@@ -1,57 +1,188 @@
+// ignore_for_file: constant_identifier_names
 import 'package:flutter/material.dart';
 
-/// TaskTap brand color palette.
+/// TaskTap design-system color tokens (v2 — matches DESIGN-SPEC.md).
+/// Token names (Y, DARK, BG1, etc.) are intentional — they match DESIGN-SPEC.md verbatim.
 abstract final class AppColors {
-  /// Brand yellow — primary action color. Always pair with [onBrand].
-  static const Color brand = Color(0xFFFFF10E);
+  // ── Brand ────────────────────────────────────────────────────────────────
 
-  /// Foreground on brand yellow — near-black for high contrast.
-  static const Color onBrand = Color(0xFF111111);
+  /// Y — brand yellow #FFF10E.
+  static const Color Y = Color(0xFFFFF10E);
 
-  /// Surface — white.
-  static const Color surface = Color(0xFFFFFFFF);
+  /// YDark — darker yellow #E6D900.
+  static const Color YDark = Color(0xFFE6D900);
 
-  /// Background — very light grey, not pure white.
-  static const Color background = Color(0xFFF5F5F7);
+  /// YSoft — translucent yellow rgba(255,241,14,0.20).
+  static const Color YSoft = Color(0x33FFF10E);
 
-  /// Surface variant — card / elevated surface.
-  static const Color surfaceVariant = Color(0xFFFFFFFF);
+  // ── Ink ─────────────────────────────────────────────────────────────────
 
-  /// Border / divider.
-  static const Color outline = Color(0xFFE0E0E0);
+  /// DARK #363636.
+  static const Color DARK = Color(0xFF363636);
 
-  /// Primary text.
-  static const Color textPrimary = Color(0xFF111111);
+  /// CHARCOAL #292929.
+  static const Color CHARCOAL = Color(0xFF292929);
 
-  /// Secondary text.
-  static const Color textSecondary = Color(0xFF6B7280);
+  /// FG2 rgb(112,112,112).
+  static const Color FG2 = Color(0xFF707070);
 
-  /// Disabled text / icon.
-  static const Color textDisabled = Color(0xFFBDBDBD);
+  /// MUTED rgb(144,143,143).
+  static const Color MUTED = Color(0xFF908F8F);
 
-  // ── Status colours ──────────────────────────────────────────────────────
+  /// DIS rgb(180,180,180).
+  static const Color DIS = Color(0xFFB4B4B4);
 
-  static const Color statusBozza = Color(0xFF9E9E9E); // grey
-  static const Color onStatusBozza = Color(0xFFFFFFFF);
+  /// INV rgb(242,242,242).
+  static const Color INV = Color(0xFFF2F2F2);
 
-  static const Color statusInviato = Color(0xFF2196F3); // blue
-  static const Color onStatusInviato = Color(0xFFFFFFFF);
+  /// WHITE.
+  static const Color WHITE = Color(0xFFFFFFFF);
 
-  static const Color statusControllato = Color(0xFFFFA726); // amber
-  static const Color onStatusControllato = Color(0xFF111111);
+  // ── Surfaces ─────────────────────────────────────────────────────────────
 
-  static const Color statusFatturato = Color(0xFF4CAF50); // green
-  static const Color onStatusFatturato = Color(0xFFFFFFFF);
+  /// BG1 rgb(250,250,250).
+  static const Color BG1 = Color(0xFFFAFAFA);
 
-  static const Color statusAnnullato = Color(0xFFF44336); // red
-  static const Color onStatusAnnullato = Color(0xFFFFFFFF);
+  /// BG2 rgb(247,247,247).
+  static const Color BG2 = Color(0xFFF7F7F7);
 
-  // ── Semantic ────────────────────────────────────────────────────────────
+  /// BG3 rgb(242,242,242).
+  static const Color BG3 = Color(0xFFF2F2F2);
 
+  /// BG4 rgb(237,237,237).
+  static const Color BG4 = Color(0xFFEDEDED);
+
+  // ── Borders ──────────────────────────────────────────────────────────────
+
+  /// BL rgb(242,242,242) — lightest border.
+  static const Color BL = Color(0xFFF2F2F2);
+
+  /// BM rgb(227,227,227).
+  static const Color BM = Color(0xFFE3E3E3);
+
+  /// BS rgb(217,217,217).
+  static const Color BS = Color(0xFFD9D9D9);
+
+  /// DIV rgb(212,212,212) — divider.
+  static const Color DIV = Color(0xFFD4D4D4);
+
+  // ── Semantic ─────────────────────────────────────────────────────────────
+
+  /// AMBER rgb(255,178,0).
+  static const Color AMBER = Color(0xFFFFB200);
+
+  /// GREEN #4caf50.
+  static const Color GREEN = Color(0xFF4CAF50);
+
+  /// BLUE #2563eb.
+  static const Color BLUE = Color(0xFF2563EB);
+
+  /// CYAN #06AED5.
+  static const Color CYAN = Color(0xFF06AED5);
+
+  /// RED #ff0000.
+  static const Color RED = Color(0xFFFF0000);
+
+  /// REDSOFT rgb(255,209,209).
+  static const Color REDSOFT = Color(0xFFFFD1D1);
+
+  // ── Shadows (documented; used via BoxShadow helpers) ─────────────────────
+
+  /// SH — standard card shadow: 0 3px 5.5px rgba(0,0,0,0.10).
+  static const List<BoxShadow> SH = [
+    BoxShadow(
+      color: Color(0x1A000000), // rgba(0,0,0,0.10)
+      offset: Offset(0, 3),
+      blurRadius: 5.5,
+    ),
+  ];
+
+  /// SH_INSET — inset shadow: inset 0 2px 4px rgba(0,0,0,0.10).
+  /// Flutter doesn't support CSS inset; approximate with inner shadow.
+  static const List<BoxShadow> SH_INSET = [
+    BoxShadow(
+      color: Color(0x1A000000),
+      offset: Offset(0, 2),
+      blurRadius: 4,
+      spreadRadius: -2,
+    ),
+  ];
+
+  // ── Legacy aliases (keep screens compiling) ───────────────────────────────
+
+  /// Primary brand yellow — alias for [Y].
+  static const Color brand = Y;
+
+  /// Foreground on brand yellow — near-black [DARK].
+  static const Color onBrand = DARK;
+
+  /// White surface.
+  static const Color surface = WHITE;
+
+  /// App background — alias for [BG1].
+  static const Color background = BG1;
+
+  /// Surface variant — alias for [BG2].
+  static const Color surfaceVariant = BG2;
+
+  /// Default border/outline — alias for [BM].
+  static const Color outline = BM;
+
+  /// Primary text — alias for [DARK].
+  static const Color textPrimary = DARK;
+
+  /// Secondary text — alias for [FG2].
+  static const Color textSecondary = FG2;
+
+  /// Disabled text — alias for [DIS].
+  static const Color textDisabled = DIS;
+
+  // ── Legacy status colors (kept for StatusBadge / ReportStato enum) ────────
+
+  /// Bozza bg rgb(245,245,245).
+  static const Color statusBozza = Color(0xFFF5F5F5);
+
+  /// Bozza fg #666.
+  static const Color onStatusBozza = Color(0xFF666666);
+
+  /// Inviata bg rgb(220,232,255).
+  static const Color statusInviato = Color(0xFFDCE8FF);
+
+  /// Inviata fg #1d4ed8.
+  static const Color onStatusInviato = Color(0xFF1D4ED8);
+
+  /// Controllato bg AMBER (kept for backward compat).
+  static const Color statusControllato = AMBER;
+
+  /// Controllato fg black.
+  static const Color onStatusControllato = Color(0xFF000000);
+
+  /// Fatturato / Pagata bg rgb(218,242,224).
+  static const Color statusFatturato = Color(0xFFDAF2E0);
+
+  /// Fatturato / Pagata fg #1e7a3a.
+  static const Color onStatusFatturato = Color(0xFF1E7A3A);
+
+  /// Annullato bg rgb(255,220,220).
+  static const Color statusAnnullato = Color(0xFFFFDCDC);
+
+  /// Annullato fg #a00.
+  static const Color onStatusAnnullato = Color(0xFFAA0000);
+
+  // ── Semantic (kept for theme / screens) ───────────────────────────────────
+
+  /// Error — alias for [RED].
   static const Color error = Color(0xFFD32F2F);
-  static const Color onError = Color(0xFFFFFFFF);
 
-  static const Color success = Color(0xFF388E3C);
-  static const Color warning = Color(0xFFF57C00);
-  static const Color info = Color(0xFF1976D2);
+  /// On-error — white.
+  static const Color onError = WHITE;
+
+  /// Success — alias for [GREEN].
+  static const Color success = GREEN;
+
+  /// Warning — alias for [AMBER].
+  static const Color warning = AMBER;
+
+  /// Info — alias for [BLUE].
+  static const Color info = BLUE;
 }

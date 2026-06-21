@@ -5,8 +5,9 @@ import 'app_colors.dart';
 
 /// TaskTap typography.
 ///
-/// Display / titles → Sora (strong, geometric).
-/// Body / labels → Manrope (legible, professional).
+/// Display / titles → Sora (FD).
+/// Body / labels → Manrope (FB).
+/// Fallback → Inter (FA, system).
 abstract final class AppTextStyles {
   // ── Sora — display / headings ──────────────────────────────────────────
 
@@ -14,40 +15,40 @@ abstract final class AppTextStyles {
         fontSize: 32,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.5,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get displayMedium => GoogleFonts.sora(
         fontSize: 26,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.3,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get headlineLarge => GoogleFonts.sora(
         fontSize: 22,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.2,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get headlineMedium => GoogleFonts.sora(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.1,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get titleLarge => GoogleFonts.sora(
         fontSize: 16,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get titleMedium => GoogleFonts.sora(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   // ── Manrope — body / labels ────────────────────────────────────────────
@@ -55,56 +56,56 @@ abstract final class AppTextStyles {
   static TextStyle get bodyLarge => GoogleFonts.manrope(
         fontSize: 16,
         fontWeight: FontWeight.w400,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get bodyMedium => GoogleFonts.manrope(
         fontSize: 14,
         fontWeight: FontWeight.w400,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get bodySmall => GoogleFonts.manrope(
         fontSize: 12,
         fontWeight: FontWeight.w400,
-        color: AppColors.textSecondary,
+        color: AppColors.FG2,
       );
 
   static TextStyle get labelLarge => GoogleFonts.manrope(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.2,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get labelMedium => GoogleFonts.manrope(
         fontSize: 12,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.3,
-        color: AppColors.textSecondary,
+        color: AppColors.FG2,
       );
 
   static TextStyle get labelSmall => GoogleFonts.manrope(
         fontSize: 11,
         fontWeight: FontWeight.w500,
         letterSpacing: 0.4,
-        color: AppColors.textSecondary,
+        color: AppColors.MUTED,
       );
 
   // ── Convenience ────────────────────────────────────────────────────────
 
-  /// KPI figure — large Sora number for dashboards.
-  static TextStyle get kpi => GoogleFonts.sora(
+  /// KPI figure — large Sora number for dashboards (Manrope 500/36 DARK per spec).
+  static TextStyle get kpi => GoogleFonts.manrope(
         fontSize: 36,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w500,
         letterSpacing: -1,
-        color: AppColors.textPrimary,
+        color: AppColors.DARK,
       );
 
   static TextStyle get caption => GoogleFonts.manrope(
         fontSize: 11,
         fontWeight: FontWeight.w400,
-        color: AppColors.textSecondary,
+        color: AppColors.MUTED,
       );
 }
 

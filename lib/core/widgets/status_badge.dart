@@ -24,7 +24,7 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pair = statusColor(stato);
+    final pair = statusColorFromStato(stato);
     final label = statoLabel(stato);
 
     final textStyle = switch (size) {
