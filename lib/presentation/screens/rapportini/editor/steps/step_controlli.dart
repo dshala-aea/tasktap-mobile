@@ -39,7 +39,7 @@ class StepControlli extends ConsumerWidget {
               : ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: state.controlloRows.length,
-                  separatorBuilder: (_, __x) => const SizedBox(height: 8),
+                  separatorBuilder: (_, i) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {
                     final c = state.controlloRows[i];
                     return ListTile(

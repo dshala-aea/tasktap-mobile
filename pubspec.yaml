@@ -48,8 +48,18 @@ dependencies:
   path: ^1.9.0
   uuid: ^4.5.1
 
+  # Crash reporting (Sentry)
+  # DSN is supplied via --dart-define=SENTRY_DSN=... at build time.
+  # When the dart-define is absent (tests, local runs without a DSN) Sentry
+  # is NOT initialised and the app still works normally.
+  sentry_flutter: ^8.14.0
+
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+
+  # Integration tests (run on device/emulator — not in flutter test)
+  integration_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
@@ -62,5 +72,42 @@ dev_dependencies:
   # Testing
   mocktail: ^1.0.4
 
+  # App icon + splash generation
+  # Run: flutter pub run flutter_launcher_icons
+  flutter_launcher_icons: ^0.14.3
+
+  # Run: dart run flutter_native_splash:create
+  flutter_native_splash: ^2.4.6
+
+# ── App icon configuration (flutter_launcher_icons) ───────────────────────────
+# Source: assets/icons/tasktap_icon.png  (1024×1024 recommended)
+# Background: TaskTap brand yellow #FFF10E
+# After adding/changing the source PNG, regenerate with:
+#   flutter pub run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/tasktap_icon.png"
+  # Android adaptive icon
+  adaptive_icon_background: "#FFF10E"
+  adaptive_icon_foreground: "assets/icons/tasktap_icon.png"
+  # iOS background
+  background_color_ios: "#FFF10E"
+  remove_alpha_ios: true
+
+# ── Splash screen configuration (flutter_native_splash) ───────────────────────
+# Regenerate with: dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#FFF10E"
+  image: "assets/icons/tasktap_icon.png"
+  # Scale the logo to 33% of screen width on all densities
+  fill: false
+  android_12:
+    color: "#FFF10E"
+    image: "assets/icons/tasktap_icon.png"
+
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/icons/

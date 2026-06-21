@@ -51,7 +51,7 @@ class StepMateriali extends ConsumerWidget {
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: state.materialeRows.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, i) => const SizedBox(height: 8),
                     itemBuilder: (ctx, i) => _MaterialeCard(
                       row: state.materialeRows[i],
                       onRemove: () =>
@@ -115,7 +115,7 @@ class StepMateriali extends ConsumerWidget {
                 // Picker or free-text
                 materialiAsync.when(
                   loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => TextField(
+                  error: (err, st) => TextField(
                     controller: nameCtrl,
                     decoration:
                         const InputDecoration(labelText: 'Nome materiale'),

@@ -92,7 +92,7 @@ class _SignatureSection extends ConsumerWidget {
               child: Image.file(
                 File(localPath!),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
+                errorBuilder: (ctx, err, st) => const Icon(
                   Icons.broken_image_outlined,
                   color: Colors.grey,
                 ),

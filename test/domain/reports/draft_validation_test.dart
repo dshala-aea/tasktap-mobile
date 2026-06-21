@@ -45,8 +45,7 @@ Future<DraftReport> _insertDraft(
           isLocalOnly: const Value(true),
         ),
       );
-  return (await db.select(db.draftReports)
-        ..where((r) => r.id.equals(id)))
+  return (db.select(db.draftReports)..where((r) => r.id.equals(id)))
       .getSingle();
 }
 

@@ -13,8 +13,6 @@
 //   - Signature save creates an allegato with correct fields
 //   - watchLocalDrafts returns only isLocalOnly=true drafts, newest first
 
-import 'dart:typed_data';
-
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';

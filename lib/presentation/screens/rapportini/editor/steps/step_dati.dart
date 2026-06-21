@@ -111,7 +111,7 @@ class _StepDatiState extends ConsumerState<StepDati> {
           const SizedBox(height: 8),
           customers.when(
             loading: () => const LinearProgressIndicator(),
-            error: (_, __) => _FreeTextField(
+            error: (err, st) => _FreeTextField(
               ctrl: _customerFreeTextCtrl,
               label: 'Nome cliente',
               onChanged: (v) => notifier.setCustomerFreeText(v),
@@ -243,7 +243,7 @@ class _FreeTextField extends StatelessWidget {
             onChanged: onChanged,
           ),
         ),
-        if (trailing != null) trailing!,
+        ?trailing,
       ],
     );
   }
@@ -334,7 +334,7 @@ class _LocationPicker extends ConsumerWidget {
 
     return locAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (_, __) => _FreeTextField(
+      error: (err, st) => _FreeTextField(
         ctrl: freeTextCtrl,
         label: 'Ubicazione',
         onChanged: onFreeTextChanged,
@@ -405,7 +405,7 @@ class _TicketCantierePicker extends ConsumerWidget {
         // ── Ticket ────────────────────────────────────────────────────────
         tickets.when(
           loading: () => const LinearProgressIndicator(),
-          error: (_, __) => _FreeTextField(
+          error: (err, st) => _FreeTextField(
             ctrl: ticketCtrl,
             label: 'Rif. Ticket',
             onChanged: onTicketFreeText,
@@ -445,7 +445,7 @@ class _TicketCantierePicker extends ConsumerWidget {
         // ── Cantiere ──────────────────────────────────────────────────────
         cantieri.when(
           loading: () => const LinearProgressIndicator(),
-          error: (_, __) => _FreeTextField(
+          error: (err, st) => _FreeTextField(
             ctrl: cantiereCtrl,
             label: 'Cantiere',
             onChanged: onCantiereFreeText,

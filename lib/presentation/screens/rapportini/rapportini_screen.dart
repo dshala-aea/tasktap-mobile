@@ -57,7 +57,7 @@ class RapportiniScreen extends ConsumerWidget {
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: drafts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            separatorBuilder: (_, i) => const SizedBox(height: 8),
             itemBuilder: (ctx, i) => _DraftTile(
               draft: drafts[i],
               onTap: () => context.push(
