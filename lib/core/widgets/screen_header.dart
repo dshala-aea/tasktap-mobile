@@ -105,6 +105,7 @@ class ScreenHeader extends StatelessWidget {
     this.showBack = false,
     this.onBack,
     this.actions = const [],
+    this.dark = false,
   });
 
   final String title;
@@ -113,8 +114,12 @@ class ScreenHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final List<Widget> actions;
 
+  /// Dark variant: white title on a dark background.
+  final bool dark;
+
   @override
   Widget build(BuildContext context) {
+    final titleColor = dark ? AppColors.WHITE : AppColors.DARK;
     return Padding(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
       child: Row(
@@ -124,6 +129,7 @@ class ScreenHeader extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: HeaderIconBtn(
                 icon: LucideIcons.chevronLeft,
+                glass: dark,
                 onTap: onBack ?? () => Navigator.of(context).maybePop(),
               ),
             ),
@@ -139,7 +145,7 @@ class ScreenHeader extends StatelessWidget {
                   style: GoogleFonts.sora(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.DARK,
+                    color: titleColor,
                   ),
                 ),
                 if (subtitle != null)
@@ -150,7 +156,9 @@ class ScreenHeader extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.MUTED,
+                      color: dark
+                          ? AppColors.WHITE.withAlpha(179)
+                          : AppColors.MUTED,
                     ),
                   ),
               ],
