@@ -1,7 +1,7 @@
 // dart format width=100
-import 'dart:typed_data';
 import 'package:drift/drift.dart';
 import '../local/app_database.dart';
+import '../sync/draft_submission_state.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // DraftReportRepository
@@ -163,6 +163,111 @@ class DraftReportRepository {
           ..where((a) => a.entityId.equals(reportId))
           ..orderBy([(a) => OrderingTerm.asc(a.createdAt)]))
         .watch();
+  }
+
+  // ── Signature helpers ──────────────────────────────────────────────────────
+  // Signatures are stored as allegati with special content types.
+  // Returns the allegato id so the draft header can reference it.
+
+  // ── Submission state ───────────────────────────────────────────────────────
+
+  /// Update the submission state machine field on a draft.
+  /// Only the provided fields are changed; others remain untouched.
+  Future<void> updateSubmissionState({
+    required String reportId,
+    required DraftSubmissionState state,
+    String? idempotencyKey,
+    String? error,
+    bool clearError = false,
+  }) async {
+    final companion = DraftReportsCompanion(
+      id: Value(reportId),
+      submissionState: Value(state.toPersistedString()),
+      updatedAt: Value(DateTime.now().toUtc()),
+      idempotencyKey:
+          idempotencyKey != null ? Value(idempotencyKey) : const Value.absent(),
+      submissionError:
+          clearError || error == null ? const Value(null) : Value(error),
+    );
+    await (_db.update(_db.draftReports)
+          ..where((r) => r.id.equals(reportId)))
+        .write(companion);
+  }
+
+  /// Fetch all drafts currently in [readyToSubmit] state.
+  Future<List<DraftReport>> getDraftsReadyToSubmit() async {
+    return (_db.select(_db.draftReports)
+          ..where((r) => r.submissionState
+              .equals(DraftSubmissionState.readyToSubmit.toPersistedString())))
+        .get();
+  }
+
+  /// Return all [ReportAllegatiData] for [reportId] that are still pending upload.
+  Future<List<ReportAllegatiData>> getPendingAllegati(String reportId) async {
+    return (_db.select(_db.reportAllegati)
+          ..where((a) =>
+              a.entityId.equals(reportId) & a.isPendingUpload.equals(true)))
+        .get();
+  }
+
+  /// Mark an allegato as uploaded; replace its local id with the server id.
+  Future<void> markAllegatoUploaded({
+    required String localId,
+    required String serverAllegatoId,
+  }) async {
+    // If the server echoed the same id, just clear the flag.
+    if (localId == serverAllegatoId) {
+      await (_db.update(_db.reportAllegati)..where((a) => a.id.equals(localId)))
+          .write(const ReportAllegatiCompanion(
+        isPendingUpload: Value(false),
+      ));
+      return;
+    }
+    // Otherwise replace the row with a new id (server assigned a different UUID).
+    final existing = await (_db.select(_db.reportAllegati)
+          ..where((a) => a.id.equals(localId)))
+        .getSingleOrNull();
+    if (existing == null) return;
+
+    await _db.transaction(() async {
+      await (_db.delete(_db.reportAllegati)..where((a) => a.id.equals(localId)))
+          .go();
+      await _db.into(_db.reportAllegati).insert(
+            existing.toCompanion(true).copyWith(
+                  id: Value(serverAllegatoId),
+                  isPendingUpload: const Value(false),
+                ),
+          );
+    });
+  }
+
+  /// Update the draft header's signature allegato id after a successful upload.
+  Future<void> updateSignatureAllegatoId({
+    required String reportId,
+    required bool isCustomer,
+    required String serverAllegatoId,
+  }) async {
+    final companion = isCustomer
+        ? DraftReportsCompanion(
+            customerSignatureAllegatoId: Value(serverAllegatoId),
+            updatedAt: Value(DateTime.now().toUtc()),
+          )
+        : DraftReportsCompanion(
+            technicianSignatureAllegatoId: Value(serverAllegatoId),
+            updatedAt: Value(DateTime.now().toUtc()),
+          );
+    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId)))
+        .write(companion);
+  }
+
+  /// Mark a draft as submitted (clear isLocalOnly flag).
+  Future<void> markSubmitted(String reportId) async {
+    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId)))
+        .write(DraftReportsCompanion(
+      isLocalOnly: const Value(false),
+      stato: const Value('Inviato'),
+      updatedAt: Value(DateTime.now().toUtc()),
+    ));
   }
 
   // ── Signature helpers ──────────────────────────────────────────────────────

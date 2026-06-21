@@ -303,6 +303,9 @@ class ReportEditorState {
         customerSignoffText: null,
         customerSignoffAt: null,
         isLocalOnly: true,
+        submissionState: 'draft',
+        idempotencyKey: null,
+        submissionError: null,
       );
 
   ReportEditorState copyWith({

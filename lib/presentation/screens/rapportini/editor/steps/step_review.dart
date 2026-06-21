@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../../data/local/app_database.dart';
+import '../../../../../data/sync/draft_submission_state.dart';
+import '../../../../../data/sync/submission_queue_watcher.dart';
 import '../../../../../domain/reports/draft_validation.dart';
 import '../../../../providers/report_editor_providers.dart';
 
@@ -13,15 +16,42 @@ import '../../../../providers/report_editor_providers.dart';
 // Actual submission is M5.
 // ══════════════════════════════════════════════════════════════════════════════
 
-class StepReview extends ConsumerWidget {
+class StepReview extends ConsumerStatefulWidget {
   const StepReview({super.key, required this.reportId});
 
   final String reportId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(reportEditorProvider(reportId));
+  ConsumerState<StepReview> createState() => _StepReviewState();
+}
+
+class _StepReviewState extends ConsumerState<StepReview> {
+  bool _submitting = false;
+  String? _submitError;
+
+  Future<void> _onInvia() async {
+    final queue = ref.read(realSubmissionQueueProvider);
+    setState(() {
+      _submitting = true;
+      _submitError = null;
+    });
+    try {
+      await queue.enqueue(widget.reportId);
+      await queue.processAll();
+    } catch (e) {
+      setState(() => _submitError = e.toString());
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(reportEditorProvider(widget.reportId));
     final validation = state.validation;
+
+    // Watch live draft for submission state
+    final repo = ref.watch(draftReportRepositoryProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -126,7 +156,8 @@ class StepReview extends ConsumerWidget {
           const SizedBox(height: 12),
 
           _ReviewSection(
-            title: 'Foto / Allegati (${state.allegatoRows.where((a) => !a.isSignature).length})',
+            title:
+                'Foto / Allegati (${state.allegatoRows.where((a) => !a.isSignature).length})',
             items: state.allegatoRows
                 .where((a) => !a.isSignature)
                 .map((a) => _ReviewItem(a.fileName, a.localPath))
@@ -135,41 +166,195 @@ class StepReview extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // Pronto per invio badge
-          if (validation.isValid)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.green[50],
-                border: Border.all(color: Colors.green),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 28),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Pronto per l\'invio',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(
-                          'Il rapportino è completo. Sarà inviato al server alla prossima connessione (M5).',
-                          style: TextStyle(color: Colors.green, fontSize: 12),
-                        ),
-                      ],
-                    ),
+          // ── Submission state + Invia button ────────────────────────────────
+          StreamBuilder<DraftReport?>(
+            stream: repo.watchDraft(widget.reportId),
+            builder: (context, snap) {
+              final draft = snap.data;
+              final subState = DraftSubmissionState.fromString(
+                  draft?.submissionState ?? 'draft');
+
+              if (subState == DraftSubmissionState.submitted) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green[50],
+                    border: Border.all(color: Colors.green),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ],
-              ),
-            ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 28),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Rapportino inviato con successo.',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, color: Colors.green),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (subState == DraftSubmissionState.uploadingMedia ||
+                  subState == DraftSubmissionState.submitting) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50],
+                    border: Border.all(color: Colors.blue),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        subState == DraftSubmissionState.uploadingMedia
+                            ? 'Caricamento media in corso...'
+                            : 'Invio rapportino...',
+                        style: const TextStyle(color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (subState == DraftSubmissionState.failed) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red[50],
+                        border: Border.all(color: Colors.red),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.error_outline,
+                                  color: Colors.red, size: 20),
+                              SizedBox(width: 8),
+                              Text(
+                                'Invio fallito',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red),
+                              ),
+                            ],
+                          ),
+                          if (draft?.submissionError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                draft!.submissionError!,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.red),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _submitting ? null : _onInvia,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Riprova invio'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              // draft or readyToSubmit
+              if (validation.isValid) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        border: Border.all(color: Colors.green),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.check_circle,
+                              color: Colors.green, size: 28),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Pronto per l\'invio',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  'Il rapportino è completo e pronto per essere inviato.',
+                                  style:
+                                      TextStyle(color: Colors.green, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_submitError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          _submitError!,
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                        ),
+                      ),
+                    ElevatedButton.icon(
+                      onPressed: _submitting ? null : _onInvia,
+                      icon: _submitting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send),
+                      label: Text(_submitting ? 'Invio in corso...' : 'Invia'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
+
           const SizedBox(height: 24),
         ],
       ),

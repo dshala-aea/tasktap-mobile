@@ -8,6 +8,8 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/draft_submission_state.dart';
+import '../../../data/sync/submission_queue_watcher.dart';
 import '../../providers/report_editor_providers.dart';
 
 /// Rapportini list screen — shows local draft list + "Nuovo rapportino" FAB.
@@ -99,14 +101,17 @@ class RapportiniScreen extends ConsumerWidget {
   }
 }
 
-class _DraftTile extends StatelessWidget {
+class _DraftTile extends ConsumerWidget {
   const _DraftTile({required this.draft, required this.onTap});
 
   final DraftReport draft;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subState =
+        DraftSubmissionState.fromString(draft.submissionState);
+
     return Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -126,11 +131,36 @@ class _DraftTile extends StatelessWidget {
           draft.title,
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
-        subtitle: Text(
-          'Creato: ${_fmt(draft.createdAt)}',
-          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Creato: ${_fmt(draft.createdAt)}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 2),
+            _SubmissionStateBadge(subState: subState),
+            if (subState == DraftSubmissionState.failed &&
+                draft.submissionError != null)
+              Text(
+                draft.submissionError!,
+                style: const TextStyle(color: Colors.red, fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
         ),
-        trailing: const Icon(Icons.chevron_right),
+        isThreeLine: true,
+        trailing: subState == DraftSubmissionState.failed
+            ? IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.red),
+                tooltip: 'Riprova invio',
+                onPressed: () {
+                  final queue = ref.read(realSubmissionQueueProvider);
+                  queue.retry(draft.id);
+                },
+              )
+            : const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
     );
@@ -139,4 +169,38 @@ class _DraftTile extends StatelessWidget {
   String _fmt(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+}
+
+class _SubmissionStateBadge extends StatelessWidget {
+  const _SubmissionStateBadge({required this.subState});
+
+  final DraftSubmissionState subState;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (subState) {
+      DraftSubmissionState.draft => ('Bozza locale', Colors.grey),
+      DraftSubmissionState.readyToSubmit =>
+        ('Pronto per invio', Colors.blue),
+      DraftSubmissionState.uploadingMedia =>
+        ('Caricamento media...', Colors.orange),
+      DraftSubmissionState.submitting =>
+        ('Invio in corso...', Colors.orange),
+      DraftSubmissionState.submitted => ('Inviato', Colors.green),
+      DraftSubmissionState.failed => ('Errore invio', Colors.red),
+    };
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(color: color, fontSize: 11)),
+      ],
+    );
+  }
 }

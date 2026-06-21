@@ -204,6 +204,18 @@ class DraftReports extends Table {
   /// True for drafts that only exist locally (not yet submitted).
   BoolColumn get isLocalOnly => boolean().withDefault(const Constant(false))();
 
+  /// Submission state machine:
+  /// draft | readyToSubmit | uploadingMedia | submitting | submitted | failed
+  TextColumn get submissionState =>
+      text().withDefault(const Constant('draft'))();
+
+  /// Stable idempotency key (UUID string) persisted on first submit attempt.
+  /// Reused on retries so the server deduplicates duplicate submits.
+  TextColumn get idempotencyKey => text().nullable()();
+
+  /// Human-readable error message from the last failed attempt (null when ok).
+  TextColumn get submissionError => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -320,7 +332,25 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (m) async {
+        await m.createAll();
+      },
+      onUpgrade: (m, from, to) async {
+        if (from < 2) {
+          // M5: add submission state fields to draft_reports
+          await m.addColumn(
+              draftReports, draftReports.submissionState);
+          await m.addColumn(draftReports, draftReports.idempotencyKey);
+          await m.addColumn(draftReports, draftReports.submissionError);
+        }
+      },
+    );
+  }
 
   // ── sync_meta helpers ────────────────────────────────────────────────────
 
