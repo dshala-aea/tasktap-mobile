@@ -8,6 +8,7 @@ import '../../presentation/screens/interventi/interventi_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
 import '../../presentation/screens/oggi/oggi_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
+import '../../presentation/screens/rapportini/editor/rapportino_editor_screen.dart';
 import '../../presentation/screens/rapportini/rapportini_screen.dart';
 
 /// Route path constants.
@@ -17,6 +18,11 @@ abstract final class AppRoutes {
   static const String interventi = '/interventi';
   static const String rapportini = '/rapportini';
   static const String profilo = '/profilo';
+  static const String _rapportiniEditorBase = '/rapportini/editor';
+
+  /// Build the editor path for a given draft report id.
+  static String rapportiniEditor(String reportId) =>
+      '$_rapportiniEditorBase/$reportId';
 }
 
 /// Global navigator key — use for imperative navigation outside widget tree.
@@ -94,6 +100,14 @@ GoRouter buildRouter(WidgetRef ref) {
               GoRoute(
                 path: AppRoutes.rapportini,
                 builder: (context, state) => const RapportiniScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'editor/:reportId',
+                    builder: (context, state) => RapportinoEditorScreen(
+                      reportId: state.pathParameters['reportId']!,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

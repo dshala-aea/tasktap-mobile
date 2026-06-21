@@ -106,3 +106,28 @@ final allMaterialiProvider =
         ..orderBy([(m) => OrderingTerm.asc(m.name)]))
       .watch();
 });
+
+final allLocationsProvider =
+    StreamProvider.autoDispose<List<Location>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.locations)
+        ..where((l) => l.isActive.equals(true))
+        ..orderBy([(l) => OrderingTerm.asc(l.name)]))
+      .watch();
+});
+
+final allTicketsProvider =
+    StreamProvider.autoDispose<List<Ticket>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.tickets)
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+      .watch();
+});
+
+final allCantieriProvider =
+    StreamProvider.autoDispose<List<CantieriData>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.cantieri)
+        ..orderBy([(c) => OrderingTerm.asc(c.name)]))
+      .watch();
+});
