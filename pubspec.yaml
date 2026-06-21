@@ -1,0 +1,65 @@
+name: tasktap_mobile
+description: "TaskTap mobile app for field technicians — offline-first rapportino creation."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management & DI
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # Local DB (offline-first)
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.24
+
+  # Auth & backend
+  supabase_flutter: ^2.8.4
+  dio: ^5.8.0+1
+
+  # Secure storage
+  flutter_secure_storage: ^9.2.4
+
+  # Connectivity
+  connectivity_plus: ^6.1.4
+
+  # Fonts
+  google_fonts: ^6.2.1
+
+  # Field capture
+  signature: ^5.5.0
+  image_picker: ^1.1.2
+  geolocator: ^13.0.4
+
+  # Utilities
+  intl: ^0.20.2
+  path_provider: ^2.1.5
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+  # Code generation
+  build_runner: ^2.4.15
+  drift_dev: ^2.22.1
+  riverpod_generator: ^2.6.3
+
+  # Testing
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
