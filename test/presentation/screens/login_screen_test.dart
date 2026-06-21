@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
@@ -24,6 +25,12 @@ Widget _buildLoginScreen(IAuthRepository repo) {
     ),
   );
 }
+
+/// Finds the primary login CTA — AppButton with label 'Accedi'.
+Finder get _loginCta => find.descendant(
+      of: find.byType(AppButton),
+      matching: find.text('Accedi'),
+    );
 
 void main() {
   late MockAuthRepository repo;
@@ -82,8 +89,8 @@ void main() {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
-      // Tap the ElevatedButton (the Accedi CTA) without filling any field.
-      await tester.tap(find.byType(ElevatedButton).first);
+      // Tap the login CTA (AppButton labelled 'Accedi') without filling any field.
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(find.text('Inserisci l\'email'), findsOneWidget);
@@ -97,7 +104,7 @@ void main() {
         find.byType(TextFormField).first,
         'not-an-email',
       );
-      await tester.tap(find.byType(ElevatedButton).first);
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(find.text('Inserisci un\'email valida'), findsOneWidget);
@@ -111,7 +118,7 @@ void main() {
         find.byType(TextFormField).first,
         'valid@email.com',
       );
-      await tester.tap(find.byType(ElevatedButton).first);
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(find.text('Inserisci la password'), findsOneWidget);
@@ -132,7 +139,7 @@ void main() {
       await tester.enterText(fields.at(0), 'tech@tasktap.io');
       await tester.enterText(fields.at(1), 'mypassword');
 
-      await tester.tap(find.byType(ElevatedButton).first);
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(find.text('Inserisci l\'email'), findsNothing);
@@ -158,7 +165,7 @@ void main() {
       await tester.enterText(fields.at(0), 'tech@tasktap.io');
       await tester.enterText(fields.at(1), 'wrongpass');
 
-      await tester.tap(find.byType(ElevatedButton).first);
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(
@@ -182,7 +189,7 @@ void main() {
       await tester.enterText(fields.at(0), 'tech@tasktap.io');
       await tester.enterText(fields.at(1), 'pass');
 
-      await tester.tap(find.byType(ElevatedButton).first);
+      await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('connessione'), findsOneWidget);
