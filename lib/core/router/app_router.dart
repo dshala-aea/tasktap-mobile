@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
+import '../../presentation/screens/interventi/interventi_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
 import '../../presentation/screens/oggi/oggi_screen.dart';
-import '../../presentation/screens/interventi/interventi_screen.dart';
-import '../../presentation/screens/rapportini/rapportini_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
+import '../../presentation/screens/rapportini/rapportini_screen.dart';
 
 /// Route path constants.
 abstract final class AppRoutes {
@@ -22,12 +24,37 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///
-/// Auth guarding is a seam for M2 — for now all routes are accessible.
-GoRouter buildRouter() {
+/// Auth guard: the `redirect` callback reads [authStateProvider] from [ref].
+/// - AsyncLoading: return null (stay on current route while determining state).
+/// - null user (unauthenticated): redirect to /login.
+/// - non-null user (authenticated): redirect away from /login to /oggi.
+///
+/// This is the only place auth-to-route mapping lives, so adding PIN/QR auth
+/// later requires no routing changes — only [IAuthRepository] changes.
+GoRouter buildRouter(WidgetRef ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.oggi,
     debugLogDiagnostics: false,
+    redirect: (context, state) {
+      final authAsync = ref.read(authStateProvider);
+      final isOnLogin = state.matchedLocation == AppRoutes.login;
+
+      return authAsync.when(
+        // While Supabase is restoring the session, stay put.
+        loading: () => null,
+        // On error (e.g. offline with no cached session), go to login.
+        error: (err, stack) => isOnLogin ? null : AppRoutes.login,
+        data: (user) {
+          final isAuthenticated = user != null;
+          if (!isAuthenticated && !isOnLogin) return AppRoutes.login;
+          if (isAuthenticated && isOnLogin) return AppRoutes.oggi;
+          return null;
+        },
+      );
+    },
+    // Rebuild router on auth state changes so redirects are applied.
+    refreshListenable: _AuthStateListenable(ref),
     routes: [
       // ── Auth ────────────────────────────────────────────────────────────
       GoRoute(
@@ -83,4 +110,15 @@ GoRouter buildRouter() {
       ),
     ],
   );
+}
+
+/// [Listenable] that notifies go_router whenever auth state changes.
+///
+/// go_router's [refreshListenable] re-evaluates the `redirect` callback on
+/// every notification, which is what drives the login → home transition and
+/// the forced /login redirect when the token refresh fails.
+class _AuthStateListenable extends ChangeNotifier {
+  _AuthStateListenable(WidgetRef ref) {
+    ref.listenManual(authStateProvider, (prev, next) => notifyListeners());
+  }
 }
