@@ -120,7 +120,7 @@ void main() {
 
       // Subscribe to authStateProvider so the container starts listening
       // to the stream and processes incoming events.
-      container.listen(authStateProvider, (_, __) {});
+      container.listen(authStateProvider, (prev, next) {});
 
       authStreamController.add(expected);
       await Future<void>.delayed(Duration.zero);

@@ -1,31 +1,68 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../data/sync/sync_service.dart';
 
 /// The main app shell with bottom navigation.
 ///
 /// Hosts four tabs: Oggi / Interventi / Rapportini / Profilo.
 /// Uses [StatefulNavigationShell] to preserve each branch's state.
-class HomeShell extends StatelessWidget {
+///
+/// Sync triggers:
+/// - On first mount (post-login): calls [SyncNotifier.performSync].
+/// - On app foreground resume: calls [SyncNotifier.performSync].
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
+  ConsumerState<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Trigger initial sync post-login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(syncProvider.notifier).performSync();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Called when the app is brought back to foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(syncProvider.notifier).performSync();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell,
+      body: widget.navigationShell,
       bottomNavigationBar: _AppBottomNav(
-        currentIndex: navigationShell.currentIndex,
+        currentIndex: widget.navigationShell.currentIndex,
         onDestinationSelected: _onDestinationSelected,
       ),
     );
   }
 
   void _onDestinationSelected(int index) {
-    navigationShell.goBranch(
+    widget.navigationShell.goBranch(
       index,
       // Return to the initial location when re-tapping the active tab.
-      initialLocation: index == navigationShell.currentIndex,
+      initialLocation: index == widget.navigationShell.currentIndex,
     );
   }
 }
