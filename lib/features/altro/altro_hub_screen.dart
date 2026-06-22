@@ -93,22 +93,20 @@ class AltroHubScreen extends ConsumerWidget {
         icon: LucideIcons.users,
         label: 'Clienti',
         color: const Color(0xFF4CAF50), // GREEN
-        // TODO(D5): wire Clienti list
-        onTap: () => _pushComingSoon(context, 'Clienti'),
+        onTap: () => context.push(AppRoutes.altroClienti),
       ),
       _GestioneTile(
         icon: LucideIcons.package,
         label: 'Prodotti',
         color: const Color(0xFFF4A261), // warm orange
-        // TODO(D5): wire Prodotti list
+        // Prodotti data not cached on device — use ComingSoon.
         onTap: () => _pushComingSoon(context, 'Prodotti'),
       ),
       _GestioneTile(
         icon: LucideIcons.warehouse,
         label: 'Magazzino',
         color: const Color(0xFFFFB200), // AMBER
-        // TODO(D5): wire Magazzino list
-        onTap: () => _pushComingSoon(context, 'Magazzino'),
+        onTap: () => context.push(AppRoutes.altroMagazzino),
       ),
       _GestioneTile(
         icon: LucideIcons.receipt,

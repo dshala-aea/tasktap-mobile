@@ -15,6 +15,9 @@ import '../../presentation/screens/login/login_screen.dart';
 import '../../features/calendario/calendario_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
+import '../../features/clienti/clienti_list_screen.dart';
+import '../../features/clienti/cliente_detail_screen.dart';
+import '../../features/magazzino/magazzino_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
@@ -39,6 +42,13 @@ abstract final class AppRoutes {
 
   /// Path for the shared "coming soon" placeholder; pass [title] as GoRouter extra.
   static const String altroComingSoon = '/altro/coming-soon';
+
+  static const String altroClienti = '/altro/clienti';
+  static const String altroClientiDetail = '/altro/clienti/:id';
+  static const String altroMagazzino = '/altro/magazzino';
+
+  /// Build the detail path for a given customer id.
+  static String clientiDetail(String id) => '/altro/clienti/$id';
 
   /// Build the editor path for a given draft report id (under Altro › Rapportini).
   static String rapportiniEditor(String reportId) =>
@@ -183,6 +193,22 @@ GoRouter buildRouter(WidgetRef ref) {
                     path: 'notifiche',
                     builder: (context, state) =>
                         const NotificheScreen(),
+                  ),
+                  GoRoute(
+                    path: 'clienti',
+                    builder: (context, state) => const ClientiListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) => ClienteDetailScreen(
+                          customerId: state.pathParameters['id']!,
+                        ),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'magazzino',
+                    builder: (context, state) => const MagazzinoScreen(),
                   ),
                   GoRoute(
                     path: 'coming-soon',
