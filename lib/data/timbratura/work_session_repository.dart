@@ -18,6 +18,12 @@ abstract interface class IWorkSessionRepository {
   /// Stream of today's events in chronological order.
   Stream<List<WorkSession>> watchTodaySessions();
 
+  /// Snapshot of today's events in chronological order (one-shot).
+  Future<List<WorkSession>> getTodaySessions();
+
+  /// Mark the given event ids as synced (isPendingSync = false).
+  Future<void> markSynced(List<String> ids);
+
   /// Delete all sessions for today (used in tests / reset).
   Future<void> clearToday();
 }
@@ -59,6 +65,29 @@ class WorkSessionRepository implements IWorkSessionRepository {
           )
           ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
         .watch();
+  }
+
+  @override
+  Future<List<WorkSession>> getTodaySessions() {
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day).toUtc();
+    final end = start.add(const Duration(days: 1));
+    return (_db.select(_db.workSessions)
+          ..where(
+            (s) =>
+                s.eventTime.isBiggerOrEqualValue(start) &
+                s.eventTime.isSmallerThanValue(end),
+          )
+          ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
+        .get();
+  }
+
+  @override
+  Future<void> markSynced(List<String> ids) async {
+    if (ids.isEmpty) return;
+    await (_db.update(_db.workSessions)
+          ..where((s) => s.id.isIn(ids)))
+        .write(const WorkSessionsCompanion(isPendingSync: Value(false)));
   }
 
   @override
