@@ -12,7 +12,7 @@ import '../../presentation/screens/home/home_shell.dart';
 import '../../features/ticket/ticket_detail_screen.dart';
 import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
-import '../../presentation/screens/placeholder/calendario_placeholder_screen.dart';
+import '../../features/calendario/calendario_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
@@ -133,14 +133,13 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 3 — Calendario (placeholder)
+          // 3 — Calendario
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'calendario'),
             routes: [
               GoRoute(
                 path: AppRoutes.calendario,
-                builder: (context, state) =>
-                    const CalendarioPlaceholderScreen(),
+                builder: (context, state) => const CalendarioScreen(),
               ),
             ],
           ),

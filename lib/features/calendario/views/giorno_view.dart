@@ -1,0 +1,197 @@
+// lib/features/calendario/views/giorno_view.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/status_colors.dart';
+import '../../../data/local/app_database.dart';
+import '../calendario_providers.dart';
+
+/// First hour shown in the day grid.
+const int _kStartHour = 7;
+
+/// Last hour shown (exclusive) — rows from 7:00 to 20:00.
+const int _kEndHour = 21;
+
+/// Height in logical pixels for one hour row.
+const double _kHourHeight = 64.0;
+
+/// Width reserved for the hour labels column.
+const double _kLabelWidth = 48.0;
+
+/// Calendario → Giorno view: vertical hour grid with coloured event blocks
+/// positioned by timeStartMinutes / timeEndMinutes.
+///
+/// Tapping an event block with a ticketId triggers [onTapTicket]; otherwise
+/// [onTapSchedule] is called to show an info sheet.
+class GiornoView extends ConsumerWidget {
+  const GiornoView({
+    super.key,
+    required this.schedules,
+    this.onTapTicket,
+    this.onTapSchedule,
+  });
+
+  final List<Schedule> schedules;
+  final void Function(String ticketId)? onTapTicket;
+  final void Function(Schedule schedule)? onTapSchedule;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final totalHeight = (_kEndHour - _kStartHour) * _kHourHeight;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+      child: SizedBox(
+        height: totalHeight + 8,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Hour labels ──────────────────────────────────────────────────
+            SizedBox(
+              width: _kLabelWidth,
+              height: totalHeight,
+              child: Column(
+                children: [
+                  for (int h = _kStartHour; h < _kEndHour; h++)
+                    SizedBox(
+                      height: _kHourHeight,
+                      child: Align(
+                        alignment: Alignment.topRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8, top: 4),
+                          child: Text(
+                            '${h.toString().padLeft(2, '0')}:00',
+                            style: GoogleFonts.manrope(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.MUTED,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Hour grid + event blocks ─────────────────────────────────────
+            Expanded(
+              child: Stack(
+                children: [
+                  // Grid lines
+                  Column(
+                    children: [
+                      for (int h = _kStartHour; h < _kEndHour; h++)
+                        Container(
+                          height: _kHourHeight,
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: AppColors.BL,
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  // Event blocks
+                  for (final s in schedules) _EventBlock(schedule: s, onTapTicket: onTapTicket, onTapSchedule: onTapSchedule),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EventBlock extends StatelessWidget {
+  const _EventBlock({
+    required this.schedule,
+    this.onTapTicket,
+    this.onTapSchedule,
+  });
+
+  final Schedule schedule;
+  final void Function(String ticketId)? onTapTicket;
+  final void Function(Schedule schedule)? onTapSchedule;
+
+  @override
+  Widget build(BuildContext context) {
+    final startMin = schedule.timeStartMinutes;
+    final endMin = schedule.timeEndMinutes;
+    final clampedStart =
+        startMin.clamp(_kStartHour * 60, _kEndHour * 60).toDouble();
+    final clampedEnd =
+        endMin.clamp(_kStartHour * 60, _kEndHour * 60).toDouble();
+
+    final top = (clampedStart - _kStartHour * 60) / 60 * _kHourHeight;
+    final height = ((clampedEnd - clampedStart) / 60 * _kHourHeight)
+        .clamp(24.0, double.infinity);
+
+    final statusName = scheduleStatusName(schedule.statusId);
+    final pair = statusColor(statusName);
+
+    return Positioned(
+      top: top,
+      left: 4,
+      right: 4,
+      height: height,
+      child: GestureDetector(
+        onTap: () {
+          if (schedule.ticketId != null && onTapTicket != null) {
+            onTapTicket!(schedule.ticketId!);
+          } else if (onTapSchedule != null) {
+            onTapSchedule!(schedule);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: pair.background,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: pair.foreground.withAlpha(51), width: 1),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                schedule.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: pair.foreground,
+                ),
+              ),
+              if (height > 36)
+                Text(
+                  '${formatMinutes(schedule.timeStartMinutes)} – '
+                  '${formatMinutes(schedule.timeEndMinutes)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.manrope(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: pair.foreground.withAlpha(179),
+                  ),
+                ),
+              if (schedule.ticketId != null && height > 52)
+                Icon(LucideIcons.link, size: 10, color: pair.foreground.withAlpha(153)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

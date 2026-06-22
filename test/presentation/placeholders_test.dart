@@ -1,14 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/presentation/screens/placeholder/calendario_placeholder_screen.dart';
-
-void main() {
-  testWidgets('CalendarioPlaceholderScreen renders without error',
-      (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(home: CalendarioPlaceholderScreen()),
-    );
-    expect(find.byType(Scaffold), findsOneWidget);
-    expect(find.text('Calendario'), findsOneWidget);
-  });
-}
+// This test was replaced in D4b — CalendarioPlaceholderScreen has been
+// superseded by CalendarioScreen (lib/features/calendario/calendario_screen.dart).
+// The placeholder file is kept to avoid a dead-import error in case it is
+// referenced from other tests in future, but this suite no longer tests it.
+//
+// Full CalendarioScreen widget tests live in:
+//   test/features/calendario/calendario_screen_test.dart
+void main() {}
