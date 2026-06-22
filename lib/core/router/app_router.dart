@@ -13,7 +13,8 @@ import '../../presentation/screens/placeholder/calendario_placeholder_screen.dar
 import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
-import '../../presentation/screens/rapportini/rapportini_screen.dart';
+import '../../features/rapportino/rapportini_list_screen.dart';
+import '../../features/rapportino/rapportino_view_screen.dart';
 
 /// Route path constants.
 abstract final class AppRoutes {
@@ -34,6 +35,10 @@ abstract final class AppRoutes {
   /// Build the editor path for a given draft report id (under Altro › Rapportini).
   static String rapportiniEditor(String reportId) =>
       '/altro/rapportini/editor/$reportId';
+
+  /// Build the read-only view path for a submitted rapportino.
+  static String rapportiniView(String reportId) =>
+      '/altro/rapportini/view/$reportId';
 }
 
 /// Global navigator key — use for imperative navigation outside widget tree.
@@ -141,11 +146,18 @@ GoRouter buildRouter(WidgetRef ref) {
                 routes: [
                   GoRoute(
                     path: 'rapportini',
-                    builder: (context, state) => const RapportiniScreen(),
+                    builder: (context, state) =>
+                        const RapportiniListScreen(),
                     routes: [
                       GoRoute(
                         path: 'editor/:reportId',
                         builder: (context, state) => RapportinoFormScreen(
+                          reportId: state.pathParameters['reportId']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'view/:reportId',
+                        builder: (context, state) => RapportinoViewScreen(
                           reportId: state.pathParameters['reportId']!,
                         ),
                       ),
