@@ -1,12 +1,16 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../presentation/providers/report_editor_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'ticket_providers.dart';
 
@@ -252,10 +256,8 @@ class _TicketDetailBody extends ConsumerWidget {
                 Expanded(
                   child: AppButton(
                     label: 'Crea rapportino',
-                    onPressed: () {
-                      // TODO(D3b): navigate to rapportino form with ticketId.
-                      // context.push('/altro/rapportini/editor/new?ticketId=${ticket.id}');
-                    },
+                    onPressed: () =>
+                        _createRapportino(context, ref, ticket),
                   ),
                 ),
               ],
@@ -264,6 +266,32 @@ class _TicketDetailBody extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _createRapportino(
+    BuildContext context,
+    WidgetRef ref,
+    Ticket ticket,
+  ) async {
+    final repo = ref.read(draftReportRepositoryProvider);
+    final id = 'draft-${DateTime.now().millisecondsSinceEpoch}';
+    await repo.createDraft(
+      DraftReportsCompanion.insert(
+        id: id,
+        tenantId: 'local',
+        createdAt: DateTime.now().toUtc(),
+        title: 'Rapportino — ${ticket.title}',
+        insertedUserId: 'local-user',
+        locationId: ticket.locationId,
+        ticketId: Value(ticket.id),
+        customerId: Value(ticket.customerId),
+        isLocalOnly: const Value(true),
+        stato: const Value('Bozza'),
+      ),
+    );
+    if (context.mounted) {
+      context.push(AppRoutes.rapportiniEditor(id));
+    }
   }
 }
 

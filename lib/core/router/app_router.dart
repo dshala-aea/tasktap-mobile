@@ -12,7 +12,7 @@ import '../../presentation/screens/placeholder/altro_screen.dart';
 import '../../presentation/screens/placeholder/calendario_placeholder_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
-import '../../presentation/screens/rapportini/editor/rapportino_editor_screen.dart';
+import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../presentation/screens/rapportini/rapportini_screen.dart';
 
 /// Route path constants.
@@ -145,7 +145,7 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'editor/:reportId',
-                        builder: (context, state) => RapportinoEditorScreen(
+                        builder: (context, state) => RapportinoFormScreen(
                           reportId: state.pathParameters['reportId']!,
                         ),
                       ),

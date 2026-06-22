@@ -1,0 +1,479 @@
+// dart format width=100
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_card.dart';
+// section_title omitted — using inline _SL below
+import '../../../presentation/providers/report_editor_providers.dart';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Step 2 — Ore
+//
+// Per-technician hours tiles (HH/MM) + km/travel + start/stop timer.
+// Dark "Totale ore" summary card at the bottom.
+// Folds old step_staff.dart logic with design-system styling.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class StepOre extends ConsumerWidget {
+  const StepOre({super.key, required this.reportId});
+
+  final String reportId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(reportEditorProvider(reportId));
+    final notifier = ref.read(reportEditorProvider(reportId).notifier);
+    final totalOre = state.staffRows.fold<double>(
+      0,
+      (sum, r) => sum + r.effectiveHours,
+    );
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(19, 16, 19, 8),
+            children: [
+              _SL(title:'Tecnici / Ore lavorate'),
+              const SizedBox(height: 12),
+              if (state.staffRows.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text(
+                      'Nessun tecnico aggiunto.\nPremi il pulsante per aggiungere.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.MUTED, fontSize: 15),
+                    ),
+                  ),
+                )
+              else
+                ...state.staffRows.map(
+                  (row) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _StaffTile(
+                      row: row,
+                      onUpdate: (updated) => notifier.updateStaff(updated),
+                      onRemove: () => notifier.removeStaff(row.id),
+                      onStartTimer: () => notifier.startTimer(row.id),
+                      onStopTimer: () => notifier.stopTimer(row.id),
+                    ),
+                  ),
+                ),
+
+              // Add staff button
+              OutlinedButton.icon(
+                onPressed: () => _showAddStaffDialog(context, ref),
+                icon: const Icon(Icons.person_add_outlined),
+                label: const Text('Aggiungi tecnico'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // ── Totale ore dark card ───────────────────────────────────────
+              _TotalOreCard(totalOre: totalOre, staffCount: state.staffRows.length),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddStaffDialog(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(reportEditorProvider(reportId).notifier);
+    final userIdCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aggiungi tecnico'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Nome tecnico'),
+            ),
+            TextField(
+              controller: userIdCtrl,
+              decoration: const InputDecoration(labelText: 'ID utente'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final id = DateTime.now().millisecondsSinceEpoch.toString();
+              notifier.addStaff(
+                StaffRow(
+                  id: 'staff-$id',
+                  userId: userIdCtrl.text.trim().isEmpty
+                      ? 'user-$id'
+                      : userIdCtrl.text.trim(),
+                  displayName: nameCtrl.text.trim(),
+                ),
+              );
+              Navigator.pop(ctx);
+            },
+            child: const Text('Aggiungi'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Staff tile ─────────────────────────────────────────────────────────────────
+
+class _StaffTile extends StatefulWidget {
+  const _StaffTile({
+    required this.row,
+    required this.onUpdate,
+    required this.onRemove,
+    required this.onStartTimer,
+    required this.onStopTimer,
+  });
+
+  final StaffRow row;
+  final ValueChanged<StaffRow> onUpdate;
+  final VoidCallback onRemove;
+  final VoidCallback onStartTimer;
+  final VoidCallback onStopTimer;
+
+  @override
+  State<_StaffTile> createState() => _StaffTileState();
+}
+
+class _StaffTileState extends State<_StaffTile> {
+  late final TextEditingController _hoursCtrl;
+  late final TextEditingController _kmCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _hoursCtrl = TextEditingController(
+      text: widget.row.hoursWorked?.toStringAsFixed(1) ?? '',
+    );
+    _kmCtrl = TextEditingController(
+      text: widget.row.kmTraveled > 0
+          ? widget.row.kmTraveled.toStringAsFixed(1)
+          : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoursCtrl.dispose();
+    _kmCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final row = widget.row;
+
+    return AppCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: AppColors.YSoft,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person_outline, size: 18, color: AppColors.DARK),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  row.displayName.isNotEmpty ? row.displayName : row.userId,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: AppColors.DARK,
+                  ),
+                ),
+              ),
+              // Timer badge / start button
+              if (row.timerRunning)
+                _RunningTimerBadge(
+                  startedAt: row.timerStartedAt,
+                  onStop: widget.onStopTimer,
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.timer_outlined, color: AppColors.MUTED),
+                  tooltip: 'Avvia timer',
+                  constraints:
+                      const BoxConstraints(minWidth: 44, minHeight: 44),
+                  onPressed: widget.onStartTimer,
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: AppColors.RED),
+                tooltip: 'Rimuovi',
+                constraints:
+                    const BoxConstraints(minWidth: 44, minHeight: 44),
+                onPressed: widget.onRemove,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // HH / MM tiles
+          Row(
+            children: [
+              Expanded(
+                child: _NumField(
+                  controller: _hoursCtrl,
+                  label: 'Ore',
+                  suffix: 'h',
+                  onChanged: (v) {
+                    final h = double.tryParse(v);
+                    widget.onUpdate(row.copyWith(hoursWorked: h));
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _NumField(
+                  controller: _kmCtrl,
+                  label: 'Km percorsi',
+                  suffix: 'km',
+                  onChanged: (v) {
+                    final km = double.tryParse(v) ?? 0.0;
+                    widget.onUpdate(row.copyWith(kmTraveled: km));
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          // Timer time range display
+          if (row.startTime != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Inizio: ${_fmtTime(row.startTime!)}'
+              '${row.endTime != null ? ' → Fine: ${_fmtTime(row.endTime!)}' : ' (in corso)'}',
+              style: const TextStyle(color: AppColors.MUTED, fontSize: 12),
+            ),
+            Text(
+              'Ore effettive: ${row.effectiveHours.toStringAsFixed(2)}h',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: AppColors.DARK,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _fmtTime(DateTime dt) =>
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+}
+
+// ── Running timer badge ────────────────────────────────────────────────────────
+
+class _RunningTimerBadge extends StatefulWidget {
+  const _RunningTimerBadge({this.startedAt, required this.onStop});
+
+  final DateTime? startedAt;
+  final VoidCallback onStop;
+
+  @override
+  State<_RunningTimerBadge> createState() => _RunningTimerBadgeState();
+}
+
+class _RunningTimerBadgeState extends State<_RunningTimerBadge>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker((_) => setState(() {}));
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = widget.startedAt != null
+        ? DateTime.now().toUtc().difference(widget.startedAt!)
+        : Duration.zero;
+    final hh = elapsed.inHours.toString().padLeft(2, '0');
+    final mm = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
+    final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+
+    return GestureDetector(
+      onTap: widget.onStop,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.YSoft,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.Y),
+        ),
+        child: Text(
+          '$hh:$mm:$ss',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            color: AppColors.DARK,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Numeric input field ────────────────────────────────────────────────────────
+
+class _NumField extends StatelessWidget {
+  const _NumField({
+    required this.controller,
+    required this.label,
+    required this.suffix,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String suffix;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        suffixText: suffix,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+// ── Totale ore dark card ──────────────────────────────────────────────────────
+
+class _TotalOreCard extends StatelessWidget {
+  const _TotalOreCard({required this.totalOre, required this.staffCount});
+
+  final double totalOre;
+  final int staffCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.CHARCOAL,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppColors.SH,
+      ),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Totale ore',
+                style: TextStyle(
+                  color: AppColors.MUTED,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${totalOre.toStringAsFixed(1)} h',
+                style: const TextStyle(
+                  color: AppColors.Y,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Text(
+                'Tecnici',
+                style: TextStyle(
+                  color: AppColors.MUTED,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$staffCount',
+                style: const TextStyle(
+                  color: AppColors.INV,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SL extends StatelessWidget {
+  const _SL({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontFamily: 'Sora',
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: Color(0xFF363636),
+      ),
+    );
+  }
+}
