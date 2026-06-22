@@ -204,18 +204,16 @@ class _BottomNavBar extends StatelessWidget {
                   size: AppButtonSize.lg,
                 ),
               ),
-              const SizedBox(width: 12),
+              if (!isLast) const SizedBox(width: 12),
             ],
-            Expanded(
-              flex: isFirst ? 1 : 1,
-              child: isLast
-                  ? const SizedBox.shrink() // Riepilogo has its own submit btn
-                  : AppButton(
-                      label: 'Avanti',
-                      onPressed: onNext,
-                      size: AppButtonSize.lg,
-                    ),
-            ),
+            if (!isLast)
+              Expanded(
+                child: AppButton(
+                  label: 'Avanti',
+                  onPressed: onNext,
+                  size: AppButtonSize.lg,
+                ),
+              ),
           ],
         ),
       ),
