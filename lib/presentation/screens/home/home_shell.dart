@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../data/timbratura/timbra_sync_watcher.dart';
 
 /// The main app shell with the 5-tab floating-pill bottom navigation.
 ///
@@ -31,6 +32,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     // Trigger initial sync post-login.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncProvider.notifier).performSync();
+      initTimbraSyncWatcher(ref);
     });
   }
 

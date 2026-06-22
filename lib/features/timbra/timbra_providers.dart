@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
+import '../../data/timbratura/timbra_sync_service.dart';
 import '../../data/timbratura/work_session_repository.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -28,6 +29,12 @@ final todaySessionsProvider =
     StreamProvider.autoDispose<List<WorkSession>>((ref) {
   final repo = ref.watch(workSessionRepositoryProvider);
   return repo.watchTodaySessions();
+});
+
+/// True when at least one of today's events has not yet been synced.
+final hasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
+  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
+  return sessions.any((s) => s.isPendingSync);
 });
 
 // ── Shift state notifier ──────────────────────────────────────────────────────
@@ -151,9 +158,10 @@ final totalWorkedTodayProvider = Provider.autoDispose<Duration>((ref) {
 
 /// Notifier for punch-in / punch-out / pause / resume.
 class PunchNotifier extends StateNotifier<AsyncValue<void>> {
-  PunchNotifier(this._repo) : super(const AsyncData(null));
+  PunchNotifier(this._repo, [this._syncService]) : super(const AsyncData(null));
 
   final IWorkSessionRepository _repo;
+  final TimbraSyncService? _syncService;
 
   Future<void> punch(TimbraState current) async {
     state = const AsyncLoading();
@@ -175,6 +183,8 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
         );
       }
       state = const AsyncData(null);
+      // Best-effort sync after punch (fire-and-forget; ignore failure).
+      _syncService?.syncNow();
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -199,6 +209,8 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
         );
       }
       state = const AsyncData(null);
+      // Best-effort sync after pause/resume (fire-and-forget; ignore failure).
+      _syncService?.syncNow();
     } catch (e, st) {
       state = AsyncError(e, st);
     }
@@ -207,5 +219,8 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
 
 final punchNotifierProvider =
     StateNotifierProvider.autoDispose<PunchNotifier, AsyncValue<void>>((ref) {
-  return PunchNotifier(ref.watch(workSessionRepositoryProvider));
+  return PunchNotifier(
+    ref.watch(workSessionRepositoryProvider),
+    ref.watch(timbraSyncServiceProvider),
+  );
 });

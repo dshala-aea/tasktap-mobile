@@ -132,6 +132,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
                   sessions: sessions,
                   total: total,
                   now: _now,
+                  hasPendingSync: ref.watch(hasPendingSyncProvider),
                 ),
               ),
             ],
@@ -312,11 +313,13 @@ class _SessionsCard extends StatelessWidget {
     required this.sessions,
     required this.total,
     required this.now,
+    required this.hasPendingSync,
   });
 
   final List<WorkSession> sessions;
   final Duration total;
   final DateTime now;
+  final bool hasPendingSync;
 
   @override
   Widget build(BuildContext context) {
@@ -331,16 +334,34 @@ class _SessionsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section title
-          Text(
-            'SESSIONI DI OGGI',
-            style: const TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.4,
-              color: AppColors.MUTED,
-            ),
+          // Section title + optional pending-sync indicator
+          Row(
+            children: [
+              const Text(
+                'SESSIONI DI OGGI',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.4,
+                  color: AppColors.MUTED,
+                ),
+              ),
+              if (hasPendingSync) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Non sincronizzato',
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      color: AppColors.AMBER,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 16),
 
