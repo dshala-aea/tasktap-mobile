@@ -247,9 +247,9 @@ class _TicketDetailBody extends ConsumerWidget {
                 Expanded(
                   child: AppButton.secondary(
                     label: 'Cliente',
-                    onPressed: () {
-                      // TODO: navigate to customer detail when built (P5).
-                    },
+                    onPressed: () => context.push(
+                      AppRoutes.clientiDetail(ticket.customerId),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
