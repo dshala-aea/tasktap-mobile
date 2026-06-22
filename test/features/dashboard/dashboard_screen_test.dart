@@ -108,7 +108,7 @@ void main() {
     testWidgets('shows ActiveJobCard when in-progress schedule present',
         (tester) async {
       final today = DateTime.now().toUtc();
-      final dayStart = DateTime(today.year, today.month, today.day).toUtc();
+      final dayStart = DateTime.utc(today.year, today.month, today.day);
       await db.into(db.schedules).insert(SchedulesCompanion.insert(
             id: 'sched-1',
             tenantId: 'tenant-1',

@@ -553,7 +553,7 @@ void main() {
         () async {
       // Pre-seed DB directly (no network)
       final today = DateTime.now().toUtc();
-      final todayDate = DateTime(today.year, today.month, today.day).toUtc();
+      final todayDate = DateTime.utc(today.year, today.month, today.day);
 
       await db.into(db.schedules).insert(
             SchedulesCompanion.insert(
@@ -588,7 +588,7 @@ void main() {
     test('weekSchedulesProvider emits schedules for next 7 days', () async {
       final now = DateTime.now().toUtc();
       final day0 =
-          DateTime(now.year, now.month, now.day).toUtc(); // today
+          DateTime.utc(now.year, now.month, now.day); // today
       final day3 = day0.add(const Duration(days: 3)); // in window
       final day9 = day0.add(const Duration(days: 9)); // outside window
 
@@ -716,7 +716,7 @@ void main() {
     test('shows only today schedules, not future ones', () async {
       final today = DateTime.now().toUtc();
       final todayDate =
-          DateTime(today.year, today.month, today.day).toUtc();
+          DateTime.utc(today.year, today.month, today.day);
       final tomorrow = todayDate.add(const Duration(days: 1));
 
       await db.into(db.schedules).insert(
@@ -765,7 +765,7 @@ void main() {
     test('today schedules are ordered by timeStartMinutes ASC', () async {
       final today = DateTime.now().toUtc();
       final todayDate =
-          DateTime(today.year, today.month, today.day).toUtc();
+          DateTime.utc(today.year, today.month, today.day);
 
       await db.into(db.schedules).insert(
             SchedulesCompanion.insert(

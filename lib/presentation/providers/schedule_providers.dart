@@ -10,9 +10,11 @@ import '../../data/sync/sync_service.dart';
 final todaySchedulesProvider =
     StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now();
-  final todayDate =
-      DateTime(today.year, today.month, today.day).toUtc();
+  // "Today" is the UTC calendar day — schedules' activityDate is stored as a
+  // UTC-midnight date, so the window must be UTC to bucket correctly across the
+  // local/UTC date boundary (a local-midnight window misbuckets near midnight).
+  final today = DateTime.now().toUtc();
+  final todayDate = DateTime.utc(today.year, today.month, today.day);
   final tomorrowDate = todayDate.add(const Duration(days: 1));
 
   return (db.select(db.schedules)
@@ -29,8 +31,8 @@ final todaySchedulesProvider =
 final weekSchedulesProvider =
     StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now();
-  final start = DateTime(today.year, today.month, today.day).toUtc();
+  final today = DateTime.now().toUtc();
+  final start = DateTime.utc(today.year, today.month, today.day);
   final end = start.add(const Duration(days: 8));
 
   return (db.select(db.schedules)

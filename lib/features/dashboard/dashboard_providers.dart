@@ -30,8 +30,8 @@ const int _kStatusCompleted = 5;
 final inProgressSchedulesProvider =
     StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now();
-  final start = DateTime(today.year, today.month, today.day).toUtc();
+  final today = DateTime.now().toUtc();
+  final start = DateTime.utc(today.year, today.month, today.day);
   final end = start.add(const Duration(days: 1));
   return (db.select(db.schedules)
         ..where(
@@ -48,8 +48,8 @@ final inProgressSchedulesProvider =
 final completedTodaySchedulesProvider =
     StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now();
-  final start = DateTime(today.year, today.month, today.day).toUtc();
+  final today = DateTime.now().toUtc();
+  final start = DateTime.utc(today.year, today.month, today.day);
   final end = start.add(const Duration(days: 1));
   return (db.select(db.schedules)
         ..where(
@@ -65,13 +65,10 @@ final completedTodaySchedulesProvider =
 final upcomingSchedulesProvider =
     StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now();
-  final start = DateTime(today.year, today.month, today.day)
-      .toUtc()
-      .add(const Duration(days: 1));
-  final end = DateTime(today.year, today.month, today.day)
-      .toUtc()
-      .add(const Duration(days: 8));
+  final today = DateTime.now().toUtc();
+  final base = DateTime.utc(today.year, today.month, today.day);
+  final start = base.add(const Duration(days: 1));
+  final end = base.add(const Duration(days: 8));
   return (db.select(db.schedules)
         ..where(
           (s) =>
