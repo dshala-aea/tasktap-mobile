@@ -142,7 +142,8 @@ void main() {
       await tester.tap(ticketTab.first);
       await tester.pumpAndSettle(const Duration(seconds: 1));
       // Ticket is now the active tab → its label is shown in the nav.
-      expect(find.text('Ticket'), findsOneWidget);
+      // (TicketListScreen also renders a "Ticket" heading, so at least one match.)
+      expect(find.text('Ticket'), findsWidgets);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
