@@ -282,6 +282,33 @@ class ReportControlli extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── work_sessions (Timbra) ────────────────────────────────────────────────────
+/// Local-only clock-in / clock-out sessions for the Timbra feature.
+/// When the backend endpoint (D6) is implemented, these rows will be synced up.
+///
+/// event_type values:
+///   'ingresso'  — clock-in (shift start)
+///   'fine'      — clock-out (shift end)
+///   'pausa'     — pause start
+///   'ripresa'   — pause end (resume)
+class WorkSessions extends Table {
+  @override
+  String get tableName => 'work_sessions';
+
+  TextColumn get id => text()();
+  DateTimeColumn get eventTime => dateTime()();
+  /// One of: ingresso | fine | pausa | ripresa
+  TextColumn get eventType => text()();
+  /// Optional notes (future use).
+  TextColumn get notes => text().nullable()();
+  /// True while not yet synced to the backend.
+  BoolColumn get isPendingSync =>
+      boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── report_allegati ───────────────────────────────────────────────────────────
 /// Local attachment metadata. Before upload, storagePath is a local file path.
 class ReportAllegati extends Table {
@@ -326,13 +353,14 @@ class ReportAllegati extends Table {
     ReportMateriali,
     ReportControlli,
     ReportAllegati,
+    WorkSessions,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -347,6 +375,10 @@ class AppDatabase extends _$AppDatabase {
               draftReports, draftReports.submissionState);
           await m.addColumn(draftReports, draftReports.idempotencyKey);
           await m.addColumn(draftReports, draftReports.submissionError);
+        }
+        if (from < 3) {
+          // Timbra: add work_sessions table for local clock-in/out (D6 backend pending)
+          await m.createTable(workSessions);
         }
       },
     );

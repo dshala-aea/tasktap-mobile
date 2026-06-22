@@ -9,7 +9,7 @@ import '../../presentation/screens/interventi/interventi_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
 import '../../presentation/screens/placeholder/altro_screen.dart';
 import '../../presentation/screens/placeholder/calendario_placeholder_screen.dart';
-import '../../presentation/screens/placeholder/timbra_placeholder_screen.dart';
+import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
 import '../../presentation/screens/rapportini/editor/rapportino_editor_screen.dart';
 import '../../presentation/screens/rapportini/rapportini_screen.dart';
@@ -96,13 +96,13 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 2 — Timbra (placeholder)
+          // 2 — Timbra
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'timbra'),
             routes: [
               GoRoute(
                 path: AppRoutes.timbra,
-                builder: (context, state) => const TimbraPlaceholderScreen(),
+                builder: (context, state) => const TimbraScreen(),
               ),
             ],
           ),
