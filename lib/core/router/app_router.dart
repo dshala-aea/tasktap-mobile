@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/altro/altro_hub_screen.dart';
+import '../../features/altro/coming_soon_screen.dart';
+import '../../features/altro/impostazioni_screen.dart';
+import '../../features/altro/notifiche_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
 import '../../features/ticket/ticket_detail_screen.dart';
 import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
-import '../../presentation/screens/placeholder/altro_screen.dart';
 import '../../presentation/screens/placeholder/calendario_placeholder_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
@@ -31,6 +34,11 @@ abstract final class AppRoutes {
   static const String altro = '/altro';
   static const String altroProfilo = '/altro/profilo';
   static const String altroRapportini = '/altro/rapportini';
+  static const String altroImpostazioni = '/altro/impostazioni';
+  static const String altroNotifiche = '/altro/notifiche';
+
+  /// Path for the shared "coming soon" placeholder; pass [title] as GoRouter extra.
+  static const String altroComingSoon = '/altro/coming-soon';
 
   /// Build the editor path for a given draft report id (under Altro › Rapportini).
   static String rapportiniEditor(String reportId) =>
@@ -136,13 +144,13 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 4 — Altro (hub + Rapportini + Profilo sub-routes)
+          // 4 — Altro (hub + Rapportini + Profilo + Impostazioni + Notifiche)
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'altro'),
             routes: [
               GoRoute(
                 path: AppRoutes.altro,
-                builder: (context, state) => const AltroScreen(),
+                builder: (context, state) => const AltroHubScreen(),
                 routes: [
                   GoRoute(
                     path: 'rapportini',
@@ -166,6 +174,22 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'profilo',
                     builder: (context, state) => const ProfiloScreen(),
+                  ),
+                  GoRoute(
+                    path: 'impostazioni',
+                    builder: (context, state) =>
+                        const ImpostazioniScreen(),
+                  ),
+                  GoRoute(
+                    path: 'notifiche',
+                    builder: (context, state) =>
+                        const NotificheScreen(),
+                  ),
+                  GoRoute(
+                    path: 'coming-soon',
+                    builder: (context, state) => ComingSoonScreen(
+                      title: (state.extra as String?) ?? 'In arrivo',
+                    ),
                   ),
                 ],
               ),
