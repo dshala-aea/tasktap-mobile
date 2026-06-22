@@ -91,6 +91,9 @@ void main() {
       expect(find.text('Avanti'), findsOneWidget);
       // Indietro NOT visible on step 1
       expect(find.text('Indietro'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
 
     testWidgets('Avanti navigates from step 1 to step 2', (tester) async {
@@ -105,6 +108,9 @@ void main() {
       expect(find.text('Aggiungi tecnico'), findsOneWidget);
       // Indietro now visible
       expect(find.text('Indietro'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
 
     testWidgets('Indietro navigates from step 2 back to step 1', (tester) async {
@@ -124,6 +130,9 @@ void main() {
       // Back on step 1
       expect(find.text('Titolo *'), findsWidgets);
       expect(find.text('Indietro'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
 
     testWidgets('step 3 (Materiali) renders Aggiungi materiale button',
@@ -139,6 +148,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Aggiungi materiale'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
 
     testWidgets('step 4 (Riepilogo) renders firma blocks + validation panel',
@@ -159,6 +171,9 @@ void main() {
       expect(find.text('Da completare prima dell\'invio:'), findsOneWidget);
       // No Avanti on last step
       expect(find.text('Avanti'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
   });
 
@@ -186,6 +201,9 @@ void main() {
 
       // Queue should NOT have been called
       verifyNever(() => fakeQueue.enqueue(any()));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
 
     testWidgets('submit calls queue.enqueue + processAll when draft is valid',
@@ -246,6 +264,7 @@ void main() {
                 customerSignatureLocalPath: '/tmp/sig-c.png',
                 technicianSignatureAllegatoId: 'sig-t-1',
                 technicianSignatureLocalPath: '/tmp/sig-t.png',
+                materialiNotRequired: true,
                 staffRows: [
                   StaffRow(
                     id: 'staff-1',
@@ -274,12 +293,17 @@ void main() {
       // Invia button present + enabled
       final inviaBtn = find.text('Invia rapportino');
       expect(inviaBtn, findsOneWidget);
+      await tester.ensureVisible(inviaBtn);
+      await tester.pumpAndSettle();
       await tester.tap(inviaBtn);
       await tester.pump();
 
       // Queue must have been called
       verify(() => fakeQueue.enqueue(reportId)).called(1);
       verify(() => fakeQueue.processAll()).called(1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
   });
 }
