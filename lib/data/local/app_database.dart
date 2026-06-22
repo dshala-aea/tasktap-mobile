@@ -147,6 +147,29 @@ class Cantieri extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ticket_statuses ───────────────────────────────────────────────────────────
+class TicketStatuses extends Table {
+  IntColumn get id => integer()();
+  TextColumn get tenantId => text()();
+  TextColumn get name => text()();
+  BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
+  BoolColumn get isClosed => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── ticket_types ──────────────────────────────────────────────────────────────
+class TicketTypes extends Table {
+  IntColumn get id => integer()();
+  TextColumn get tenantId => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── materiali ─────────────────────────────────────────────────────────────────
 class Materiali extends Table {
   TextColumn get id => text()();
@@ -347,6 +370,8 @@ class ReportAllegati extends Table {
     Tickets,
     Schedules,
     Cantieri,
+    TicketStatuses,
+    TicketTypes,
     Materiali,
     DraftReports,
     ReportStaffTable,
@@ -360,7 +385,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -379,6 +404,11 @@ class AppDatabase extends _$AppDatabase {
         if (from < 3) {
           // Timbra: add work_sessions table for local clock-in/out (D6 backend pending)
           await m.createTable(workSessions);
+        }
+        if (from < 4) {
+          // D3a: add ticket lookup tables (status + type)
+          await m.createTable(ticketStatuses);
+          await m.createTable(ticketTypes);
         }
       },
     );
