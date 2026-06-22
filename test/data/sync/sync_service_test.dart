@@ -37,6 +37,8 @@ Map<String, dynamic> _syncPayload({
   List<Map<String, dynamic>> customers = const [],
   List<Map<String, dynamic>> locations = const [],
   List<Map<String, dynamic>> tickets = const [],
+  List<Map<String, dynamic>> ticketStatuses = const [],
+  List<Map<String, dynamic>> ticketTypes = const [],
 }) {
   return {
     'syncedAt': (syncedAt ?? DateTime.utc(2026, 6, 21, 12)).toIso8601String(),
@@ -46,6 +48,8 @@ Map<String, dynamic> _syncPayload({
     'customers': customers,
     'locations': locations,
     'tickets': tickets,
+    'ticketStatuses': ticketStatuses,
+    'ticketTypes': ticketTypes,
   };
 }
 
@@ -139,6 +143,29 @@ Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
       'contractId': null,
       'prodottoAssistenzaId': null,
       'commessaId': null,
+    };
+
+Map<String, dynamic> _ticketStatusJson({
+  int id = 1,
+  String name = 'Aperto',
+}) =>
+    {
+      'id': id,
+      'tenantId': 'tenant-1',
+      'name': name,
+      'isDefault': true,
+      'isClosed': false,
+    };
+
+Map<String, dynamic> _ticketTypeJson({
+  int id = 1,
+  String name = 'Assistenza',
+}) =>
+    {
+      'id': id,
+      'tenantId': 'tenant-1',
+      'name': name,
+      'description': null,
     };
 
 Map<String, dynamic> _draftReportJson({String id = 'report-1'}) => {
@@ -356,6 +383,52 @@ void main() {
 
       final rows = await db.select(db.customers).get();
       expect(rows.length, 1);
+    });
+  });
+
+  // ── Ticket lookup tables ───────────────────────────────────────────────────
+
+  group('sync — ticket lookup tables', () {
+    test('inserts a new ticketStatus', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(ticketStatuses: [_ticketStatusJson()]),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.ticketStatuses).get();
+      expect(rows.length, 1);
+      expect(rows.first.id, 1);
+      expect(rows.first.name, 'Aperto');
+      expect(rows.first.isDefault, true);
+      expect(rows.first.isClosed, false);
+    });
+
+    test('inserts a new ticketType', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(ticketTypes: [_ticketTypeJson()]),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.ticketTypes).get();
+      expect(rows.length, 1);
+      expect(rows.first.id, 1);
+      expect(rows.first.name, 'Assistenza');
+    });
+
+    test('upserts ticketStatus on re-sync', () async {
+      _stubDioGet(mockDio, _syncPayload(ticketStatuses: [_ticketStatusJson(name: 'Vecchio')]));
+      await svc.sync();
+
+      _stubDioGet(mockDio, _syncPayload(ticketStatuses: [_ticketStatusJson(name: 'Aggiornato')]));
+      await svc.sync();
+
+      final rows = await db.select(db.ticketStatuses).get();
+      expect(rows.length, 1);
+      expect(rows.first.name, 'Aggiornato');
     });
   });
 
@@ -623,6 +696,17 @@ void main() {
         ScheduleDto.parseTimeToMinutes(dto.schedules.first.timeStart),
         480,
       );
+    });
+
+    test('parses ticketStatuses and ticketTypes', () {
+      final dto = SyncResultDto.fromJson(_syncPayload(
+        ticketStatuses: [_ticketStatusJson()],
+        ticketTypes: [_ticketTypeJson()],
+      ));
+      expect(dto.ticketStatuses.length, 1);
+      expect(dto.ticketStatuses.first.name, 'Aperto');
+      expect(dto.ticketTypes.length, 1);
+      expect(dto.ticketTypes.first.name, 'Assistenza');
     });
   });
 
