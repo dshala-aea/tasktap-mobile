@@ -9,6 +9,8 @@ class SyncResultDto {
   final List<CustomerDto> customers;
   final List<LocationDto> locations;
   final List<TicketDto> tickets;
+  final List<TicketStatusDto> ticketStatuses;
+  final List<TicketTypeDto> ticketTypes;
 
   const SyncResultDto({
     required this.syncedAt,
@@ -18,6 +20,8 @@ class SyncResultDto {
     required this.customers,
     required this.locations,
     required this.tickets,
+    required this.ticketStatuses,
+    required this.ticketTypes,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -29,6 +33,8 @@ class SyncResultDto {
       customers: _list(j['customers'], CustomerDto.fromJson),
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),
+      ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
+      ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
     );
   }
 }
@@ -207,6 +213,55 @@ class TicketDto {
         contractId: j['contractId'] as String?,
         prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
         commessaId: j['commessaId'] as String?,
+      );
+}
+
+// ── TicketStatus ───────────────────────────────────────────────────────────────
+
+class TicketStatusDto {
+  final int id;
+  final String tenantId;
+  final String name;
+  final bool isDefault;
+  final bool isClosed;
+
+  const TicketStatusDto({
+    required this.id,
+    required this.tenantId,
+    required this.name,
+    required this.isDefault,
+    required this.isClosed,
+  });
+
+  factory TicketStatusDto.fromJson(Map<String, dynamic> j) => TicketStatusDto(
+        id: (j['id'] as num).toInt(),
+        tenantId: j['tenantId'] as String,
+        name: j['name'] as String,
+        isDefault: j['isDefault'] as bool? ?? false,
+        isClosed: j['isClosed'] as bool? ?? false,
+      );
+}
+
+// ── TicketType ─────────────────────────────────────────────────────────────────
+
+class TicketTypeDto {
+  final int id;
+  final String tenantId;
+  final String name;
+  final String? description;
+
+  const TicketTypeDto({
+    required this.id,
+    required this.tenantId,
+    required this.name,
+    this.description,
+  });
+
+  factory TicketTypeDto.fromJson(Map<String, dynamic> j) => TicketTypeDto(
+        id: (j['id'] as num).toInt(),
+        tenantId: j['tenantId'] as String,
+        name: j['name'] as String,
+        description: j['description'] as String?,
       );
 }
 

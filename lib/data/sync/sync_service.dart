@@ -46,6 +46,8 @@ class SyncService {
       await _upsertTickets(payload.tickets);
       await _upsertSchedules(payload.schedules);
       await _upsertDraftReports(payload.draftReports);
+      await _upsertTicketStatuses(payload.ticketStatuses);
+      await _upsertTicketTypes(payload.ticketTypes);
     });
 
     await db.setLastSync(payload.syncedAt);
@@ -190,6 +192,33 @@ class SyncService {
               customerSignoffAt: Value(r.customerSignoffAt),
               // Synced-down reports are never local-only
               isLocalOnly: const Value(false),
+            ),
+          );
+    }
+  }
+
+  Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
+    for (final s in list) {
+      await db.into(db.ticketStatuses).insertOnConflictUpdate(
+            TicketStatusesCompanion.insert(
+              id: Value(s.id),
+              tenantId: s.tenantId,
+              name: s.name,
+              isDefault: Value(s.isDefault),
+              isClosed: Value(s.isClosed),
+            ),
+          );
+    }
+  }
+
+  Future<void> _upsertTicketTypes(List<TicketTypeDto> list) async {
+    for (final t in list) {
+      await db.into(db.ticketTypes).insertOnConflictUpdate(
+            TicketTypesCompanion.insert(
+              id: Value(t.id),
+              tenantId: t.tenantId,
+              name: t.name,
+              description: Value(t.description),
             ),
           );
     }
