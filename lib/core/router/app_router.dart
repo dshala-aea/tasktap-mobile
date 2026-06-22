@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
-import '../../presentation/screens/interventi/interventi_screen.dart';
+import '../../features/ticket/ticket_detail_screen.dart';
+import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
 import '../../presentation/screens/placeholder/altro_screen.dart';
 import '../../presentation/screens/placeholder/calendario_placeholder_screen.dart';
@@ -19,6 +20,11 @@ abstract final class AppRoutes {
   static const String login = '/login';
   static const String dashboard = '/dashboard';
   static const String ticket = '/ticket';
+  static const String ticketDetail = '/ticket/:id';
+
+  /// Build the detail path for a given ticket id.
+  static String ticketDetailPath(String id) => '/ticket/$id';
+
   static const String timbra = '/timbra';
   static const String calendario = '/calendario';
   static const String altro = '/altro';
@@ -86,13 +92,21 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 1 — Ticket (reuses the existing interventi/schedules list)
+          // 1 — Ticket
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'ticket'),
             routes: [
               GoRoute(
                 path: AppRoutes.ticket,
-                builder: (context, state) => const InterventiScreen(),
+                builder: (context, state) => const TicketListScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (context, state) => TicketDetailScreen(
+                      ticketId: state.pathParameters['id']!,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
