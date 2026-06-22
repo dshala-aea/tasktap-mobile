@@ -8,12 +8,16 @@
 //   - todaySessionsProvider: returns only today's sessions
 //   - timbraStateProvider: reflects punch state
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
+import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -22,6 +26,31 @@ AppDatabase _makeDb() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   return AppDatabase(NativeDatabase.memory());
 }
+
+// No-op stub repo and API client so timbraSyncServiceProvider never hits Dio.
+class _StubRepo implements IWorkSessionRepository {
+  @override
+  Future<void> addEvent({required String id, required DateTime eventTime, required String eventType}) async {}
+  @override
+  Stream<List<WorkSession>> watchTodaySessions() => const Stream.empty();
+  @override
+  Future<List<WorkSession>> getTodaySessions() async => [];
+  @override
+  Future<void> markSynced(List<String> ids) async {}
+  @override
+  Future<void> clearToday() async {}
+}
+
+class _NoopApiClient extends WorklogApiClient {
+  _NoopApiClient() : super(Dio());
+  @override
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async => [];
+  @override
+  Future<List<TodayWorkLogDto>> getToday() async => [];
+}
+
+TimbraSyncService _noopSyncService() =>
+    TimbraSyncService(repo: _StubRepo(), apiClient: _NoopApiClient());
 
 // ── deriveShiftState unit tests ───────────────────────────────────────────────
 
@@ -196,7 +225,10 @@ void main() {
     setUp(() {
       db = _makeDb();
       container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+        ],
       );
     });
 
