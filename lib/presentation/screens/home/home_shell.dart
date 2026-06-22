@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 
-/// The main app shell with bottom navigation.
+/// The main app shell with the 5-tab floating-pill bottom navigation.
 ///
-/// Hosts four tabs: Oggi / Interventi / Rapportini / Profilo.
+/// Hosts: Dashboard / Ticket / Timbra / Calendario / Altro.
 /// Uses [StatefulNavigationShell] to preserve each branch's state.
 ///
 /// Sync triggers:
@@ -47,17 +48,6 @@ class _HomeShellState extends ConsumerState<HomeShell>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: widget.navigationShell,
-      bottomNavigationBar: _AppBottomNav(
-        currentIndex: widget.navigationShell.currentIndex,
-        onDestinationSelected: _onDestinationSelected,
-      ),
-    );
-  }
-
   void _onDestinationSelected(int index) {
     widget.navigationShell.goBranch(
       index,
@@ -65,48 +55,17 @@ class _HomeShellState extends ConsumerState<HomeShell>
       initialLocation: index == widget.navigationShell.currentIndex,
     );
   }
-}
-
-class _AppBottomNav extends StatelessWidget {
-  const _AppBottomNav({
-    required this.currentIndex,
-    required this.onDestinationSelected,
-  });
-
-  final int currentIndex;
-  final ValueChanged<int> onDestinationSelected;
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBar(
-      selectedIndex: currentIndex,
-      onDestinationSelected: onDestinationSelected,
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.today_outlined),
-          selectedIcon: Icon(Icons.today),
-          label: 'Oggi',
-          tooltip: 'Oggi',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.build_outlined),
-          selectedIcon: Icon(Icons.build),
-          label: 'Interventi',
-          tooltip: 'Interventi',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.description_outlined),
-          selectedIcon: Icon(Icons.description),
-          label: 'Rapportini',
-          tooltip: 'Rapportini',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'Profilo',
-          tooltip: 'Profilo',
-        ),
-      ],
+    return Scaffold(
+      body: widget.navigationShell,
+      // Extend body behind the floating pill so the hero/content scrolls under it.
+      extendBody: true,
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: widget.navigationShell.currentIndex,
+        onTap: _onDestinationSelected,
+      ),
     );
   }
 }

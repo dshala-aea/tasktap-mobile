@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -113,29 +114,35 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('bottom navigation bar is visible', (tester) async {
+    testWidgets('AppBottomNav is visible (5-tab pill)', (tester) async {
       await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(AppBottomNav), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('bottom nav has 4 destinations', (tester) async {
+    testWidgets('Dashboard tab is active label on launch', (tester) async {
       await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      expect(find.byType(NavigationDestination), findsNWidgets(4));
+      // Active tab shows its label; Dashboard is index 0 (initial route).
+      expect(find.text('Dashboard'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('tab labels are in Italian', (tester) async {
+    testWidgets('tapping Ticket tab switches branch', (tester) async {
       await tester.pumpWidget(_buildAuthenticatedApp(repo, db, mockDio));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      expect(find.text('Oggi'), findsWidgets);
-      expect(find.text('Interventi'), findsWidgets);
-      expect(find.text('Rapportini'), findsWidgets);
-      expect(find.text('Profilo'), findsWidgets);
+      // Inactive tabs render icon-only; find by Semantics label.
+      final ticketTab = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Ticket',
+      );
+      expect(ticketTab, findsWidgets);
+      await tester.tap(ticketTab.first);
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+      // Ticket is now the active tab → its label is shown in the nav.
+      expect(find.text('Ticket'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
