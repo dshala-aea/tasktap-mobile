@@ -166,12 +166,17 @@ void main() {
 
       await pump(tester);
 
-      // Tap "Pianificazioni" tab (index 2)
+      // Tap "Pianificazioni" tab (index 2).
+      // Use a taller surface so the tab bar is not obscured by the bottom
+      // actions bar (now a two-row Column after the Timbra cantiere button).
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pump();
       await tester.ensureVisible(find.text('Pianificazioni'));
       await tester.tap(find.text('Pianificazioni'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sopralluogo', skipOffstage: false), findsOneWidget);
+      expect(find.text('Sopralluogo'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null); // reset
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
