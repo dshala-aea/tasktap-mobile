@@ -21,6 +21,7 @@ import '../../features/magazzino/magazzino_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
+import '../../features/timbra/cantiere_timbra_screen.dart';
 
 /// Route path constants.
 abstract final class AppRoutes {
@@ -42,6 +43,17 @@ abstract final class AppRoutes {
 
   /// Path for the shared "coming soon" placeholder; pass [title] as GoRouter extra.
   static const String altroComingSoon = '/altro/coming-soon';
+
+  /// Path for the cantiere clock-in/out screen.
+  static const String cantiereTimbra = '/cantiere-timbra';
+
+  /// Build the cantiere timbra path with optional query params.
+  static String cantiereTimbraPath({String? ticketId, String? customerId}) {
+    final params = <String>[];
+    if (ticketId != null) params.add('ticketId=$ticketId');
+    if (customerId != null) params.add('customerId=$customerId');
+    return params.isEmpty ? cantiereTimbra : '$cantiereTimbra?${params.join('&')}';
+  }
 
   static const String altroClienti = '/altro/clienti';
   static const String altroClientiDetail = '/altro/clienti/:id';
@@ -97,6 +109,19 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+
+      // ── Cantiere timbra (pushed from ticket detail) ──────────────────────
+      GoRoute(
+        path: AppRoutes.cantiereTimbra,
+        builder: (context, state) {
+          final ticketId = state.uri.queryParameters['ticketId'];
+          final customerId = state.uri.queryParameters['customerId'];
+          return CantiereTimbraScreen(
+            ticketId: ticketId,
+            customerId: customerId,
+          );
+        },
       ),
 
       // ── Main Shell (5-tab pill bottom nav) ───────────────────────────────

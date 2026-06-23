@@ -242,22 +242,38 @@ class _TicketDetailBody extends ConsumerWidget {
           // Bottom actions
           Padding(
             padding: const EdgeInsets.fromLTRB(19, 8, 19, 16),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: AppButton.secondary(
-                    label: 'Cliente',
-                    onPressed: () => context.push(
-                      AppRoutes.clientiDetail(ticket.customerId),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton.secondary(
+                        label: 'Cliente',
+                        onPressed: () => context.push(
+                          AppRoutes.clientiDetail(ticket.customerId),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Crea rapportino',
+                        onPressed: () =>
+                            _createRapportino(context, ref, ticket),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppButton(
-                    label: 'Crea rapportino',
-                    onPressed: () =>
-                        _createRapportino(context, ref, ticket),
+                const SizedBox(height: 10),
+                AppButton.dark(
+                  label: 'Timbra cantiere',
+                  icon: const Icon(Icons.location_on_outlined),
+                  onPressed: () => context.push(
+                    AppRoutes.cantiereTimbraPath(
+                      ticketId: ticket.id,
+                      customerId: ticket.customerId,
+                    ),
                   ),
                 ),
               ],
