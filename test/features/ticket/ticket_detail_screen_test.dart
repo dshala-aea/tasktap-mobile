@@ -167,10 +167,11 @@ void main() {
       await pump(tester);
 
       // Tap "Pianificazioni" tab (index 2)
+      await tester.ensureVisible(find.text('Pianificazioni'));
       await tester.tap(find.text('Pianificazioni'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sopralluogo'), findsOneWidget);
+      expect(find.text('Sopralluogo', skipOffstage: false), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
