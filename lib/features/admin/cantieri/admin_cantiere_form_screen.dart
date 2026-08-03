@@ -209,7 +209,7 @@ class _AdminCantiereFormScreenState
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
-              value: _selectedCustomerId,
+              initialValue: _selectedCustomerId,
               decoration: const InputDecoration(
                 labelText: 'Cliente',
                 border: OutlineInputBorder(),

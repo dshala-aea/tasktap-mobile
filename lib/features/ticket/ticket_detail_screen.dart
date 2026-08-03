@@ -533,7 +533,7 @@ class _AssignSheetState extends State<_AssignSheet> {
             const Center(child: CircularProgressIndicator())
           else
             DropdownButtonFormField<String>(
-              value: _selectedUserId,
+              initialValue: _selectedUserId,
               decoration: const InputDecoration(
                 labelText: 'Tecnico',
                 border: OutlineInputBorder(),

@@ -58,7 +58,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         _SectionLabel(text: 'Cliente *'),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: widget.state.customerId,
+          initialValue: widget.state.customerId,
           isExpanded: true,
           decoration: const InputDecoration(
             hintText: 'Seleziona cliente…',
@@ -92,7 +92,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         _SectionLabel(text: 'Sede *'),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: widget.state.locationId,
+          initialValue: widget.state.locationId,
           isExpanded: true,
           decoration: InputDecoration(
             hintText: widget.state.customerId != null

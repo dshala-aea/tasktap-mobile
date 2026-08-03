@@ -183,7 +183,7 @@ class _AdminLocationFormScreenState
           children: [
             // ── Customer selector ─────────────────────────────────────────
             DropdownButtonFormField<String>(
-              value: _selectedCustomerId,
+              initialValue: _selectedCustomerId,
               decoration: const InputDecoration(
                 labelText: 'Cliente *',
                 border: OutlineInputBorder(),

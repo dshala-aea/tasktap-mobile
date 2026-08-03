@@ -220,7 +220,7 @@ class _AdminContractFormScreenState
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
-              value: _selectedCustomerId,
+              initialValue: _selectedCustomerId,
               decoration: const InputDecoration(
                 labelText: 'Cliente *',
                 border: OutlineInputBorder(),
@@ -237,7 +237,7 @@ class _AdminContractFormScreenState
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
-              value: _selectedLocationId,
+              initialValue: _selectedLocationId,
               decoration: const InputDecoration(
                 labelText: 'Sede',
                 border: OutlineInputBorder(),
@@ -304,7 +304,7 @@ class _AdminContractFormScreenState
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _frequencyUnit,
+                    initialValue: _frequencyUnit,
                     decoration: const InputDecoration(
                       labelText: 'Unità',
                       border: OutlineInputBorder(),

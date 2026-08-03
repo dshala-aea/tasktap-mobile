@@ -95,7 +95,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         _SectionLabel(text: 'Tipo *'),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          value: widget.state.typeId,
+          initialValue: widget.state.typeId,
           isExpanded: true,
           decoration: const InputDecoration(
             hintText: 'Seleziona tipo…',
