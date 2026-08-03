@@ -14,22 +14,32 @@ method" below).
 
 ## Result
 
-- **44 call sites** extracted from `lib/**/*.dart`, collapsing to **43
-  distinct (method, path) routes** (`GET /api/users` is called from two
-  places with identical semantics).
-- **43 exist** on the backend, matched by path shape (segment-for-segment,
-  case-insensitive, `$id`/`${expr}` interpolations treated as matching any
-  `{param}` segment) and by HTTP method.
-- **0 absent.**
+- **44 call sites** extracted from `lib/**/*.dart`, listed as **44 rows**
+  below (one call site per row, throughout). They collapse to **43
+  distinct (method, path) routes** — `GET /api/users` is called from two
+  places (`admin_api_client.dart:292` and `ticket_api_client.dart:38`)
+  with identical semantics, so it appears as two rows pointing at the same
+  backend route.
+- **43 of 43 distinct routes exist** on the backend, matched by path shape
+  (segment-for-segment, case-insensitive, `$id`/`${expr}` interpolations
+  treated as matching any `{param}` segment) and by HTTP method.
+- **0 absent** — no client call site targets a URL the backend never
+  registered.
 - **0 ambiguous** by path/method — but see "The one route-existence
   finding" below for one route that exists yet is a documented
-  **deprecated alias**, which is a disposition finding even though it
-  isn't a "gap."
+  **deprecated alias**, and "Routes present, data path missing" further
+  down for a *different* category of problem entirely: routes that exist
+  and are correctly named, but that no client code path ever calls, so the
+  screens built on them are permanently empty. That second category is
+  not a route-existence gap — it is the reason this task exists to feed
+  Task 5, and it is detailed in its own section rather than left as a
+  prose aside, specifically so Task 5 cannot skim past it.
 
 This is a materially different result than expected going in: Task 1's
 agent, despite never running against the backend, named its routes
-correctly against 43 of 43 distinct endpoints it called. The one real
-finding is below.
+correctly against 43 of 43 distinct endpoints it called. The one
+route-existence finding is below — but the more consequential finding for
+Task 5 is "Routes present, data path missing," not this section.
 
 ## baseURL convention (verified, not assumed)
 
@@ -111,7 +121,8 @@ from that source read are folded into the "Notes" column below and into
 | lib/data/sync/sync_service.dart:35 | GET | /api/sync/mobile | /api/Sync/mobile | ✅ exists | keep — path is a `const _path` identifier, not a literal at the call site (see extractor notes) |
 | lib/features/ticket/ticket_api_client.dart:20 | POST | /api/tickets | /api/Tickets | ✅ exists | keep |
 | lib/features/admin/admin_api_client.dart:283 | PUT | /api/tickets/$ticketId | /api/Tickets/{id} | ✅ exists | keep — verified: backend does a true partial update (only non-null fields), no dedicated assign endpoint exists for admin-assigns-technician, so PUT is the correct/only choice |
-| lib/features/admin/admin_api_client.dart:292; lib/features/ticket/ticket_api_client.dart:38 | GET | /api/users | /api/Users | ✅ exists | keep — but see pagination/role-filter note below |
+| lib/features/admin/admin_api_client.dart:292 | GET | /api/users | /api/Users | ✅ exists | keep — but see pagination/role-filter note below |
+| lib/features/ticket/ticket_api_client.dart:38 | GET | /api/users | /api/Users | ✅ exists | keep — but see pagination/role-filter note below (same route as the row above; kept as two rows for one-call-site-per-row consistency with the rest of this table) |
 | lib/data/timbratura/worklog_api_client.dart:117 | POST | /api/worklog/mobile/sessions | /api/WorkLog/mobile/sessions | ✅ exists | keep |
 | lib/data/timbratura/worklog_api_client.dart:139 | GET | /api/worklog/mobile/today | /api/WorkLog/mobile/today | ✅ exists | keep |
 
@@ -157,6 +168,79 @@ same PR that lands this audit rather than deferring to Task 5, since it's
 not an "unavailable state" problem — the route works today either way, it's
 purely a cleanup with a backend-side removal condition attached.
 
+## Routes present, data path missing
+
+This is a different category of problem than everything else in this
+document, and it is the one Task 5 most needs to see, so it gets its own
+heading rather than living as a bullet under "Out of scope." Every other
+finding above is about whether a URL the client calls exists on the
+backend. This one is the inverse: **the backend GET routes exist and are
+correctly named — `GET /api/cantieri` and `GET /api/Materiali` are both
+live — but no code path in `lib/` ever calls them, and no code path ever
+writes their local cache tables either.** The result is not a broken call;
+it's a screen that renders successfully, shows an empty list, and never
+throws — the exact "silent failure" this whole audit exists to catch, and
+exactly what Task 5's honest-unavailable-state work is supposed to prevent.
+
+**Verified by two greps, not inferred from the sync code alone:**
+1. `SyncService._upsert*` (`lib/data/sync/sync_service.dart`) writes
+   `customers`, `locations`, `tickets`, `schedules`, `draftReports`,
+   `ticketStatuses`, and `ticketTypes` — never `cantieri` or `materiali`.
+2. A repo-wide search for any `db.into(db.cantieri)` / `db.into(db.materiali)`
+   / `CantieriCompanion` / `MaterialiCompanion` insert anywhere in `lib/`
+   (outside the generated `app_database.g.dart`) turns up **zero** writes.
+   (`ReportMaterialiCompanion` does appear, but it belongs to a different
+   table — `report_materiali`, the materials attached to one report — not
+   the `materiali` catalog table these screens read from. Don't conflate
+   the two.)
+
+So unlike the routes flagged below in "Out of scope," this isn't a subtle
+authorization or pagination bug — it's a complete absence of any producer
+for two Drift tables that eleven call sites depend on as their only data
+source (see the table below for the exact count and breakdown).
+
+**This is narrower than it first looked.** Three other entities that
+looked similarly at-risk — contracts, squadre, prodottoAssistenza — are
+*not* affected: they aren't covered by sync either, but each has a
+dedicated direct-GET method on `AdminApiClient` (`fetchContracts`,
+`fetchSquadre`, `fetchProdottiAssistenza`) that its list screen actually
+calls (confirmed: `admin_contract_list_screen.dart`,
+`admin_squadra_list_screen.dart`, and `admin_prodotto_list_screen.dart` all
+call their respective `fetch*` method). Only **cantieri** and
+**materiali** have neither a sync path nor a direct-fetch call — genuinely
+orphaned, not just "not synced."
+
+**Affected providers/screens** (all confirmed by reading the file — every
+one is a `db.select(db.cantieri)` / `db.select(db.materiali)` read against
+a table nothing ever populates):
+
+| Table | Provider / screen | What it's for |
+|---|---|---|
+| `db.materiali` | `lib/features/magazzino/magazzino_providers.dart:9` (`materialiCatalogProvider`) | Warehouse/materiali catalog screen — already has a `// TODO(backend): warehouses + movements not synced to mobile.` comment at line 8 acknowledging this |
+| `db.materiali` | `lib/features/magazzino/magazzino_providers.dart:19` (`materialiCategoriesProvider`) | Category filter chips on the same screen |
+| `db.materiali` | `lib/presentation/providers/schedule_providers.dart:103` (`allMaterialiProvider`) | Materiali picker, used when building/editing a schedule |
+| `db.materiali` | `lib/features/admin/materiali/admin_materiale_list_screen.dart:17` | Admin materiali list |
+| `db.materiali` | `lib/features/admin/materiali/admin_materiale_detail_screen.dart:16` | Admin materiali detail (single-record lookup — empty table means this 404s from the local cache even for a materiale that exists server-side) |
+| `db.materiali` | `lib/features/admin/materiali/admin_materiale_form_screen.dart:44` | Admin materiali edit-form prefill |
+| `db.cantieri` | `lib/presentation/providers/schedule_providers.dart:129` (`allCantieriProvider`) | Cantiere picker, used when building/editing a schedule |
+| `db.cantieri` | `lib/features/timbra/cantiere_timbra_screen.dart:41` (`cantieriProvider`) | **Technician-facing**: the "which cantiere am I clocking into" picker on the cantiere timbratura (worklog) screen — a technician cannot start a cantiere work session through this screen while this table is empty |
+| `db.cantieri` | `lib/features/admin/cantieri/admin_cantiere_list_screen.dart:17` | Admin cantieri list |
+| `db.cantieri` | `lib/features/admin/cantieri/admin_cantiere_detail_screen.dart:17` | Admin cantieri detail |
+| `db.cantieri` | `lib/features/admin/cantieri/admin_cantiere_form_screen.dart:47` | Admin cantieri edit-form prefill |
+
+That's 2 tables, 11 call sites, across an admin CRUD flow, a warehouse
+screen, a schedule-building picker, and — most seriously — the
+technician-facing cantiere clock-in picker. All of them will render
+successfully today, with an empty or "no results" state, and none of them
+will show an error, because nothing ever fails: the query against the
+local Drift table simply returns zero rows. Recommend this becomes an
+explicit Task 5/6 item, distinct from ordinary "unavailable state" work,
+because the fix isn't "handle the error gracefully" — there is no error to
+handle — it's "wire a data source that doesn't exist yet" (either add
+`cantieri`/`materiali` to `SyncService._upsert*`, or give `AdminApiClient`
+`fetchCantieri()`/`fetchMateriali()` methods matching the pattern already
+used for contracts/squadre/prodottoAssistenza).
+
 ## Out of scope (surfaced incidentally, not part of the route-existence audit)
 
 These came up while reading controller source to corroborate the six
@@ -194,26 +278,11 @@ correctly:
   not data exposure), but it's an IDOR and should get its own security
   finding rather than living buried in this doc.
 
-- **Admin list screens for customers, locations, cantieri, materiali, and
-  schedules have no client-side "fetch all" path at all** — `AdminApiClient`
-  only has create/update methods for these five entities (confirmed by
-  reading the full file); their Drift tables are populated exclusively by
-  `SyncService`'s delta sync, and `SyncService._upsert*` only covers
-  customers, locations, tickets, schedules, draftReports, ticketStatuses,
-  and ticketTypes — **not** cantieri, materiali, contracts, squadre, or
-  prodottoAssistenza. `magazzino_providers.dart:8` even has a
-  `// TODO(backend): warehouses + movements not synced to mobile.` comment
-  confirming the pattern is a known gap. `fetchContracts`, `fetchSquadre`,
-  and `fetchProdottiAssistenza` exist as direct-GET methods precisely
-  because those three entities can't rely on sync — but materiali and
-  cantieri have neither a sync path nor a direct fetch, so their admin list
-  screens likely render empty or stale-only data. This is a real product
-  gap, but it is not a "route doesn't exist" finding — the backend GET
-  routes for all of these exist fine — it's a **missing client-side wiring**
-  finding, out of this task's methodology (which audits calls the client
-  makes, not calls it should be making but isn't). Recommend flagging to
-  whoever scopes Task 5/6, since "this screen has no data" is a worse UX
-  than "this screen shows an honest unavailable state."
+- **Two entities — cantieri and materiali — have no client-side read path
+  at all.** See the dedicated "Routes present, data path missing" section
+  above for the full list of affected screens/providers; not repeated
+  here because it's the single most important finding of this document
+  and lives under its own heading precisely so it doesn't get missed.
 
 ## Extractor notes
 
