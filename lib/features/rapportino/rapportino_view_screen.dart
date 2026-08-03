@@ -257,7 +257,12 @@ class _RapportinoViewBody extends ConsumerWidget {
                     ),
                   ),
 
-                // ── Download PDF (stub) ───────────────────────────────────────
+                // ── Download PDF ──────────────────────────────────────────────
+                // GET /api/Reports/{id}/pdf exists and generates the PDF
+                // server-side, but no client code path in lib/ calls it yet
+                // (verified by grep — no Dio request to any /pdf route).
+                // This button names that gap instead of promising a date
+                // nobody has set.
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(19, 0, 19, 24),
@@ -267,9 +272,11 @@ class _RapportinoViewBody extends ConsumerWidget {
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content:
-                                Text('Disponibile a breve'),
-                            duration: Duration(seconds: 2),
+                            content: Text(
+                              'Il PDF viene generato dal server ma il '
+                              "download non è ancora collegato nell'app.",
+                            ),
+                            duration: Duration(seconds: 4),
                           ),
                         );
                       },
