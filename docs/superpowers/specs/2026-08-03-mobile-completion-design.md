@@ -120,9 +120,13 @@ GPS capture and inline photo attach follow the same rule.
 thumb reach, ≥44pt targets everywhere including where the 393pt design draws smaller,
 one concern per step, destructive actions never at thumb rest.
 
-**Known backend constraint, not worked around here:** `ProdottoAssistenza.SerialNumber`
-is a scalar, so one product carries at most one serial. Multi-serial inventory
-requires backend evolution before richer matricole UX can exist.
+**One scanner for everything.** Backend T10 gives each aggregate its own identifier
+table (`MaterialeBarcode` already exists; `ProdottoAssistenzaIdentifier` is added and
+`SerialNumber` migrates into it) behind a single `GET /api/scan?code=...` that
+returns the matched entity **and a recommended action**. The mobile scanner therefore
+never asks "am I scanning a material or a product?" — it asks "what is this code?"
+and performs the returned action. On the rare collision the endpoint returns more
+than one resolution and the form shows a picker.
 
 ### M-C — Technician core
 
@@ -241,5 +245,5 @@ voice are pilot scope, not post-pilot.
 
 ## 10. Out of scope
 
-Background location and geofencing, multi-serial inventory UX, merging the three
-approval workflows, and any offline queueing of manager or anagrafiche writes.
+Background location and geofencing, merging the three approval workflows, and any
+offline queueing of manager or anagrafiche writes.
