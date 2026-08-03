@@ -10,7 +10,13 @@
 
 ## Global Constraints
 
-- Flutter lives Windows-side: invoke it as `/mnt/c/Users/DanielShala/Downloads/flutter/bin/flutter`. WSL has **no Android SDK**, so only `analyze` and `test` run here. `flutter build apk`, emulator runs and device integration tests are user-run on Windows and are **not** steps in this plan.
+- Flutter lives Windows-side. **The WSL path `/mnt/c/.../bin/flutter` does not work** — that install has no Linux Dart SDK cached (discovered in Task 2). Shell through Windows instead:
+
+  ```bash
+  cmd.exe /c "cd /d D:\AEA\Sviluppi\TaskTap\mobile && C:\Users\DanielShala\Downloads\flutter\bin\flutter.bat analyze"
+  ```
+
+  WSL has **no Android SDK**, so only `analyze` and `test` run here. `flutter build apk`, emulator runs and device integration tests are user-run on Windows and are **not** steps in this plan.
 - The mobile repo is its own git repository, gitignored from the backend repo. Never `git add -A` at the backend root for mobile changes, and never commit mobile files into the backend repo.
 - **Drift teardown discipline:** any widget test pumping a screen that watches a Drift stream must end with `await tester.pumpWidget(const SizedBox.shrink()); await tester.pumpAndSettle();` — otherwise `StreamQueryStore.markAsClosed`'s zero-duration timer outlives teardown, the suite hangs, and the failure reads as "A Timer is still pending".
 - `ensureVisible(finder)` before tapping any button inside a `SingleChildScrollView`.
