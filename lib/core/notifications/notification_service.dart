@@ -30,6 +30,11 @@ class NotificationService {
   String? _currentToken;
   bool _initialized = false;
 
+  /// The most recent access token passed to [registerDeviceToken], cached so
+  /// that an FCM token refresh (which fires independently of auth state) can
+  /// re-register without needing the caller to thread the token through.
+  String? _lastAccessToken;
+
   /// Initialize FCM: request permission, get token, set up listeners.
   Future<void> initialize() async {
     if (_initialized) return;
@@ -58,7 +63,10 @@ class NotificationService {
     _messaging.onTokenRefresh.listen((newToken) {
       _currentToken = newToken;
       debugPrint('FCM token refreshed: $newToken');
-      registerDeviceToken();
+      final accessToken = _lastAccessToken;
+      if (accessToken != null) {
+        registerDeviceToken(accessToken);
+      }
     });
 
     // Handle foreground messages.
@@ -88,6 +96,7 @@ class NotificationService {
   /// Called after login and on token refresh. Safe to call multiple times
   /// — the backend upserts by (userId, deviceToken).
   Future<void> registerDeviceToken(String accessToken) async {
+    _lastAccessToken = accessToken;
     final token = _currentToken;
     if (token == null || accessToken.isEmpty || Env.apiBaseUrl.isEmpty) return;
 
