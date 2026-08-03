@@ -208,7 +208,7 @@ void main() {
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessun cantiere attivo'), findsOneWidget);
+      expect(find.text('Selezione cantiere non disponibile'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -250,6 +250,19 @@ void main() {
 
     testWidgets('shows validation error when no cantiere selected and clock-in tapped',
         (tester) async {
+      // The clock-in button is disabled outright when the cache holds zero
+      // cantieri (see `noCantieriAvailable` in cantiere_timbra_screen.dart) —
+      // an honest response to db.cantieri never being synced. This test
+      // exercises the "cantieri exist but none picked" validation path
+      // instead, which is what the button becomes reachable for once
+      // syncing is wired up.
+      await db.into(db.cantieri).insert(CantieriCompanion.insert(
+            id: 'cant-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Cantiere Via Roma',
+          ));
+
       final api = _FakeApiClient();
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();

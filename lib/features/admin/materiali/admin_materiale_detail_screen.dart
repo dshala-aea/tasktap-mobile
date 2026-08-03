@@ -44,7 +44,12 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Errore: $e')),
         data: (materiale) {
           if (materiale == null) {
-            return const Center(child: Text('Materiale non trovato'));
+            return const UnavailableState(
+              titolo: 'Materiale non disponibile',
+              motivo: 'Il catalogo materiali non è ancora sincronizzato sul '
+                  'dispositivo, quindi questo materiale non può essere '
+                  'letto dalla cache locale anche se esiste sul server.',
+            );
           }
           return _MaterialeDetailBody(materiale: materiale);
         },

@@ -5,7 +5,10 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 
 /// All active materiali, alphabetical by name.
-/// TODO(backend): warehouses + movements not synced to mobile.
+///
+/// TODO(backend): `db.materiali` is never populated — no sync path and no
+/// `AdminApiClient.fetchMateriali()` exist yet, so this stream is always
+/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
 final materialiCatalogProvider =
     StreamProvider.autoDispose<List<MaterialiData>>((ref) {
   final db = ref.watch(appDatabaseProvider);

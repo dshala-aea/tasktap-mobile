@@ -9,8 +9,10 @@ import '../../data/local/app_database.dart';
 import 'magazzino_providers.dart';
 
 // TODO(backend): warehouses + movements not synced to mobile.
-// Only the Articoli catalog is available on device; tabs + valore-totale
-// require backend endpoints not yet in /api/sync/mobile.
+// The Articoli catalog itself is NOT synced either — GET /api/Materiali
+// exists on the backend but no client code path (SyncService or a direct
+// fetch method) ever calls it, so `db.materiali` stays empty forever. See
+// docs/api-gap-list.md § "Routes present, data path missing".
 
 class MagazzinoScreen extends StatefulWidget {
   const MagazzinoScreen({super.key});
@@ -155,10 +157,12 @@ class _MagazzinoBody extends ConsumerWidget {
           )
         else if (filtered.isEmpty)
           SliverToBoxAdapter(
-            child: EmptyState(
+            child: UnavailableState(
               icon: LucideIcons.package,
-              title: 'Nessun articolo',
-              body: 'Gli articoli sincronizzati appariranno qui.',
+              titolo: 'Catalogo materiali non disponibile',
+              motivo: "L'app non scarica ancora l'elenco materiali dal "
+                  'server: il catalogo resta vuoto finché questa '
+                  'sincronizzazione non sarà collegata.',
             ),
           )
         else

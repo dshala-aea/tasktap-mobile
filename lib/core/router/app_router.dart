@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../theme/app_colors.dart';
+import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
-import '../../features/altro/coming_soon_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
@@ -65,8 +66,10 @@ abstract final class AppRoutes {
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';
 
-  /// Path for the shared "coming soon" placeholder; pass [title] as GoRouter extra.
-  static const String altroComingSoon = '/altro/coming-soon';
+  /// Path for the shared "unavailable" placeholder; pass an
+  /// `({String titolo, String motivo})` record as GoRouter extra so the
+  /// screen can state a real reason instead of a "coming soon" promise.
+  static const String altroNonDisponibile = '/altro/non-disponibile';
 
   /// Path for the cantiere clock-in/out screen.
   static const String cantiereTimbra = '/cantiere-timbra';
@@ -507,10 +510,29 @@ GoRouter buildRouter(WidgetRef ref) {
                     ],
                   ),
                   GoRoute(
-                    path: 'coming-soon',
-                    builder: (context, state) => ComingSoonScreen(
-                      title: (state.extra as String?) ?? 'In arrivo',
-                    ),
+                    path: 'non-disponibile',
+                    builder: (context, state) {
+                      final args =
+                          state.extra as ({String titolo, String motivo})?;
+                      final titolo = args?.titolo ?? 'Sezione non disponibile';
+                      return Scaffold(
+                        backgroundColor: AppColors.BG2,
+                        body: SafeArea(
+                          child: Column(
+                            children: [
+                              ScreenHeader(title: titolo, showBack: true),
+                              Expanded(
+                                child: UnavailableState(
+                                  titolo: titolo,
+                                  motivo: args?.motivo ??
+                                      'Questa funzione non è ancora stata implementata nel client mobile.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

@@ -101,9 +101,9 @@ void main() {
   }
 
   group('MagazzinoScreen', () {
-    testWidgets('shows empty state when no materiali', (tester) async {
+    testWidgets('shows unavailable state when no materiali', (tester) async {
       await pump(tester);
-      expect(find.byType(EmptyState), findsOneWidget);
+      expect(find.byType(UnavailableState), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

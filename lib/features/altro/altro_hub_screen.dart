@@ -295,8 +295,14 @@ class _SistemaSection extends ConsumerWidget {
               title: 'Audit log',
               subtitle: 'Cronologia attività',
               showDivider: true,
-              onTap: () =>
-                  context.push(AppRoutes.altroComingSoon, extra: 'Audit log'),
+              onTap: () => context.push(
+                AppRoutes.altroNonDisponibile,
+                extra: (
+                  titolo: 'Audit log',
+                  motivo:
+                      "Il backend registra un log di controllo (/api/admin/audit-log) ma il client mobile non lo scarica ancora.",
+                ),
+              ),
             ),
             // Impostazioni
             ListRow(
@@ -313,8 +319,14 @@ class _SistemaSection extends ConsumerWidget {
               title: 'Ruoli e permessi',
               subtitle: 'Gestione accessi',
               showDivider: false,
-              onTap: () => context.push(AppRoutes.altroComingSoon,
-                  extra: 'Ruoli e permessi'),
+              onTap: () => context.push(
+                AppRoutes.altroNonDisponibile,
+                extra: (
+                  titolo: 'Ruoli e permessi',
+                  motivo:
+                      "La matrice ruoli/permessi esiste lato server (/api/admin/role-permissions) ma la sua gestione non è ancora stata costruita nel client mobile.",
+                ),
+              ),
             ),
           ],
         ),

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
@@ -34,6 +35,14 @@ class _AdminCantiereFormScreenState
   String? _selectedCustomerId;
   bool _isSaving = false;
 
+  /// True once an edit-mode load has completed and found nothing in the
+  /// local cache. `db.cantieri` is never populated by sync (see
+  /// docs/api-gap-list.md), so this is the normal outcome for every
+  /// cantiereId today — surfaced explicitly instead of silently leaving
+  /// every field blank, which would let a save overwrite the real record
+  /// with empty values.
+  bool _prefillFailed = false;
+
   bool get _isEditing => widget.cantiereId != null;
 
   @override
@@ -47,7 +56,8 @@ class _AdminCantiereFormScreenState
     final cantiere = await (db.select(db.cantieri)
           ..where((c) => c.id.equals(widget.cantiereId!)))
         .getSingleOrNull();
-    if (cantiere != null && mounted) {
+    if (!mounted) return;
+    if (cantiere != null) {
       setState(() {
         _nameCtrl.text = cantiere.name;
         _addressCtrl.text = cantiere.address ?? '';
@@ -58,6 +68,8 @@ class _AdminCantiereFormScreenState
         _endDate = cantiere.endDate;
         _selectedCustomerId = cantiere.customerId;
       });
+    } else {
+      setState(() => _prefillFailed = true);
     }
   }
 
@@ -162,6 +174,24 @@ class _AdminCantiereFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_isEditing && _prefillFailed) {
+      return Scaffold(
+        backgroundColor: AppColors.BG2,
+        appBar: AppBar(
+          title: const Text('Modifica cantiere'),
+          backgroundColor: AppColors.BG2,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+        ),
+        body: const UnavailableState(
+          titolo: 'Cantiere non disponibile',
+          motivo: "L'elenco cantieri non è ancora sincronizzato sul "
+              'dispositivo, quindi non è possibile precompilare o '
+              'modificare questo cantiere da qui.',
+        ),
+      );
+    }
+
     final customersAsync = ref.watch(allCustomersProvider);
     final customers = customersAsync.valueOrNull ?? [];
 

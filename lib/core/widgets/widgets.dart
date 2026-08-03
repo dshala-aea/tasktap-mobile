@@ -21,3 +21,4 @@ export 'signature_pad.dart';
 export 'stats_grid.dart';
 export 'status_badge.dart';
 export 'status_pill.dart';
+export 'unavailable_state.dart';

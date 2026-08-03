@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 
@@ -31,6 +32,14 @@ class _AdminMaterialeFormScreenState
   final _salePriceCtrl = TextEditingController();
   bool _isSaving = false;
 
+  /// True once an edit-mode load has completed and found nothing in the
+  /// local cache. `db.materiali` is never populated by sync (see
+  /// docs/api-gap-list.md), so this is the normal outcome for every
+  /// materialeId today — surfaced explicitly instead of silently leaving
+  /// every field blank, which would let a save overwrite the real record
+  /// with empty values.
+  bool _prefillFailed = false;
+
   bool get _isEditing => widget.materialeId != null;
 
   @override
@@ -44,7 +53,8 @@ class _AdminMaterialeFormScreenState
     final mat = await (db.select(db.materiali)
           ..where((m) => m.id.equals(widget.materialeId!)))
         .getSingleOrNull();
-    if (mat != null && mounted) {
+    if (!mounted) return;
+    if (mat != null) {
       setState(() {
         _codeCtrl.text = mat.code;
         _nameCtrl.text = mat.name;
@@ -56,6 +66,8 @@ class _AdminMaterialeFormScreenState
             mat.purchasePrice?.toStringAsFixed(2) ?? '';
         _salePriceCtrl.text = mat.salePrice?.toStringAsFixed(2) ?? '';
       });
+    } else {
+      setState(() => _prefillFailed = true);
     }
   }
 
@@ -145,6 +157,24 @@ class _AdminMaterialeFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_isEditing && _prefillFailed) {
+      return Scaffold(
+        backgroundColor: AppColors.BG2,
+        appBar: AppBar(
+          title: const Text('Modifica materiale'),
+          backgroundColor: AppColors.BG2,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+        ),
+        body: const UnavailableState(
+          titolo: 'Materiale non disponibile',
+          motivo: 'Il catalogo materiali non è ancora sincronizzato sul '
+              'dispositivo, quindi non è possibile precompilare o '
+              'modificare questo materiale da qui.',
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.BG2,
       appBar: AppBar(

@@ -38,6 +38,11 @@ import '../../data/timbratura/cantiere_worklog_api_client.dart';
 
 /// All active cantieri from the local Drift cache, alphabetical.
 /// Status 0 = Active (CantiereStatusEnum.Active).
+///
+/// TODO(backend): `db.cantieri` is never populated — no sync path and no
+/// `AdminApiClient.fetchCantieri()` exist yet, so this stream is always
+/// empty and the picker below always renders [UnavailableState]. See
+/// docs/api-gap-list.md § "Routes present, data path missing".
 final cantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.cantieri)
@@ -297,6 +302,15 @@ class _CheckInBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // `cantieriProvider` reads a Drift table nothing ever populates today
+    // (see the TODO on the provider above), so once the stream has emitted
+    // at least once, an empty list is permanent — not "still loading" —
+    // and the clock-in button below must not offer an action that can
+    // never succeed.
+    final cantieriValue = cantieriAsync.valueOrNull;
+    final noCantieriAvailable =
+        cantieriValue != null && cantieriValue.isEmpty;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
       child: Column(
@@ -368,11 +382,13 @@ class _CheckInBody extends StatelessWidget {
               final ordered = [...preferred, ...others];
 
               if (ordered.isEmpty) {
-                return EmptyState(
+                return const UnavailableState(
                   icon: LucideIcons.hardHat,
-                  title: 'Nessun cantiere attivo',
-                  body:
-                      'Non ci sono cantieri attivi disponibili nel cache locale.',
+                  titolo: 'Selezione cantiere non disponibile',
+                  motivo: "L'elenco cantieri non è ancora sincronizzato su "
+                      'questo dispositivo: non è possibile scegliere un '
+                      'cantiere né timbrare l\'ingresso finché questa '
+                      'sincronizzazione non sarà collegata.',
                 );
               }
 
@@ -469,12 +485,15 @@ class _CheckInBody extends StatelessWidget {
             const SizedBox(height: 16),
           ],
 
-          // Clock-in button
+          // Clock-in button — disabled (not hidden) when there is nothing to
+          // select, so the reason above stays visible instead of the row
+          // just disappearing.
           AppButton(
             label: 'Timbra ingresso cantiere',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
-            onPressed: isLoading ? null : onStart,
+            onPressed:
+                (isLoading || noCantieriAvailable) ? null : onStart,
             size: AppButtonSize.lg,
           ),
         ],

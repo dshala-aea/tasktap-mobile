@@ -43,7 +43,12 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Errore: $e')),
         data: (cantiere) {
           if (cantiere == null) {
-            return const Center(child: Text('Cantiere non trovato'));
+            return const UnavailableState(
+              titolo: 'Cantiere non disponibile',
+              motivo: "L'elenco cantieri non è ancora sincronizzato sul "
+                  'dispositivo, quindi questo cantiere non può essere '
+                  'letto dalla cache locale anche se esiste sul server.',
+            );
           }
           return _CantiereDetailBody(
             cantiere: cantiere,

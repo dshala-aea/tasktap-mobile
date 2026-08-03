@@ -11,6 +11,10 @@ import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 
 /// All materiali from Drift cache, alphabetical.
+///
+/// TODO(backend): `db.materiali` is never populated — no sync path and no
+/// `AdminApiClient.fetchMateriali()` exist yet, so this stream is always
+/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
 final adminMaterialiProvider =
     StreamProvider.autoDispose<List<MaterialiData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
@@ -176,10 +180,13 @@ class _AdminMaterialeListBody extends ConsumerWidget {
           )
         else if (filtered.isEmpty)
           SliverToBoxAdapter(
-            child: EmptyState(
+            child: UnavailableState(
               icon: LucideIcons.package,
-              title: 'Nessun materiale',
-              body: 'Crea un nuovo materiale con il pulsante +.',
+              titolo: 'Catalogo materiali non disponibile',
+              motivo: 'Il catalogo materiali non è ancora sincronizzato sul '
+                  'dispositivo. I materiali creati con il pulsante + vengono '
+                  'salvati sul server ma non compariranno in questa lista '
+                  'finché la sincronizzazione non sarà collegata.',
             ),
           )
         else

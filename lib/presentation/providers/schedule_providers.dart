@@ -100,6 +100,13 @@ final allCustomersProvider =
       .watch();
 });
 
+/// TODO(backend): `db.materiali` is never populated — no sync path and no
+/// `AdminApiClient.fetchMateriali()` exist yet, so this stream is always
+/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
+/// Consumers (`step_materiali_fold.dart`) already degrade to a free-text
+/// field when the list is empty, so no `UnavailableState` is used here —
+/// that fallback already tells the truth (nothing to pick from) without
+/// blocking the technician from recording a materiale by name.
 final allMaterialiProvider =
     StreamProvider.autoDispose<List<MaterialiData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
@@ -126,6 +133,13 @@ final allTicketsProvider =
       .watch();
 });
 
+/// TODO(backend): `db.cantieri` is never populated — no sync path and no
+/// `AdminApiClient.fetchCantieri()` exist yet, so this stream is always
+/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
+/// Consumers (`step_dettagli.dart`'s `_TicketCantierePicker`) already
+/// degrade to a free-text field when the list is empty, so no
+/// `UnavailableState` is used here — that fallback already tells the truth
+/// (nothing to pick from) without blocking report submission.
 final allCantieriProvider =
     StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);

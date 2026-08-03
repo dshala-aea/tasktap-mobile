@@ -11,6 +11,10 @@ import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 
 /// All cantieri from Drift cache, alphabetical.
+///
+/// TODO(backend): `db.cantieri` is never populated — no sync path and no
+/// `AdminApiClient.fetchCantieri()` exist yet, so this stream is always
+/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
 final adminCantieriProvider =
     StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
@@ -106,10 +110,13 @@ class _AdminCantiereListBody extends ConsumerWidget {
           )
         else if (filtered.isEmpty)
           SliverToBoxAdapter(
-            child: EmptyState(
+            child: UnavailableState(
               icon: LucideIcons.hardHat,
-              title: 'Nessun cantiere',
-              body: 'Crea un nuovo cantiere con il pulsante +.',
+              titolo: 'Cantieri non disponibili',
+              motivo: "L'elenco cantieri non è ancora sincronizzato sul "
+                  'dispositivo. I cantieri creati con il pulsante + vengono '
+                  'salvati sul server ma non compariranno in questa lista '
+                  'finché la sincronizzazione non sarà collegata.',
             ),
           )
         else
