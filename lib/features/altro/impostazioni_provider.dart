@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -80,20 +82,19 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   }
 
   final IAuthRepository _authRepo;
-  late final SharedPreferences _prefs;
 
   /// Load persisted settings from SharedPreferences.
   Future<void> _loadFromPrefs() async {
-    _prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     state = ImpostazioniState(
-      pushAbilitate: _prefs.getBool(_kPushAbilitate) ?? true,
-      notificheInterventi: _prefs.getBool(_kNotificheInterventi) ?? true,
-      notificheRapportini: _prefs.getBool(_kNotificheRapportini) ?? true,
-      syncOffline: _prefs.getBool(_kSyncOffline) ?? true,
-      geoLocazione: _prefs.getBool(_kGeoLocazione) ?? false,
-      temaScuro: _prefs.getBool(_kTemaScuro) ?? false,
+      pushAbilitate: prefs.getBool(_kPushAbilitate) ?? true,
+      notificheInterventi: prefs.getBool(_kNotificheInterventi) ?? true,
+      notificheRapportini: prefs.getBool(_kNotificheRapportini) ?? true,
+      syncOffline: prefs.getBool(_kSyncOffline) ?? true,
+      geoLocazione: prefs.getBool(_kGeoLocazione) ?? false,
+      temaScuro: prefs.getBool(_kTemaScuro) ?? false,
       autenticazioneBiometrica:
-          _prefs.getBool(_kAutenticazioneBiometrica) ?? false,
+          prefs.getBool(_kAutenticazioneBiometrica) ?? false,
     );
   }
 
@@ -113,8 +114,12 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       _ => state,
     };
 
-    // Persist the toggled value.
-    _persist(key, _valueForKey(key));
+    // Persist the toggled value. Fire-and-forget: `_persist` awaits its own
+    // `SharedPreferences.getInstance()` (cached after the first call, so this
+    // is cheap even if it races `_loadFromPrefs()` — unlike a shared `late
+    // final` field, there's no window where a fast tap right after screen
+    // open throws a LateInitializationError).
+    unawaited(_persist(key, _valueForKey(key)));
 
     // Side-effect: push toggle controls device registration.
     if (key == 'pushAbilitate') {
@@ -144,8 +149,9 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
         _ => key,
       };
 
-  void _persist(String key, bool value) {
-    _prefs.setBool(_prefKeyForKey(key), value);
+  Future<void> _persist(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKeyForKey(key), value);
   }
 
   /// Register or unregister the device token when push is toggled.
