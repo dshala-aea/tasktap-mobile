@@ -58,6 +58,11 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         _SectionLabel(text: 'Cliente *'),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          // initialValue only applies on first build; this field's value can
+          // be reset externally (e.g. wizard back-navigation), so key it by
+          // the value to force a fresh widget — and thus a fresh
+          // initialValue — whenever it changes underneath us.
+          key: ValueKey('cliente-${widget.state.customerId}'),
           initialValue: widget.state.customerId,
           isExpanded: true,
           decoration: const InputDecoration(
@@ -92,6 +97,10 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         _SectionLabel(text: 'Sede *'),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
+          // Same reasoning as the customer field above — the customer
+          // dropdown's onChanged resets locationId externally (line ~78),
+          // so this must be rekeyed to pick up the reset.
+          key: ValueKey('sede-${widget.state.locationId}'),
           initialValue: widget.state.locationId,
           isExpanded: true,
           decoration: InputDecoration(

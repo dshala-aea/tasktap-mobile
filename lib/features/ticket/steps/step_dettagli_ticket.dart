@@ -95,6 +95,11 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         _SectionLabel(text: 'Tipo *'),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
+          // initialValue only applies on first build. This screen already
+          // resyncs its text controllers in didUpdateWidget when state is
+          // reset externally (e.g. wizard back-navigation); key this field
+          // by value so it gets the same resync via a fresh initialValue.
+          key: ValueKey('tipo-${widget.state.typeId}'),
           initialValue: widget.state.typeId,
           isExpanded: true,
           decoration: const InputDecoration(
