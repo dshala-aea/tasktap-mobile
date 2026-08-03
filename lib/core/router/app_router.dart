@@ -30,7 +30,7 @@ import '../../features/admin/schedules/admin_schedule_form_screen.dart';
 import '../../features/admin/materiali/admin_materiale_list_screen.dart';
 import '../../features/admin/materiali/admin_materiale_detail_screen.dart';
 import '../../features/admin/materiali/admin_materiale_form_screen.dart';
-import '../../features/admin/prodotti/admin_prodottoList_screen.dart';
+import '../../features/admin/prodotti/admin_prodotto_list_screen.dart';
 import '../../features/admin/prodotti/admin_prodotto_detail_screen.dart';
 import '../../features/admin/prodotti/admin_prodotto_form_screen.dart';
 import '../../features/admin/contracts/admin_contract_list_screen.dart';
