@@ -114,13 +114,17 @@ void main() {
     final user = _fakeUser(displayName: 'Mario');
     await pump(tester, user: user);
 
-    // Scroll past the Gestione grid (4 rows of 2 tiles each) to reveal Sistema.
-    final scroller = find.byType(CustomScrollView);
-    await tester.drag(scroller, const Offset(0, -300));
-    await tester.pump();
-    await tester.drag(scroller, const Offset(0, -300));
-    await tester.pump();
-    await tester.drag(scroller, const Offset(0, -300));
+    // Scroll past the Gestione grid (10 tiles / 5 rows, one per admin CRUD
+    // domain) to reveal Sistema. A fixed drag count is too fragile now that
+    // the grid can grow — scroll incrementally until the target is visible.
+    // (scrollUntilVisible casts its `scrollable` finder to `Scrollable`, so
+    // it must resolve the Scrollable itself, not the CustomScrollView that
+    // creates it — omit it and let the default `find.byType(Scrollable)`
+    // locate the single Scrollable in this tree.)
+    await tester.scrollUntilVisible(
+      find.text('Impostazioni'),
+      300,
+    );
     await tester.pump();
 
     expect(find.text('Impostazioni'), findsOneWidget);
@@ -136,16 +140,17 @@ void main() {
     final user = _fakeUser(displayName: 'Mario');
     await pump(tester, user: user);
 
-    // Scroll down in multiple steps to expose the logout row at the bottom.
-    final scroller = find.byType(CustomScrollView);
-    await tester.drag(scroller, const Offset(0, -400));
-    await tester.pump();
-    await tester.drag(scroller, const Offset(0, -400));
-    await tester.pump();
-    await tester.drag(scroller, const Offset(0, -400));
+    // Scroll down until the logout row (bottom of the screen) is visible.
+    // A fixed drag count is too fragile now that the Gestione grid above it
+    // can grow — scroll incrementally until the target is visible. (See the
+    // "renders Sistema rows" test above for why `scrollable` is omitted.)
+    final logoutFinder = find.text("Esci dall'account");
+    await tester.scrollUntilVisible(
+      logoutFinder,
+      400,
+    );
     await tester.pump();
 
-    final logoutFinder = find.text("Esci dall'account");
     expect(logoutFinder, findsOneWidget);
     await tester.tap(logoutFinder);
     await tester.pumpAndSettle();
