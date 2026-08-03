@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
+import 'notifiche_provider.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AltroHubScreen
@@ -96,11 +97,22 @@ class AltroHubScreen extends ConsumerWidget {
         onTap: () => context.push(AppRoutes.altroClienti),
       ),
       _GestioneTile(
+        icon: LucideIcons.mapPin,
+        label: 'Sedi',
+        color: const Color(0xFF8B5CF6), // violet
+        onTap: () => context.push('/altro/sedi'),
+      ),
+      _GestioneTile(
+        icon: LucideIcons.hardHat,
+        label: 'Cantieri',
+        color: const Color(0xFFF97316), // orange
+        onTap: () => context.push('/altro/cantieri'),
+      ),
+      _GestioneTile(
         icon: LucideIcons.package,
         label: 'Prodotti',
         color: const Color(0xFFF4A261), // warm orange
-        // Prodotti data not cached on device — use ComingSoon.
-        onTap: () => _pushComingSoon(context, 'Prodotti'),
+        onTap: () => context.push('/altro/prodotti'),
       ),
       _GestioneTile(
         icon: LucideIcons.warehouse,
@@ -109,31 +121,24 @@ class AltroHubScreen extends ConsumerWidget {
         onTap: () => context.push(AppRoutes.altroMagazzino),
       ),
       _GestioneTile(
-        icon: LucideIcons.receipt,
-        label: 'Fatture',
+        icon: LucideIcons.fileSignature,
+        label: 'Contratti',
         color: const Color(0xFF7C3AED), // violet
-        // TODO(D5): wire Fatture list
-        onTap: () => _pushComingSoon(context, 'Fatture'),
+        onTap: () => context.push('/altro/contratti'),
       ),
       _GestioneTile(
         icon: LucideIcons.users2,
-        label: 'Team',
+        label: 'Squadre',
         color: const Color(0xFF06AED5), // CYAN
-        // TODO(D5): wire Team list
-        onTap: () => _pushComingSoon(context, 'Team'),
+        onTap: () => context.push('/altro/squadre'),
       ),
       _GestioneTile(
-        icon: LucideIcons.tag,
-        label: 'Tag',
-        color: const Color(0xFFEF4444), // red
-        // TODO(D5): wire Tag list
-        onTap: () => _pushComingSoon(context, 'Tag'),
+        icon: LucideIcons.calendarDays,
+        label: 'Pianificazioni',
+        color: const Color(0xFF2563EB), // BLUE
+        onTap: () => context.push('/altro/pianificazioni'),
       ),
     ];
-  }
-
-  void _pushComingSoon(BuildContext context, String title) {
-    context.push(AppRoutes.altroComingSoon, extra: title);
   }
 }
 
@@ -260,21 +265,26 @@ class _GestioneTile extends StatelessWidget {
 // Sistema section
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _SistemaSection extends StatelessWidget {
+class _SistemaSection extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 19),
       child: AppCard(
         padding: EdgeInsets.zero,
         child: Column(
           children: [
-            // Notifiche — unread badge (0 for now)
+            // Notifiche — unread badge
             ListRow(
               leading: _sistemaTileIcon(LucideIcons.bell, AppColors.BLUE),
               title: 'Notifiche',
               subtitle: 'Avvisi e aggiornamenti',
-              meta: AppBadge(label: '0', bgColor: AppColors.BG3),
+              meta: ref.watch(notificheUnreadCountProvider) > 0
+                  ? AppBadge(
+                      label: '${ref.watch(notificheUnreadCountProvider)}',
+                      bgColor: AppColors.RED,
+                    )
+                  : null,
               showDivider: true,
               onTap: () => context.push(AppRoutes.altroNotifiche),
             ),

@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
 
-import '../../data/auth/supabase_auth_repository.dart';
+import '../../data/auth/zitadel_auth_repository.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
@@ -18,7 +17,7 @@ import '../../domain/auth/i_auth_repository.dart';
 /// )
 /// ```
 final authRepositoryProvider = Provider<IAuthRepository>((ref) {
-  return SupabaseAuthRepository(Supabase.instance.client);
+  return ZitadelAuthRepository();
 });
 
 // ── Auth state stream ──────────────────────────────────────────────────────
@@ -70,15 +69,9 @@ class LoginNotifier extends StateNotifier<LoginState> {
 
   final IAuthRepository _repo;
 
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn() async {
     state = const LoginState(isLoading: true);
-    final result = await _repo.signInWithEmailPassword(
-      email: email,
-      password: password,
-    );
+    final result = await _repo.signIn();
     if (result.failure != null) {
       state = LoginState(failure: result.failure);
     } else {

@@ -29,8 +29,8 @@ extension _FilterLabel on _NotificaFilter {
 /// Filter chips → notification list (or EmptyState when empty).
 /// "Segna tutte come lette" action in header.
 ///
-/// Data layer: [notificheProvider] — currently returns [] (EmptyState shown).
-// TODO(backend): wire SignalR / GET notifications when backend is ready.
+/// Data layer: [notificheProvider] — Drift-cached notifications with
+/// backend refresh on screen open.
 class NotificheScreen extends ConsumerStatefulWidget {
   const NotificheScreen({super.key});
 
@@ -40,6 +40,16 @@ class NotificheScreen extends ConsumerStatefulWidget {
 
 class _NotificheScreenState extends ConsumerState<NotificheScreen> {
   _NotificaFilter _filter = _NotificaFilter.tutte;
+
+  @override
+  void initState() {
+    super.initState();
+    // Trigger a refresh from the backend when the screen opens.
+    // The Drift cache is already loaded by the provider constructor.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(notificheProvider.notifier).refresh();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -103,6 +103,80 @@ The configuration is already in `pubspec.yaml` under `flutter_launcher_icons:` a
 
 ---
 
+## CI/CD (CodeMagic)
+
+The project uses [CodeMagic](https://codemagic.io) for automated builds, testing, and deployment.
+
+### Workflows
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `check` | Pull requests | `flutter analyze` + `flutter test` |
+| `android_release` | Push to `main` or tag `v*` | Build AAB + APK → Google Play internal track |
+| `ios_release` | Push to `main` or tag `v*` | Build IPA → TestFlight |
+| `ios_app_store` | Manual | Promote TestFlight build to App Store |
+
+### CodeMagic secrets (encrypted variable groups)
+
+Create these groups in CodeMagic UI (Team settings > Encrypted variables):
+
+**`tasktap_dartDefines`** — environment variables passed as `--dart-define`:
+
+| Variable | Description |
+|---|---|
+| `SUPABASE_URL` | `https://<project>.supabase.co` |
+| `SUPABASE_ANON_KEY` | Supabase anon (public) key |
+| `API_BASE_URL` | TaskTap backend REST API base URL |
+| `SENTRY_DSN` | Sentry DSN for crash reporting (optional) |
+
+**`tasktap_keystore`** — Android release signing (set up via CodeMagic UI signing tab):
+
+| Variable | Description |
+|---|---|
+| `KEYSTORE_PATH` | Path to uploaded keystore (CodeMagic sets this) |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias |
+| `KEY_PASSWORD` | Key password |
+
+**`tasktap_google_play`** — Google Play deployment:
+
+| Variable | Description |
+|---|---|
+| `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` | Service account JSON for Google Play API |
+
+**`tasktap_app_store_connect`** — App Store Connect (iOS):
+
+| Variable | Description |
+|---|---|
+| `APP_STORE_CONNECT_API_KEY` | App Store Connect API private key (text) |
+| `APP_STORE_CONNECT_API_KEY_ID` | Key ID |
+| `APP_STORE_CONNECT_ISSUER_ID` | Issuer ID |
+
+### Android release signing
+
+Android release builds use a keystore uploaded to CodeMagic. The `android/app/build.gradle.kts` checks for the `KEYSTORE_PATH` env var:
+
+- **CodeMagic CI**: keystore is available → release signing is used.
+- **Local builds**: no keystore → falls back to debug signing.
+
+To generate a release keystore locally (one-time):
+
+```sh
+keytool -genkey -v -keystore tasktap-release.jks \
+  -alias tasktap -keyalg RSA -keysize 2048 -validity 10000
+```
+
+### Tagging a release
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This triggers both `android_release` and `ios_release` workflows.
+
+---
+
 ## Project structure
 
 ```

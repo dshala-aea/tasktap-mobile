@@ -1,0 +1,248 @@
+// dart format width=100
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/widgets.dart';
+import '../admin_api_client.dart';
+
+/// Filter options for the admin report list.
+enum _ReportFilter { tutti, bozza, inviato, controllato, fatturato }
+
+extension _ReportFilterLabel on _ReportFilter {
+  String get label => switch (this) {
+        _ReportFilter.tutti => 'Tutti',
+        _ReportFilter.bozza => 'Bozza',
+        _ReportFilter.inviato => 'Inviato',
+        _ReportFilter.controllato => 'Controllato',
+        _ReportFilter.fatturato => 'Fatturato',
+      };
+
+  String? get statusMatch => switch (this) {
+        _ReportFilter.tutti => null,
+        _ReportFilter.bozza => 'Bozza',
+        _ReportFilter.inviato => 'Inviato',
+        _ReportFilter.controllato => 'Controllato',
+        _ReportFilter.fatturato => 'Fatturato',
+      };
+}
+
+/// Admin report list — shows all tenant reports from backend API.
+class AdminReportListScreen extends StatefulWidget {
+  const AdminReportListScreen({super.key});
+
+  @override
+  State<AdminReportListScreen> createState() => _AdminReportListScreenState();
+}
+
+class _AdminReportListScreenState extends State<AdminReportListScreen> {
+  _ReportFilter _filter = _ReportFilter.tutti;
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.BG2,
+      body: SafeArea(
+        child: _AdminReportListBody(
+          filter: _filter,
+          query: _query,
+          searchCtrl: _searchCtrl,
+          onFilterChanged: (f) => setState(() => _filter = f),
+          onQueryChanged: (q) => setState(() => _query = q),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminReportListBody extends ConsumerWidget {
+  const _AdminReportListBody({
+    required this.filter,
+    required this.query,
+    required this.searchCtrl,
+    required this.onFilterChanged,
+    required this.onQueryChanged,
+  });
+
+  final _ReportFilter filter;
+  final String query;
+  final TextEditingController searchCtrl;
+  final ValueChanged<_ReportFilter> onFilterChanged;
+  final ValueChanged<String> onQueryChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reportsAsync = ref.watch(
+      adminReportsProvider(
+        StatoFilter(filter.statusMatch),
+      ),
+    );
+
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: ScreenHeader(
+            title: 'Rapportini',
+            subtitle: 'Vista amministratore',
+            showBack: true,
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: AppSearchBar(
+            controller: searchCtrl,
+            hint: 'Cerca per titolo…',
+            onChanged: onQueryChanged,
+          ),
+        ),
+        // ── Filter chips ─────────────────────────────────────────────────
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _ReportFilter.values.map((f) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: AppChip(
+                      label: f.label,
+                      active: filter == f,
+                      onTap: () => onFilterChanged(f),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+        // ── Report list ──────────────────────────────────────────────────
+        reportsAsync.when(
+          loading: () => const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(48),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          ),
+          error: (e, _) => SliverToBoxAdapter(
+            child: Center(child: Text('Errore: $e')),
+          ),
+          data: (reports) {
+            // Client-side query filter
+            final filtered = reports.where((r) {
+              if (query.isEmpty) return true;
+              final title = (r['title'] as String? ?? '').toLowerCase();
+              return title.contains(query.toLowerCase());
+            }).toList();
+
+            if (filtered.isEmpty) {
+              return SliverToBoxAdapter(
+                child: EmptyState(
+                  icon: LucideIcons.fileText,
+                  title: 'Nessun rapportino',
+                  body: 'Non ci sono rapportini per questo filtro.',
+                ),
+              );
+            }
+
+            return SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final report = filtered[i];
+                  return _AdminReportRow(
+                    report: report,
+                    isLast: i == filtered.length - 1,
+                  );
+                },
+                childCount: filtered.length,
+              ),
+            );
+          },
+        ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
+  }
+}
+
+/// Provider that fetches reports from backend API.
+final adminReportsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, StatoFilter>((ref, filter) async {
+  final api = ref.watch(adminApiClientProvider);
+  return api.fetchReports(stato: filter.value);
+});
+
+/// Simple wrapper for the stato filter value.
+class StatoFilter {
+  const StatoFilter(this.value);
+  final String? value;
+}
+
+class _AdminReportRow extends StatelessWidget {
+  const _AdminReportRow({required this.report, required this.isLast});
+
+  final Map<String, dynamic> report;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = report['title'] as String? ?? '—';
+    final stato = report['stato'] as String? ?? 'Bozza';
+    final createdAt = report['createdAt'] as String?;
+    final dateLabel = createdAt != null
+        ? DateFormat('dd/MM/yyyy HH:mm', 'it')
+            .format(DateTime.parse(createdAt).toLocal())
+        : '—';
+
+    return ListRow(
+      leading: _StatoIcon(stato: stato),
+      title: title,
+      subtitle: dateLabel,
+      meta: StatusPill(stato: stato),
+      showDivider: !isLast,
+      onTap: () => context.push(
+        '/altro/rapportini-admin/${report['id']}',
+        extra: report,
+      ),
+    );
+  }
+}
+
+class _StatoIcon extends StatelessWidget {
+  const _StatoIcon({required this.stato});
+
+  final String stato;
+
+  @override
+  Widget build(BuildContext context) {
+    final (color, icon) = switch (stato) {
+      'Bozza' => (AppColors.MUTED, LucideIcons.fileEdit),
+      'Inviato' => (const Color(0xFF2563EB), LucideIcons.send),
+      'Controllato' => (const Color(0xFF4CAF50), LucideIcons.checkCircle),
+      'Fatturato' => (const Color(0xFF7C3AED), LucideIcons.receipt),
+      _ => (AppColors.MUTED, LucideIcons.fileText),
+    };
+
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, size: 20, color: color),
+    );
+  }
+}

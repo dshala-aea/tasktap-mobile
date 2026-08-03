@@ -17,21 +17,27 @@
 ///   --dart-define=SENTRY_DSN=$SENTRY_DSN
 /// ```
 ///
-/// NEVER commit real values here. The defaults are intentionally empty
-/// so that a build without the dart-define flags fails fast at runtime
-/// (Supabase.initialize will throw if the URL is blank).
+/// NEVER commit real values here. The OIDC/API defaults are intentionally
+/// empty so a build without the dart-define flags fails fast at runtime.
 /// SENTRY_DSN is optional: when absent, crash reporting is a no-op.
 abstract final class Env {
-  /// Supabase project URL — e.g. https://abcdefgh.supabase.co
-  static const String supabaseUrl = String.fromEnvironment(
-    'SUPABASE_URL',
+  /// Zitadel OIDC issuer — e.g. https://tasktap-auth.advantedgeautomation.com
+  static const String oidcIssuer = String.fromEnvironment(
+    'OIDC_ISSUER',
     defaultValue: '',
   );
 
-  /// Supabase anon (public) key.
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
+  /// OIDC client id of the mobile (Native) app.
+  static const String oidcClientId = String.fromEnvironment(
+    'OIDC_CLIENT_ID',
     defaultValue: '',
+  );
+
+  /// OIDC redirect URI (custom scheme). Must match the app's registered scheme
+  /// and the Zitadel Native app's redirect URI — e.g. it.tasktap.app://callback
+  static const String oidcRedirectUri = String.fromEnvironment(
+    'OIDC_REDIRECT_URI',
+    defaultValue: 'it.tasktap.app://callback',
   );
 
   /// TaskTap backend REST API base URL — e.g. https://api.tasktap.io
@@ -55,7 +61,7 @@ abstract final class Env {
 
   /// Returns true when all required env vars are present.
   static bool get isConfigured =>
-      supabaseUrl.isNotEmpty &&
-      supabaseAnonKey.isNotEmpty &&
+      oidcIssuer.isNotEmpty &&
+      oidcClientId.isNotEmpty &&
       apiBaseUrl.isNotEmpty;
 }

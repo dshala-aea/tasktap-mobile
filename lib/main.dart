@@ -1,13 +1,15 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/env.dart';
 import 'core/crash_reporting/crash_reporter.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
+import 'core/notifications/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'presentation/providers/auth_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,25 +52,31 @@ Future<void> main() async {
 /// Extracted so it can be called both from inside the Sentry [appRunner]
 /// callback and from the no-DSN code path.
 Future<void> runTaskTapApp() async {
-  // ── Supabase ──────────────────────────────────────────────────────────────
+  // ── Firebase ────────────────────────────────────────────────────────────────
   //
-  // Credentials come from --dart-define at build time (see lib/core/config/env.dart).
-  // supabase_flutter persists the session automatically using SharedPreferences
-  // and, when available, flutter_secure_storage so the user stays signed in
-  // across app restarts and can use the app offline (cached JWT).
-  //
-  // authFlowType: pkce is the recommended secure flow for mobile apps.
-  if (Env.supabaseUrl.isNotEmpty && Env.supabaseAnonKey.isNotEmpty) {
-    await Supabase.initialize(
-      url: Env.supabaseUrl,
-      publishableKey: Env.supabaseAnonKey,
-      authOptions: const FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
-        // Keep the session alive in the background.
-        autoRefreshToken: true,
-      ),
-    );
+  // Firebase is initialised FIRST so that FirebaseMessaging can be used
+  // immediately after Supabase auth completes. The platform-specific config
+  // files (google-services.json / GoogleService-Info.plist) must be present.
+  // Firebase is optional: when the dart-define FIREBASE_ENABLED is absent or
+  // "false", push notifications are silently disabled.
+  const firebaseEnabled = String.fromEnvironment(
+    'FIREBASE_ENABLED',
+    defaultValue: 'true',
+  );
+  if (firebaseEnabled == 'true') {
+    try {
+      await Firebase.initializeApp();
+      await NotificationService.instance.initialize();
+    } catch (e) {
+      // Firebase is optional — app still works without push notifications.
+      debugPrint('Firebase init failed (push disabled): $e');
+    }
   }
+
+  // Auth is Zitadel OIDC (see ZitadelAuthRepository) — no SDK init needed here;
+  // the session is restored from the stored refresh token by the repository.
+  // FCM device-token registration is driven off the Riverpod auth state inside
+  // TaskTapApp (a listener needs the ProviderScope, created below).
 
   runApp(
     const ProviderScope(
@@ -95,6 +103,28 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Register the FCM device token whenever a user becomes authenticated
+    // (replaces the old Supabase auth-state listener).
+    const firebaseEnabled =
+        String.fromEnvironment('FIREBASE_ENABLED', defaultValue: 'true');
+    ref.listen(authStateProvider, (previous, next) {
+      final user = next.valueOrNull;
+      if (firebaseEnabled == 'true' && user != null) {
+        NotificationService.instance.registerDeviceToken(user.accessToken);
+      }
+    });
+
+    // Check for pending deep-links from notification taps.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final deepLink = NotificationService.instance.consumePendingDeepLink();
+      if (deepLink != null) {
+        final route = deepLink.resolveRoute();
+        if (route != null) {
+          _router.go(route);
+        }
+      }
+    });
+
     return MaterialApp.router(
       title: 'TaskTap',
       debugShowCheckedModeBanner: false,

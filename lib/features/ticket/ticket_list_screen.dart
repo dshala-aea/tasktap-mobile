@@ -63,8 +63,11 @@ class _TicketListScreenState extends State<TicketListScreen> {
       ),
       floatingActionButton: AppFab(
         tooltip: 'Nuovo ticket',
-        onPressed: () {
-          // TODO(D3b): navigate to new-ticket stub when form is built.
+        onPressed: () async {
+          final created = await context.push<bool>('/ticket/new');
+          if (created == true && mounted) {
+            // List auto-refreshes via StreamProvider, no manual refresh needed.
+          }
         },
       ),
     );

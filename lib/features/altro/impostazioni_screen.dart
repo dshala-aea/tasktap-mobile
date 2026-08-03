@@ -3,14 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../core/config/app_info_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
-
-// App version — read from package_info_plus when available.
-// TODO: replace with PackageInfo.fromPlatform() if package_info_plus is added.
-const _kAppVersion = '1.0.0+1';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ImpostazioniScreen
@@ -27,6 +24,7 @@ class ImpostazioniScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     final settings = ref.watch(impostazioniProvider);
     final notifier = ref.read(impostazioniProvider.notifier);
+    final appInfoAsync = ref.watch(appInfoProvider);
 
     final displayName = user?.displayName ?? user?.email ?? '';
 
@@ -156,11 +154,15 @@ class ImpostazioniScreen extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(19, 32, 19, 0),
                 child: Center(
-                  child: Text(
-                    'TaskTap v$_kAppVersion',
-                    style: GoogleFonts.manrope(
-                      fontSize: 11,
-                      color: AppColors.DIS,
+                  child: appInfoAsync.when(
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
+                    data: (info) => Text(
+                      'TaskTap v${info.displayVersion}',
+                      style: GoogleFonts.manrope(
+                        fontSize: 11,
+                        color: AppColors.DIS,
+                      ),
                     ),
                   ),
                 ),

@@ -143,17 +143,14 @@ void main() {
     });
 
     test('signIn sets isLoading then clears on success', () async {
-      when(() => repo.signInWithEmailPassword(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).thenAnswer((_) async => (user: _fakeUser(), failure: null));
+      when(() => repo.signIn()).thenAnswer((_) async => (user: _fakeUser(), failure: null));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
       await container
           .read(loginProvider.notifier)
-          .signIn(email: 'tech@tasktap.io', password: 'secret');
+          .signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -161,10 +158,7 @@ void main() {
     });
 
     test('signIn sets failure on InvalidCredentials', () async {
-      when(() => repo.signInWithEmailPassword(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).thenAnswer(
+      when(() => repo.signIn()).thenAnswer(
             (_) async => (user: null, failure: const InvalidCredentials()),
           );
 
@@ -173,7 +167,7 @@ void main() {
 
       await container
           .read(loginProvider.notifier)
-          .signIn(email: 'bad@email.com', password: 'wrong');
+          .signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -181,10 +175,7 @@ void main() {
     });
 
     test('clearError resets failure to null', () async {
-      when(() => repo.signInWithEmailPassword(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).thenAnswer(
+      when(() => repo.signIn()).thenAnswer(
             (_) async => (user: null, failure: const NetworkError()),
           );
 
@@ -193,7 +184,7 @@ void main() {
 
       await container
           .read(loginProvider.notifier)
-          .signIn(email: 'tech@tasktap.io', password: 'secret');
+          .signIn();
 
       expect(container.read(loginProvider).failure, isA<NetworkError>());
 

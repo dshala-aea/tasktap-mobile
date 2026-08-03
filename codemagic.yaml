@@ -1,0 +1,173 @@
+workflows:
+  # ──────────────────────────────────────────────────────────────────────────────
+  # PR / branch checks — analyse + test, no artefacts
+  # ──────────────────────────────────────────────────────────────────────────────
+  check:
+    name: PR Check
+    max_build_duration: 20
+    environment:
+      flutter: stable
+      groups:
+        - tasktap_dartDefines
+    triggering:
+      events:
+        - pull_request
+    scripts:
+      - name: Install dependencies
+        script: flutter pub get
+      - name: Analyse
+        script: flutter analyze
+      - name: Unit tests
+        script: flutter test
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # Android — build APK + AAB, upload to Google Play (internal track)
+  # Triggered on push to main or manual tag v*
+  # ──────────────────────────────────────────────────────────────────────────────
+  android_release:
+    name: Android Release
+    max_build_duration: 40
+    environment:
+      flutter: stable
+      groups:
+        - tasktap_dartDefines
+        - tasktap_google_play        # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, PACKAGE_NAME
+      android_signing:
+        - tasktap_keystore
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Install dependencies
+        script: flutter pub get
+      - name: Analyse
+        script: flutter analyze
+      - name: Unit tests
+        script: flutter test
+      - name: Build Android App Bundle (release)
+        script: |
+          flutter build appbundle \
+            --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN"
+      - name: Build APK (release, for testing)
+        script: |
+          flutter build apk \
+            --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN"
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/*.apk
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        package_name: com.advantedge.tasktap.tasktap_mobile
+        track: internal
+        status: completed
+        # Upload both AAB and APK — AAB for Play Store, APK for direct install
+        upload:
+          - build/**/outputs/**/release/*.aab
+      email:
+        recipients:
+          - dev@advantedge.com
+        notify:
+          success: true
+          failure: true
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # iOS — build IPA, upload to TestFlight
+  # Triggered on push to main or manual tag v*
+  # ──────────────────────────────────────────────────────────────────────────────
+  ios_release:
+    name: iOS Release
+    max_build_duration: 40
+    environment:
+      flutter: stable
+      groups:
+        - tasktap_dartDefines
+        - tasktap_app_store_connect  # APP_STORE_CONNECT_API_KEY_ID, APP_STORE_CONNECT_ISSUER_ID,
+                                     # APP_STORE_CONNECT_API_KEY (private key)
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.advantedge.tasktap.tasktapMobile
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Install dependencies
+        script: flutter pub get
+      - name: Analyse
+        script: flutter analyze
+      - name: Unit tests
+        script: flutter test
+      - name: Build iOS (release)
+        script: |
+          flutter build ipa \
+            --release \
+            --export-options-plist=/Users/builder/export_options.plist \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/**/*.xcarchive
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_API_KEY
+        key_id: $APP_STORE_CONNECT_API_KEY_ID
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_app_store: false
+        submit_to_testflight: true
+      email:
+        recipients:
+          - dev@advantedge.com
+        notify:
+          success: true
+          failure: true
+
+  # ──────────────────────────────────────────────────────────────────────────────
+  # iOS App Store — promote TestFlight build to production
+  # Triggered manually after QA on TestFlight
+  # ──────────────────────────────────────────────────────────────────────────────
+  ios_app_store:
+    name: iOS App Store
+    max_build_duration: 20
+    environment:
+      groups:
+        - tasktap_app_store_connect
+      flutter: stable
+    triggering:
+      events:
+        - manual
+    scripts:
+      - name: Download latest TestFlight build info
+        script: |
+          echo "Promoting latest TestFlight build to App Store..."
+          # CodeMagic App Store Connect integration handles this via submit_to_app_store
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_API_KEY
+        key_id: $APP_STORE_CONNECT_API_KEY_ID
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_app_store: true
+        submit_to_testflight: false

@@ -12,6 +12,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import '../admin/admin_api_client.dart';
 import 'ticket_providers.dart';
 
 class TicketDetailScreen extends ConsumerStatefulWidget {
@@ -249,13 +250,25 @@ class _TicketDetailBody extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: AppButton.secondary(
+                        label: 'Assegna',
+                        icon: const Icon(LucideIcons.userCheck, size: 16),
+                        onPressed: () => _showAssignSheet(context, ref, ticket),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AppButton.secondary(
                         label: 'Cliente',
                         onPressed: () => context.push(
                           AppRoutes.clientiDetail(ticket.customerId),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
                     Expanded(
                       child: AppButton(
                         label: 'Crea rapportino',
@@ -263,18 +276,20 @@ class _TicketDetailBody extends ConsumerWidget {
                             _createRapportino(context, ref, ticket),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                AppButton.dark(
-                  label: 'Timbra cantiere',
-                  icon: const Icon(Icons.location_on_outlined),
-                  onPressed: () => context.push(
-                    AppRoutes.cantiereTimbraPath(
-                      ticketId: ticket.id,
-                      customerId: ticket.customerId,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AppButton.dark(
+                        label: 'Timbra cantiere',
+                        icon: const Icon(Icons.location_on_outlined),
+                        onPressed: () => context.push(
+                          AppRoutes.cantiereTimbraPath(
+                            ticketId: ticket.id,
+                            customerId: ticket.customerId,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -308,6 +323,25 @@ class _TicketDetailBody extends ConsumerWidget {
     if (context.mounted) {
       context.push(AppRoutes.rapportiniEditor(id));
     }
+  }
+
+  void _showAssignSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Ticket ticket,
+  ) {
+    final api = ref.read(adminApiClientProvider);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _AssignSheet(
+        api: api,
+        ticket: ticket,
+      ),
+    );
   }
 }
 
@@ -413,6 +447,119 @@ class _PianificazioniTab extends ConsumerWidget {
                 }).toList(),
               ),
             ),
+    );
+  }
+}
+
+class _AssignSheet extends StatefulWidget {
+  const _AssignSheet({required this.api, required this.ticket});
+
+  final AdminApiClient api;
+  final Ticket ticket;
+
+  @override
+  State<_AssignSheet> createState() => _AssignSheetState();
+}
+
+class _AssignSheetState extends State<_AssignSheet> {
+  String? _selectedUserId;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  List<Map<String, dynamic>> _technicians = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedUserId = widget.ticket.assignedUserId;
+    _loadTechnicians();
+  }
+
+  Future<void> _loadTechnicians() async {
+    try {
+      final techs = await widget.api.fetchTechnicians();
+      if (mounted) {
+        setState(() {
+          _technicians = techs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _isSaving = true);
+    try {
+      await widget.api.assignTicket(widget.ticket.id, _selectedUserId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Assegnazione aggiornata')),
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        19,
+        19,
+        19,
+        MediaQuery.of(context).viewInsets.bottom + 19,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Assegna tecnico',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else
+            DropdownButtonFormField<String>(
+              value: _selectedUserId,
+              decoration: const InputDecoration(
+                labelText: 'Tecnico',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: null,
+                  child: Text('Non assegnato'),
+                ),
+                ..._technicians.map((t) => DropdownMenuItem(
+                      value: t['id'] as String,
+                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                    )),
+              ],
+              onChanged: (v) => setState(() => _selectedUserId = v),
+            ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              label: _isSaving ? 'Salvataggio…' : 'Salva',
+              onPressed: _isSaving ? null : _save,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

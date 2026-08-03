@@ -9,15 +9,39 @@ import '../../features/altro/notifiche_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
+import '../../features/ticket/new_ticket_form_screen.dart';
 import '../../features/ticket/ticket_detail_screen.dart';
 import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
 import '../../features/calendario/calendario_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
+import '../../features/admin/customers/admin_customer_detail_screen.dart';
+import '../../features/admin/customers/admin_customer_form_screen.dart';
+import '../../features/admin/locations/admin_location_list_screen.dart';
+import '../../features/admin/locations/admin_location_detail_screen.dart';
+import '../../features/admin/locations/admin_location_form_screen.dart';
+import '../../features/admin/cantieri/admin_cantiere_list_screen.dart';
+import '../../features/admin/cantieri/admin_cantiere_detail_screen.dart';
+import '../../features/admin/cantieri/admin_cantiere_form_screen.dart';
+import '../../features/admin/schedules/admin_schedule_list_screen.dart';
+import '../../features/admin/schedules/admin_schedule_detail_screen.dart';
+import '../../features/admin/schedules/admin_schedule_form_screen.dart';
+import '../../features/admin/materiali/admin_materiale_list_screen.dart';
+import '../../features/admin/materiali/admin_materiale_detail_screen.dart';
+import '../../features/admin/materiali/admin_materiale_form_screen.dart';
+import '../../features/admin/prodotti/admin_prodottoList_screen.dart';
+import '../../features/admin/prodotti/admin_prodotto_detail_screen.dart';
+import '../../features/admin/prodotti/admin_prodotto_form_screen.dart';
+import '../../features/admin/contracts/admin_contract_list_screen.dart';
+import '../../features/admin/contracts/admin_contract_detail_screen.dart';
+import '../../features/admin/contracts/admin_contract_form_screen.dart';
+import '../../features/admin/squadre/admin_squadra_list_screen.dart';
+import '../../features/admin/squadre/admin_squadra_detail_screen.dart';
+import '../../features/admin/squadre/admin_squadra_form_screen.dart';
+import '../../features/admin/reports/admin_report_list_screen.dart';
+import '../../features/admin/reports/admin_report_detail_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
-import '../../features/clienti/cliente_detail_screen.dart';
-import '../../features/magazzino/magazzino_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
@@ -124,6 +148,12 @@ GoRouter buildRouter(WidgetRef ref) {
         },
       ),
 
+      // ── New ticket form (pushed from ticket list FAB) ─────────────────────
+      GoRoute(
+        path: '/ticket/new',
+        builder: (context, state) => const NewTicketFormScreen(),
+      ),
+
       // ── Main Shell (5-tab pill bottom nav) ───────────────────────────────
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -224,16 +254,257 @@ GoRouter buildRouter(WidgetRef ref) {
                     builder: (context, state) => const ClientiListScreen(),
                     routes: [
                       GoRoute(
+                        path: 'nuovo',
+                        builder: (context, state) =>
+                            const AdminCustomerFormScreen(),
+                      ),
+                      GoRoute(
                         path: ':id',
-                        builder: (context, state) => ClienteDetailScreen(
+                        builder: (context, state) => AdminCustomerDetailScreen(
                           customerId: state.pathParameters['id']!,
                         ),
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) =>
+                                AdminCustomerFormScreen(
+                              customerId: state.pathParameters['id']!,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'cantieri',
+                    builder: (context, state) =>
+                        const AdminCantiereListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        builder: (context, state) =>
+                            const AdminCantiereFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) =>
+                            AdminCantiereDetailScreen(
+                          cantiereId: state.pathParameters['id']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) =>
+                                AdminCantiereFormScreen(
+                              cantiereId: state.pathParameters['id'],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'sedi',
+                    builder: (context, state) =>
+                        const AdminLocationListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuova',
+                        builder: (context, state) =>
+                            const AdminLocationFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) =>
+                            AdminLocationDetailScreen(
+                          locationId: state.pathParameters['id']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) =>
+                                AdminLocationFormScreen(
+                              locationId: state.pathParameters['id'],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'pianificazioni',
+                    builder: (context, state) =>
+                        const AdminScheduleListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuova',
+                        builder: (context, state) =>
+                            const AdminScheduleFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) =>
+                            AdminScheduleDetailScreen(
+                          scheduleId: state.pathParameters['id']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) =>
+                                AdminScheduleFormScreen(
+                              scheduleId: state.pathParameters['id'],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                   GoRoute(
                     path: 'magazzino',
-                    builder: (context, state) => const MagazzinoScreen(),
+                    builder: (context, state) =>
+                        const AdminMaterialeListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        builder: (context, state) =>
+                            const AdminMaterialeFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) =>
+                            AdminMaterialeDetailScreen(
+                          materialeId: state.pathParameters['id']!,
+                        ),
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) =>
+                                AdminMaterialeFormScreen(
+                              materialeId: state.pathParameters['id'],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'prodotti',
+                    builder: (context, state) =>
+                        const AdminProdottoListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        builder: (context, state) =>
+                            const AdminProdottoFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final prodotto =
+                              state.extra as Map<String, dynamic>?;
+                          return AdminProdottoDetailScreen(
+                            prodotto: prodotto ?? {},
+                          );
+                        },
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) {
+                              final prodotto =
+                                  state.extra as Map<String, dynamic>?;
+                              return AdminProdottoFormScreen(
+                                prodotto: prodotto,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'contratti',
+                    builder: (context, state) =>
+                        const AdminContractListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        builder: (context, state) =>
+                            const AdminContractFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final contract =
+                              state.extra as Map<String, dynamic>?;
+                          return AdminContractDetailScreen(
+                            contract: contract ?? {},
+                          );
+                        },
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) {
+                              final contract =
+                                  state.extra as Map<String, dynamic>?;
+                              return AdminContractFormScreen(
+                                contract: contract,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'squadre',
+                    builder: (context, state) =>
+                        const AdminSquadraListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        builder: (context, state) =>
+                            const AdminSquadraFormScreen(),
+                      ),
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final squadra =
+                              state.extra as Map<String, dynamic>?;
+                          return AdminSquadraDetailScreen(
+                            squadra: squadra ?? {},
+                          );
+                        },
+                        routes: [
+                          GoRoute(
+                            path: 'modifica',
+                            builder: (context, state) {
+                              final squadra =
+                                  state.extra as Map<String, dynamic>?;
+                              return AdminSquadraFormScreen(
+                                squadra: squadra,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'rapportini-admin',
+                    builder: (context, state) =>
+                        const AdminReportListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) {
+                          final report =
+                              state.extra as Map<String, dynamic>?;
+                          return AdminReportDetailScreen(
+                            report: report ?? {},
+                          );
+                        },
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: 'coming-soon',

@@ -1,0 +1,279 @@
+// dart format width=100
+import 'package:drift/drift.dart' hide Column;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/widgets.dart';
+import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_service.dart';
+
+/// All materiali from Drift cache, alphabetical.
+final adminMaterialiProvider =
+    StreamProvider.autoDispose<List<MaterialiData>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.materiali)
+        ..orderBy([(m) => OrderingTerm.asc(m.name)]))
+      .watch();
+});
+
+/// Admin materiale list — with search, category filter, FAB.
+class AdminMaterialeListScreen extends StatefulWidget {
+  const AdminMaterialeListScreen({super.key});
+
+  @override
+  State<AdminMaterialeListScreen> createState() =>
+      _AdminMaterialeListScreenState();
+}
+
+class _AdminMaterialeListScreenState extends State<AdminMaterialeListScreen> {
+  String _query = '';
+  String? _selectedCategory;
+  bool _showInactive = false;
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.BG2,
+      body: SafeArea(
+        child: _AdminMaterialeListBody(
+          query: _query,
+          selectedCategory: _selectedCategory,
+          showInactive: _showInactive,
+          searchCtrl: _searchCtrl,
+          onQueryChanged: (q) => setState(() => _query = q),
+          onCategoryChanged: (c) =>
+              setState(() => _selectedCategory = c),
+          onShowInactiveChanged: (v) =>
+              setState(() => _showInactive = v),
+        ),
+      ),
+      floatingActionButton: AppFab(
+        tooltip: 'Nuovo materiale',
+        onPressed: () => context.push('/altro/magazzino/nuovo'),
+      ),
+    );
+  }
+}
+
+class _AdminMaterialeListBody extends ConsumerWidget {
+  const _AdminMaterialeListBody({
+    required this.query,
+    required this.selectedCategory,
+    required this.showInactive,
+    required this.searchCtrl,
+    required this.onQueryChanged,
+    required this.onCategoryChanged,
+    required this.onShowInactiveChanged,
+  });
+
+  final String query;
+  final String? selectedCategory;
+  final bool showInactive;
+  final TextEditingController searchCtrl;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String?> onCategoryChanged;
+  final ValueChanged<bool> onShowInactiveChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final materialiAsync = ref.watch(adminMaterialiProvider);
+    final allMateriali = materialiAsync.valueOrNull ?? [];
+
+    // Collect unique categories for filter chips
+    final categories = allMateriali
+        .where((m) => m.category != null && m.category!.isNotEmpty)
+        .map((m) => m.category!)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final filtered = allMateriali.where((m) {
+      final matchActive = showInactive || m.isActive;
+      final matchCategory =
+          selectedCategory == null || m.category == selectedCategory;
+      final matchQuery = query.isEmpty ||
+          m.name.toLowerCase().contains(query.toLowerCase()) ||
+          m.code.toLowerCase().contains(query.toLowerCase()) ||
+          (m.description?.toLowerCase().contains(query.toLowerCase()) ??
+              false);
+      return matchActive && matchCategory && matchQuery;
+    }).toList();
+
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: ScreenHeader(
+            title: 'Magazzino',
+            subtitle: '${filtered.length} totali',
+            showBack: true,
+            actions: [
+              IconButton(
+                icon: Icon(
+                  showInactive
+                      ? LucideIcons.eye
+                      : LucideIcons.eyeOff,
+                  size: 20,
+                ),
+                tooltip: showInactive ? 'Nascondi inattivi' : 'Mostra inattivi',
+                onPressed: () => onShowInactiveChanged(!showInactive),
+              ),
+            ],
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: AppSearchBar(
+            controller: searchCtrl,
+            hint: 'Cerca per nome, codice o descrizione…',
+            onChanged: onQueryChanged,
+          ),
+        ),
+        // ── Category filter ──────────────────────────────────────────────
+        if (categories.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    AppChip(
+                      label: 'Tutti',
+                      active: selectedCategory == null,
+                      onTap: () => onCategoryChanged(null),
+                    ),
+                    const SizedBox(width: 8),
+                    for (final cat in categories) ...[
+                      AppChip(
+                        label: cat,
+                        active: selectedCategory == cat,
+                        onTap: () => onCategoryChanged(cat),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (materialiAsync.isLoading)
+          const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(48),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          )
+        else if (filtered.isEmpty)
+          SliverToBoxAdapter(
+            child: EmptyState(
+              icon: LucideIcons.package,
+              title: 'Nessun materiale',
+              body: 'Crea un nuovo materiale con il pulsante +.',
+            ),
+          )
+        else
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, i) {
+                final materiale = filtered[i];
+                return _AdminMaterialeRow(
+                  materiale: materiale,
+                  isLast: i == filtered.length - 1,
+                );
+              },
+              childCount: filtered.length,
+            ),
+          ),
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
+  }
+}
+
+class _AdminMaterialeRow extends StatelessWidget {
+  const _AdminMaterialeRow({
+    required this.materiale,
+    required this.isLast,
+  });
+
+  final MaterialiData materiale;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final catLabel = materiale.category ?? '—';
+    final priceLabel = materiale.salePrice != null
+        ? '€${materiale.salePrice!.toStringAsFixed(2)}'
+        : '—';
+
+    return ListRow(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.BG3,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: materiale.imageUrl != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  materiale.imageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    LucideIcons.package,
+                    size: 20,
+                    color: AppColors.MUTED,
+                  ),
+                ),
+              )
+            : const Icon(
+                LucideIcons.package,
+                size: 20,
+                color: AppColors.MUTED,
+              ),
+      ),
+      title: materiale.name,
+      subtitle: '${materiale.code} · $catLabel',
+      meta: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            priceLabel,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          if (!materiale.isActive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              margin: const EdgeInsets.only(top: 2),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+                child: const Text(
+                  'Inattivo',
+                  style: TextStyle(fontSize: 10, color: AppColors.error),
+              ),
+            ),
+        ],
+      ),
+      showDivider: !isLast,
+      onTap: () => context.push('/altro/magazzino/${materiale.id}'),
+    );
+  }
+}

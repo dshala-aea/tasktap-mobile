@@ -1,13 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/notifications/notification_service.dart';
+import '../../domain/auth/i_auth_repository.dart';
+import '../../presentation/providers/auth_providers.dart';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SharedPreferences keys
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _kPushAbilitate = 'settings.push_abilitate';
+const _kNotificheInterventi = 'settings.notifiche_interventi';
+const _kNotificheRapportini = 'settings.notifiche_rapportini';
+const _kSyncOffline = 'settings.sync_offline';
+const _kGeoLocazione = 'settings.geo_locazione';
+const _kTemaScuro = 'settings.tema_scuro';
+const _kAutenticazioneBiometrica = 'settings.auth_biometrica';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Settings state
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// App-wide settings state (in-memory).
-///
-/// Seam: `shared_preferences` is not in pubspec — add it when persisting.
-// TODO: persist settings via shared_preferences or similar.
 class ImpostazioniState {
   const ImpostazioniState({
     // Notifiche
@@ -58,14 +71,34 @@ class ImpostazioniState {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Notifier
+// Notifier (persisted via shared_preferences)
 // ══════════════════════════════════════════════════════════════════════════════
 
 class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
-  ImpostazioniNotifier() : super(const ImpostazioniState());
+  ImpostazioniNotifier(this._authRepo) : super(const ImpostazioniState()) {
+    _loadFromPrefs();
+  }
 
+  final IAuthRepository _authRepo;
+  late final SharedPreferences _prefs;
+
+  /// Load persisted settings from SharedPreferences.
+  Future<void> _loadFromPrefs() async {
+    _prefs = await SharedPreferences.getInstance();
+    state = ImpostazioniState(
+      pushAbilitate: _prefs.getBool(_kPushAbilitate) ?? true,
+      notificheInterventi: _prefs.getBool(_kNotificheInterventi) ?? true,
+      notificheRapportini: _prefs.getBool(_kNotificheRapportini) ?? true,
+      syncOffline: _prefs.getBool(_kSyncOffline) ?? true,
+      geoLocazione: _prefs.getBool(_kGeoLocazione) ?? false,
+      temaScuro: _prefs.getBool(_kTemaScuro) ?? false,
+      autenticazioneBiometrica:
+          _prefs.getBool(_kAutenticazioneBiometrica) ?? false,
+    );
+  }
+
+  /// Toggle a setting by key and persist to SharedPreferences.
   void toggle({required String key}) {
-    // TODO: persist settings via shared_preferences after each toggle.
     state = switch (key) {
       'pushAbilitate' => state.copyWith(pushAbilitate: !state.pushAbilitate),
       'notificheInterventi' =>
@@ -79,6 +112,51 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
           autenticazioneBiometrica: !state.autenticazioneBiometrica),
       _ => state,
     };
+
+    // Persist the toggled value.
+    _persist(key, _valueForKey(key));
+
+    // Side-effect: push toggle controls device registration.
+    if (key == 'pushAbilitate') {
+      _syncPushRegistration(state.pushAbilitate);
+    }
+  }
+
+  bool _valueForKey(String key) => switch (key) {
+        'pushAbilitate' => state.pushAbilitate,
+        'notificheInterventi' => state.notificheInterventi,
+        'notificheRapportini' => state.notificheRapportini,
+        'syncOffline' => state.syncOffline,
+        'geoLocazione' => state.geoLocazione,
+        'temaScuro' => state.temaScuro,
+        'autenticazioneBiometrica' => state.autenticazioneBiometrica,
+        _ => false,
+      };
+
+  String _prefKeyForKey(String key) => switch (key) {
+        'pushAbilitate' => _kPushAbilitate,
+        'notificheInterventi' => _kNotificheInterventi,
+        'notificheRapportini' => _kNotificheRapportini,
+        'syncOffline' => _kSyncOffline,
+        'geoLocazione' => _kGeoLocazione,
+        'temaScuro' => _kTemaScuro,
+        'autenticazioneBiometrica' => _kAutenticazioneBiometrica,
+        _ => key,
+      };
+
+  void _persist(String key, bool value) {
+    _prefs.setBool(_prefKeyForKey(key), value);
+  }
+
+  /// Register or unregister the device token when push is toggled.
+  void _syncPushRegistration(bool enabled) {
+    final token = _authRepo.currentUser?.accessToken;
+    if (token == null || token.isEmpty) return;
+    if (enabled) {
+      NotificationService.instance.registerDeviceToken(token);
+    } else {
+      NotificationService.instance.unregisterDeviceToken(token);
+    }
   }
 }
 
@@ -88,5 +166,5 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 
 final impostazioniProvider =
     StateNotifierProvider<ImpostazioniNotifier, ImpostazioniState>(
-  (ref) => ImpostazioniNotifier(),
+  (ref) => ImpostazioniNotifier(ref.watch(authRepositoryProvider)),
 );

@@ -8,8 +8,8 @@ import 'auth_user.dart';
 /// on this type, making provider swaps zero-cost.
 ///
 /// Implementations:
-/// - [SupabaseAuthRepository] — email/password via supabase_flutter (M2).
-/// - Future: PinAuthRepository, QrAuthRepository (not built in M2).
+/// - [ZitadelAuthRepository] — OIDC (Auth Code + PKCE) via flutter_appauth.
+/// - Future: PinAuthRepository, QrAuthRepository.
 abstract interface class IAuthRepository {
   // ── Session queries ────────────────────────────────────────────────────
 
@@ -22,14 +22,13 @@ abstract interface class IAuthRepository {
 
   // ── Auth actions ───────────────────────────────────────────────────────
 
-  /// Sign in with email and password.
+  /// Start the interactive sign-in flow (OIDC: opens the system browser for
+  /// Authorization Code + PKCE). Credentials are entered at the identity
+  /// provider, never in-app.
   ///
-  /// Returns the signed-in [AuthUser] on success, or an [AuthFailure] on
-  /// any error (network, bad credentials, account disabled, …).
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithEmailPassword({
-    required String email,
-    required String password,
-  });
+  /// Returns the signed-in [AuthUser] on success, or an [AuthFailure] on any
+  /// error (network, cancelled, …).
+  Future<({AuthUser? user, AuthFailure? failure})> signIn();
 
   /// Silently refresh the session using the stored refresh token.
   ///

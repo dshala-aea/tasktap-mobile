@@ -8,10 +8,6 @@
 //   3. Returns the current position or null (never throws) on denial/error.
 //
 // Tested via a fake injected implementation — never calls real GPS in tests.
-//
-// TODO(native-config): Add the following to native projects before shipping:
-//   iOS  → Info.plist: NSLocationWhenInUseUsageDescription
-//   Android → AndroidManifest.xml: ACCESS_FINE_LOCATION permission
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -26,7 +26,8 @@ Widget _buildLoginScreen(IAuthRepository repo) {
   );
 }
 
-/// Finds the primary login CTA — AppButton with label 'Accedi'.
+/// The primary login CTA — the AppButton labelled 'Accedi' (distinct from the
+/// screen heading, which is also 'Accedi').
 Finder get _loginCta => find.descendant(
       of: find.byType(AppButton),
       matching: find.text('Accedi'),
@@ -50,29 +51,6 @@ void main() {
   // ── Rendering ──────────────────────────────────────────────────────────
 
   group('LoginScreen rendering', () {
-    testWidgets('renders email and password fields', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Email'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-    });
-
-    testWidgets('renders Accedi button', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Accedi'), findsWidgets);
-    });
-
-    testWidgets('renders Ricordami checkbox checked by default', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
-      expect(checkbox.value, isTrue);
-    });
-
     testWidgets('renders TaskTap logo', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -80,114 +58,50 @@ void main() {
       expect(find.text('TT'), findsOneWidget);
       expect(find.text('TaskTap'), findsOneWidget);
     });
+
+    testWidgets('renders the Accedi CTA', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(_loginCta, findsOneWidget);
+    });
+
+    testWidgets('does not render email/password fields (OIDC redirect)',
+        (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextFormField), findsNothing);
+    });
   });
 
-  // ── Validation ─────────────────────────────────────────────────────────
+  // ── Sign-in ──────────────────────────────────────────────────────────────
 
-  group('LoginScreen validation', () {
-    testWidgets('shows error when email is empty', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      // Tap the login CTA (AppButton labelled 'Accedi') without filling any field.
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Inserisci l\'email'), findsOneWidget);
-    });
-
-    testWidgets('shows error when email format is invalid', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'not-an-email',
-      );
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Inserisci un\'email valida'), findsOneWidget);
-    });
-
-    testWidgets('shows error when password is empty', (tester) async {
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'valid@email.com',
-      );
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Inserisci la password'), findsOneWidget);
-    });
-
-    testWidgets('no validation error with valid email and password', (tester) async {
-      when(() => repo.signInWithEmailPassword(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).thenAnswer(
-            (_) async => (user: null, failure: const InvalidCredentials()),
-          );
+  group('LoginScreen sign-in', () {
+    testWidgets('tapping Accedi starts the interactive sign-in', (tester) async {
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'tech@tasktap.io');
-      await tester.enterText(fields.at(1), 'mypassword');
-
       await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
-      expect(find.text('Inserisci l\'email'), findsNothing);
-      expect(find.text('Inserisci la password'), findsNothing);
+      verify(() => repo.signIn()).called(1);
     });
   });
 
   // ── Error display ──────────────────────────────────────────────────────
 
   group('LoginScreen error display', () {
-    testWidgets('shows Italian error banner on InvalidCredentials', (tester) async {
-      when(() => repo.signInWithEmailPassword(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).thenAnswer(
-            (_) async => (user: null, failure: const InvalidCredentials()),
-          );
+    testWidgets('shows the network error banner on NetworkError',
+        (tester) async {
+      when(() => repo.signIn())
+          .thenAnswer((_) async => (user: null, failure: const NetworkError()));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
-
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'tech@tasktap.io');
-      await tester.enterText(fields.at(1), 'wrongpass');
-
-      await tester.tap(_loginCta);
-      await tester.pumpAndSettle();
-
-      expect(
-        find.textContaining('Email o password errati'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('shows network error banner on NetworkError', (tester) async {
-      when(() => repo.signInWithEmailPassword(
-            email: any(named: 'email'),
-            password: any(named: 'password'),
-          )).thenAnswer(
-            (_) async => (user: null, failure: const NetworkError()),
-          );
-
-      await tester.pumpWidget(_buildLoginScreen(repo));
-      await tester.pumpAndSettle();
-
-      final fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'tech@tasktap.io');
-      await tester.enterText(fields.at(1), 'pass');
 
       await tester.tap(_loginCta);
       await tester.pumpAndSettle();

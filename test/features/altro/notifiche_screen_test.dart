@@ -10,18 +10,23 @@
 //   5. Mark-all-read clears the unread dot.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/features/altro/notifiche_provider.dart';
 import 'package:tasktap_mobile/features/altro/notifiche_screen.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Fake notifier that can be seeded with test data.
+/// Fake notifier that can be seeded with test data, bypassing DB initialization.
 class _FakeNotificheNotifier extends NotificheNotifier {
-  _FakeNotificheNotifier(List<AppNotifica> initial) {
+  _FakeNotificheNotifier(List<AppNotifica> initial)
+      : super(AppDatabase(NativeDatabase.memory()), Dio()) {
+    // Override state directly, skipping _loadFromCache().
     state = initial;
   }
 }

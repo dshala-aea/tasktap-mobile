@@ -332,6 +332,39 @@ class WorkSessions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── notifications ─────────────────────────────────────────────────────────────
+/// Cached notifications from the backend. Used for offline display of the
+/// notification center. Synced via GET /api/notifications; individual
+/// read-state is updated locally and synced back via PUT.
+class AppNotifications extends Table {
+  @override
+  String get tableName => 'notifications';
+
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get userId => text()();
+  TextColumn get title => text()();
+  TextColumn get message => text()();
+  /// Notification type string (e.g. TicketAssigned, ScheduleReminder)
+  TextColumn get type => text()();
+  /// Delivery type string (InApp, Push, Email)
+  TextColumn get deliveryType => text()();
+  BoolColumn get isRead => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get readAt => dateTime().nullable()();
+  TextColumn get relatedEntityId => text().nullable()();
+  TextColumn get relatedEntityType => text().nullable()();
+  DateTimeColumn get scheduledFor => dateTime().nullable()();
+  DateTimeColumn get sentAt => dateTime().nullable()();
+  BoolColumn get isDelivered =>
+      boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── report_allegati ───────────────────────────────────────────────────────────
 /// Local attachment metadata. Before upload, storagePath is a local file path.
 class ReportAllegati extends Table {
@@ -379,13 +412,14 @@ class ReportAllegati extends Table {
     ReportControlli,
     ReportAllegati,
     WorkSessions,
+    AppNotifications,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -409,6 +443,10 @@ class AppDatabase extends _$AppDatabase {
           // D3a: add ticket lookup tables (status + type)
           await m.createTable(ticketStatuses);
           await m.createTable(ticketTypes);
+        }
+        if (from < 5) {
+          // Notifications: add cache table for notification center
+          await m.createTable(appNotifications);
         }
       },
     );

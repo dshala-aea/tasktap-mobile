@@ -1,0 +1,231 @@
+// dart format width=100
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/widgets.dart';
+import '../admin_api_client.dart';
+
+/// Admin report detail — read-only with state transition actions.
+class AdminReportDetailScreen extends ConsumerWidget {
+  const AdminReportDetailScreen({super.key, required this.report});
+
+  final Map<String, dynamic> report;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final title = report['title'] as String? ?? '—';
+    final stato = report['stato'] as String? ?? 'Bozza';
+    final createdAt = report['createdAt'] as String?;
+    final details = report['details'] as String? ?? '';
+    final technicianNotes = report['technicianNotes'] as String? ?? '';
+    final inviatoAt = report['inviatoAt'] as String?;
+    final controllatoAt = report['controllatoAt'] as String?;
+    final fatturatoAt = report['fatturatoAt'] as String?;
+
+    final dateLabel = createdAt != null
+        ? DateFormat('dd/MM/yyyy HH:mm', 'it')
+            .format(DateTime.parse(createdAt).toLocal())
+        : '—';
+
+    return Scaffold(
+      backgroundColor: AppColors.BG2,
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: AppColors.BG2,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(LucideIcons.moreVertical, size: 20),
+            itemBuilder: (_) => [
+              if (stato == 'Inviato')
+                const PopupMenuItem(
+                  value: 'controlla',
+                  child: Text('Segna come controllato'),
+                ),
+              if (stato == 'Controllato')
+                const PopupMenuItem(
+                  value: 'fattura',
+                  child: Text('Segna come fatturato'),
+                ),
+            ],
+            onSelected: (v) => _handleAction(context, ref, v),
+          ),
+        ],
+      ),
+      body: CustomScrollView(
+        slivers: [
+          // ── Status header ───────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+              child: Row(
+                children: [
+                  StatusPill(stato: stato),
+                  const Spacer(),
+                  Text(
+                    dateLabel,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.MUTED,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // ── Info card ───────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: [
+                    KeyVal(label: 'Stato', value: stato),
+                    KeyVal(label: 'Data creazione', value: dateLabel),
+                    if (inviatoAt != null)
+                      KeyVal(
+                        label: 'Inviato il',
+                        value: DateFormat('dd/MM/yyyy HH:mm', 'it')
+                            .format(DateTime.parse(inviatoAt).toLocal()),
+                      ),
+                    if (controllatoAt != null)
+                      KeyVal(
+                        label: 'Controllato il',
+                        value: DateFormat('dd/MM/yyyy HH:mm', 'it')
+                            .format(DateTime.parse(controllatoAt).toLocal()),
+                      ),
+                    if (fatturatoAt != null)
+                      KeyVal(
+                        label: 'Fatturato il',
+                        value: DateFormat('dd/MM/yyyy HH:mm', 'it')
+                            .format(DateTime.parse(fatturatoAt).toLocal()),
+                        showDivider: false,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // ── Details ─────────────────────────────────────────────────
+          if (details.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                child: AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle(title: 'Dettagli'),
+                      const SizedBox(height: 4),
+                      Text(
+                        details,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // ── Technician notes ────────────────────────────────────────
+          if (technicianNotes.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                child: AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle(title: 'Note tecnico'),
+                      const SizedBox(height: 4),
+                      Text(
+                        technicianNotes,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // ── State transition buttons ────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(19),
+              child: _StateTransitionButtons(
+                stato: stato,
+                onTransition: (action) =>
+                    _handleAction(context, ref, action),
+              ),
+            ),
+          ),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleAction(
+    BuildContext context,
+    WidgetRef ref,
+    String action,
+  ) async {
+    final api = ref.read(adminApiClientProvider);
+    final reportId = report['id'] as String;
+
+    try {
+      switch (action) {
+        case 'controlla':
+          await api.controllaReport(reportId);
+          break;
+        case 'fattura':
+          await api.fatturaReport(reportId);
+          break;
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stato aggiornato')),
+        );
+        // Pop to refresh list
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Errore: $e')),
+        );
+      }
+    }
+  }
+}
+
+class _StateTransitionButtons extends StatelessWidget {
+  const _StateTransitionButtons({
+    required this.stato,
+    required this.onTransition,
+  });
+
+  final String stato;
+  final ValueChanged<String> onTransition;
+
+  @override
+  Widget build(BuildContext context) {
+    if (stato == 'Inviato') {
+      return AppButton(
+        label: 'Segna come controllato',
+        icon: const Icon(LucideIcons.checkCircle, size: 18),
+        onPressed: () => onTransition('controlla'),
+      );
+    }
+    if (stato == 'Controllato') {
+      return AppButton(
+        label: 'Segna come fatturato',
+        icon: const Icon(LucideIcons.receipt, size: 18),
+        onPressed: () => onTransition('fattura'),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+}

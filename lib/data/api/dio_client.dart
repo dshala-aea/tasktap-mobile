@@ -3,8 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
 import '../../domain/auth/i_auth_repository.dart';
-import '../auth/supabase_auth_repository.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../presentation/providers/auth_providers.dart';
 
 // ── Dio provider ───────────────────────────────────────────────────────────
 
@@ -25,7 +24,9 @@ final dioProvider = Provider<Dio>((ref) {
     ),
   );
 
-  final authRepo = SupabaseAuthRepository(Supabase.instance.client);
+  // Share the single repository instance so the interceptor sees the same
+  // session (access token) that the login flow established.
+  final authRepo = ref.watch(authRepositoryProvider);
   dio.interceptors.add(AuthInterceptor(dio: dio, authRepo: authRepo));
 
   return dio;
