@@ -155,7 +155,16 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   }
 
   /// Register or unregister the device token when push is toggled.
+  ///
+  /// Guarded on `NotificationService.isAvailable` — same as the two call
+  /// sites in main.dart. `NotificationService.instance` eagerly touches
+  /// `FirebaseMessaging.instance` on first access and throws `[core/no-app]`
+  /// if Firebase was never initialized (missing config, no Play Services,
+  /// offline at cold start — an explicitly supported, silently-degraded
+  /// path). Without this guard, a logged-in user tapping "Notifiche push"
+  /// on a device where Firebase init failed would crash this callback.
   void _syncPushRegistration(bool enabled) {
+    if (!NotificationService.isAvailable) return;
     final token = _authRepo.currentUser?.accessToken;
     if (token == null || token.isEmpty) return;
     if (enabled) {

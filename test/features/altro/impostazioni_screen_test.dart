@@ -146,6 +146,40 @@ void main() {
     await drain(tester);
   });
 
+  // ── 6b. Push toggle with a logged-in user doesn't crash ────────────────────
+  //
+  // `toggle(key: 'pushAbilitate')` calls `_syncPushRegistration`, which
+  // touches `NotificationService.instance` — first access eagerly reads
+  // `FirebaseMessaging.instance` and throws `[core/no-app]` unless Firebase
+  // was initialized. Widget tests never call `runTaskTapApp()`, so
+  // `NotificationService.isAvailable` is false here exactly like on a real
+  // device where Firebase init failed. Test #6 above doesn't stub
+  // `repo.currentUser`, so `_authRepo.currentUser?.accessToken` is null and
+  // `_syncPushRegistration` early-returns *before* reaching the vulnerable
+  // line — it never exercises this branch. This test stubs a real,
+  // non-empty access token so the guard in `_syncPushRegistration` is
+  // actually the thing preventing the crash.
+  testWidgets(
+      'tapping push toggle with a logged-in user does not crash '
+      'when Firebase is unavailable', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    when(() => repo.currentUser).thenReturn(user);
+    await pump(tester, user: user);
+
+    // First AppToggle is "Notifiche push", wired to key: 'pushAbilitate'.
+    final pushToggle = find.byType(AppToggle).first;
+    await tester.ensureVisible(pushToggle);
+    await tester.tap(pushToggle);
+    await tester.pump();
+
+    // No exception propagated out of the tap → the Firebase-availability
+    // guard held. (flutter_test surfaces any error thrown here as a failed
+    // expectation on the enclosing testWidgets zone, so reaching this line
+    // at all is the assertion.)
+    expect(find.byType(AppToggle), findsWidgets);
+    await drain(tester);
+  });
+
   // ── 7. Logout row triggers dialog ─────────────────────────────────────────
   testWidgets('logout row tap shows confirm dialog', (tester) async {
     when(() => repo.currentUser).thenReturn(null);

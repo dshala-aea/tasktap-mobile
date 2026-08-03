@@ -26,6 +26,20 @@ class NotificationService {
 
   static final NotificationService instance = NotificationService._();
 
+  /// Set to `true` by `runTaskTapApp()` in main.dart only after
+  /// `Firebase.initializeApp()` *actually succeeds*. Firebase init is an
+  /// explicitly supported failure path (missing config, no Play Services,
+  /// offline at cold start — main.dart degrades gracefully via try/catch),
+  /// so the FIREBASE_ENABLED dart-define alone doesn't tell you it's safe
+  /// to touch [instance].
+  ///
+  /// [instance]'s constructor eagerly reads `FirebaseMessaging.instance`
+  /// (below), which throws `[core/no-app]` the moment it's first accessed
+  /// if Firebase was never initialized — including in widget tests, which
+  /// never call `runTaskTapApp()` at all. **Every** call site that touches
+  /// [instance] must check this flag first; there is no other guard.
+  static bool isAvailable = false;
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   String? _currentToken;
   bool _initialized = false;

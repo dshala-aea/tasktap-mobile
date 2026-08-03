@@ -47,18 +47,6 @@ Future<void> main() async {
   }
 }
 
-/// Set to `true` by [runTaskTapApp] only after `Firebase.initializeApp()`
-/// *actually succeeds*. [TaskTapApp] gates every access to
-/// [NotificationService.instance] on this — not on the FIREBASE_ENABLED
-/// dart-define alone — because Firebase init is explicitly allowed to fail
-/// at runtime (see the try/catch below) even when the build opted in.
-/// [NotificationService.instance] eagerly touches `FirebaseMessaging.instance`
-/// on first access, which throws `[core/no-app]` if Firebase was never
-/// initialized; without this flag the app would crash on its very first
-/// frame whenever Firebase is unavailable — including in every widget test,
-/// which never calls [runTaskTapApp] at all.
-bool _firebaseInitialized = false;
-
 /// Initialise Supabase and launch the Flutter widget tree.
 ///
 /// Extracted so it can be called both from inside the Sentry [appRunner]
@@ -79,7 +67,7 @@ Future<void> runTaskTapApp() async {
     try {
       await Firebase.initializeApp();
       await NotificationService.instance.initialize();
-      _firebaseInitialized = true;
+      NotificationService.isAvailable = true;
     } catch (e) {
       // Firebase is optional — app still works without push notifications.
       debugPrint('Firebase init failed (push disabled): $e');
@@ -118,17 +106,17 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
   Widget build(BuildContext context) {
     // Register the FCM device token whenever a user becomes authenticated
     // (replaces the old Supabase auth-state listener). Guarded on
-    // `_firebaseInitialized` — see its doc comment for why the dart-define
-    // alone isn't a safe enough check.
+    // `NotificationService.isAvailable` — see its doc comment for why the
+    // FIREBASE_ENABLED dart-define alone isn't a safe enough check.
     ref.listen(authStateProvider, (previous, next) {
       final user = next.valueOrNull;
-      if (_firebaseInitialized && user != null) {
+      if (NotificationService.isAvailable && user != null) {
         NotificationService.instance.registerDeviceToken(user.accessToken);
       }
     });
 
     // Check for pending deep-links from notification taps.
-    if (_firebaseInitialized) {
+    if (NotificationService.isAvailable) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final deepLink = NotificationService.instance.consumePendingDeepLink();
         if (deepLink != null) {
