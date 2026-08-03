@@ -65,17 +65,17 @@ class AdminApiClient {
     await _dio.put(
       '/api/customers/$id',
       data: {
-        if (companyName != null) 'companyName': companyName,
-        if (taxId != null) 'taxId': taxId,
-        if (address != null) 'address': address,
-        if (city != null) 'city': city,
-        if (postalCode != null) 'postalCode': postalCode,
-        if (country != null) 'country': country,
-        if (phone != null) 'phone': phone,
-        if (email != null) 'email': email,
-        if (contactPerson != null) 'contactPerson': contactPerson,
-        if (notes != null) 'notes': notes,
-        if (isActive != null) 'isActive': isActive,
+        'companyName': ?companyName,
+        'taxId': ?taxId,
+        'address': ?address,
+        'city': ?city,
+        'postalCode': ?postalCode,
+        'country': ?country,
+        'phone': ?phone,
+        'email': ?email,
+        'contactPerson': ?contactPerson,
+        'notes': ?notes,
+        'isActive': ?isActive,
       },
     );
   }
@@ -103,8 +103,8 @@ class AdminApiClient {
         if (city != null && city.isNotEmpty) 'city': city,
         if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
         if (country != null && country.isNotEmpty) 'country': country,
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
@@ -129,17 +129,17 @@ class AdminApiClient {
     await _dio.put(
       '/api/locations/$id',
       data: {
-        if (customerId != null) 'customerId': customerId,
-        if (name != null) 'name': name,
-        if (address != null) 'address': address,
-        if (city != null) 'city': city,
-        if (postalCode != null) 'postalCode': postalCode,
-        if (country != null) 'country': country,
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
-        if (phone != null) 'phone': phone,
-        if (notes != null) 'notes': notes,
-        if (isActive != null) 'isActive': isActive,
+        'customerId': ?customerId,
+        'name': ?name,
+        'address': ?address,
+        'city': ?city,
+        'postalCode': ?postalCode,
+        'country': ?country,
+        'latitude': ?latitude,
+        'longitude': ?longitude,
+        'phone': ?phone,
+        'notes': ?notes,
+        'isActive': ?isActive,
       },
     );
   }
@@ -168,7 +168,7 @@ class AdminApiClient {
         if (startDate != null) 'startDate': startDate.toIso8601String(),
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'status': status,
-        if (customerId != null) 'customerId': customerId,
+        'customerId': ?customerId,
       },
     );
     return res.data!['cantiereId'] as String;
@@ -190,14 +190,14 @@ class AdminApiClient {
       '/api/cantierei/$id',
       data: {
         'name': name,
-        if (address != null) 'address': address,
-        if (city != null) 'city': city,
-        if (postalCode != null) 'postalCode': postalCode,
-        if (notes != null) 'notes': notes,
+        'address': ?address,
+        'city': ?city,
+        'postalCode': ?postalCode,
+        'notes': ?notes,
         if (startDate != null) 'startDate': startDate.toIso8601String(),
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'status': status,
-        if (customerId != null) 'customerId': customerId,
+        'customerId': ?customerId,
       },
     );
   }
@@ -230,14 +230,14 @@ class AdminApiClient {
         'userId': userId,
         'statusId': statusId,
         'locationId': locationId,
-        if (ticketId != null) 'ticketId': ticketId,
+        'ticketId': ?ticketId,
         'allDay': allDay,
         if (title != null && title.isNotEmpty) 'title': title,
         if (description != null && description.isNotEmpty)
           'description': description,
-        if (teamLeadId != null) 'teamLeadId': teamLeadId,
-        if (staffIds != null) 'staffIds': staffIds,
-        if (squadraId != null) 'squadraId': squadraId,
+        'teamLeadId': ?teamLeadId,
+        'staffIds': ?staffIds,
+        'squadraId': ?squadraId,
       },
     );
     return res.data!['scheduleId'] as String;
@@ -266,13 +266,13 @@ class AdminApiClient {
         if (timeEndMinutes != null)
           'timeEnd':
               '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
-        if (userId != null) 'userId': userId,
-        if (statusId != null) 'statusId': statusId,
-        if (locationId != null) 'locationId': locationId,
-        if (ticketId != null) 'ticketId': ticketId,
-        if (allDay != null) 'allDay': allDay,
-        if (title != null) 'title': title,
-        if (description != null) 'description': description,
+        'userId': ?userId,
+        'statusId': ?statusId,
+        'locationId': ?locationId,
+        'ticketId': ?ticketId,
+        'allDay': ?allDay,
+        'title': ?title,
+        'description': ?description,
       },
     );
   }
@@ -283,7 +283,7 @@ class AdminApiClient {
     await _dio.put(
       '/api/tickets/$ticketId',
       data: {
-        if (userId != null) 'assignedUserId': userId,
+        'assignedUserId': ?userId,
       },
     );
   }
@@ -319,8 +319,8 @@ class AdminApiClient {
           'unitOfMeasure': unitOfMeasure,
         if (category != null && category.isNotEmpty) 'category': category,
         if (marca != null && marca.isNotEmpty) 'marca': marca,
-        if (purchasePrice != null) 'purchasePrice': purchasePrice,
-        if (salePrice != null) 'salePrice': salePrice,
+        'purchasePrice': ?purchasePrice,
+        'salePrice': ?salePrice,
       },
     );
     return res.data!['materialId'] as String;
@@ -341,15 +341,15 @@ class AdminApiClient {
     await _dio.put(
       '/api/materiali/$id',
       data: {
-        if (code != null) 'code': code,
-        if (name != null) 'name': name,
-        if (description != null) 'description': description,
-        if (unitOfMeasure != null) 'unitOfMeasure': unitOfMeasure,
-        if (category != null) 'category': category,
-        if (marca != null) 'marca': marca,
-        if (purchasePrice != null) 'purchasePrice': purchasePrice,
-        if (salePrice != null) 'salePrice': salePrice,
-        if (isActive != null) 'isActive': isActive,
+        'code': ?code,
+        'name': ?name,
+        'description': ?description,
+        'unitOfMeasure': ?unitOfMeasure,
+        'category': ?category,
+        'marca': ?marca,
+        'purchasePrice': ?purchasePrice,
+        'salePrice': ?salePrice,
+        'isActive': ?isActive,
       },
     );
   }
@@ -402,15 +402,15 @@ class AdminApiClient {
     await _dio.put(
       '/api/prodottoassistenza/$id',
       data: {
-        if (name != null) 'name': name,
-        if (customerId != null) 'customerId': customerId,
-        if (locationId != null) 'locationId': locationId,
-        if (description != null) 'description': description,
-        if (serialNumber != null) 'serialNumber': serialNumber,
+        'name': ?name,
+        'customerId': ?customerId,
+        'locationId': ?locationId,
+        'description': ?description,
+        'serialNumber': ?serialNumber,
         if (warrantyExpiryDate != null)
           'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
-        if (notes != null) 'notes': notes,
-        if (isActive != null) 'isActive': isActive,
+        'notes': ?notes,
+        'isActive': ?isActive,
       },
     );
   }
@@ -443,11 +443,10 @@ class AdminApiClient {
         'startDate': startDate.toIso8601String(),
         if (description != null && description.isNotEmpty)
           'description': description,
-        if (locationId != null) 'locationId': locationId,
-        if (prodottoAssistenzaId != null)
-          'prodottoAssistenzaId': prodottoAssistenzaId,
+        'locationId': ?locationId,
+        'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
-        if (price != null) 'price': price,
+        'price': ?price,
         'frequencyValue': frequencyValue,
         'frequencyUnit': frequencyUnit,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
@@ -474,19 +473,18 @@ class AdminApiClient {
     await _dio.put(
       '/api/contracts/$id',
       data: {
-        if (name != null) 'name': name,
-        if (customerId != null) 'customerId': customerId,
+        'name': ?name,
+        'customerId': ?customerId,
         if (startDate != null) 'startDate': startDate.toIso8601String(),
-        if (description != null) 'description': description,
-        if (locationId != null) 'locationId': locationId,
-        if (prodottoAssistenzaId != null)
-          'prodottoAssistenzaId': prodottoAssistenzaId,
+        'description': ?description,
+        'locationId': ?locationId,
+        'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
-        if (price != null) 'price': price,
-        if (frequencyValue != null) 'frequencyValue': frequencyValue,
-        if (frequencyUnit != null) 'frequencyUnit': frequencyUnit,
-        if (notes != null) 'notes': notes,
-        if (isActive != null) 'isActive': isActive,
+        'price': ?price,
+        'frequencyValue': ?frequencyValue,
+        'frequencyUnit': ?frequencyUnit,
+        'notes': ?notes,
+        'isActive': ?isActive,
       },
     );
   }
@@ -538,12 +536,12 @@ class AdminApiClient {
     await _dio.put(
       '/api/squadre/$id',
       data: {
-        if (nome != null) 'nome': nome,
-        if (descrizione != null) 'descrizione': descrizione,
-        if (specializzazione != null) 'specializzazione': specializzazione,
-        if (coloreCalendario != null) 'coloreCalendario': coloreCalendario,
-        if (note != null) 'note': note,
-        if (isActive != null) 'isActive': isActive,
+        'nome': ?nome,
+        'descrizione': ?descrizione,
+        'specializzazione': ?specializzazione,
+        'coloreCalendario': ?coloreCalendario,
+        'note': ?note,
+        'isActive': ?isActive,
       },
     );
   }
@@ -573,7 +571,7 @@ class AdminApiClient {
     final res = await _dio.get<List<dynamic>>(
       '/api/reports',
       queryParameters: {
-        if (stato != null) 'stato': stato,
+        'stato': ?stato,
         'page': page,
         'pageSize': pageSize,
       },

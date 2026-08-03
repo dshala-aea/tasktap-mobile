@@ -25,7 +25,7 @@ class TicketApiClient {
           'description': description,
         'customerId': customerId,
         'locationId': locationId,
-        if (assignedUserId != null) 'assignedUserId': assignedUserId,
+        'assignedUserId': ?assignedUserId,
         'statusId': statusId,
         'typeId': typeId,
       },
