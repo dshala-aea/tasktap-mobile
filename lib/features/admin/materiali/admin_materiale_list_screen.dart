@@ -231,7 +231,7 @@ class _AdminMaterialeRow extends StatelessWidget {
                 child: Image.network(
                   materiale.imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
+                  errorBuilder: (_, _, _) => const Icon(
                     LucideIcons.package,
                     size: 20,
                     color: AppColors.MUTED,

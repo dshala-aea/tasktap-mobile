@@ -97,7 +97,7 @@ class _MaterialeDetailBody extends StatelessWidget {
                   height: 180,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  errorBuilder: (_, _, _) => Container(
                     height: 180,
                     color: AppColors.BG3,
                     child: const Center(
