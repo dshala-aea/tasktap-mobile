@@ -150,11 +150,29 @@ class SyncService {
               allDay: Value(s.allDay),
               title: s.title,
               description: s.description,
-              teamLeadId: Value(s.teamLeadId),
-              staffIds: Value(s.staffIds),
-              squadraId: Value(s.squadraId),
             ),
           );
+
+      // Replaced wholesale rather than merged: the payload is the whole truth about who is on
+      // this schedule, and someone removed from a squadra must stop appearing on the device the
+      // same way they stop appearing on the server.
+      await (db.delete(db.scheduleAssignees)
+            ..where((t) => t.scheduleId.equals(s.id)))
+          .go();
+
+      for (final a in s.assignees) {
+        await db.into(db.scheduleAssignees).insertOnConflictUpdate(
+              ScheduleAssigneesCompanion.insert(
+                scheduleId: s.id,
+                userId: a.userId,
+                isUserActive: Value(a.isUserActive),
+                isDirect: Value(a.isDirect),
+                isLead: Value(a.isLead),
+                isTeam: Value(a.isTeam),
+                isLegacyStaff: Value(a.isLegacyStaff),
+              ),
+            );
+      }
     }
   }
 

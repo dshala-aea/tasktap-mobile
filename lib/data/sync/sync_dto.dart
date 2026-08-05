@@ -284,9 +284,13 @@ class ScheduleDto {
   final bool allDay;
   final String title;
   final String description;
-  final String? teamLeadId;
-  final String staffIds;
-  final String? squadraId;
+
+  /// Everyone on this schedule, with every reason they are on it.
+  ///
+  /// Replaces teamLeadId / staffIds / squadraId, which the server dropped (backend ADR-0009).
+  /// Those three expressed three overlapping halves of one answer and could not express the
+  /// fourth at all: a job assigned to a squadra named nobody the device could see.
+  final List<ScheduleAssigneeDto> assignees;
 
   const ScheduleDto({
     required this.id,
@@ -303,9 +307,7 @@ class ScheduleDto {
     required this.allDay,
     required this.title,
     required this.description,
-    this.teamLeadId,
-    required this.staffIds,
-    this.squadraId,
+    this.assignees = const [],
   });
 
   factory ScheduleDto.fromJson(Map<String, dynamic> j) {
@@ -328,10 +330,21 @@ class ScheduleDto {
       allDay: j['allDay'] as bool? ?? false,
       title: j['title'] as String? ?? '',
       description: j['description'] as String? ?? '',
-      teamLeadId: j['teamLeadId'] as String?,
-      staffIds: j['staffIds'] as String? ?? '[]',
-      squadraId: j['squadraId'] as String?,
+      assignees: (j['assignees'] as List<dynamic>? ?? const [])
+          .map((e) => ScheduleAssigneeDto.fromJson(e as Map<String, dynamic>))
+          .toList(growable: false),
     );
+  }
+
+  /// The directly assigned technician, or null when the job is only assigned to a squadra.
+  ///
+  /// [userId] still carries the same value the server sends, and the server still sends the
+  /// all-zeros guid when there is nobody — this is the honest reading of it.
+  String? get directAssigneeId {
+    for (final a in assignees) {
+      if (a.isDirect) return a.userId;
+    }
+    return null;
   }
 
   /// Parse "HH:MM:SS" → total minutes since midnight.
@@ -343,6 +356,43 @@ class ScheduleDto {
     return h * 60 + m;
   }
 }
+
+// ── ScheduleAssignee ───────────────────────────────────────────────────────────
+
+/// One person on a schedule, carrying every reason they are on it rather than only the
+/// strongest.
+///
+/// The flags are deliberately not collapsed into a single "role". A screen asking "may this
+/// person write the rapportino" reads [isLead]; one asking "who is on the squadra" reads
+/// [isTeam]. A single winner would make the second question unanswerable without another call —
+/// which is how the server-side model went wrong in the first place.
+class ScheduleAssigneeDto {
+  final String userId;
+  final bool isUserActive;
+  final bool isDirect;
+  final bool isLead;
+  final bool isTeam;
+  final bool isLegacyStaff;
+
+  const ScheduleAssigneeDto({
+    required this.userId,
+    this.isUserActive = true,
+    this.isDirect = false,
+    this.isLead = false,
+    this.isTeam = false,
+    this.isLegacyStaff = false,
+  });
+
+  factory ScheduleAssigneeDto.fromJson(Map<String, dynamic> j) => ScheduleAssigneeDto(
+        userId: j['userId'] as String,
+        isUserActive: j['isUserActive'] as bool? ?? true,
+        isDirect: j['isDirect'] as bool? ?? false,
+        isLead: j['isLead'] as bool? ?? false,
+        isTeam: j['isTeam'] as bool? ?? false,
+        isLegacyStaff: j['isLegacyStaff'] as bool? ?? false,
+      );
+}
+
 
 // ── Report (draft) ─────────────────────────────────────────────────────────────
 

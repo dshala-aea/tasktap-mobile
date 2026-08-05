@@ -103,6 +103,7 @@ Map<String, dynamic> _scheduleJson({
   String title = 'Manutenzione',
   String? updatedAt,
   String activityDate = '2026-06-21T00:00:00Z',
+  List<Map<String, dynamic>>? assignees,
 }) =>
     {
       'id': id,
@@ -119,9 +120,17 @@ Map<String, dynamic> _scheduleJson({
       'allDay': false,
       'title': title,
       'description': 'Descrizione intervento',
-      'teamLeadId': 'user-1',
-      'staffIds': '[]',
-      'squadraId': null,
+      'assignees': assignees ??
+          [
+            {
+              'userId': 'user-1',
+              'isUserActive': true,
+              'isDirect': true,
+              'isLead': false,
+              'isTeam': false,
+              'isLegacyStaff': false,
+            },
+          ],
     };
 
 Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
@@ -295,6 +304,69 @@ void main() {
       // 08:00 → 480 minutes; 17:00 → 1020 minutes
       expect(s.timeStartMinutes, 480);
       expect(s.timeEndMinutes, 1020);
+    });
+
+    test('stores who is on a schedule', () async {
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
+
+      await svc.sync();
+
+      final assignees = await db.select(db.scheduleAssignees).get();
+      expect(assignees.length, 1);
+      expect(assignees.first.scheduleId, 'sched-1');
+      expect(assignees.first.userId, 'user-1');
+      expect(assignees.first.isDirect, isTrue);
+    });
+
+    // The case the four dropped columns could not express at all: a job assigned to a squadra
+    // named nobody the device could see.
+    test('stores squadra members the old columns could not express', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(schedules: [
+          _scheduleJson(assignees: [
+            {
+              'userId': 'member-1',
+              'isUserActive': true,
+              'isDirect': false,
+              'isLead': false,
+              'isTeam': true,
+              'isLegacyStaff': false,
+            },
+            {
+              'userId': 'member-2',
+              'isUserActive': true,
+              'isDirect': false,
+              'isLead': false,
+              'isTeam': true,
+              'isLegacyStaff': false,
+            },
+          ]),
+        ]),
+      );
+
+      await svc.sync();
+
+      final assignees = await db.select(db.scheduleAssignees).get();
+      expect(assignees.length, 2);
+      expect(assignees.every((a) => a.isTeam), isTrue);
+    });
+
+    // Someone taken off a squadra stops appearing on the server; they must stop appearing here
+    // too, which a merge-only upsert would never achieve.
+    test('a removed assignee disappears on the next sync', () async {
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
+      await svc.sync();
+
+      _stubDioGet(
+        mockDio,
+        _syncPayload(schedules: [
+          _scheduleJson(updatedAt: '2026-06-22T00:00:00Z', assignees: const []),
+        ]),
+      );
+      await svc.sync();
+
+      expect(await db.select(db.scheduleAssignees).get(), isEmpty);
     });
 
     test('inserts a new draft report', () async {

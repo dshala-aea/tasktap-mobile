@@ -115,13 +115,33 @@ class Schedules extends Table {
   BoolColumn get allDay => boolean().withDefault(const Constant(false))();
   TextColumn get title => text()();
   TextColumn get description => text()();
-  TextColumn get teamLeadId => text().nullable()();
-  /// JSON array of user-id strings
-  TextColumn get staffIds => text().withDefault(const Constant('[]'))();
-  TextColumn get squadraId => text().nullable()();
+
+  // Who is on this schedule lives in [ScheduleAssignees]. teamLeadId, staffIds and squadraId
+  // were dropped server-side (backend ADR-0009) and stopped arriving; keeping them here would
+  // have left three columns that are null forever and a staffIds blob that never parses to
+  // anyone — which is the shape that made team-assigned work invisible on the device.
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Everyone on a schedule, one row per person per reason.
+///
+/// A row per (schedule, user) rather than a JSON list on Schedules: the list form is what the
+/// server just spent a migration removing, and it cannot answer "which of my jobs am I on"
+/// without reading every row and parsing each blob.
+class ScheduleAssignees extends Table {
+  TextColumn get scheduleId => text().references(Schedules, #id)();
+  TextColumn get userId => text()();
+
+  BoolColumn get isUserActive => boolean().withDefault(const Constant(true))();
+  BoolColumn get isDirect => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLead => boolean().withDefault(const Constant(false))();
+  BoolColumn get isTeam => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLegacyStaff => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {scheduleId, userId};
 }
 
 // ── cantieri ──────────────────────────────────────────────────────────────────
@@ -402,6 +422,7 @@ class ReportAllegati extends Table {
     Locations,
     Tickets,
     Schedules,
+    ScheduleAssignees,
     Cantieri,
     TicketStatuses,
     TicketTypes,
@@ -419,7 +440,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -447,6 +468,18 @@ class AppDatabase extends _$AppDatabase {
         if (from < 5) {
           // Notifications: add cache table for notification center
           await m.createTable(appNotifications);
+        }
+        if (from < 6) {
+          // Backend ADR-0009: assignment moved off the Schedules row into its own table.
+          // teamLeadId/staffIds/squadraId stopped arriving from the server, so they are
+          // dropped rather than left to sit null forever.
+          await m.createTable(scheduleAssignees);
+          // TableMigration is Drift's supported way to drop a column from SQLite (which has no
+          // DROP COLUMN for this case) — it recreates the table from the current definition and
+          // copies the rows across. Flagged experimental for API stability, not correctness, and
+          // there is no non-experimental alternative short of leaving the dead columns in place.
+          // ignore: experimental_member_use
+          await m.alterTable(TableMigration(schedules));
         }
       },
     );
