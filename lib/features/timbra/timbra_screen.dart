@@ -102,6 +102,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
               _PunchButton(
                 shiftState: shiftState,
                 isLoading: punchState is AsyncLoading,
+                guard: ref.watch(punchGuardProvider),
                 onTap: () {
                   ref.read(punchNotifierProvider.notifier).punch(shiftState);
                 },
@@ -219,17 +220,24 @@ class _PunchButton extends StatelessWidget {
     required this.shiftState,
     required this.isLoading,
     required this.onTap,
+    this.guard = TimbraGuard.allowed,
   });
 
   final TimbraState shiftState;
   final bool isLoading;
   final VoidCallback onTap;
 
+  /// A refusal the server already told us about — a closed payroll period, a shift another
+  /// device opened. Blocking here turns a rejection the user would otherwise meet after a
+  /// silent sync into one they see at the moment of the tap.
+  final TimbraGuard guard;
+
   @override
   Widget build(BuildContext context) {
     final isOnShift = shiftState.isOnShift;
     final label = isOnShift ? 'FINE TURNO' : 'INIZIA TURNO';
     final icon = isOnShift ? LucideIcons.square : LucideIcons.play;
+    final blocked = guard.blocked;
 
     // Radial gradient: yellow centre → dark rim (or red-ish when ending)
     final gradient = isOnShift
@@ -244,12 +252,18 @@ class _PunchButton extends StatelessWidget {
             colors: [AppColors.Y, AppColors.YDark],
           );
 
-    return Semantics(
+    // Dimmed and inert rather than hidden: a button that disappears leaves the user with no
+    // idea what happened, and the reason is printed underneath so it is readable without a
+    // long-press or a tooltip this platform would not show anyway.
+    final button = Semantics(
       button: true,
-      label: label,
+      enabled: !blocked,
+      label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
       child: GestureDetector(
-        onTap: isLoading ? null : onTap,
-        child: Container(
+        onTap: isLoading || blocked ? null : onTap,
+        child: Opacity(
+          opacity: blocked ? 0.4 : 1,
+          child: Container(
           width: 180,
           height: 180,
           decoration: BoxDecoration(
@@ -298,8 +312,30 @@ class _PunchButton extends StatelessWidget {
                     ),
                   ],
                 ),
+          ),
         ),
       ),
+    );
+
+    if (!blocked || guard.reason == null) return button;
+
+    return Column(
+      children: [
+        button,
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            guard.reason!,
+            style: const TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              color: AppColors.MUTED,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
     );
   }
 }

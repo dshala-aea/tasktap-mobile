@@ -10,6 +10,9 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../api/dio_client.dart';
 
 // ── Request DTO ───────────────────────────────────────────────────────────────
 
@@ -99,6 +102,72 @@ class TodayWorkLogDto {
       );
 }
 
+// ── Giornata (GET /api/WorkLog/today) ─────────────────────────────────────────
+
+/// One action the server may offer, and why it does not (backend ADR-0013 §C.5).
+///
+/// [reasonCode] is the contract; [reason] is Italian prose the server sent for a client that
+/// has no string for that code yet. Unknown codes must fall through to [reason] rather than
+/// render blank — a reason added server-side has to keep explaining itself on an app build
+/// that predates it.
+class GiornataActionDto {
+  const GiornataActionDto({
+    required this.action,
+    required this.enabled,
+    this.reasonCode,
+    this.reason,
+  });
+
+  final String action; // ClockIn | ClockOut | StartBreak | EndBreak | Submit
+  final bool enabled;
+  final String? reasonCode;
+  final String? reason;
+
+  factory GiornataActionDto.fromJson(Map<String, dynamic> json) =>
+      GiornataActionDto(
+        action: json['action'] as String,
+        enabled: json['enabled'] as bool? ?? false,
+        reasonCode: json['reasonCode'] as String?,
+        reason: json['reason'] as String?,
+      );
+}
+
+/// The server's view of the signed-in user's day.
+class GiornataDto {
+  const GiornataDto({
+    required this.status,
+    required this.workedMinutes,
+    required this.breakMinutes,
+    required this.isPayrollLocked,
+    required this.actions,
+  });
+
+  final String status; // ClockedOut | Working | OnBreak
+  final int workedMinutes;
+  final int breakMinutes;
+  final bool isPayrollLocked;
+  final List<GiornataActionDto> actions;
+
+  /// The availability of [action], or null when the server did not mention it.
+  GiornataActionDto? action(String action) {
+    for (final a in actions) {
+      if (a.action == action) return a;
+    }
+    return null;
+  }
+
+  factory GiornataDto.fromJson(Map<String, dynamic> json) => GiornataDto(
+        status: json['status'] as String? ?? 'ClockedOut',
+        workedMinutes: (json['workedMinutes'] as num?)?.toInt() ?? 0,
+        breakMinutes: (json['breakMinutes'] as num?)?.toInt() ?? 0,
+        isPayrollLocked: json['isPayrollLocked'] as bool? ?? false,
+        actions: (json['availableActions'] as List<dynamic>? ?? [])
+            .cast<Map<String, dynamic>>()
+            .map(GiornataActionDto.fromJson)
+            .toList(),
+      );
+}
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 class WorklogApiClient {
@@ -146,4 +215,27 @@ class WorklogApiClient {
         .map(TodayWorkLogDto.fromJson)
         .toList();
   }
+
+  /// GET /api/WorkLog/today
+  ///
+  /// The server's own view of the day, including which actions it will accept right now and
+  /// why it will refuse the others. Distinct from [getToday], which returns the raw entries
+  /// the sync path reconciles against.
+  ///
+  /// Throws [DioException] on network / server error — including offline, which is a normal
+  /// state here and not an error the user should see.
+  Future<GiornataDto> getGiornata() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/worklog/today');
+
+    final data = response.data;
+    if (data == null) throw StateError('Risposta vuota da getGiornata');
+    return GiornataDto.fromJson(data);
+  }
 }
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+
+/// Provides [WorklogApiClient]. Override in tests with a fake.
+final worklogApiClientProvider = Provider<WorklogApiClient>((ref) {
+  return WorklogApiClient(ref.watch(dioProvider));
+});

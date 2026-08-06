@@ -6,6 +6,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
 import '../../data/timbratura/work_session_repository.dart';
+import '../../data/timbratura/worklog_api_client.dart';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const _kIngresso = 'ingresso';
@@ -153,6 +154,96 @@ final totalWorkedTodayProvider = Provider.autoDispose<Duration>((ref) {
   final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? [];
   return computeTotalWorked(sessions, DateTime.now());
 });
+
+// ── What the server will accept (backend ADR-0013 §C.5) ──────────────────────
+
+/// The server's view of today, or null when it could not be reached.
+///
+/// Errors resolve to null rather than propagating: offline is the normal condition of a phone
+/// in the field, not a failure to report. The screen keeps working from local events; this
+/// only ever adds what the device cannot know by itself.
+final giornataProvider = FutureProvider.autoDispose<GiornataDto?>((ref) async {
+  final client = ref.watch(worklogApiClientProvider);
+  try {
+    return await client.getGiornata();
+  } catch (_) {
+    return null;
+  }
+});
+
+/// A refusal the device is willing to enforce before the punch is even recorded.
+class TimbraGuard {
+  const TimbraGuard({required this.blocked, this.reason});
+
+  final bool blocked;
+  final String? reason;
+
+  static const allowed = TimbraGuard(blocked: false);
+}
+
+/// Human-readable text for a server reason code, falling back to the server's own prose.
+String? _guardReason(GiornataActionDto action) {
+  const known = <String, String>{
+    'payroll_locked': 'Il periodo è chiuso per le buste paga: chiedi all\'amministrazione.',
+    'already_clocked_in': 'Risulti già in servizio.',
+    'not_clocked_in': 'Non risulti in servizio.',
+    'on_break': 'Risulti in pausa.',
+    'not_on_break': 'Non risulti in pausa.',
+    'still_clocked_in': 'Chiudi la giornata prima di inviare le ore.',
+    'nothing_to_submit': 'Non ci sono ore da inviare.',
+    'already_submitted': 'Le ore di oggi sono già state inviate.',
+  };
+  final code = action.reasonCode;
+  if (code != null && known.containsKey(code)) return known[code];
+  return action.reason;
+}
+
+/// Decides whether the device should refuse [action] before recording it locally.
+///
+/// The web client can simply render `availableActions`; this one cannot, and the difference is
+/// the point of the offline model:
+///
+/// - **No server answer** — allow. The phone works from its own events when there is no
+///   network, which is most of why it exists.
+/// - **Unsynced events pending** — allow, *except* for a payroll lock. The server has not seen
+///   the events sitting in the local queue, so its idea of "are you clocked in" is stale by
+///   construction and would refuse a perfectly good punch. A closed payroll period is not
+///   about those events at all: it is true whatever this device has queued, so it still holds.
+/// - **Fresh answer, nothing pending** — the server decides, and its reason is shown. This is
+///   the case where the device would otherwise let someone punch into a state the server will
+///   reject on sync, turning a refusal the user could have seen now into a mystery later.
+///
+/// Not a security boundary either way: the server re-validates every write. This exists so the
+/// user finds out at the moment of the tap rather than after a sync they never watch.
+TimbraGuard resolveGuard({
+  required GiornataDto? giornata,
+  required bool hasPendingSync,
+  required String action,
+}) {
+  if (giornata == null) return TimbraGuard.allowed;
+
+  final availability = giornata.action(action);
+  if (availability == null || availability.enabled) return TimbraGuard.allowed;
+
+  final isLock = availability.reasonCode == 'payroll_locked';
+  if (hasPendingSync && !isLock) return TimbraGuard.allowed;
+
+  return TimbraGuard(blocked: true, reason: _guardReason(availability));
+}
+
+/// The guard for the punch button, whose action depends on whether a shift is open.
+final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
+  final shift = ref.watch(timbraStateProvider);
+  return resolveGuard(
+    giornata: ref.watch(giornataProvider).valueOrNull,
+    hasPendingSync: ref.watch(hasPendingSyncProvider),
+    action: shift.isOnShift ? 'ClockOut' : 'ClockIn',
+  );
+});
+
+// No pause guard yet: `togglePause` exists on the notifier but no screen calls it, so a
+// provider for it would guard a button that does not exist. `resolveGuard` takes any action
+// name, so adding one when the pause control lands is a three-line provider.
 
 // ── Punch action ──────────────────────────────────────────────────────────────
 
