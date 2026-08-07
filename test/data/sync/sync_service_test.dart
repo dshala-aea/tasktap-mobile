@@ -39,6 +39,8 @@ Map<String, dynamic> _syncPayload({
   List<Map<String, dynamic>> tickets = const [],
   List<Map<String, dynamic>> ticketStatuses = const [],
   List<Map<String, dynamic>> ticketTypes = const [],
+  List<Map<String, dynamic>> materiali = const [],
+  List<Map<String, dynamic>> cantieri = const [],
 }) {
   return {
     'syncedAt': (syncedAt ?? DateTime.utc(2026, 6, 21, 12)).toIso8601String(),
@@ -50,6 +52,8 @@ Map<String, dynamic> _syncPayload({
     'tickets': tickets,
     'ticketStatuses': ticketStatuses,
     'ticketTypes': ticketTypes,
+    'materiali': materiali,
+    'cantieri': cantieri,
   };
 }
 
@@ -881,6 +885,100 @@ void main() {
       expect(schedules.length, 2);
       expect(schedules.first.id, 'early');
       expect(schedules.last.id, 'late');
+    });
+  });
+
+  // ── Catalogue tables ───────────────────────────────────────────────────────
+
+  /// These two tables existed for months with nothing filling them, which left every screen
+  /// reading them dead: the magazzino catalogue, admin materiali and cantieri, the schedule
+  /// pickers, and — worst — cantiere clock-in, where a technician could not pick a site and so
+  /// could not record site hours at all. The payload carried both arrays the whole time; only the
+  /// client side of the wire was missing, which is the kind of gap that hides until someone opens
+  /// the screen.
+  group('sync — catalogue tables', () {
+    test('materiali arrive in the local catalogue', () async {
+      _stubDioGet(mockDio, _syncPayload(materiali: [
+        {
+          'id': 'mat-1',
+          'tenantId': 'ten-1',
+          'createdAt': '2026-06-01T00:00:00Z',
+          'updatedAt': null,
+          'code': 'ART-001',
+          'name': 'Tubo rame 15mm',
+          'description': null,
+          'unitOfMeasure': 'm',
+          'category': 'Idraulica',
+          'marca': null,
+          'purchasePrice': 3.5,
+          'salePrice': 6.0,
+          'isActive': true,
+        }
+      ]));
+
+      await svc.sync();
+
+      final rows = await db.select(db.materiali).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.name, 'Tubo rame 15mm');
+      expect(rows.first.salePrice, 6.0);
+    });
+
+    test('cantieri arrive in the local catalogue', () async {
+      _stubDioGet(mockDio, _syncPayload(cantieri: [
+        {
+          'id': 'can-1',
+          'tenantId': 'ten-1',
+          'createdAt': '2026-06-01T00:00:00Z',
+          'updatedAt': null,
+          'name': 'Cantiere Via Roma',
+          'address': 'Via Roma 10',
+          'city': 'Milano',
+          'postalCode': '20121',
+          'notes': null,
+          'startDate': null,
+          'endDate': null,
+          'status': 'Active',
+          'customerId': 'cli-1',
+          'commessaId': null,
+        }
+      ]));
+
+      await svc.sync();
+
+      final rows = await db.select(db.cantieri).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.name, 'Cantiere Via Roma');
+      expect(rows.first.status, 0, reason: 'Active maps to 0');
+    });
+
+    /// A re-sync must not duplicate the catalogue — it runs on every reconnect.
+    test('re-syncing the same materiale updates rather than duplicates', () async {
+      Map<String, dynamic> materiale(String name) => {
+            'id': 'mat-1',
+            'tenantId': 'ten-1',
+            'createdAt': '2026-06-01T00:00:00Z',
+            'updatedAt': null,
+            'code': 'ART-001',
+            'name': name,
+            'description': null,
+            'unitOfMeasure': null,
+            'category': null,
+            'marca': null,
+            'purchasePrice': null,
+            'salePrice': null,
+            'isActive': true,
+          };
+
+      _stubDioGet(mockDio, _syncPayload(materiali: [materiale('Vecchio nome')]));
+      await svc.sync();
+
+      _stubDioGet(mockDio, _syncPayload(materiali: [materiale('Nuovo nome')]));
+      await svc.sync();
+
+      final rows = await db.select(db.materiali).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.name, 'Nuovo nome');
     });
   });
 }

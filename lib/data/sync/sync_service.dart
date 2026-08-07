@@ -48,6 +48,8 @@ class SyncService {
       await _upsertDraftReports(payload.draftReports);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
+      await _upsertMateriali(payload.materiali);
+      await _upsertCantieri(payload.cantieri);
     });
 
     await db.setLastSync(payload.syncedAt);
@@ -55,6 +57,59 @@ class SyncService {
   }
 
   // ── Upsert helpers ─────────────────────────────────────────────────────────
+
+  /// The materiali catalogue.
+  ///
+  /// These two tables existed and nothing ever filled them, which left every screen reading them
+  /// dead: the magazzino catalogue, admin materiali and cantieri, the schedule pickers, and —
+  /// worst — cantiere clock-in, where a technician could not select a site and so could not
+  /// record site hours at all. The payload has carried both arrays all along; only the client
+  /// side of the wire was missing.
+  Future<void> _upsertMateriali(List<MaterialeDto> list) async {
+    for (final m in list) {
+      await db.into(db.materiali).insertOnConflictUpdate(
+            MaterialiCompanion.insert(
+              id: m.id,
+              tenantId: m.tenantId,
+              createdAt: m.createdAt,
+              updatedAt: Value(m.updatedAt),
+              code: m.code,
+              name: m.name,
+              description: Value(m.description),
+              unitOfMeasure: Value(m.unitOfMeasure),
+              category: Value(m.category),
+              marca: Value(m.marca),
+              purchasePrice: Value(m.purchasePrice),
+              salePrice: Value(m.salePrice),
+              isActive: Value(m.isActive),
+            ),
+          );
+    }
+  }
+
+  /// The cantieri a technician may be sent to.
+  Future<void> _upsertCantieri(List<CantiereDto> list) async {
+    for (final c in list) {
+      await db.into(db.cantieri).insertOnConflictUpdate(
+            CantieriCompanion.insert(
+              id: c.id,
+              tenantId: c.tenantId,
+              createdAt: c.createdAt,
+              updatedAt: Value(c.updatedAt),
+              name: c.name,
+              address: Value(c.address),
+              city: Value(c.city),
+              postalCode: Value(c.postalCode),
+              notes: Value(c.notes),
+              startDate: Value(c.startDate),
+              endDate: Value(c.endDate),
+              status: Value(c.status),
+              customerId: Value(c.customerId),
+              commessaId: Value(c.commessaId),
+            ),
+          );
+    }
+  }
 
   Future<void> _upsertCustomers(List<CustomerDto> list) async {
     for (final c in list) {

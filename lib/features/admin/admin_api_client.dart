@@ -158,7 +158,7 @@ class AdminApiClient {
     String? customerId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
-      '/api/cantierei',
+      '/api/cantieri',
       data: {
         'name': name,
         if (address != null && address.isNotEmpty) 'address': address,
@@ -187,7 +187,7 @@ class AdminApiClient {
     String? customerId,
   }) async {
     await _dio.put(
-      '/api/cantierei/$id',
+      '/api/cantieri/$id',
       data: {
         'name': name,
         'address': ?address,

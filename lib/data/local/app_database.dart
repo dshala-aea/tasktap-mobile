@@ -352,6 +352,41 @@ class WorkSessions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── cantiere_punches (Cantiere Timbra) ────────────────────────────────────────
+/// Local-only clock-in / clock-out events for cantiere (worksite) timbratura.
+///
+/// One row per raw event (mirrors [WorkSessions]), not per session: an
+/// 'ingresso' event carries the site context (cantiereId/customerId/ticketId)
+/// and the arrival position; the matching 'uscita' event only needs a
+/// timestamp. `cantiere_session_assembler.dart` folds pairs of these into the
+/// intervals the backend's `/api/CantiereWorkLog/mobile/sessions` upsert
+/// expects.
+///
+/// event_type values:
+///   'ingresso' — arrive at site (opens an interval)
+///   'uscita'   — leave site (closes the open interval)
+class CantierePunches extends Table {
+  TextColumn get id => text()();
+  DateTimeColumn get eventTime => dateTime()();
+  /// One of: ingresso | uscita
+  TextColumn get eventType => text()();
+  /// Site context — set on 'ingresso', null on 'uscita' (inherited from the
+  /// paired opener by the assembler).
+  TextColumn get cantiereId => text().nullable()();
+  TextColumn get customerId => text().nullable()();
+  TextColumn get ticketId => text().nullable()();
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+  /// True while not yet synced to the backend.
+  BoolColumn get isPendingSync =>
+      boolean().withDefault(const Constant(true))();
+  /// Human-readable error message from the last failed sync attempt (null when ok).
+  TextColumn get syncError => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── notifications ─────────────────────────────────────────────────────────────
 /// Cached notifications from the backend. Used for offline display of the
 /// notification center. Synced via GET /api/notifications; individual
@@ -398,7 +433,7 @@ class ReportAllegati extends Table {
   IntColumn get sizeBytes => integer()();
   TextColumn get storagePath => text()();
   TextColumn get url => text()();
-  /// AllegatoEntityTypeEnum: Ticket=0, Report=1
+  /// AllegatoEntityTypeEnum: Ticket=0, Report=1, Materiale=2
   IntColumn get entityType => integer()();
   TextColumn get entityId => text()();
   TextColumn get uploadedByUserId => text()();
@@ -434,13 +469,14 @@ class ReportAllegati extends Table {
     ReportAllegati,
     WorkSessions,
     AppNotifications,
+    CantierePunches,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration {
@@ -480,6 +516,11 @@ class AppDatabase extends _$AppDatabase {
           // there is no non-experimental alternative short of leaving the dead columns in place.
           // ignore: experimental_member_use
           await m.alterTable(TableMigration(schedules));
+        }
+        if (from < 7) {
+          // Cantiere timbra: add cantiere_punches table for local-first
+          // clock-in/out (mirrors work_sessions for the simple timbra flow).
+          await m.createTable(cantierePunches);
         }
       },
     );

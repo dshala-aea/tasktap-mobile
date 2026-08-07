@@ -39,10 +39,7 @@ import '../../data/timbratura/cantiere_worklog_api_client.dart';
 /// All active cantieri from the local Drift cache, alphabetical.
 /// Status 0 = Active (CantiereStatusEnum.Active).
 ///
-/// TODO(backend): `db.cantieri` is never populated — no sync path and no
-/// `AdminApiClient.fetchCantieri()` exist yet, so this stream is always
-/// empty and the picker below always renders [UnavailableState]. See
-/// docs/api-gap-list.md § "Routes present, data path missing".
+/// Reads the local mirror the sync now fills.
 final cantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.cantieri)

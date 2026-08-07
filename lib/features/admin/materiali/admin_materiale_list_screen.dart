@@ -12,9 +12,7 @@ import '../../../data/sync/sync_service.dart';
 
 /// All materiali from Drift cache, alphabetical.
 ///
-/// TODO(backend): `db.materiali` is never populated — no sync path and no
-/// `AdminApiClient.fetchMateriali()` exist yet, so this stream is always
-/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
+/// Reads the local mirror the sync now fills.
 final adminMaterialiProvider =
     StreamProvider.autoDispose<List<MaterialiData>>((ref) {
   final db = ref.watch(appDatabaseProvider);

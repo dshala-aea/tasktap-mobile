@@ -12,9 +12,7 @@ import '../../../data/sync/sync_service.dart';
 
 /// All cantieri from Drift cache, alphabetical.
 ///
-/// TODO(backend): `db.cantieri` is never populated — no sync path and no
-/// `AdminApiClient.fetchCantieri()` exist yet, so this stream is always
-/// empty. See docs/api-gap-list.md § "Routes present, data path missing".
+/// Reads the local mirror the sync now fills.
 final adminCantieriProvider =
     StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);

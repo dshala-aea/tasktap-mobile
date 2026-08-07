@@ -9,6 +9,8 @@ class SyncResultDto {
   final List<CustomerDto> customers;
   final List<LocationDto> locations;
   final List<TicketDto> tickets;
+  final List<MaterialeDto> materiali;
+  final List<CantiereDto> cantieri;
   final List<TicketStatusDto> ticketStatuses;
   final List<TicketTypeDto> ticketTypes;
 
@@ -20,6 +22,8 @@ class SyncResultDto {
     required this.customers,
     required this.locations,
     required this.tickets,
+    required this.materiali,
+    required this.cantieri,
     required this.ticketStatuses,
     required this.ticketTypes,
   });
@@ -33,6 +37,8 @@ class SyncResultDto {
       customers: _list(j['customers'], CustomerDto.fromJson),
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),
+      materiali: _list(j['materiali'], MaterialeDto.fromJson),
+      cantieri: _list(j['cantieri'], CantiereDto.fromJson),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
     );
@@ -212,6 +218,127 @@ class TicketDto {
         internalNotes: j['internalNotes'] as String?,
         contractId: j['contractId'] as String?,
         prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
+        commessaId: j['commessaId'] as String?,
+      );
+}
+
+// ── Materiale ──────────────────────────────────────────────────────────────────
+
+class MaterialeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String code;
+  final String name;
+  final String? description;
+  final String? unitOfMeasure;
+  final String? category;
+  final String? marca;
+  final double? purchasePrice;
+  final double? salePrice;
+  final bool isActive;
+
+  const MaterialeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.code,
+    required this.name,
+    this.description,
+    this.unitOfMeasure,
+    this.category,
+    this.marca,
+    this.purchasePrice,
+    this.salePrice,
+    this.isActive = true,
+  });
+
+  factory MaterialeDto.fromJson(Map<String, dynamic> j) => MaterialeDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        code: j['code'] as String,
+        name: j['name'] as String,
+        description: j['description'] as String?,
+        unitOfMeasure: j['unitOfMeasure'] as String?,
+        category: j['category'] as String?,
+        marca: j['marca'] as String?,
+        // decimal? fields serialise as either a JSON number or a string
+        // (pattern-validated), same idiom as ReportMateriale.UnitPrice — see
+        // Materiale.AliquotaIVA's XML doc for why.
+        purchasePrice: _dbl(j['purchasePrice']),
+        salePrice: _dbl(j['salePrice']),
+        isActive: j['isActive'] as bool? ?? true,
+      );
+}
+
+// ── Cantiere ───────────────────────────────────────────────────────────────────
+
+/// CantiereStatusEnum values, in the same order as the backend enum
+/// (`[JsonConverter(typeof(JsonStringEnumConverter))] enum CantiereStatusEnum`)
+/// and as the `Cantieri.status` Drift column (Active=0, Completed=1, Cancelled=2).
+const _cantiereStatusValues = <String, int>{
+  'Active': 0,
+  'Completed': 1,
+  'Cancelled': 2,
+};
+
+/// Parses the wire enum string to the int the Drift column stores.
+/// Unknown/missing values default to Active — the safest fallback for a
+/// picker that filters on "active" cantieri (see [CantieriProvider] usage).
+int parseCantiereStatus(dynamic v) =>
+    _cantiereStatusValues[v as String?] ?? 0;
+
+class CantiereDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String name;
+  final String? address;
+  final String? city;
+  final String? postalCode;
+  final String? notes;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final int status;
+  final String? customerId;
+  final String? commessaId;
+
+  const CantiereDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.name,
+    this.address,
+    this.city,
+    this.postalCode,
+    this.notes,
+    this.startDate,
+    this.endDate,
+    this.status = 0,
+    this.customerId,
+    this.commessaId,
+  });
+
+  factory CantiereDto.fromJson(Map<String, dynamic> j) => CantiereDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        name: j['name'] as String,
+        address: j['address'] as String?,
+        city: j['city'] as String?,
+        postalCode: j['postalCode'] as String?,
+        notes: j['notes'] as String?,
+        startDate: _dt(j['startDate']),
+        endDate: _dt(j['endDate']),
+        status: parseCantiereStatus(j['status']),
+        customerId: j['customerId'] as String?,
         commessaId: j['commessaId'] as String?,
       );
 }
