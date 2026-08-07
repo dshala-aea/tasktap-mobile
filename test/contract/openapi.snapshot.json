@@ -21140,6 +21140,20 @@
             ],
             "description": "New company display name. Pass empty string to revert to tenant Name."
           },
+          "fontFamily": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Font family for documents and the office UI. Empty string reverts to the default."
+          },
+          "reportFooter": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Legal footer printed on customer-facing PDFs. Empty string clears it."
+          },
           "faviconUrl": {
             "type": [
               "null",
@@ -22380,6 +22394,55 @@
               "string"
             ],
             "description": "Tenant domain."
+          },
+          "slug": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "URL slug."
+          },
+          "companyVATNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Partita IVA \u2014 e.g. \u0022IT12345678901\u0022. Empty string clears it."
+          },
+          "fiscalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Codice Fiscale. Empty string clears it."
+          },
+          "pecEmail": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Posta Elettronica Certificata address. Empty string clears it."
+          },
+          "sdiCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Codice Destinatario SDI. Empty string clears it."
+          },
+          "industryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Industry key captured at signup. Empty string clears it."
+          },
+          "companySize": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Company size bucket. Empty string clears it."
           },
           "isActive": {
             "type": [
