@@ -5976,7 +5976,24 @@
         ],
         "responses": {
           "200": {
-            "description": "Paginated list of notifications."
+            "description": "Paginated list of notifications.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -17421,11 +17438,186 @@
       "MovimentoTipoEnum": {
         "type": "integer"
       },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "User identifier who receives the notification.",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Notification title."
+          },
+          "message": {
+            "type": "string",
+            "description": "Notification message body."
+          },
+          "type": {
+            "description": "Type of notification (e.g., TicketAssigned, ScheduleReminder).",
+            "$ref": "#/components/schemas/NotificationTypeEnum"
+          },
+          "deliveryType": {
+            "description": "Delivery method for the notification.",
+            "$ref": "#/components/schemas/NotificationDeliveryTypeEnum"
+          },
+          "isRead": {
+            "type": "boolean",
+            "description": "Indicates whether the notification has been read."
+          },
+          "readAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the notification was read.",
+            "format": "date-time"
+          },
+          "relatedEntityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Identifier of the related entity (e.g., TicketId, ScheduleId).",
+            "format": "uuid"
+          },
+          "relatedEntityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Type of the related entity (e.g., \u0022Ticket\u0022, \u0022Schedule\u0022, \u0022License\u0022)."
+          },
+          "scheduledFor": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Scheduled date/time for delayed notification delivery.",
+            "format": "date-time"
+          },
+          "sentAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the notification was sent/delivered.",
+            "format": "date-time"
+          },
+          "isDelivered": {
+            "type": "boolean",
+            "description": "Indicates whether the notification was successfully delivered."
+          },
+          "deliveryError": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Error message if delivery failed."
+          },
+          "retryCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of times delivery has been attempted (for push notifications).",
+            "format": "int32"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "Represents a notification sent to a user."
+      },
       "NotificationDeliveryTypeEnum": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Defines the delivery methods for notifications."
+      },
+      "NotificationListResponse": {
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "totalItems",
+          "totalPages",
+          "unreadCount"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Notification"
+            }
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unreadCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "The notification list page, plus the unread total the badge reads."
       },
       "NotificationTypeEnum": {
-        "type": "integer"
+        "type": "integer",
+        "description": "Defines the types of notifications in the system."
       },
       "PaginatedResultOfCantiere": {
         "type": "object",
