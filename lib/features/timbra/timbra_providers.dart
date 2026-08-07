@@ -241,9 +241,18 @@ final punchGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
   );
 });
 
-// No pause guard yet: `togglePause` exists on the notifier but no screen calls it, so a
-// provider for it would guard a button that does not exist. `resolveGuard` takes any action
-// name, so adding one when the pause control lands is a three-line provider.
+/// The guard for the pause/resume control, whose action depends on whether a break is open.
+///
+/// Mirrors [punchGuardProvider] exactly — same `resolveGuard` merge rule, different action pair
+/// (`StartBreak` / `EndBreak` instead of `ClockIn` / `ClockOut`).
+final pauseGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
+  final shift = ref.watch(timbraStateProvider);
+  return resolveGuard(
+    giornata: ref.watch(giornataProvider).valueOrNull,
+    hasPendingSync: ref.watch(hasPendingSyncProvider),
+    action: shift.isOnPause ? 'EndBreak' : 'StartBreak',
+  );
+});
 
 // ── Punch action ──────────────────────────────────────────────────────────────
 

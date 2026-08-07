@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/widgets/widgets.dart';
+import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 
@@ -33,6 +34,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncProvider.notifier).performSync();
       initTimbraSyncWatcher(ref);
+      // Retries the OIDC token refresh as soon as connectivity returns —
+      // matters most right after a cold start on no signal, where auth
+      // falls back to a cached, signed-in-but-offline identity (see
+      // ZitadelAuthRepository._restore).
+      initAuthReconnectWatcher(ref);
     });
   }
 

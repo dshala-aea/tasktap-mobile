@@ -151,4 +151,93 @@ void main() {
     expect(find.byTooltip('Non sincronizzato'), findsOneWidget);
     await _teardownTimer(tester);
   });
+
+  // ── Pause / resume control ────────────────────────────────────────────────
+  //
+  // `togglePause` existed on PunchNotifier with nothing in the UI calling it
+  // (break start/end was unreachable). These verify the pill is wired up: it
+  // only appears once a shift is open, and toggles between PAUSA/RIPRENDI
+  // while recording the corresponding session.
+
+  group('pause/resume control', () {
+    testWidgets('is not shown before a shift starts', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('PAUSA'), findsNothing);
+      expect(find.text('RIPRENDI'), findsNothing);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('appears labeled PAUSA once a shift is open', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('PAUSA'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.text('PAUSA'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Pausa'), findsOneWidget);
+      expect(find.text('RIPRENDI'), findsOneWidget);
+      expect(find.text('PAUSA'), findsNothing);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('tapping RIPRENDI records a Ripresa entry and flips back to PAUSA',
+        (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.text('PAUSA'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      await tester.tap(find.text('RIPRENDI'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('Ripresa'), findsOneWidget);
+      expect(find.text('PAUSA'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('disappears again once the shift ends', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('PAUSA'), findsOneWidget);
+
+      await tester.tap(find.text('FINE TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('PAUSA'), findsNothing);
+      expect(find.text('RIPRENDI'), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
 }

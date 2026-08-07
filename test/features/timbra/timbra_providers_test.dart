@@ -7,6 +7,7 @@
 //   - PunchNotifier: toggles shift on/off and records sessions
 //   - todaySessionsProvider: returns only today's sessions
 //   - timbraStateProvider: reflects punch state
+//   - pauseGuardProvider: forwards StartBreak/EndBreak to resolveGuard
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -302,6 +303,97 @@ void main() {
 
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions, isEmpty);
+    });
+  });
+
+  // ── pauseGuardProvider ──────────────────────────────────────────────────────
+  //
+  // Mirrors punchGuardProvider's contract, just with the break action pair.
+  // resolveGuard's own decision logic is exhaustively covered in
+  // timbra_guard_test.dart; this only checks the provider forwards the right
+  // action name for each shift state.
+
+  group('pauseGuardProvider', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = _makeDb();
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    GiornataDto giornataWith(List<GiornataActionDto> actions) => GiornataDto(
+          status: 'Working',
+          workedMinutes: 0,
+          breakMinutes: 0,
+          isPayrollLocked: false,
+          actions: actions,
+        );
+
+    test('requests StartBreak when not currently on a break', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          giornataProvider.overrideWith((ref) async => giornataWith([
+                const GiornataActionDto(
+                  action: 'StartBreak',
+                  enabled: false,
+                  reasonCode: 'not_clocked_in',
+                  reason: 'Non risulti in servizio.',
+                ),
+              ])),
+        ],
+      );
+
+      final guard = await container.read(giornataProvider.future).then(
+            (_) => container.read(pauseGuardProvider),
+          );
+
+      expect(guard.blocked, isTrue);
+      expect(guard.reason, contains('servizio'));
+    });
+
+    test('requests EndBreak when currently on a break', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          giornataProvider.overrideWith((ref) async => giornataWith([
+                const GiornataActionDto(
+                  action: 'EndBreak',
+                  enabled: false,
+                  reasonCode: 'not_on_break',
+                  reason: 'Non risulti in pausa.',
+                ),
+              ])),
+        ],
+      );
+
+      // Put the derived shift state into "on pause" by seeding events, then
+      // mark them synced — resolveGuard deliberately ignores a stale server
+      // refusal while events are still pending (see timbra_guard_test.dart),
+      // so an unsynced seed here would pass for the wrong reason.
+      final sessionRepo = container.read(workSessionRepositoryProvider);
+      final now = DateTime.now().toUtc();
+      await sessionRepo.addEvent(id: 'a', eventTime: now, eventType: 'ingresso');
+      await sessionRepo.addEvent(
+        id: 'b',
+        eventTime: now.add(const Duration(minutes: 5)),
+        eventType: 'pausa',
+      );
+      await sessionRepo.markSynced(['a', 'b']);
+      await container.read(todaySessionsProvider.future);
+      await container.read(giornataProvider.future);
+
+      final guard = container.read(pauseGuardProvider);
+
+      expect(guard.blocked, isTrue);
+      expect(guard.reason, contains('pausa'));
     });
   });
 }

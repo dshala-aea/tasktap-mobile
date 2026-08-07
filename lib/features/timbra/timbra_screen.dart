@@ -21,6 +21,7 @@ import 'timbra_providers.dart';
 ///   - Date label (uppercase, Manrope 13 muted)
 ///   - Live clock (Sora 72 thin, yellow, ticking every second)
 ///   - Circular punch button (radial yellow gradient)
+///   - Pause/resume pill (only while on shift)
 ///   - "Sessioni di oggi" card (session rows + running total)
 class TimbraScreen extends ConsumerStatefulWidget {
   const TimbraScreen({super.key});
@@ -119,6 +120,19 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
                     textAlign: TextAlign.center,
                   ),
                 ),
+
+              // ── Pause / resume (only meaningful while on shift) ───────────
+              if (shiftState.isOnShift) ...[
+                const SizedBox(height: 16),
+                _PauseButton(
+                  shiftState: shiftState,
+                  isLoading: punchState is AsyncLoading,
+                  guard: ref.watch(pauseGuardProvider),
+                  onTap: () {
+                    ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                  },
+                ),
+              ],
 
               const SizedBox(height: 40),
 
@@ -323,6 +337,104 @@ class _PunchButton extends StatelessWidget {
       children: [
         button,
         const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            guard.reason!,
+            style: const TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              color: AppColors.MUTED,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _PauseButton
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Small secondary pill button for break start/end, shown only while on shift.
+///
+/// Deliberately understated next to [_PunchButton]: starting/ending the shift is the
+/// primary action, pause/resume is a secondary one that happens mid-shift.
+class _PauseButton extends StatelessWidget {
+  const _PauseButton({
+    required this.shiftState,
+    required this.isLoading,
+    required this.onTap,
+    this.guard = TimbraGuard.allowed,
+  });
+
+  final TimbraState shiftState;
+  final bool isLoading;
+  final VoidCallback onTap;
+
+  /// Same server-driven refusal as [_PunchButton.guard], applied to StartBreak/EndBreak.
+  final TimbraGuard guard;
+
+  @override
+  Widget build(BuildContext context) {
+    final isOnPause = shiftState.isOnPause;
+    final label = isOnPause ? 'RIPRENDI' : 'PAUSA';
+    final icon = isOnPause ? LucideIcons.play : LucideIcons.coffee;
+    final accent = isOnPause ? AppColors.CYAN : AppColors.AMBER;
+    final blocked = guard.blocked;
+
+    final button = Semantics(
+      button: true,
+      enabled: !blocked,
+      label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
+      child: GestureDetector(
+        onTap: isLoading || blocked ? null : onTap,
+        child: Opacity(
+          opacity: blocked ? 0.4 : 1,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(13),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: accent.withAlpha(120)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLoading)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                  )
+                else
+                  Icon(icon, size: 16, color: accent),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: accent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (!blocked || guard.reason == null) return button;
+
+    return Column(
+      children: [
+        button,
+        const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
