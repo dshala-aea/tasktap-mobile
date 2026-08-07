@@ -81,7 +81,9 @@ class _AdminCantiereListBody extends ConsumerWidget {
           (c.city?.toLowerCase().contains(query.toLowerCase()) ?? false);
     }).toList();
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -134,6 +136,7 @@ class _AdminCantiereListBody extends ConsumerWidget {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

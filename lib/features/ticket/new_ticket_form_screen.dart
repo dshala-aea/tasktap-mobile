@@ -6,12 +6,13 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_stepper.dart';
+import '../../data/sync/connectivity_provider.dart';
+import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'steps/step_assegnazione.dart';
 import 'steps/step_cliente_sede.dart';
 import 'steps/step_dettagli_ticket.dart';
 import 'new_ticket_form_state.dart';
 import 'steps/step_riepilogo_ticket.dart';
-import 'ticket_api_client.dart';
 import 'ticket_providers.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -44,36 +45,47 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   NewTicketFormState _formState = const NewTicketFormState();
   bool _isSubmitting = false;
 
+  late final ProviderSubscription<AsyncValue<Map<int, String>>>
+      _statusListener;
+
   int get _stepIndex => _FormStep.values.indexOf(_step);
   bool get _isFirst => _step == _FormStep.clienteSede;
   bool get _isLast => _step == _FormStep.riepilogo;
 
-  /// Auto-select default status on first build.
+  /// Auto-select the default status once the status list has loaded.
+  ///
+  /// Uses `ref.listenManual` rather than a single post-frame check: the
+  /// underlying StreamProvider reads from Drift and its first emission is
+  /// not guaranteed to land within the very first frame (cold start, slow
+  /// device, or simply a scheduling race). A one-shot check that ran before
+  /// the data arrived left `statusId` null forever — the submit button
+  /// stayed tappable but `_onSubmit` silently no-opped on `isValid == false`,
+  /// which is exactly the kind of silent data loss this screen must avoid.
   @override
   void initState() {
     super.initState();
-    // Default status will be set when TicketStatuses data loads (via build).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureDefaultStatus();
-    });
+    _statusListener = ref.listenManual(
+      ticketStatusMapProvider,
+      (previous, next) => next.whenData(_applyDefaultStatus),
+      fireImmediately: true,
+    );
   }
 
-  void _ensureDefaultStatus() {
-    final statusMapAsync = ref.read(ticketStatusMapProvider);
-    statusMapAsync.whenData((statusMap) {
-      if (_formState.statusId == null) {
-        // Find the default status (isDefault == true).
-        final defaultEntry = statusMap.entries.firstOrNull;
-        // We don't have isDefault in the map, but the first entry
-        // from the query is typically the default. Alternatively, we can
-        // read it from a dedicated provider.
-        // For now, pick the first status as default.
-        if (defaultEntry != null) {
-          setState(() {
-            _formState = _formState.copyWith(statusId: defaultEntry.key);
-          });
-        }
-      }
+  @override
+  void dispose() {
+    _statusListener.close();
+    super.dispose();
+  }
+
+  void _applyDefaultStatus(Map<int, String> statusMap) {
+    if (_formState.statusId != null) return;
+    // We don't have isDefault in the map, but the first entry from the
+    // query is typically the default. Alternatively, we can read it from a
+    // dedicated provider. For now, pick the first status as default.
+    final defaultEntry = statusMap.entries.firstOrNull;
+    if (defaultEntry == null) return;
+    setState(() {
+      _formState = _formState.copyWith(statusId: defaultEntry.key);
     });
   }
 
@@ -97,43 +109,70 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
     setState(() => _formState = newState);
   }
 
+  /// The ticket is ALWAYS persisted to the local outbox first (see
+  /// [TicketCreationQueue]), so nothing the technician typed is ever
+  /// discarded — not even when this call fails.
+  ///
+  /// - Offline: the row is queued and sent automatically on reconnect.
+  /// - Online + success: done.
+  /// - Online + failure: ticket creation has no client-supplied dedup key
+  ///   (unlike rapportini/worklogs), so the outcome on the server is
+  ///   unknown — the ticket is kept locally as `failed` for a deliberate,
+  ///   user-initiated retry from the ticket list. It is never auto-retried.
   Future<void> _onSubmit() async {
     if (!_formState.isValid || _isSubmitting) return;
 
     setState(() => _isSubmitting = true);
 
-    try {
-      final client = ref.read(ticketApiClientProvider);
-      await client.createTicket(
-        title: _formState.title!,
-        description: _formState.description,
-        customerId: _formState.customerId!,
-        locationId: _formState.locationId!,
-        assignedUserId: _formState.assignedUserId,
-        statusId: _formState.statusId!,
-        typeId: _formState.typeId!,
-      );
+    final isOnline = ref.read(isOnlineProvider);
+    final queue = ref.read(ticketCreationQueueProvider);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket creato con successo'),
-            backgroundColor: AppColors.GREEN,
+    final outcome = await queue.create(
+      title: _formState.title!,
+      description: _formState.description,
+      customerId: _formState.customerId!,
+      locationId: _formState.locationId!,
+      assignedUserId: _formState.assignedUserId,
+      statusId: _formState.statusId!,
+      typeId: _formState.typeId!,
+      isOnline: isOnline,
+    );
+
+    if (!mounted) return;
+
+    if (outcome.isQueuedOffline) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sei offline: il ticket è stato salvato e verrà inviato '
+            'automaticamente alla riconnessione.',
           ),
-        );
-        Navigator.of(context).pop(true); // return true = created
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Errore: ${e.toString()}'),
-            backgroundColor: AppColors.RED,
+          backgroundColor: AppColors.AMBER,
+        ),
+      );
+      Navigator.of(context).pop(true); // return true = created (locally)
+    } else if (outcome.isSubmitted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ticket creato con successo'),
+          backgroundColor: AppColors.GREEN,
+        ),
+      );
+      Navigator.of(context).pop(true);
+    } else {
+      // Failed while online: the request may have already reached the
+      // server, so we do NOT retry automatically. Data is safe locally.
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Il ticket è stato salvato in locale, ma l\'invio non è '
+            'riuscito (${outcome.error}). Per evitare duplicati, controlla '
+            'la lista ticket prima di riprovare dalla sezione "In sospeso".',
           ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+          backgroundColor: AppColors.RED,
+        ),
+      );
     }
   }
 

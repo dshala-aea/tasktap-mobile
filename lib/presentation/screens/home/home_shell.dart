@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 
 /// The main app shell with the 5-tab floating-pill bottom navigation.
@@ -34,6 +35,10 @@ class _HomeShellState extends ConsumerState<HomeShell>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncProvider.notifier).performSync();
       initTimbraSyncWatcher(ref);
+      // Offline-created tickets are queued locally (see
+      // features/ticket/new_ticket_form_screen.dart); this flushes the
+      // ones that are safe to auto-retry as soon as connectivity returns.
+      initTicketCreationQueueWatcher(ref);
       // Retries the OIDC token refresh as soon as connectivity returns —
       // matters most right after a cold start on no signal, where auth
       // falls back to a cached, signed-in-but-offline identity (see

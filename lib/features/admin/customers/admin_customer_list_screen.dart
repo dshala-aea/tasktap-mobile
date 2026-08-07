@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_service.dart';
 import '../admin_providers.dart';
 
 /// Admin customer list — shows all customers (active + inactive) with FAB to
@@ -79,7 +80,9 @@ class _AdminCustomerListBody extends ConsumerWidget {
       return matchActive && matchQuery;
     }).toList();
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -148,6 +151,7 @@ class _AdminCustomerListBody extends ConsumerWidget {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

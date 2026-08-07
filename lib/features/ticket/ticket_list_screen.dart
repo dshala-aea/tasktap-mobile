@@ -7,6 +7,9 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
+import '../../data/tickets/pending_ticket_state.dart';
+import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'ticket_providers.dart';
 
 /// Filter options for the ticket list.
@@ -93,6 +96,7 @@ class _TicketListBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(ticketsProvider);
     final statusMapAsync = ref.watch(ticketStatusMapProvider);
+    final pendingTickets = ref.watch(pendingTicketsProvider).valueOrNull ?? [];
 
     final statusMap = statusMapAsync.valueOrNull ?? {};
     final allTickets = ticketsAsync.valueOrNull ?? [];
@@ -114,8 +118,10 @@ class _TicketListBody extends ConsumerWidget {
       return matchFilter && matchQuery;
     }).toList();
 
-    return CustomScrollView(
-      slivers: [
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: CustomScrollView(
+        slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
             title: 'Ticket',
@@ -128,6 +134,10 @@ class _TicketListBody extends ConsumerWidget {
             ],
           ),
         ),
+        if (pendingTickets.isNotEmpty)
+          SliverToBoxAdapter(
+            child: _PendingTicketsSection(pendingTickets: pendingTickets),
+          ),
         SliverToBoxAdapter(
           child: AppSearchBar(
             controller: searchCtrl,
@@ -188,7 +198,119 @@ class _TicketListBody extends ConsumerWidget {
             ),
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Pending (locally-created, not-yet-confirmed) tickets ───────────────────────
+
+class _PendingTicketsSection extends StatelessWidget {
+  const _PendingTicketsSection({required this.pendingTickets});
+
+  final List<PendingTicket> pendingTickets;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'In sospeso (${pendingTickets.length})',
+            style: const TextStyle(
+              fontFamily: 'Sora',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.DARK,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final t in pendingTickets) ...[
+            _PendingTicketRow(ticket: t),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingTicketRow extends ConsumerWidget {
+  const _PendingTicketRow({required this.ticket});
+
+  final PendingTicket ticket;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = PendingTicketState.fromString(ticket.state);
+    final isFailed = state == PendingTicketState.failed;
+
+    final String subtitle = switch (state) {
+      PendingTicketState.pendingSync =>
+        'In attesa di connessione — verrà inviato automaticamente',
+      PendingTicketState.submitting => 'Invio in corso…',
+      PendingTicketState.failed =>
+        'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+      PendingTicketState.submitted => 'Inviato',
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isFailed ? AppColors.REDSOFT : AppColors.BG3,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
+            size: 18,
+            color: isFailed ? AppColors.RED : AppColors.MUTED,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  ticket.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.DARK,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 11,
+                    color: AppColors.MUTED,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (isFailed) ...[
+            const SizedBox(width: 8),
+            AppButton(
+              label: 'Riprova',
+              size: AppButtonSize.sm,
+              onPressed: () =>
+                  ref.read(ticketCreationQueueProvider).retry(ticket.id),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

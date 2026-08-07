@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -105,6 +108,7 @@ class _AdminCantiereFormScreenState
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
 
     setState(() => _isSaving = true);
     try {
@@ -150,6 +154,10 @@ class _AdminCantiereFormScreenState
           customerId: _selectedCustomerId,
         );
       }
+
+      // Pull the new/updated row down immediately so the list shows it
+      // without waiting for the next app-level sync.
+      unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

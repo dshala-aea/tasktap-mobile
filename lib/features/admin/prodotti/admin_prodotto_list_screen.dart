@@ -72,7 +72,9 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
     final customers = customersAsync.valueOrNull ?? [];
     final customerMap = {for (final c in customers) c.id: c.companyName};
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(adminProdottiAssistenzaProvider.future),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -121,6 +123,7 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

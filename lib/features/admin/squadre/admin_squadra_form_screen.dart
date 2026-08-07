@@ -1,9 +1,13 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/offline_guard.dart';
+import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 
 /// Admin squadra form — create or edit.
@@ -56,6 +60,7 @@ class _AdminSquadraFormScreenState
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
 
     setState(() => _isSaving = true);
     try {
@@ -95,6 +100,8 @@ class _AdminSquadraFormScreenState
               : _noteCtrl.text.trim(),
         );
       }
+
+      unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

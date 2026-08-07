@@ -79,7 +79,9 @@ class _AdminScheduleListBody extends ConsumerWidget {
       return s.title.toLowerCase().contains(query.toLowerCase());
     }).toList();
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -130,6 +132,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

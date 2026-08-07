@@ -95,7 +95,9 @@ class _AdminLocationListBody extends ConsumerWidget {
       return matchCustomer && matchQuery;
     }).toList();
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -173,6 +175,7 @@ class _AdminLocationListBody extends ConsumerWidget {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

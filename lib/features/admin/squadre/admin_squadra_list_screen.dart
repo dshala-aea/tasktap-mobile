@@ -40,16 +40,16 @@ class AdminSquadraListScreen extends ConsumerWidget {
   }
 }
 
-class _SquadraListBody extends StatefulWidget {
+class _SquadraListBody extends ConsumerStatefulWidget {
   const _SquadraListBody({required this.squadre});
 
   final List<Map<String, dynamic>> squadre;
 
   @override
-  State<_SquadraListBody> createState() => _SquadraListBodyState();
+  ConsumerState<_SquadraListBody> createState() => _SquadraListBodyState();
 }
 
-class _SquadraListBodyState extends State<_SquadraListBody> {
+class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
   String _query = '';
   final _searchCtrl = TextEditingController();
 
@@ -67,7 +67,9 @@ class _SquadraListBodyState extends State<_SquadraListBody> {
       return nome.contains(_query.toLowerCase());
     }).toList();
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(adminSquadreProvider.future),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -115,6 +117,7 @@ class _SquadraListBodyState extends State<_SquadraListBody> {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

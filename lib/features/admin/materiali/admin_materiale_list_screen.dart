@@ -111,7 +111,9 @@ class _AdminMaterialeListBody extends ConsumerWidget {
       return matchActive && matchCategory && matchQuery;
     }).toList();
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -202,6 +204,7 @@ class _AdminMaterialeListBody extends ConsumerWidget {
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

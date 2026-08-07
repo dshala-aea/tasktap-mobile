@@ -83,13 +83,12 @@ class _AdminReportListBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reportsAsync = ref.watch(
-      adminReportsProvider(
-        StatoFilter(filter.statusMatch),
-      ),
-    );
+    final statoFilter = StatoFilter(filter.statusMatch);
+    final reportsAsync = ref.watch(adminReportsProvider(statoFilter));
 
-    return CustomScrollView(
+    return RefreshIndicator(
+      onRefresh: () => ref.refresh(adminReportsProvider(statoFilter).future),
+      child: CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: ScreenHeader(
@@ -173,6 +172,7 @@ class _AdminReportListBody extends ConsumerWidget {
         ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
+      ),
     );
   }
 }

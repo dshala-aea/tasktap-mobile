@@ -446,6 +446,47 @@ class ReportAllegati extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── pending_tickets ───────────────────────────────────────────────────────────
+/// Local outbox for tickets created while the device might be offline.
+///
+/// Unlike [DraftReports] (which carries a server-honoured idempotency key),
+/// ticket creation (`POST /api/Tickets`) has no client-supplied dedup field.
+/// So this table's state machine is stricter than the rapportino queue's:
+///
+///   pendingSync ──(never sent — device was offline at create time)──► submitting
+///   submitting  ──(200 OK)──────────────────────────────────────────► submitted
+///   submitting  ──(error — outcome on the server is now unknown)────► failed
+///
+/// `failed` rows are NEVER auto-retried by [TicketCreationQueue.processAll]:
+/// the create request may already have reached the server, so resending it
+/// automatically could create a duplicate, customer-visible ticket. Only
+/// `pendingSync` rows — created while genuinely offline, so the request was
+/// never sent at all — are safe to retry automatically on reconnect. A
+/// `failed` row requires an explicit, user-initiated retry.
+class PendingTickets extends Table {
+  TextColumn get id => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  TextColumn get title => text()();
+  TextColumn get description => text().nullable()();
+  TextColumn get customerId => text()();
+  TextColumn get locationId => text()();
+  TextColumn get assignedUserId => text().nullable()();
+  IntColumn get statusId => integer()();
+  IntColumn get typeId => integer()();
+
+  /// pendingSync | submitting | submitted | failed
+  TextColumn get state =>
+      text().withDefault(const Constant('pendingSync'))();
+  /// Human-readable error from the last failed attempt (null when ok).
+  TextColumn get error => text().nullable()();
+  /// Set once the server confirms creation — the real Ticket.id.
+  TextColumn get serverTicketId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Database class
 // ══════════════════════════════════════════════════════════════════════════════
@@ -470,13 +511,14 @@ class ReportAllegati extends Table {
     WorkSessions,
     AppNotifications,
     CantierePunches,
+    PendingTickets,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration {
@@ -521,6 +563,11 @@ class AppDatabase extends _$AppDatabase {
           // Cantiere timbra: add cantiere_punches table for local-first
           // clock-in/out (mirrors work_sessions for the simple timbra flow).
           await m.createTable(cantierePunches);
+        }
+        if (from < 8) {
+          // Offline-first ticket creation: local outbox so a new ticket
+          // typed while offline is never silently discarded.
+          await m.createTable(pendingTickets);
         }
       },
     );

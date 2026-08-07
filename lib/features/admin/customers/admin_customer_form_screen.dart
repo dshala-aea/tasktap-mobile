@@ -1,9 +1,12 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../data/sync/sync_service.dart';
@@ -95,6 +98,7 @@ class _AdminCustomerFormScreenState
 
   Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate() || _isSubmitting) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
     setState(() => _isSubmitting = true);
 
     try {
@@ -128,6 +132,8 @@ class _AdminCustomerFormScreenState
           notes: _notesCtrl.text.trim(),
         );
       }
+
+      unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

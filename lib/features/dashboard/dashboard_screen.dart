@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'dashboard_providers.dart';
@@ -26,7 +27,9 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.BG2,
-      body: CustomScrollView(
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+        child: CustomScrollView(
         slivers: [
           // ── Hero ──────────────────────────────────────────────────────────
           SliverToBoxAdapter(
@@ -157,6 +160,7 @@ class DashboardScreen extends ConsumerWidget {
           // Bottom padding so the last card clears the floating bottom nav.
           const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
         ],
+        ),
       ),
     );
   }
