@@ -7,6 +7,7 @@ import 'core/config/env.dart';
 import 'core/crash_reporting/crash_reporter.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
 import 'core/notifications/notification_service.dart';
+import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/providers/auth_providers.dart';
@@ -114,6 +115,14 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
         NotificationService.instance.registerDeviceToken(user.accessToken);
       }
     });
+
+    // A push arriving in the foreground is the moment we know there is something new; pull it
+    // into the local mirror so the badge and the list update without waiting for the technician
+    // to open the Notifiche screen. Nothing polled before this, despite a comment claiming it did.
+    if (NotificationService.isAvailable) {
+      NotificationService.instance.onForegroundMessage =
+          () => ref.read(notificheProvider.notifier).refresh();
+    }
 
     // Check for pending deep-links from notification taps.
     if (NotificationService.isAvailable) {

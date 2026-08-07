@@ -159,11 +159,24 @@ class NotificationService {
     final notification = message.notification;
     if (notification == null) return;
 
-    // TODO: show a local in-app banner (Snack-bar or flutter_local_notifications)
-    // For now, just log. The in-app notification list will be refreshed via
-    // the notificheProvider polling mechanism.
     debugPrint('FCM foreground: ${notification.title} — ${notification.body}');
+
+    // Pull the new notification into the local mirror so the badge and the list reflect it now.
+    //
+    // The comment that stood here claimed "the in-app notification list will be refreshed via the
+    // notificheProvider polling mechanism". No such polling exists — the list refreshed only when
+    // somebody opened the Notifiche screen, so a technician who never opened it saw a stale or
+    // zero badge no matter what had been delivered. A push arriving is exactly the moment we know
+    // there is something new to fetch.
+    onForegroundMessage?.call();
   }
+
+  /// Called when a push arrives while the app is in the foreground.
+  ///
+  /// A callback rather than a direct provider read: this service is a singleton created before
+  /// the Riverpod container exists, so it cannot reach a provider itself. `main.dart` wires this
+  /// to a refresh of the notification mirror.
+  void Function()? onForegroundMessage;
 
   /// Handle notification tap — deep-link to the relevant screen.
   void _handleNotificationTap(RemoteMessage message) {

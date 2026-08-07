@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/notifications/notification_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -49,6 +52,21 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(notificheProvider.notifier).refresh();
     });
+  }
+
+  /// Navigates to whatever the notification is about, if it names something we can open.
+  ///
+  /// Silently does nothing when the pair is absent or the type is one we have no screen for —
+  /// the notification has still been marked read, which is the part the technician asked for by
+  /// tapping. Bouncing them to an error for a notification that simply has no destination would
+  /// be worse than staying put.
+  void _openRelatedEntity(BuildContext context, AppNotifica n) {
+    final type = n.relatedEntityType;
+    final id = n.relatedEntityId;
+    if (type == null || id == null) return;
+
+    final route = DeepLinkIntent(entityType: type, entityId: id).resolveRoute();
+    if (route != null) context.push(route);
   }
 
   @override
@@ -131,8 +149,14 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                     return _NotificaRow(
                       notifica: n,
                       isLast: i == filtered.length - 1,
-                      onTap: () =>
-                          ref.read(notificheProvider.notifier).segnaLetta(n.id),
+                      // Marking read was the only thing a tap did. The row already carried
+                      // relatedEntityType/relatedEntityId — the same pair a push tap resolves
+                      // through DeepLinkIntent — so opening the notification centre and tapping
+                      // an item left the technician to go and find the job themselves.
+                      onTap: () {
+                        ref.read(notificheProvider.notifier).segnaLetta(n.id);
+                        _openRelatedEntity(context, n);
+                      },
                     );
                   },
                   childCount: filtered.length,
