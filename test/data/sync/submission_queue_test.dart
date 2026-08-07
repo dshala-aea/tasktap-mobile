@@ -505,7 +505,7 @@ void main() {
           SubmitReportMaterialeDto(quantity: 2.0, freeTextName: 'Bullone'),
         ],
         controlli: [
-          SubmitReportControlloDto(controlId: 'ctrl-1', boolValue: true),
+          SubmitReportControlloDto(ticketControlId: 'ctrl-1', boolValue: true),
         ],
       );
 
@@ -569,12 +569,15 @@ void main() {
     test('controllo toJson mirrors backend SubmitReportControlloDto fields',
         () {
       const c = SubmitReportControlloDto(
-        controlId: 'ctrl-1',
+        ticketControlId: 'ctrl-1',
         stringValue: 'OK',
         boolValue: true,
       );
       final json = c.toJson();
-      expect(json['controlId'], 'ctrl-1');
+      // 'ticketControlId' — the id of the *ticket's* control, not the template's. This test
+      // asserted 'controlId' and passed for months while every real submission was rejected: it
+      // mirrored the Dart class back to itself rather than the backend DTO its name claims.
+      expect(json['ticketControlId'], 'ctrl-1');
       expect(json['stringValue'], 'OK');
       expect(json['boolValue'], true);
     });

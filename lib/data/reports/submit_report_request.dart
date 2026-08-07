@@ -173,21 +173,30 @@ class SubmitReportMaterialeDto {
 }
 
 /// One inspection control answer. Mirror of SubmitReportControlloDto.cs.
+///
+/// The id is the **TicketControl** — this job's copy of a checklist item, resolved from the
+/// published template version when the ticket was created (ADR-0012 §B.4) — not the template
+/// control it came from. The server checks that every id belongs to this report's ticket, so a
+/// mismatched name here does not fail quietly: it fails the whole submit.
 class SubmitReportControlloDto {
   const SubmitReportControlloDto({
-    required this.controlId,
+    required this.ticketControlId,
     this.stringValue,
     this.boolValue,
     this.dateValue,
   });
 
-  final String controlId;
+  final String ticketControlId;
   final String? stringValue;
   final bool? boolValue;
   final DateTime? dateValue;
 
   Map<String, dynamic> toJson() => {
-        'controlId': controlId,
+        // 'ticketControlId', not 'controlId'. The server's field is a non-nullable Guid, so the
+        // old name deserialized to Guid.Empty, which belongs to no ticket — and the ownership
+        // guard rejected the entire submission. A technician who filled in the checklist could
+        // not send their rapportino at all. Renamed by ADR-0012; mobile was never updated.
+        'ticketControlId': ticketControlId,
         if (stringValue != null) 'stringValue': stringValue,
         if (boolValue != null) 'boolValue': boolValue,
         if (dateValue != null) 'dateValue': dateValue!.toUtc().toIso8601String(),

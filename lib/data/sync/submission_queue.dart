@@ -246,7 +246,7 @@ class SubmissionQueue {
       controlli: controlli
           .map(
             (c) => SubmitReportControlloDto(
-              controlId: c.controlId,
+              ticketControlId: c.controlId,
               stringValue: c.stringValue,
               boolValue: c.boolValue,
               dateValue: c.dateValue,
