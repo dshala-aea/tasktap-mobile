@@ -8,6 +8,12 @@ class TicketApiClient {
 
   final Dio _dio;
 
+  /// Creates a ticket, returning its server id.
+  ///
+  /// [clientId] is the local row's own uuid, carried so the server can recognise a resend. It
+  /// answers 200 with the ticket it already created instead of 201 with a second one, so a retry
+  /// after a lost reply is safe. Both statuses carry the same body and mean the same thing here:
+  /// this ticket exists on the server with this id.
   Future<String> createTicket({
     required String title,
     String? description,
@@ -16,6 +22,7 @@ class TicketApiClient {
     String? assignedUserId,
     required int statusId,
     required int typeId,
+    String? clientId,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/tickets',
@@ -28,6 +35,7 @@ class TicketApiClient {
         'assignedUserId': ?assignedUserId,
         'statusId': statusId,
         'typeId': typeId,
+        'clientId': ?clientId,
       },
     );
 

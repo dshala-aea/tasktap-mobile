@@ -15232,6 +15232,14 @@
               "string"
             ],
             "description": "Legacy gestionale id (W6b Task 8). No \u0060[JsonPropertyName]\u0060 needed \u2014 \u0022externalId\u0022 is\nthe default ASP.NET Core camelCase output for \u0060ExternalId\u0060."
+          },
+          "clientId": {
+            "maxLength": 100,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Client-generated id, so a ticket raised on a phone can be resent without risking a\nduplicate. Repeating one returns the ticket it already created, with 200 instead of 201.\nOmitted by the office web, which has no queue behind it. See string? Ticket.ClientId."
           }
         }
       },
@@ -20654,6 +20662,13 @@
               "string"
             ],
             "description": "Legacy gestionale id (legacy \u0060idGestionale\u0060), for cross-referencing tickets\nimported from the legacy ERP. Nullable and deliberately NOT unique \u2014 the legacy system\nused \u00600\u0060 as a \u0022no link\u0022 sentinel, so many tickets legitimately carry no external id.\nFollows string? Commessa.ExternalId/string? Agent.ExternalId exactly (W6b\nTask 8). Any import boundary must map a legacy \u00600\u0060/\u0060\u00220\u0022\u0060/\u0060\u0022\u0022\u0060 to\n\u0060null\u0060 via LegacyExternalIdMapper\nbefore assigning this property."
+          },
+          "clientId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Client-generated id for a ticket raised on a phone, carried so the create can be retried\nsafely. Backed by a unique index filtered on NOT NULL over (TenantId, ClientId), which is\nwhat makes it an idempotency key rather than a note."
           },
           "numero": {
             "type": [

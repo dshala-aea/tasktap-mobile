@@ -95,6 +95,7 @@ void main() {
             locationId: any(named: 'locationId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           ));
     });
 
@@ -117,6 +118,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenAnswer((_) async => 'server-ticket-1');
 
       // Simulates the reconnect hook (TicketCreationQueueWatcher).
@@ -156,6 +158,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenAnswer((_) async => 'server-ticket-2');
 
       final outcome = await queue.create(
@@ -186,6 +189,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenThrow(Exception('Network error'));
 
       final outcome = await queue.create(
@@ -206,8 +210,12 @@ void main() {
       expect(onSubmittedCalls, 0);
     });
 
-    test(
-        'processAll (auto reconnect) never retries a failed (already-sent) ticket',
+    /// Changed deliberately when `clientId` shipped. This used to assert the opposite — that a
+    /// `failed` ticket was left alone until a human tapped Riprova — because the outcome of the
+    /// first send was unknown and a blind resend could raise a second customer-visible ticket.
+    /// The server now keys on the client id and returns the ticket it already created, so the
+    /// resend is safe and the technician is no longer asked to adjudicate it.
+    test('processAll retries a failed (already-sent) ticket, because clientId makes it safe',
         () async {
       when(() => mockApiClient.createTicket(
             title: any(named: 'title'),
@@ -217,9 +225,59 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenThrow(Exception('Timeout'));
 
-      await queue.create(
+      final outcome = await queue.create(
+        title: 'Sostituzione filtro',
+        customerId: 'cust-2',
+        locationId: 'loc-2',
+        statusId: 1,
+        typeId: 1,
+        isOnline: true,
+      );
+      expect((await repo.getById(outcome.localId))!.state, 'failed');
+
+      // The connection comes back and the send succeeds this time.
+      clearInteractions(mockApiClient);
+      when(() => mockApiClient.createTicket(
+            title: any(named: 'title'),
+            description: any(named: 'description'),
+            customerId: any(named: 'customerId'),
+            locationId: any(named: 'locationId'),
+            assignedUserId: any(named: 'assignedUserId'),
+            statusId: any(named: 'statusId'),
+            typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
+          )).thenAnswer((_) async => 'server-ticket-9');
+
+      await queue.processAll();
+
+      final row = await repo.getById(outcome.localId);
+      expect(row!.state, 'submitted');
+      expect(row.serverTicketId, 'server-ticket-9');
+    });
+
+    /// Every attempt must carry the SAME id. A fresh one per attempt would deduplicate nothing —
+    /// the server would see two unrelated creates and make two tickets, which is the exact
+    /// failure the key exists to prevent.
+    test('every attempt sends the local row id as clientId, unchanged', () async {
+      final sentClientIds = <String?>[];
+      when(() => mockApiClient.createTicket(
+            title: any(named: 'title'),
+            description: any(named: 'description'),
+            customerId: any(named: 'customerId'),
+            locationId: any(named: 'locationId'),
+            assignedUserId: any(named: 'assignedUserId'),
+            statusId: any(named: 'statusId'),
+            typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
+          )).thenAnswer((invocation) async {
+        sentClientIds.add(invocation.namedArguments[#clientId] as String?);
+        throw Exception('Timeout');
+      });
+
+      final outcome = await queue.create(
         title: 'Sostituzione filtro',
         customerId: 'cust-2',
         locationId: 'loc-2',
@@ -228,20 +286,11 @@ void main() {
         isOnline: true,
       );
 
-      // Clear the mock's throw behaviour and verify a later auto-flush
-      // (processAll — what the reconnect watcher calls) does NOT retry it.
-      clearInteractions(mockApiClient);
       await queue.processAll();
+      await queue.retry(outcome.localId);
 
-      verifyNever(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-          ));
+      expect(sentClientIds, hasLength(3), reason: 'initial send, auto-retry, manual retry');
+      expect(sentClientIds, everyElement(equals(outcome.localId)));
     });
 
     test('an explicit user-initiated retry can resend a failed ticket',
@@ -254,6 +303,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenThrow(Exception('Network error'));
 
       final firstOutcome = await queue.create(
@@ -274,6 +324,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenAnswer((_) async => 'server-ticket-3');
 
       final retryOutcome = await queue.retry(firstOutcome.localId);
@@ -312,6 +363,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            clientId: any(named: 'clientId'),
           )).thenAnswer((inv) async {
         final title = inv.namedArguments[#title] as String;
         return 'server-$title';

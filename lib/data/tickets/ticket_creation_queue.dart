@@ -11,24 +11,23 @@ import 'pending_ticket_state.dart';
 // Persists every "create ticket" attempt locally FIRST, then decides whether
 // it's safe to send it and, later, whether it's safe to retry it.
 //
-// Why this queue is stricter than SubmissionQueue (the rapportino queue):
-// `POST /api/Tickets` has no client-supplied idempotency key. The rapportino
-// queue can safely resend a failed submit any number of times because the
-// server deduplicates by that key. A ticket create cannot: if the first
-// attempt actually reached the server (e.g. the response was lost after a
-// 200), blindly resending it would create a second, customer-visible ticket.
+// Every attempt carries the local row's uuid as `clientId`. The server keys on
+// it, so a resend returns the ticket it already created (200) rather than a
+// second one (201). That is what makes retrying safe at all.
 //
-// So the state machine draws a hard line between two kinds of failure:
+// This queue used to be stricter than SubmissionQueue for want of that key. It
+// could distinguish two kinds of failure but could only act on one:
 //   - pendingSync: the device was offline, so the request was NEVER SENT.
-//     100% safe to auto-retry on reconnect — nothing could have reached the
-//     server yet. Handled by [processAll].
-//   - failed: the request WAS sent (the device believed itself online) and
-//     something went wrong afterwards. The outcome on the server is unknown.
-//     Never auto-retried. Only [retry], which must be triggered by an
-//     explicit user action, will resend it — and even that carries residual
-//     duplicate risk. The only way to close that gap fully is a backend
-//     `clientId` on CreateTicketRequest that the server can deduplicate on,
-//     the same way worklogs and rapportini already do.
+//     Nothing could have reached the server; always safe to retry.
+//   - failed: the request WAS sent and something went wrong afterwards. The
+//     outcome on the server was unknown, so an automatic retry risked a second
+//     customer-visible ticket and no retry lost the job. Neither is
+//     acceptable, so the technician was asked to decide — about the one thing
+//     only the server could know.
+//
+// Both are now auto-retried. The distinction is kept because it still says
+// something true about what happened, and it is what the UI shows; it no
+// longer decides whether a retry may happen.
 //
 // Invariant, mirrored from SubmissionQueue: a pending ticket is NEVER deleted
 // on failure — only its state changes. Nothing typed by the technician is
@@ -89,14 +88,23 @@ class TicketCreationQueue {
     return _attempt(id);
   }
 
-  /// Auto-retry every ticket whose create request was NEVER sent (state ==
-  /// pendingSync). Called on reconnect and on app start. `failed` rows are
-  /// deliberately excluded — see the class doc comment.
+  /// Auto-retry every ticket that has not reached the server yet — both the
+  /// ones never sent (`pendingSync`) and the ones whose send failed part-way
+  /// (`failed`). Called on reconnect and on app start.
+  ///
+  /// `failed` rows are included because `clientId` makes the resend safe: if
+  /// the earlier attempt did land, the server returns that same ticket instead
+  /// of creating another. Before the key existed this loop could only carry
+  /// `pendingSync`, and a ticket that failed mid-send sat on the device until
+  /// somebody noticed it.
   Future<void> processAll() async {
     if (_running) return;
     _running = true;
     try {
-      final pending = await _repo.getByState(PendingTicketState.pendingSync);
+      final pending = [
+        ...await _repo.getByState(PendingTicketState.pendingSync),
+        ...await _repo.getByState(PendingTicketState.failed),
+      ];
       for (final t in pending) {
         await _attempt(t.id);
       }
@@ -105,10 +113,9 @@ class TicketCreationQueue {
     }
   }
 
-  /// Explicit, user-initiated retry of a `failed` ticket. Must only be
-  /// called from a direct user tap (e.g. a "Riprova" button) — never wired
-  /// to an automatic trigger, because the previous attempt's outcome on the
-  /// server is unknown.
+  /// Explicit, user-initiated retry — the "Riprova" button. Same call as the
+  /// automatic path; it exists so a technician who does not want to wait for
+  /// the next reconnect can push a ticket through now.
   Future<TicketCreationOutcome> retry(String id) => _attempt(id);
 
   Future<TicketCreationOutcome> _attempt(String id) async {
@@ -132,6 +139,9 @@ class TicketCreationQueue {
         assignedUserId: t.assignedUserId,
         statusId: t.statusId,
         typeId: t.typeId,
+        // The local row id, unchanged across every attempt — that is the whole
+        // point. A new one per attempt would deduplicate nothing.
+        clientId: t.id,
       );
       await _repo.markSubmitted(id: id, serverTicketId: serverId);
       _onSubmitted?.call();
