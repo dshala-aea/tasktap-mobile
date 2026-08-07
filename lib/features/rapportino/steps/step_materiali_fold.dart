@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_card.dart';
@@ -12,6 +13,8 @@ import '../../../core/widgets/app_toggle.dart';
 // section_title omitted — using inline _SL below
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../ticket/ticket_detail_api_client.dart';
+import '../../ticket/ticket_providers.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Materiali  (folds Controlli + Foto/Allegati as sub-sections)
@@ -101,64 +104,12 @@ class StepMaterialiFold extends ConsumerWidget {
         ],
 
         // ── Controlli sub-section ──────────────────────────────────────────
-        _SL(title:'Controlli (${state.controlloRows.length})'),
+        // The checklist for this intervention, resolved server-side from the
+        // ticket's maintenance-template version (ADR-0012) — not a free-text
+        // "type an ID" box. See _ControlliChecklist.
+        _SL(title: 'Controlli'),
         const SizedBox(height: 8),
-        if (state.controlloRows.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Nessun controllo aggiunto.',
-              style: TextStyle(color: AppColors.MUTED, fontSize: 13),
-            ),
-          )
-        else
-          ...state.controlloRows.map(
-            (c) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: AppCard(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle_outline,
-                        size: 18, color: AppColors.GREEN),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            c.controlId,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                          if (c.stringValue != null)
-                            Text(
-                              c.stringValue!,
-                              style: const TextStyle(
-                                  color: AppColors.MUTED, fontSize: 12),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => _showAddControlloDialog(context, ref),
-          icon: const Icon(Icons.add_task),
-          label: const Text('Aggiungi controllo'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 52),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
+        _ControlliChecklist(reportId: reportId, ticketId: state.ticketId),
         const SizedBox(height: 24),
 
         // ── Foto / Allegati sub-section ────────────────────────────────────
@@ -341,56 +292,6 @@ class StepMaterialiFold extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showAddControlloDialog(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final controlIdCtrl = TextEditingController();
-    final valueCtrl = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aggiungi controllo'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: controlIdCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Nome controllo / ID'),
-            ),
-            TextField(
-              controller: valueCtrl,
-              decoration: const InputDecoration(labelText: 'Valore'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final id = 'ctrl-${DateTime.now().millisecondsSinceEpoch}';
-              notifier.upsertControllo(
-                ControlloRow(
-                  id: id,
-                  reportId: reportId,
-                  controlId: controlIdCtrl.text.trim(),
-                  stringValue: valueCtrl.text.trim().isEmpty
-                      ? null
-                      : valueCtrl.text.trim(),
-                ),
-              );
-              Navigator.pop(ctx);
-            },
-            child: const Text('Aggiungi'),
-          ),
-        ],
       ),
     );
   }
@@ -599,6 +500,273 @@ class _SL extends StatelessWidget {
         fontWeight: FontWeight.w700,
         color: Color(0xFF363636),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Controlli checklist — the real thing, not a "type an ID" dialog.
+//
+// A ticket's checklist is resolved server-side from the maintenance-template
+// version it materialised at creation (ADR-0012 §B.3): a fixed list of items,
+// each with its own label and input type. A field technician was never meant
+// to type a control ID — that requirement only existed because nothing wired
+// the real checklist through. This reads it via GET
+// /api/tickets/{ticketId}/controls (ticketControlsProvider) and renders one
+// input per item, driven by ControlType. Answers are still collected into
+// ControlloRow / upserted the same way as before — only how they're gathered
+// changed, not the submit payload shape.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _ControlliChecklist extends ConsumerWidget {
+  const _ControlliChecklist({required this.reportId, required this.ticketId});
+
+  final String reportId;
+  final String? ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ticket = ticketId;
+    if (ticket == null || ticket.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          'I controlli sono legati al ticket: questo rapportino non è '
+          'collegato a nessun ticket, quindi non è previsto alcun controllo.',
+          style: TextStyle(color: AppColors.MUTED, fontSize: 13),
+        ),
+      );
+    }
+
+    final controlsAsync = ref.watch(ticketControlsProvider(ticket));
+
+    return controlsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          e is TicketDetailOfflineException
+              ? 'Controlli non disponibili offline: riprova quando torni online.'
+              : 'Impossibile caricare i controlli. Riprova più tardi.',
+          style: const TextStyle(color: AppColors.MUTED, fontSize: 13),
+        ),
+      ),
+      data: (groups) {
+        final flat = flattenTicketControls(groups);
+        if (flat.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Nessun controllo previsto per questo intervento.',
+              style: TextStyle(color: AppColors.MUTED, fontSize: 13),
+            ),
+          );
+        }
+        return Column(
+          children: flat
+              .map(
+                (f) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _ControlloInputCard(
+                    key: ValueKey(f.control.id),
+                    reportId: reportId,
+                    flat: f,
+                  ),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+}
+
+/// One checklist item's input, driven by [TicketControlDto.type]. Pre-filled
+/// from whatever this session has already recorded for it, falling back to
+/// the ticket's last known answer (from a previous visit) as a starting
+/// point — never auto-submitted until the technician actually interacts.
+class _ControlloInputCard extends ConsumerStatefulWidget {
+  const _ControlloInputCard({super.key, required this.reportId, required this.flat});
+
+  final String reportId;
+  final FlatTicketControl flat;
+
+  @override
+  ConsumerState<_ControlloInputCard> createState() => _ControlloInputCardState();
+}
+
+class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
+  late final TextEditingController _textCtrl;
+
+  String get _rowId => 'ctrl-${widget.reportId}-${widget.flat.control.id}';
+
+  ControlloRow? _findExisting(List<ControlloRow> rows) {
+    for (final row in rows) {
+      if (row.controlId == widget.flat.control.id) return row;
+    }
+    return null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final state = ref.read(reportEditorProvider(widget.reportId));
+    final existing = _findExisting(state.controlloRows);
+    _textCtrl = TextEditingController(
+      text: existing?.stringValue ?? widget.flat.control.stringValue ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _textCtrl.dispose();
+    super.dispose();
+  }
+
+  void _save({String? stringValue, bool? boolValue, DateTime? dateValue}) {
+    final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
+    notifier.upsertControllo(
+      ControlloRow(
+        id: _rowId,
+        reportId: widget.reportId,
+        controlId: widget.flat.control.id,
+        stringValue: stringValue,
+        boolValue: boolValue,
+        dateValue: dateValue,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.flat.control;
+    final rows = ref.watch(
+      reportEditorProvider(widget.reportId).select((s) => s.controlloRows),
+    );
+    final existing = _findExisting(rows);
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.flat.groupPath.isNotEmpty)
+            Text(
+              widget.flat.groupPath,
+              style: const TextStyle(color: AppColors.MUTED, fontSize: 11),
+            ),
+          const SizedBox(height: 2),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  c.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    color: AppColors.DARK,
+                  ),
+                ),
+              ),
+              if (c.isRequired)
+                const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: Text(
+                    '*',
+                    style: TextStyle(color: AppColors.RED, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+          if (c.description != null && c.description!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Text(
+                c.description!,
+                style: const TextStyle(color: AppColors.MUTED, fontSize: 12),
+              ),
+            ),
+          const SizedBox(height: 8),
+          _buildInput(c, existing),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInput(TicketControlDto c, ControlloRow? existing) {
+    switch (c.type) {
+      case ControlType.checkbox:
+      case ControlType.radioOnOff:
+        final value = existing?.boolValue ?? c.boolValue ?? false;
+        return Row(
+          children: [
+            const Text('No', style: TextStyle(color: AppColors.MUTED, fontSize: 12)),
+            const SizedBox(width: 8),
+            AppToggle(
+              value: value,
+              onChanged: (v) => _save(boolValue: v),
+            ),
+            const SizedBox(width: 8),
+            const Text('Sì', style: TextStyle(color: AppColors.MUTED, fontSize: 12)),
+          ],
+        );
+      case ControlType.date:
+        final value = existing?.dateValue ?? c.dateValue;
+        return OutlinedButton.icon(
+          onPressed: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: value ?? DateTime.now(),
+              firstDate: DateTime.now().subtract(const Duration(days: 365 * 3)),
+              lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+            );
+            if (picked != null) _save(dateValue: picked);
+          },
+          icon: const Icon(Icons.calendar_today_outlined, size: 16),
+          label: Text(
+            value != null ? DateFormat('dd/MM/yyyy', 'it').format(value) : 'Seleziona data',
+          ),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 48),
+            alignment: Alignment.centerLeft,
+          ),
+        );
+      case ControlType.singleChoice:
+        final options = c.choiceOptions;
+        if (options.isEmpty) {
+          // No choice list published for this item — degrade to free text
+          // rather than a dropdown with nothing to pick.
+          return _freeTextField();
+        }
+        final currentValue = existing?.stringValue ?? c.stringValue;
+        return DropdownButtonFormField<String>(
+          initialValue: options.contains(currentValue) ? currentValue : null,
+          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+          isExpanded: true,
+          items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+          onChanged: (v) {
+            if (v != null) _save(stringValue: v);
+          },
+        );
+      case ControlType.freeText:
+      case ControlType.unknown:
+        return _freeTextField();
+    }
+  }
+
+  Widget _freeTextField() {
+    return TextField(
+      controller: _textCtrl,
+      decoration: const InputDecoration(
+        hintText: 'Valore',
+        border: OutlineInputBorder(),
+        isDense: true,
+      ),
+      onChanged: (v) => _save(stringValue: v.trim().isEmpty ? null : v.trim()),
     );
   }
 }

@@ -13,6 +13,7 @@ import '../../data/local/app_database.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
+import 'ticket_detail_api_client.dart';
 import 'ticket_providers.dart';
 
 class TicketDetailScreen extends ConsumerStatefulWidget {
@@ -354,29 +355,356 @@ class _TabContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (tabIndex) {
-      0 => const _EmptyTab(
-          icon: LucideIcons.fileText,
-          label: 'Nessun rapportino',
-          body: 'I rapportini per questo ticket appariranno qui.',
-        ),
-      1 => const _EmptyTab(
-          icon: LucideIcons.clipboardCheck,
-          label: 'Nessun controllo',
-          body: 'I controlli appariranno qui.',
-        ),
+      0 => _ReportTab(ticketId: ticketId),
+      1 => _ControlloTab(ticketId: ticketId),
       2 => _PianificazioniTab(ticketId: ticketId),
-      3 => const _EmptyTab(
-          icon: LucideIcons.paperclip,
-          label: 'Nessun allegato',
-          body: 'Gli allegati caricati appariranno qui.',
-        ),
-      4 => const _EmptyTab(
-          icon: LucideIcons.package,
-          label: 'Nessun fabbisogno',
-          body: 'I materiali richiesti appariranno qui.',
-        ),
+      3 => _AllegatiTab(ticketId: ticketId),
+      4 => _FabbisognoTab(ticketId: ticketId),
       _ => const SizedBox.shrink(),
     };
+  }
+}
+
+/// Centered spinner used by every fetch-on-demand tab while loading.
+class _TabLoading extends StatelessWidget {
+  const _TabLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+
+/// Shown when a fetch-on-demand tab's request fails. Distinguishes "offline"
+/// ([TicketDetailOfflineException] — say so plainly) from any other error
+/// (network hiccup, 500, …), so neither is mistaken for the other and
+/// neither is mistaken for a genuine empty list.
+class _TabError extends StatelessWidget {
+  const _TabError({
+    required this.icon,
+    required this.offline,
+    required this.offlineTitle,
+    required this.offlineBody,
+    required this.errorTitle,
+    required this.errorBody,
+  });
+
+  final IconData icon;
+  final bool offline;
+  final String offlineTitle;
+  final String offlineBody;
+  final String errorTitle;
+  final String errorBody;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(19, 0, 19, 0),
+      child: offline
+          ? UnavailableState(
+              icon: LucideIcons.wifiOff,
+              titolo: offlineTitle,
+              motivo: offlineBody,
+            )
+          : UnavailableState(
+              icon: icon,
+              titolo: errorTitle,
+              motivo: errorBody,
+            ),
+    );
+  }
+}
+
+String _formatBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
+String _formatQty(double qty) =>
+    qty == qty.truncateToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(1);
+
+// ── Report tab ───────────────────────────────────────────────────────────────
+
+class _ReportTab extends ConsumerWidget {
+  const _ReportTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reportsAsync = ref.watch(ticketReportsProvider(ticketId));
+
+    return reportsAsync.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => _TabError(
+        icon: LucideIcons.fileText,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Rapportini non disponibili offline',
+        offlineBody: 'La lista dei rapportini di questo ticket richiede una '
+            'connessione: riprova quando torni online.',
+        errorTitle: 'Impossibile caricare i rapportini',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ),
+      data: (reports) {
+        if (reports.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.fileText,
+            label: 'Nessun rapportino',
+            body: 'Non ci sono rapportini registrati per questo ticket.',
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          child: Column(
+            children: reports.map((r) {
+              final dateLabel =
+                  DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
+              return ListRow(
+                leading: const Icon(LucideIcons.fileText, size: 20, color: AppColors.MUTED),
+                title: r.title.isNotEmpty ? r.title : 'Rapportino',
+                subtitle: dateLabel,
+                meta: StatusPill(stato: r.statoLabel, small: true),
+                showDivider: r != reports.last,
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Controllo tab ────────────────────────────────────────────────────────────
+
+class _ControlloTab extends ConsumerWidget {
+  const _ControlloTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controlsAsync = ref.watch(ticketControlsProvider(ticketId));
+
+    return controlsAsync.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => _TabError(
+        icon: LucideIcons.clipboardCheck,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Controlli non disponibili offline',
+        offlineBody:
+            'Il checklist di questo ticket richiede una connessione: riprova quando torni online.',
+        errorTitle: 'Impossibile caricare i controlli',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ),
+      data: (groups) {
+        final flat = flattenTicketControls(groups);
+        if (flat.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.clipboardCheck,
+            label: 'Nessun controllo previsto',
+            body: 'Questo ticket non ha un template di manutenzione collegato: non è previsto '
+                'alcun controllo per questo intervento.',
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          child: Column(
+            children: flat
+                .map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _TicketControlStatusCard(flat: f),
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TicketControlStatusCard extends StatelessWidget {
+  const _TicketControlStatusCard({required this.flat});
+
+  final FlatTicketControl flat;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = flat.control;
+    final (icon, color) = switch (c.status) {
+      'Completed' => (LucideIcons.checkCircle, AppColors.GREEN),
+      'NotApplicable' => (LucideIcons.xCircle, AppColors.MUTED),
+      _ => (LucideIcons.square, AppColors.DIS),
+    };
+    final valueLabel = _valueLabel(c);
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (flat.groupPath.isNotEmpty)
+                  Text(
+                    flat.groupPath,
+                    style: const TextStyle(color: AppColors.MUTED, fontSize: 11),
+                  ),
+                Text(
+                  c.label,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: AppColors.DARK,
+                  ),
+                ),
+                if (valueLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      valueLabel,
+                      style: const TextStyle(color: AppColors.MUTED, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _valueLabel(TicketControlDto c) {
+    switch (c.type) {
+      case ControlType.checkbox:
+      case ControlType.radioOnOff:
+        if (c.boolValue == null) return null;
+        return c.boolValue! ? 'Sì' : 'No';
+      case ControlType.date:
+        if (c.dateValue == null) return null;
+        return DateFormat('dd/MM/yyyy', 'it').format(c.dateValue!.toLocal());
+      case ControlType.freeText:
+      case ControlType.singleChoice:
+      case ControlType.unknown:
+        return c.stringValue;
+    }
+  }
+}
+
+// ── Allegati tab ─────────────────────────────────────────────────────────────
+
+class _AllegatiTab extends ConsumerWidget {
+  const _AllegatiTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final attachmentsAsync = ref.watch(ticketAttachmentsProvider(ticketId));
+
+    return attachmentsAsync.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => _TabError(
+        icon: LucideIcons.paperclip,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Allegati non disponibili offline',
+        offlineBody: 'Gli allegati di questo ticket richiedono una connessione: riprova quando '
+            'torni online.',
+        errorTitle: 'Impossibile caricare gli allegati',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ),
+      data: (attachments) {
+        if (attachments.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.paperclip,
+            label: 'Nessun allegato',
+            body: 'Non ci sono allegati caricati per questo ticket.',
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          child: Column(
+            children: attachments.map((a) {
+              final dateLabel =
+                  DateFormat('dd/MM/yyyy HH:mm', 'it').format(a.createdAt.toLocal());
+              return ListRow(
+                leading: const Icon(LucideIcons.paperclip, size: 20, color: AppColors.MUTED),
+                title: a.fileName,
+                subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
+                showDivider: a != attachments.last,
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Fabbisogno tab ───────────────────────────────────────────────────────────
+
+class _FabbisognoTab extends ConsumerWidget {
+  const _FabbisognoTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final materialiAsync = ref.watch(ticketMaterialiProvider(ticketId));
+
+    return materialiAsync.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => _TabError(
+        icon: LucideIcons.package,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Fabbisogno non disponibile offline',
+        offlineBody: 'I materiali pianificati per questo ticket richiedono una connessione: '
+            'riprova quando torni online.',
+        errorTitle: 'Impossibile caricare il fabbisogno',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ),
+      data: (materiali) {
+        if (materiali.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.package,
+            label: 'Nessun fabbisogno',
+            body: 'Non ci sono materiali pianificati per questo ticket.',
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          child: Column(
+            children: materiali.map((m) {
+              final qtyLabel = m.unitaMisura != null
+                  ? '${_formatQty(m.quantita)} ${m.unitaMisura}'
+                  : _formatQty(m.quantita);
+              return ListRow(
+                leading: Icon(
+                  LucideIcons.package,
+                  size: 20,
+                  color: m.disponibile ? AppColors.MUTED : AppColors.RED,
+                ),
+                title: m.nome,
+                subtitle: m.codice != null ? '${m.codice} · $qtyLabel' : qtyLabel,
+                meta: !m.disponibile ? const AppChip(label: 'Non disponibile', active: false) : null,
+                showDivider: m != materiali.last,
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
   }
 }
 

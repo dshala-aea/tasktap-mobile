@@ -2,8 +2,10 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import 'ticket_detail_api_client.dart';
 
 /// All cached tickets, most-recent first.
 final ticketsProvider = StreamProvider.autoDispose<List<Ticket>>((ref) {
@@ -48,4 +50,55 @@ final schedulesForTicketProvider =
         ..where((s) => s.ticketId.equals(ticketId))
         ..orderBy([(s) => OrderingTerm.asc(s.activityDate)]))
       .watch();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Ticket-detail tabs with no local mirror (Report / Controllo / Allegati /
+// Fabbisogno) — fetched on demand from the backend. None of these are ever
+// written by SyncService, so "no data" and "couldn't fetch it" must stay
+// distinguishable: each provider checks connectivity itself and throws
+// [TicketDetailOfflineException] before attempting a request when offline,
+// rather than letting Dio's own network error stand in for it.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Rapportini recorded against a ticket (Report tab).
+final ticketReportsProvider =
+    FutureProvider.autoDispose.family<List<TicketReportSummary>, String>((ref, ticketId) async {
+  if (!ref.watch(isOnlineProvider)) {
+    throw const TicketDetailOfflineException();
+  }
+  final api = ref.watch(ticketDetailApiClientProvider);
+  return api.fetchReportsForTicket(ticketId);
+});
+
+/// Files uploaded directly to a ticket (Allegati tab).
+final ticketAttachmentsProvider =
+    FutureProvider.autoDispose.family<List<TicketAttachmentDto>, String>((ref, ticketId) async {
+  if (!ref.watch(isOnlineProvider)) {
+    throw const TicketDetailOfflineException();
+  }
+  final api = ref.watch(ticketDetailApiClientProvider);
+  return api.fetchAttachments(ticketId);
+});
+
+/// A ticket's checklist, resolved from the maintenance-template version it
+/// materialised at creation (ADR-0012). Shared by the Controllo tab
+/// (read-only) and the rapportino Controlli step (interactive).
+final ticketControlsProvider =
+    FutureProvider.autoDispose.family<List<TicketControlGroupDto>, String>((ref, ticketId) async {
+  if (!ref.watch(isOnlineProvider)) {
+    throw const TicketDetailOfflineException();
+  }
+  final api = ref.watch(ticketDetailApiClientProvider);
+  return api.fetchControls(ticketId);
+});
+
+/// Materials planned for a ticket — fabbisogno (Fabbisogno tab).
+final ticketMaterialiProvider =
+    FutureProvider.autoDispose.family<List<TicketMaterialeDto>, String>((ref, ticketId) async {
+  if (!ref.watch(isOnlineProvider)) {
+    throw const TicketDetailOfflineException();
+  }
+  final api = ref.watch(ticketDetailApiClientProvider);
+  return api.fetchMateriali(ticketId);
 });
