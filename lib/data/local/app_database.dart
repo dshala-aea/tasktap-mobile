@@ -206,6 +206,29 @@ class Colleagues extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// The tenant's entitlements, mirrored so the app can gate features without a network round trip.
+///
+/// One row, id `current`. Replaced whole on every successful `/api/Auth/me`; **never cleared on
+/// failure** — see `EntitlementRepository` for why that asymmetry is the whole point.
+class Entitlements extends Table {
+  TextColumn get id => text()();
+
+  /// Granted module keys, JSON array. Mirrors ModuleKeys on the server.
+  TextColumn get featuresJson => text()();
+
+  /// Canonical `module.resource.action` keys, JSON array.
+  TextColumn get capabilitiesJson => text()();
+
+  /// `field` or `office`. A field seat is the mobile-only seat.
+  TextColumn get seatType => text()();
+
+  /// When this was last confirmed by the server. Shown to the user, never used to expire the row.
+  DateTimeColumn get fetchedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class Materiali extends Table {
   TextColumn get id => text()();
   TextColumn get tenantId => text()();
@@ -528,13 +551,14 @@ class PendingTickets extends Table {
     CantierePunches,
     PendingTickets,
     Colleagues,
+    Entitlements,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -589,6 +613,10 @@ class AppDatabase extends _$AppDatabase {
           // Rapportino staff step: mirror the tenant's users so a colleague can be
           // picked offline instead of having their user id typed in by hand.
           await m.createTable(colleagues);
+        }
+        if (from < 10) {
+          // B-05: cache entitlements so feature gating survives loss of signal.
+          await m.createTable(entitlements);
         }
       },
     );
