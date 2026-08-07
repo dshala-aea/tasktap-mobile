@@ -8347,6 +8347,66 @@
         }
       }
     },
+    "/api/admin/role-permissions/catalogue": {
+      "get": {
+        "tags": [
+          "RolePermissions"
+        ],
+        "summary": "Every permission that exists, so a UI can render the real set instead of guessing it.",
+        "description": "Added because the office web\u0027s role matrix built its own axes \u2014 14 resources \u00D7 5 actions \u2014\nand asked for the cross-product. Most of those 70 keys per role do not exist, the three\nreal ones did not line up, and the grid rendered every checkbox as ungranted no matter what\nthe tenant had actually saved. It looked like a working permissions screen.\n\nThis is the same failure PermissionCatalogue\u0027s own summary describes from\nbefore it existed: the model living in several partial statements that cannot visibly\ndisagree. A client that derives the key space rather than reading it is one of those\nstatements. Serving the catalogue is what makes disagreement impossible rather than merely\nunlikely.\n\nRead-only and static per deployment \u2014 it is compiled in, not tenant data.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionCatalogueDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionCatalogueDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionCatalogueDto"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/role-permissions": {
       "get": {
         "tags": [
@@ -17905,6 +17965,35 @@
           }
         },
         "description": "Whether a payroll period is closed, and by whom."
+      },
+      "PermissionCatalogueDto": {
+        "required": [
+          "key",
+          "module",
+          "resource",
+          "action",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "The canonical compound key, e.g. \u0060clienti.customer.read\u0060. This is\n    the only string a client may send back \u2014 module/resource/action are for grouping and\n    labelling, never for a client to recombine into a key of its own."
+          },
+          "module": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "description": "One permission the matrix UI may offer, exactly as the catalogue defines it."
       },
       "PianificazioneCalendarDto": {
         "required": [
