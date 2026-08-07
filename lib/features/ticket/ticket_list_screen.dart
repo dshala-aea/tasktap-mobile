@@ -129,6 +129,7 @@ class _TicketListBody extends ConsumerWidget {
             actions: [
               HeaderIconBtn(
                 icon: LucideIcons.filter,
+                label: 'Filtra interventi',
                 onTap: () {},
               ),
             ],

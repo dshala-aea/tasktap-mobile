@@ -114,6 +114,22 @@ final allMaterialiProvider =
       .watch();
 });
 
+/// The colleagues who can be named on a rapportino, from the local mirror the sync fills.
+///
+/// Unlike the materiali picker this one has no free-text fallback, and deliberately so. A materiale
+/// typed by name is still a readable line on an invoice; a *person* typed by name is not — the
+/// server needs their user id to attribute the hours, and there is no way for a technician to know
+/// or type one. When this list is empty the step says so and offers no way to invent an entry,
+/// because the previous behaviour was to fabricate `user-<timestamp>` and let those hours reach
+/// payroll attributed to nobody.
+final allColleaguesProvider =
+    StreamProvider.autoDispose<List<Colleague>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(db.colleagues)
+        ..orderBy([(c) => OrderingTerm.asc(c.displayName)]))
+      .watch();
+});
+
 final allLocationsProvider =
     StreamProvider.autoDispose<List<Location>>((ref) {
   final db = ref.watch(appDatabaseProvider);

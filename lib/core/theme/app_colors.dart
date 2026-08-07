@@ -26,8 +26,18 @@ abstract final class AppColors {
   /// FG2 rgb(112,112,112).
   static const Color FG2 = Color(0xFF707070);
 
-  /// MUTED rgb(144,143,143).
-  static const Color MUTED = Color(0xFF908F8F);
+  /// MUTED rgb(107,107,107) — secondary text on light surfaces.
+  ///
+  /// Was `#908F8F`, which measured 3.23:1 on white and 2.88:1 on [BG3] — below the 4.5:1 WCAG AA
+  /// floor for normal-size text. It is baked into [AppTextStyles.caption] and `labelSmall` and
+  /// used directly in ~97 more places, so that single value was the app's largest source of
+  /// unreadable text: nearly every list row's second line. This app is read outdoors, in direct
+  /// sun, by someone who is not going to squint at it twice.
+  ///
+  /// `#6B6B6B` clears AA on both surfaces the app actually uses (5.33:1 on white, 4.76:1 on BG3).
+  /// `#707070` — the obvious "reuse FG2" answer — passes on white but still fails at 4.42:1 on
+  /// BG3, so it is not enough.
+  static const Color MUTED = Color(0xFF6B6B6B);
 
   /// DIS rgb(180,180,180).
   static const Color DIS = Color(0xFFB4B4B4);

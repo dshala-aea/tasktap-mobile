@@ -213,7 +213,11 @@ class _LiveClock extends StatelessWidget {
           timeStr,
           style: GoogleFonts.sora(
             fontSize: 72,
-            fontWeight: FontWeight.w100,
+            // w300, not w100. This is the number a technician checks at arm's length, outdoors,
+            // to decide whether they are on the clock. Hairline strokes at 72px look elegant on a
+            // desk monitor and disappear under sun glare on a scratched screen — the one viewing
+            // condition this screen is actually used in. Still light enough to stay display type.
+            fontWeight: FontWeight.w300,
             color: AppColors.Y,
             letterSpacing: -2,
             height: 1.0,

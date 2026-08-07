@@ -50,6 +50,7 @@ class SyncService {
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
       await _upsertCantieri(payload.cantieri);
+      await _replaceColleagues(payload.colleagues);
     });
 
     await db.setLastSync(payload.syncedAt);
@@ -65,6 +66,29 @@ class SyncService {
   /// worst — cantiere clock-in, where a technician could not select a site and so could not
   /// record site hours at all. The payload has carried both arrays all along; only the client
   /// side of the wire was missing.
+  /// The colleagues a technician can name on a rapportino.
+  ///
+  /// Replaced wholesale rather than upserted, because the server sends the full active list every
+  /// time. Upserting would leave someone who has since left the company in the picker forever —
+  /// their row would simply stop being mentioned, and nothing would ever delete it.
+  ///
+  /// Done in one transaction so a sync interrupted mid-write cannot leave the picker empty; the
+  /// technician keeps the previous list until a complete one replaces it.
+  Future<void> _replaceColleagues(List<ColleagueDto> list) async {
+    if (list.isEmpty) return;
+
+    await db.transaction(() async {
+      await db.delete(db.colleagues).go();
+      await db.batch((b) => b.insertAll(
+            db.colleagues,
+            list.map((c) => ColleaguesCompanion.insert(
+                  id: c.id,
+                  displayName: c.displayName,
+                )),
+          ));
+    });
+  }
+
   Future<void> _upsertMateriali(List<MaterialeDto> list) async {
     for (final m in list) {
       await db.into(db.materiali).insertOnConflictUpdate(

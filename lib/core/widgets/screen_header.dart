@@ -15,12 +15,20 @@ class HeaderIconBtn extends StatelessWidget {
   const HeaderIconBtn({
     super.key,
     required this.icon,
+    required this.label,
     this.onTap,
     this.showDot = false,
     this.glass = false,
   });
 
   final IconData icon;
+
+  /// What a screen reader announces. Required, not optional: this widget draws every header
+  /// action in the app — back, notifications, profile, search, across 29 screens — and it used to
+  /// set `Semantics(button: true)` with no text at all, so TalkBack announced an unnamed button
+  /// for all of them. An optional label would have stayed unset in exactly the same places.
+  final String label;
+
   final VoidCallback? onTap;
   final bool showDot;
 
@@ -31,6 +39,7 @@ class HeaderIconBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
+      label: label,
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
@@ -129,6 +138,7 @@ class ScreenHeader extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: HeaderIconBtn(
                 icon: LucideIcons.chevronLeft,
+                label: 'Indietro',
                 glass: dark,
                 onTap: onBack ?? () => Navigator.of(context).maybePop(),
               ),

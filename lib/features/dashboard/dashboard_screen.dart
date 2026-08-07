@@ -38,11 +38,13 @@ class DashboardScreen extends ConsumerWidget {
               actions: [
                 HeaderIconBtn(
                   icon: LucideIcons.bell,
+                  label: 'Notifiche',
                   glass: true,
                   onTap: () {},
                 ),
                 HeaderIconBtn(
                   icon: LucideIcons.user,
+                  label: 'Profilo',
                   glass: true,
                   onTap: () {},
                 ),

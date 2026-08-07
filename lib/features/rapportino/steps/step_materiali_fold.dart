@@ -377,6 +377,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
             children: [
               _QtyBtn(
                 icon: Icons.remove,
+                label: 'Diminuisci quantità',
                 onTap: row.quantity > 1
                     ? () => onQtyChanged(row.quantity - 1)
                     : null,
@@ -395,6 +396,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
               ),
               _QtyBtn(
                 icon: Icons.add,
+                label: 'Aumenta quantità',
                 onTap: () => onQtyChanged(row.quantity + 1),
               ),
             ],
@@ -414,26 +416,46 @@ class _MaterialeQtyStepper extends StatelessWidget {
 }
 
 class _QtyBtn extends StatelessWidget {
-  const _QtyBtn({required this.icon, this.onTap});
+  const _QtyBtn({required this.icon, required this.label, this.onTap});
 
   final IconData icon;
+
+  /// Announced by TalkBack. `Icons.add` carries no text, so without this the stepper was two
+  /// unnamed buttons either side of a number.
+  final String label;
+
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: onTap != null ? AppColors.BG3 : AppColors.BG4,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: onTap != null ? AppColors.DARK : AppColors.DIS,
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        // The circle stays 32dp — it is a deliberate part of the row's density — but the tap
+        // area around it is padded out to 48dp. A quantity stepper is tapped repeatedly, with
+        // gloves on, and a miss here silently bills the customer for the wrong number of parts.
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: onTap != null ? AppColors.BG3 : AppColors.BG4,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 16,
+                color: onTap != null ? AppColors.DARK : AppColors.DIS,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -468,15 +490,29 @@ class _PhotoThumb extends StatelessWidget {
         Positioned(
           top: 4,
           right: 4,
-          child: GestureDetector(
-            onTap: onRemove,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: AppColors.RED,
-                shape: BoxShape.circle,
+          // Destructive, and it used to be a ~22dp circle sitting between other photo
+          // thumbnails — the easiest mis-tap in the app, and the one that costs a photo the
+          // technician cannot retake once they have left the site.
+          child: Semantics(
+            button: true,
+            label: 'Rimuovi foto',
+            child: GestureDetector(
+              onTap: onRemove,
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Center(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: AppColors.RED,
+                      shape: BoxShape.circle,
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: const Icon(Icons.close, color: Colors.white, size: 14),
+                  ),
+                ),
               ),
-              padding: const EdgeInsets.all(4),
-              child: const Icon(Icons.close, color: Colors.white, size: 14),
             ),
           ),
         ),

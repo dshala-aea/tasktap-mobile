@@ -13,6 +13,7 @@ class SyncResultDto {
   final List<CantiereDto> cantieri;
   final List<TicketStatusDto> ticketStatuses;
   final List<TicketTypeDto> ticketTypes;
+  final List<ColleagueDto> colleagues;
 
   const SyncResultDto({
     required this.syncedAt,
@@ -26,6 +27,7 @@ class SyncResultDto {
     required this.cantieri,
     required this.ticketStatuses,
     required this.ticketTypes,
+    required this.colleagues,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -41,8 +43,25 @@ class SyncResultDto {
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
+      colleagues: _list(j['colleagues'], ColleagueDto.fromJson),
     );
   }
+}
+
+// ── Colleague ──────────────────────────────────────────────────────────────────
+
+/// A colleague the technician can name on a rapportino. Id and display name only — see the
+/// server's SyncColleagueDto for why the rest of the user row does not travel to a phone.
+class ColleagueDto {
+  final String id;
+  final String displayName;
+
+  const ColleagueDto({required this.id, required this.displayName});
+
+  factory ColleagueDto.fromJson(Map<String, dynamic> j) => ColleagueDto(
+        id: j['id'] as String,
+        displayName: j['displayName'] as String? ?? '',
+      );
 }
 
 // ── Customer ───────────────────────────────────────────────────────────────────

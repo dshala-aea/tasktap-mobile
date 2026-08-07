@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_card.dart';
 // section_title omitted — using inline _SL below
 import '../../../presentation/providers/report_editor_providers.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Ore
@@ -88,50 +89,131 @@ class StepOre extends ConsumerWidget {
     );
   }
 
+  /// Picks a colleague from the synced list.
+  ///
+  /// This used to be two text boxes — a name, and the colleague's **user id**. Nobody on a roof
+  /// knows a UUID, so the id was left blank, and the code then invented `user-<timestamp>`. Those
+  /// hours reached payroll and the customer's invoice attributed to a person who does not exist,
+  /// and nothing anywhere said so.
+  ///
+  /// A picker also means no keyboard: one thumb, gloves on, in the rain.
   void _showAddStaffDialog(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final userIdCtrl = TextEditingController();
-    final nameCtrl = TextEditingController();
+    final alreadyAdded =
+        ref.read(reportEditorProvider(reportId)).staffRows.map((r) => r.userId).toSet();
 
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aggiungi tecnico'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome tecnico'),
-            ),
-            TextField(
-              controller: userIdCtrl,
-              decoration: const InputDecoration(labelText: 'ID utente'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final id = DateTime.now().millisecondsSinceEpoch.toString();
-              notifier.addStaff(
-                StaffRow(
-                  id: 'staff-$id',
-                  userId: userIdCtrl.text.trim().isEmpty
-                      ? 'user-$id'
-                      : userIdCtrl.text.trim(),
-                  displayName: nameCtrl.text.trim(),
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => Consumer(
+        builder: (ctx, innerRef, _) {
+          final colleagues = innerRef.watch(allColleaguesProvider);
+
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+              ),
+              child: colleagues.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
-              );
-              Navigator.pop(ctx);
-            },
-            child: const Text('Aggiungi'),
-          ),
-        ],
+                error: (_, _) => const _StaffPickerMessage(
+                  text: 'Impossibile leggere l\'elenco dei colleghi.',
+                ),
+                data: (all) {
+                  // Someone already on this rapportino is not offered again — re-adding them
+                  // would double their hours, and the list is short enough that a disabled row
+                  // would just be noise.
+                  final selectable =
+                      all.where((c) => !alreadyAdded.contains(c.id)).toList();
+
+                  if (all.isEmpty) {
+                    return const _StaffPickerMessage(
+                      text: 'Nessun collega disponibile.\n\n'
+                          'L\'elenco arriva dalla sincronizzazione: collegati a internet una '
+                          'volta e riprova.',
+                    );
+                  }
+                  if (selectable.isEmpty) {
+                    return const _StaffPickerMessage(
+                      text: 'Hai già aggiunto tutti i colleghi disponibili.',
+                    );
+                  }
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 4, 20, 12),
+                        child: Text(
+                          'Chi ha lavorato con te?',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: selectable.length,
+                          itemBuilder: (_, i) {
+                            final c = selectable[i];
+                            return ListTile(
+                              // 56dp, not the Material default — this list is tapped with a
+                              // gloved thumb, one-handed, and a mis-tap adds the wrong person's
+                              // hours to a customer's invoice.
+                              minVerticalPadding: 16,
+                              leading: const Icon(Icons.person_outline, size: 28),
+                              title: Text(
+                                c.displayName,
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              onTap: () {
+                                notifier.addStaff(
+                                  StaffRow(
+                                    id: 'staff-${c.id}',
+                                    userId: c.id,
+                                    displayName: c.displayName,
+                                  ),
+                                );
+                                Navigator.pop(ctx);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Anything the picker has to say instead of a list — always a reason and a way forward, never a
+/// bare empty box. A technician who cannot add a colleague needs to know whether to wait for
+/// signal or call the office.
+class _StaffPickerMessage extends StatelessWidget {
+  const _StaffPickerMessage({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 16, height: 1.4, color: AppColors.FG2),
       ),
     );
   }

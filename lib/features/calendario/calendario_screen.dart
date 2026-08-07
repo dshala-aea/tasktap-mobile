@@ -37,6 +37,7 @@ class CalendarioScreen extends ConsumerWidget {
               actions: [
                 HeaderIconBtn(
                   icon: LucideIcons.calendarCheck,
+                  label: 'Vai a oggi',
                   onTap: () {
                     final today = DateTime.now();
                     ref.read(selectedDateProvider.notifier).state =

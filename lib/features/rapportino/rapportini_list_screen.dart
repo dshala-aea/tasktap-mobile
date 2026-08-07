@@ -157,6 +157,7 @@ class _RapportiniListBody extends ConsumerWidget {
             actions: [
               HeaderIconBtn(
                 icon: LucideIcons.filter,
+                label: 'Filtra rapportini',
                 onTap: () {},
               ),
             ],

@@ -157,7 +157,7 @@ class AppButton extends StatelessWidget {
         AppButtonVariant.secondary => AppColors.MUTED,
         AppButtonVariant.dark      => AppColors.INV,
         AppButtonVariant.ghost     => AppColors.DARK,
-        AppButtonVariant.danger    => const Color(0xFFCC0000),
+        AppButtonVariant.danger    => const Color(0xFFB80000),
       };
 
   List<BoxShadow> get _shadows => switch (variant) {

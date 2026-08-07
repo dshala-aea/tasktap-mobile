@@ -17138,6 +17138,13 @@
             },
             "description": "The tenant\u0027s ticket status lookup list (StatoIntervento).\nReturned in full on every sync (no UpdatedAt column \u2014 no delta filter).\nUsed by the mobile app to map a ticket\u0027s \u0060StatusId\u0060 int to a human name."
           },
+          "colleagues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncColleagueDto"
+            },
+            "description": "The tenant\u0027s active users, so a technician can name who else worked on a job by picking\nthem rather than typing a user id. Returned in full on every sync \u2014 the list is small, has\nno reliable change marker to delta on, and a stale one is worse than a large one: a\ncolleague who joined since the last full sync would simply be unnameable.\nSee SyncColleagueDto for why this is not \u0060IReadOnlyList\u0026lt;User\u0026gt;\u0060."
+          },
           "ticketTypes": {
             "type": "array",
             "items": {
@@ -20304,6 +20311,25 @@
           }
         },
         "description": "One technician\u0027s time \u002B travel contribution to the report."
+      },
+      "SyncColleagueDto": {
+        "required": [
+          "id",
+          "displayName"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The user id to send back as a rapportino staff row.",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "What the picker shows. Falls back to the email local-part when a user has no name recorded,\nbecause \u0022\u0022 in a list of colleagues is worse than an ugly label."
+          }
+        },
+        "description": "A colleague the technician can name on a rapportino \u2014 just enough to pick them from a list\nand send back the right id."
       },
       "SyncScheduleAssigneeDto": {
         "required": [

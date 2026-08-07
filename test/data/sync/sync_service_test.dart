@@ -41,6 +41,7 @@ Map<String, dynamic> _syncPayload({
   List<Map<String, dynamic>> ticketTypes = const [],
   List<Map<String, dynamic>> materiali = const [],
   List<Map<String, dynamic>> cantieri = const [],
+  List<Map<String, dynamic>> colleagues = const [],
 }) {
   return {
     'syncedAt': (syncedAt ?? DateTime.utc(2026, 6, 21, 12)).toIso8601String(),
@@ -54,6 +55,7 @@ Map<String, dynamic> _syncPayload({
     'ticketTypes': ticketTypes,
     'materiali': materiali,
     'cantieri': cantieri,
+    'colleagues': colleagues,
   };
 }
 
@@ -234,6 +236,7 @@ void _stubDioGet(MockDio mockDio, Map<String, dynamic> body,
 // ══════════════════════════════════════════════════════════════════════════════
 
 void main() {
+  _colleagueTests();
   late AppDatabase db;
   late MockDio mockDio;
   late SyncService svc;
@@ -979,6 +982,102 @@ void main() {
       final rows = await db.select(db.materiali).get();
       expect(rows, hasLength(1));
       expect(rows.first.name, 'Nuovo nome');
+    });
+  });
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Colleagues — the list the rapportino staff picker reads.
+//
+// Mirrored so a technician can name who worked with them by tapping a name. Before it existed the
+// step asked for a colleague's user id in a text box and invented `user-<timestamp>` when it was
+// left blank, so hours reached payroll attributed to a person who does not exist.
+// ══════════════════════════════════════════════════════════════════════════════
+
+Map<String, dynamic> _colleagueJson({
+  String id = 'user-1',
+  String displayName = 'Mario Rossi',
+}) =>
+    {'id': id, 'displayName': displayName};
+
+void _colleagueTests() {
+  group('SyncService — colleagues', () {
+    late AppDatabase db;
+    late MockDio dio;
+    late SyncService service;
+
+    setUp(() {
+      db = _makeDb();
+      dio = MockDio();
+      service = SyncService(db: db, dio: dio);
+    });
+
+    tearDown(() async => db.close());
+
+    void stubSync(List<Map<String, dynamic>> colleagues) {
+      when(() => dio.get<Map<String, dynamic>>(
+            any(),
+            queryParameters: any(named: 'queryParameters'),
+          )).thenAnswer((_) async => Response(
+            requestOptions: RequestOptions(path: '/api/sync/mobile'),
+            statusCode: 200,
+            data: _syncPayload(colleagues: colleagues),
+          ));
+    }
+
+    test('stores the colleagues the server sent', () async {
+      stubSync([
+        _colleagueJson(id: 'user-1', displayName: 'Mario Rossi'),
+        _colleagueJson(id: 'user-2', displayName: 'Anna Bianchi'),
+      ]);
+
+      await service.sync();
+
+      final rows = await db.select(db.colleagues).get();
+      expect(rows.map((c) => c.displayName), containsAll(['Mario Rossi', 'Anna Bianchi']));
+    });
+
+    /// The reason this is a wholesale replace rather than an upsert: someone who leaves the
+    /// company simply stops being mentioned in the payload. An upsert would leave them in the
+    /// picker forever, and nothing would ever remove them.
+    test('drops a colleague the server no longer sends', () async {
+      stubSync([
+        _colleagueJson(id: 'user-1', displayName: 'Mario Rossi'),
+        _colleagueJson(id: 'user-2', displayName: 'Anna Bianchi'),
+      ]);
+      await service.sync();
+
+      stubSync([_colleagueJson(id: 'user-1', displayName: 'Mario Rossi')]);
+      await service.sync();
+
+      final rows = await db.select(db.colleagues).get();
+      expect(rows.map((c) => c.id), ['user-1']);
+    });
+
+    test('renames a colleague in place rather than duplicating them', () async {
+      stubSync([_colleagueJson(id: 'user-1', displayName: 'M. Rossi')]);
+      await service.sync();
+
+      stubSync([_colleagueJson(id: 'user-1', displayName: 'Mario Rossi')]);
+      await service.sync();
+
+      final rows = await db.select(db.colleagues).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.displayName, 'Mario Rossi');
+    });
+
+    /// A delta sync that carries no colleagues must not wipe the picker. The technician would
+    /// open the staff step on site and find nobody to add, with no way to tell why.
+    test('an empty list leaves the existing colleagues alone', () async {
+      stubSync([_colleagueJson(id: 'user-1', displayName: 'Mario Rossi')]);
+      await service.sync();
+
+      stubSync(const []);
+      await service.sync();
+
+      final rows = await db.select(db.colleagues).get();
+      expect(rows, hasLength(1), reason: 'an absent list means "no change", not "nobody works here"');
     });
   });
 }

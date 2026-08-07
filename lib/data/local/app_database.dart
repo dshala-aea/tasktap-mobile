@@ -191,6 +191,21 @@ class TicketTypes extends Table {
 }
 
 // ── materiali ─────────────────────────────────────────────────────────────────
+/// The tenant's active users, mirrored so the rapportino staff step can offer a picker.
+///
+/// Without this table the app had nothing to pick from offline, so the step asked the technician
+/// to type a colleague's user id — and invented one when they left it blank. Hours attributed to a
+/// fabricated id reach payroll and the customer's invoice.
+///
+/// Read-only mirror: replaced wholesale on every sync, never written by the device.
+class Colleagues extends Table {
+  TextColumn get id => text()();
+  TextColumn get displayName => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class Materiali extends Table {
   TextColumn get id => text()();
   TextColumn get tenantId => text()();
@@ -512,13 +527,14 @@ class PendingTickets extends Table {
     AppNotifications,
     CantierePunches,
     PendingTickets,
+    Colleagues,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -568,6 +584,11 @@ class AppDatabase extends _$AppDatabase {
           // Offline-first ticket creation: local outbox so a new ticket
           // typed while offline is never silently discarded.
           await m.createTable(pendingTickets);
+        }
+        if (from < 9) {
+          // Rapportino staff step: mirror the tenant's users so a colleague can be
+          // picked offline instead of having their user id typed in by hand.
+          await m.createTable(colleagues);
         }
       },
     );
