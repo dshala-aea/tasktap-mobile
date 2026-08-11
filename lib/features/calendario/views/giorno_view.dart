@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
@@ -134,8 +135,16 @@ class _EventBlock extends StatelessWidget {
         endMin.clamp(_kStartHour * 60, _kEndHour * 60).toDouble();
 
     final top = (clampedStart - _kStartHour * 60) / 60 * _kHourHeight;
+    // 44dp floor, not 24: at 64dp/hour a half-hour job painted 32dp and a quarter-hour one
+    // clamped to 24 — both under the minimum target for a gloved thumb, on the view a technician
+    // uses standing at a van door.
+    //
+    // The cost is that a short block now runs 12dp past its own end time and can overlap whatever
+    // follows it. That overlap already existed here (nothing lays these out for collisions — they
+    // are absolutely positioned by time in a plain Stack, so concurrent jobs stack today), and a
+    // 12dp band at the bottom edge is a better failure than a target nothing can hit reliably.
     final height = ((clampedEnd - clampedStart) / 60 * _kHourHeight)
-        .clamp(24.0, double.infinity);
+        .clamp(44.0, double.infinity);
 
     final statusName = scheduleStatusName(schedule.statusId);
     final pair = statusColor(statusName);
@@ -145,7 +154,10 @@ class _EventBlock extends StatelessWidget {
       left: 4,
       right: 4,
       height: height,
-      child: GestureDetector(
+      // AppTappable, not GestureDetector + AnimatedContainer: the 200ms colour morph only ran when
+      // a job's stato changed under the user, while the missing press feedback was felt on every
+      // single tap. Feedback wins the trade.
+      child: AppTappable(
         onTap: () {
           if (schedule.ticketId != null && onTapTicket != null) {
             onTapTicket!(schedule.ticketId!);
@@ -153,15 +165,11 @@ class _EventBlock extends StatelessWidget {
             onTapSchedule!(schedule);
           }
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            color: pair.background,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: pair.foreground.withAlpha(51), width: 1),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Column(
+        color: pair.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: pair.foreground.withAlpha(51), width: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -174,8 +182,10 @@ class _EventBlock extends StatelessWidget {
                   color: pair.foreground,
                 ),
               ),
-              if (height > 36)
-                Text(
+              // No height gate on the time: the 44dp floor makes the old `height > 36` test
+              // always true, and a block that shows a title without its hours is worth less than
+              // the space it saves.
+              Text(
                   '${formatMinutes(schedule.timeStartMinutes)} – '
                   '${formatMinutes(schedule.timeEndMinutes)}',
                   maxLines: 1,
@@ -190,7 +200,6 @@ class _EventBlock extends StatelessWidget {
                 Icon(LucideIcons.link, size: 10, color: pair.foreground.withAlpha(153)),
             ],
           ),
-        ),
       ),
     );
   }

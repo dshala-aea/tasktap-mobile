@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -88,7 +89,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.link, size: 18, color: AppColors.Y),
+                  const Icon(LucideIcons.link, size: 18, color: AppColors.Y),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -240,7 +241,7 @@ class _GpsCapture extends ConsumerWidget {
       child: Row(
         children: [
           Icon(
-            hasGps ? Icons.location_on : Icons.location_off_outlined,
+            hasGps ? LucideIcons.mapPin : LucideIcons.mapPinOff,
             color: hasGps ? AppColors.GREEN : AppColors.MUTED,
             size: 20,
           ),
@@ -260,7 +261,7 @@ class _GpsCapture extends ConsumerWidget {
           const SizedBox(width: 8),
           TextButton.icon(
             onPressed: () => _captureGps(context, notifier),
-            icon: const Icon(Icons.my_location, size: 16),
+            icon: const Icon(LucideIcons.locateFixed, size: 16),
             label: Text(hasGps ? 'Aggiorna' : 'Acquisisci'),
             style: TextButton.styleFrom(
               minimumSize: const Size(44, 44),

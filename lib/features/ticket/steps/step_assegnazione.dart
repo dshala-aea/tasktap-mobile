@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -79,7 +80,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                const Icon(Icons.cloud_off, size: 32, color: AppColors.MUTED),
+                const Icon(LucideIcons.cloudOff, size: 32, color: AppColors.MUTED),
                 const SizedBox(height: 8),
                 Text(
                   'Impossibile caricare i tecnici.\nSeleziona un ticket senza assegnazione.',
@@ -163,8 +164,8 @@ class _AssignmentOption extends StatelessWidget {
           children: [
             Icon(
               isSelected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_off,
+                  ? LucideIcons.circleDot
+                  : LucideIcons.circle,
               size: 20,
               color: isSelected ? AppColors.Y : AppColors.MUTED,
             ),

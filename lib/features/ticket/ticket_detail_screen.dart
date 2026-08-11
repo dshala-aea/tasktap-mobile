@@ -1,10 +1,10 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
@@ -281,7 +281,7 @@ class _TicketDetailBody extends ConsumerWidget {
                     Expanded(
                       child: AppButton.dark(
                         label: 'Timbra cantiere',
-                        icon: const Icon(Icons.location_on_outlined),
+                        icon: const Icon(LucideIcons.mapPin),
                         onPressed: () => context.push(
                           AppRoutes.cantiereTimbraPath(
                             ticketId: ticket.id,

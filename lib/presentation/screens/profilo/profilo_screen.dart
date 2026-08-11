@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -78,7 +79,7 @@ class ProfiloScreen extends ConsumerWidget {
             // ── Logout ───────────────────────────────────────────────────
             AppButton.danger(
               label: 'Disconnetti',
-              icon: const Icon(Icons.logout, size: 18),
+              icon: const Icon(LucideIcons.logOut, size: 18),
               onPressed: () async {
                 final confirmed = await _confirmLogout(context);
                 if (confirmed) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -30,7 +31,7 @@ class InterventiScreen extends ConsumerWidget {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.sync),
+                : const Icon(LucideIcons.refreshCw),
             tooltip: 'Sincronizza',
             onPressed: syncState.status == SyncStatus.syncing
                 ? null
@@ -75,7 +76,7 @@ class _EmptyWeek extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.build, size: 56, color: AppColors.brand),
+            Icon(LucideIcons.wrench, size: 56, color: AppColors.brand),
             const SizedBox(height: AppSpacing.base),
             Text('Nessun intervento',
                 style: AppTextStyles.headlineMedium,

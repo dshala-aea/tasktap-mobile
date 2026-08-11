@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -91,7 +92,7 @@ class StepMaterialiFold extends ConsumerWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () => _showAddMaterialeDialog(context, ref),
-            icon: const Icon(Icons.add_box_outlined),
+            icon: const Icon(LucideIcons.plusSquare),
             label: const Text('Aggiungi materiale'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 52),
@@ -138,7 +139,7 @@ class StepMaterialiFold extends ConsumerWidget {
               child: OutlinedButton.icon(
                 onPressed: () =>
                     _pickImage(context, ref, ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined),
+                icon: const Icon(LucideIcons.image),
                 label: const Text('Galleria'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, 52),
@@ -153,7 +154,7 @@ class StepMaterialiFold extends ConsumerWidget {
               child: ElevatedButton.icon(
                 onPressed: () =>
                     _pickImage(context, ref, ImageSource.camera),
-                icon: const Icon(Icons.camera_alt_outlined),
+                icon: const Icon(LucideIcons.camera),
                 label: const Text('Fotocamera'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brand,
@@ -347,7 +348,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(Icons.inventory_2_outlined,
+          const Icon(LucideIcons.package,
               size: 18, color: AppColors.MUTED),
           const SizedBox(width: 10),
           Expanded(
@@ -376,7 +377,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               _QtyBtn(
-                icon: Icons.remove,
+                icon: LucideIcons.minus,
                 label: 'Diminuisci quantità',
                 onTap: row.quantity > 1
                     ? () => onQtyChanged(row.quantity - 1)
@@ -395,7 +396,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
                 ),
               ),
               _QtyBtn(
-                icon: Icons.add,
+                icon: LucideIcons.plus,
                 label: 'Aumenta quantità',
                 onTap: () => onQtyChanged(row.quantity + 1),
               ),
@@ -403,7 +404,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
+            icon: const Icon(LucideIcons.trash2,
                 color: AppColors.RED, size: 18),
             constraints:
                 const BoxConstraints(minWidth: 44, minHeight: 44),
@@ -420,7 +421,7 @@ class _QtyBtn extends StatelessWidget {
 
   final IconData icon;
 
-  /// Announced by TalkBack. `Icons.add` carries no text, so without this the stepper was two
+  /// Announced by TalkBack. `LucideIcons.plus` carries no text, so without this the stepper was two
   /// unnamed buttons either side of a number.
   final String label;
 
@@ -482,7 +483,7 @@ class _PhotoThumb extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (ctx, e, _) => Container(
               color: AppColors.BG3,
-              child: const Icon(Icons.broken_image_outlined,
+              child: const Icon(LucideIcons.imageOff,
                   color: AppColors.MUTED),
             ),
           ),
@@ -509,7 +510,7 @@ class _PhotoThumb extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                     padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.close, color: Colors.white, size: 14),
+                    child: const Icon(LucideIcons.x, color: Colors.white, size: 14),
                   ),
                 ),
               ),
@@ -762,7 +763,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
             );
             if (picked != null) _save(dateValue: picked);
           },
-          icon: const Icon(Icons.calendar_today_outlined, size: 16),
+          icon: const Icon(LucideIcons.calendar, size: 16),
           label: Text(
             value != null ? DateFormat('dd/MM/yyyy', 'it').format(value) : 'Seleziona data',
           ),

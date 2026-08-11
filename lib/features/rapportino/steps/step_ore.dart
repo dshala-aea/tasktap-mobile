@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,7 +69,7 @@ class StepOre extends ConsumerWidget {
               // Add staff button
               OutlinedButton.icon(
                 onPressed: () => _showAddStaffDialog(context, ref),
-                icon: const Icon(Icons.person_add_outlined),
+                icon: const Icon(LucideIcons.userPlus),
                 label: const Text('Aggiungi tecnico'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 52),
@@ -165,7 +166,7 @@ class StepOre extends ConsumerWidget {
                               // gloved thumb, one-handed, and a mis-tap adds the wrong person's
                               // hours to a customer's invoice.
                               minVerticalPadding: 16,
-                              leading: const Icon(Icons.person_outline, size: 28),
+                              leading: const Icon(LucideIcons.user, size: 28),
                               title: Text(
                                 c.displayName,
                                 style: const TextStyle(
@@ -283,7 +284,7 @@ class _StaffTileState extends State<_StaffTile> {
                   color: AppColors.YSoft,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.person_outline, size: 18, color: AppColors.DARK),
+                child: const Icon(LucideIcons.user, size: 18, color: AppColors.DARK),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -304,14 +305,14 @@ class _StaffTileState extends State<_StaffTile> {
                 )
               else
                 IconButton(
-                  icon: const Icon(Icons.timer_outlined, color: AppColors.MUTED),
+                  icon: const Icon(LucideIcons.timer, color: AppColors.MUTED),
                   tooltip: 'Avvia timer',
                   constraints:
                       const BoxConstraints(minWidth: 44, minHeight: 44),
                   onPressed: widget.onStartTimer,
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.RED),
+                icon: const Icon(LucideIcons.trash2, color: AppColors.RED),
                 tooltip: 'Rimuovi',
                 constraints:
                     const BoxConstraints(minWidth: 44, minHeight: 44),

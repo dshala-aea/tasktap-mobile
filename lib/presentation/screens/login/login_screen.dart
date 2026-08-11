@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -141,7 +142,7 @@ class _ErrorBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, color: AppColors.error, size: 18),
+          Icon(LucideIcons.alertCircle, color: AppColors.error, size: 18),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(

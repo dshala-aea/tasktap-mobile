@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/local/app_database.dart';
@@ -118,22 +119,19 @@ class MeseView extends ConsumerWidget {
                       final count = daySchedules.length;
 
                       return Expanded(
-                        child: GestureDetector(
-                          onTap: () => onDayTap?.call(day),
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            margin: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.DARK
-                                  : isToday
-                                      ? AppColors.YSoft
-                                      : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: isToday && !isSelected
-                                  ? Border.all(color: AppColors.Y, width: 1.5)
-                                  : null,
-                            ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: AppTappable(
+                            onTap: () => onDayTap?.call(day),
+                            color: isSelected
+                                ? AppColors.DARK
+                                : isToday
+                                    ? AppColors.YSoft
+                                    : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: isToday && !isSelected
+                                ? Border.all(color: AppColors.Y, width: 1.5)
+                                : null,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [

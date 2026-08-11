@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
@@ -162,7 +163,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               if (subState == DraftSubmissionState.submitted) {
                 return _StatusCard(
                   color: AppColors.GREEN,
-                  icon: Icons.check_circle,
+                  icon: LucideIcons.checkCircle2,
                   title: 'Rapportino inviato con successo.',
                 );
               }
@@ -171,7 +172,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   subState == DraftSubmissionState.submitting) {
                 return _StatusCard(
                   color: AppColors.BLUE,
-                  icon: Icons.sync,
+                  icon: LucideIcons.refreshCw,
                   title: subState == DraftSubmissionState.uploadingMedia
                       ? 'Caricamento media in corso...'
                       : 'Invio rapportino...',
@@ -185,14 +186,14 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   children: [
                     _StatusCard(
                       color: AppColors.RED,
-                      icon: Icons.error_outline,
+                      icon: LucideIcons.alertCircle,
                       title: 'Invio fallito',
                       subtitle: draft?.submissionError,
                     ),
                     const SizedBox(height: 12),
                     AppButton.danger(
                       label: 'Riprova invio',
-                      icon: const Icon(Icons.refresh),
+                      icon: const Icon(LucideIcons.refreshCw),
                       onPressed: _submitting ? null : _onInvia,
                       isLoading: _submitting,
                       size: AppButtonSize.lg,
@@ -208,7 +209,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   if (validation.isValid)
                     _StatusCard(
                       color: AppColors.GREEN,
-                      icon: Icons.check_circle,
+                      icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
                       subtitle:
                           'Il rapportino è completo e pronto per essere inviato.',
@@ -226,7 +227,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
                     icon: _submitting
                         ? null
-                        : const Icon(Icons.send),
+                        : const Icon(LucideIcons.send),
                     onPressed: validation.isValid && !_submitting
                         ? _onInvia
                         : null,
@@ -264,7 +265,7 @@ class _ValidationPanel extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.warning_amber, color: AppColors.AMBER, size: 20),
+              Icon(LucideIcons.alertTriangle, color: AppColors.AMBER, size: 20),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -284,7 +285,7 @@ class _ValidationPanel extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.circle,
+                  const Icon(LucideIcons.circle,
                       size: 6, color: AppColors.AMBER),
                   const SizedBox(width: 8),
                   Expanded(
@@ -409,7 +410,7 @@ class _SignatureBlock extends ConsumerWidget {
                 height: 120,
                 fit: BoxFit.contain,
                 errorBuilder: (ctx, e, _) => const Icon(
-                  Icons.broken_image_outlined,
+                  LucideIcons.imageOff,
                   color: AppColors.MUTED,
                   size: 40,
                 ),
@@ -418,7 +419,7 @@ class _SignatureBlock extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.check_circle,
+                const Icon(LucideIcons.checkCircle2,
                     color: AppColors.GREEN, size: 16),
                 const SizedBox(width: 6),
                 const Expanded(
@@ -461,7 +462,7 @@ class _SignatureBlock extends ConsumerWidget {
             const SizedBox(height: 10),
             AppButton(
               label: 'Acquisisci firma $label',
-              icon: const Icon(Icons.draw_outlined),
+              icon: const Icon(LucideIcons.penTool),
               onPressed: () => _captureSig(context, ref),
               size: AppButtonSize.lg,
             ),
@@ -548,7 +549,7 @@ class _SigDialogState extends State<_SigDialog> {
             foregroundColor: AppColors.INV,
             title: const Text('Acquisisci firma'),
             leading: IconButton(
-              icon: const Icon(Icons.close),
+              icon: const Icon(LucideIcons.x),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [

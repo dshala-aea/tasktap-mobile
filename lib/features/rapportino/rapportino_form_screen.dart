@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -120,7 +121,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                       color: AppColors.Y,
                     ),
                   )
-                : const Icon(Icons.cloud_done_outlined,
+                : const Icon(LucideIcons.cloud,
                     size: 20, color: AppColors.Y),
           ),
         ],

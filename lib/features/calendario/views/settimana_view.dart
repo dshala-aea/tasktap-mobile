@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
@@ -56,17 +57,14 @@ class SettimanaView extends ConsumerWidget {
             child: Column(
               children: [
                 // Day header
-                GestureDetector(
-                  onTap: () => onDayTap?.call(day),
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    height: 52,
-                    width: double.infinity,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      color: isToday ? AppColors.DARK : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                Container(
+                  height: 52,
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  child: AppTappable(
+                    onTap: () => onDayTap?.call(day),
+                    color: isToday ? AppColors.DARK : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -127,18 +125,15 @@ class _WeekEventChip extends StatelessWidget {
     final statusName = scheduleStatusName(schedule.statusId);
     final pair = statusColor(statusName);
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      constraints: const BoxConstraints(minHeight: 44),
+      child: AppTappable(
+        onTap: onTap,
+        color: pair.background,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: pair.foreground.withAlpha(51), width: 0.5),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        constraints: const BoxConstraints(minHeight: 44),
-        decoration: BoxDecoration(
-          color: pair.background,
-          borderRadius: BorderRadius.circular(6),
-          border:
-              Border.all(color: pair.foreground.withAlpha(51), width: 0.5),
-        ),
         child: Text(
           schedule.title,
           maxLines: 2,

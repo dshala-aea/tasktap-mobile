@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -31,7 +32,7 @@ class OggiScreen extends ConsumerWidget {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.sync),
+                : const Icon(LucideIcons.refreshCw),
             tooltip: 'Sincronizza',
             onPressed: syncState.status == SyncStatus.syncing
                 ? null
@@ -120,7 +121,7 @@ class _EmptyToday extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.today, size: 56, color: AppColors.brand),
+            Icon(LucideIcons.calendarDays, size: 56, color: AppColors.brand),
             const SizedBox(height: AppSpacing.base),
             Text('Nessun intervento oggi',
                 style: AppTextStyles.headlineMedium,
@@ -191,7 +192,7 @@ class _ScheduleCard extends ConsumerWidget {
             // Time range
             Row(
               children: [
-                Icon(Icons.access_time,
+                Icon(LucideIcons.clock,
                     size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
@@ -280,7 +281,7 @@ class _LocationRow extends StatelessWidget {
 
     return Row(
       children: [
-        Icon(Icons.location_on,
+        Icon(LucideIcons.mapPin,
             size: 14, color: AppColors.textSecondary),
         const SizedBox(width: AppSpacing.xs),
         Expanded(

@@ -90,8 +90,15 @@ abstract final class AppColors {
   /// CYAN #06AED5.
   static const Color CYAN = Color(0xFF06AED5);
 
-  /// RED #ff0000.
-  static const Color RED = Color(0xFFFF0000);
+  /// The one danger red, #D32F2F.
+  ///
+  /// This was #FF0000 while [error] — documented as "alias for RED" — was #D32F2F, so the app
+  /// carried two different reds that each claimed to be the other. They met on screen: a form
+  /// validation message in one, the delete icon beside it in the other.
+  ///
+  /// #D32F2F is the survivor because pure red fails AA on white (4.0:1 against 4.9:1), which put
+  /// every destructive label using RED under the floor. [error] now genuinely aliases this.
+  static const Color RED = Color(0xFFD32F2F);
 
   /// REDSOFT rgb(255,209,209).
   static const Color REDSOFT = Color(0xFFFFD1D1);
@@ -181,8 +188,8 @@ abstract final class AppColors {
 
   // ── Semantic (kept for theme / screens) ───────────────────────────────────
 
-  /// Error — alias for [RED].
-  static const Color error = Color(0xFFD32F2F);
+  /// Error — alias for [RED], and now actually one.
+  static const Color error = RED;
 
   /// On-error — white.
   static const Color onError = WHITE;

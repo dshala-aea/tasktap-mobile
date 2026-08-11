@@ -23,6 +23,11 @@ import 'package:flutter/widgets.dart';
 class LucideIcons {
   const LucideIcons._();
 
+  static const IconData alertCircle = IconData(
+    0xf10b,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData alertTriangle = IconData(
     0xf10d,
     fontFamily: 'Lucide',
@@ -103,6 +108,16 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData circle = IconData(
+    0xf20b,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData circleDot = IconData(
+    0xf20e,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData clipboardCheck = IconData(
     0xf219,
     fontFamily: 'Lucide',
@@ -115,6 +130,16 @@ class LucideIcons {
   );
   static const IconData clock = IconData(
     0xf221,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData cloud = IconData(
+    0xf22e,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData cloudOff = IconData(
+    0xf236,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -188,6 +213,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData image = IconData(
+    0xf365,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData imageOff = IconData(
     0xf367,
     fontFamily: 'Lucide',
@@ -203,6 +233,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData locateFixed = IconData(
+    0xf3ac,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData logIn = IconData(
     0xf3af,
     fontFamily: 'Lucide',
@@ -215,6 +250,16 @@ class LucideIcons {
   );
   static const IconData mapPin = IconData(
     0xf3c0,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData mapPinOff = IconData(
+    0xf3c1,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData minus = IconData(
+    0xf3dc,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -243,13 +288,13 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData penTool = IconData(
-    0xf43c,
+  static const IconData pencil = IconData(
+    0xf43d,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData pencil = IconData(
-    0xf43d,
+  static const IconData penTool = IconData(
+    0xf43c,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -268,8 +313,18 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData plusSquare = IconData(
+    0xf460,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData receipt = IconData(
     0xf477,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData refreshCw = IconData(
+    0xf480,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -300,6 +355,16 @@ class LucideIcons {
   );
   static const IconData ticket = IconData(
     0xf539,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData timer = IconData(
+    0xf53a,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData trash2 = IconData(
+    0xf546,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -345,6 +410,11 @@ class LucideIcons {
   );
   static const IconData wrench = IconData(
     0xf59d,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData x = IconData(
+    0xf59e,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
