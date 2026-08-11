@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Section heading row.
 ///
@@ -36,7 +36,7 @@ class SectionTitle extends StatelessWidget {
               style: GoogleFonts.sora(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.DARK,
+                color: context.colors.ink,
               ),
             ),
           ),

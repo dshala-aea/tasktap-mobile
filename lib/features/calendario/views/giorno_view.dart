@@ -5,10 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// First hour shown in the day grid.
 const int _kStartHour = 7;
@@ -68,7 +68,7 @@ class GiornoView extends ConsumerWidget {
                             style: GoogleFonts.manrope(
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
-                              color: AppColors.MUTED,
+                              color: context.colors.inkMuted,
                             ),
                           ),
                         ),
@@ -88,10 +88,10 @@ class GiornoView extends ConsumerWidget {
                       for (int h = _kStartHour; h < _kEndHour; h++)
                         Container(
                           height: _kHourHeight,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             border: Border(
                               bottom: BorderSide(
-                                color: AppColors.BL,
+                                color: context.colors.borderLight,
                                 width: 1,
                               ),
                             ),

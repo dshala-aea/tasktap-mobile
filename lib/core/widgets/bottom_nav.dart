@@ -5,6 +5,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../theme/app_colors.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
   static const IconData ticket = LucideIcons.ticket;
@@ -63,10 +64,10 @@ class AppBottomNav extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: AppColors.WHITE,
+            color: context.colors.surface,
             borderRadius: BorderRadius.circular(23),
-            border: Border.all(color: AppColors.BL, width: 0.5),
-            boxShadow: AppColors.SH,
+            border: Border.all(color: context.colors.borderLight, width: 0.5),
+            boxShadow: context.colors.shadow,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -131,7 +132,7 @@ class _NavTab extends StatelessWidget {
               Icon(
                 item.icon,
                 size: 18,
-                color: active ? AppColors.DARK : AppColors.DIS,
+                color: active ? context.colors.brandOn : context.colors.inkDisabled,
               ),
               if (active) ...[
                 const SizedBox(width: 8),
@@ -140,7 +141,7 @@ class _NavTab extends StatelessWidget {
                   style: GoogleFonts.sora(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.DARK,
+                    color: context.colors.brandOn,
                   ),
                 ),
               ],

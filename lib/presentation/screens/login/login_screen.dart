@@ -8,6 +8,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../providers/auth_providers.dart';
 import '../../../domain/auth/auth_failure.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Login screen — Zitadel OIDC sign-in.
 ///
@@ -36,7 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final failure = loginState.failure;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.bg1,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.pagePadding),
@@ -59,7 +60,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text(
                 'Verrai reindirizzato all\'accesso sicuro TaskTap.',
                 style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.colors.inkFaint,
                 ),
               ),
 
@@ -106,7 +107,7 @@ class _TaskTapLogo extends StatelessWidget {
           child: Text(
             'TT',
             style: AppTextStyles.titleLarge.copyWith(
-              color: AppColors.onBrand,
+              color: context.colors.brandOn,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -135,20 +136,20 @@ class _ErrorBanner extends StatelessWidget {
         vertical: AppSpacing.sm,
       ),
       decoration: BoxDecoration(
-        color: AppColors.error.withAlpha(20),
-        border: Border.all(color: AppColors.error.withAlpha(80)),
+        color: context.colors.red.withAlpha(20),
+        border: Border.all(color: context.colors.red.withAlpha(80)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(LucideIcons.alertCircle, color: AppColors.error, size: 18),
+          Icon(LucideIcons.alertCircle, color: context.colors.red, size: 18),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               message,
               style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.error,
+                color: context.colors.red,
               ),
             ),
           ),

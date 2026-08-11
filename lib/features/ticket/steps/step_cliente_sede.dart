@@ -2,11 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 1 — Cliente + Sede
@@ -144,7 +144,7 @@ class _CustomerSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.BG3,
+        color: context.colors.bg3,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -178,7 +178,7 @@ class _LocationSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.BG3,
+        color: context.colors.bg3,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -206,11 +206,11 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Sora',
         fontSize: 15,
         fontWeight: FontWeight.w700,
-        color: AppColors.DARK,
+        color: context.colors.ink,
       ),
     );
   }
@@ -229,12 +229,12 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             '$label: ',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.MUTED),
+            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
           ),
           Expanded(
             child: Text(
               value,
-              style: AppTextStyles.bodySmall.copyWith(color: AppColors.DARK),
+              style: AppTextStyles.bodySmall.copyWith(color: context.colors.ink),
             ),
           ),
         ],

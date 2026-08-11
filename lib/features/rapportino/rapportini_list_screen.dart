@@ -12,6 +12,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'rapportino_list_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -59,7 +60,7 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _RapportiniListBody(
           filter: _filter,
@@ -275,13 +276,13 @@ class _RapportinoRow extends ConsumerWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.BG3,
+              color: context.colors.bg3,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               LucideIcons.fileText,
               size: 20,
-              color: AppColors.MUTED,
+              color: context.colors.inkMuted,
             ),
           ),
           if (hasBothSigs)
@@ -292,9 +293,9 @@ class _RapportinoRow extends ConsumerWidget {
                 width: 14,
                 height: 14,
                 decoration: BoxDecoration(
-                  color: AppColors.GREEN,
+                  color: context.colors.green,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.WHITE, width: 1.5),
+                  border: Border.all(color: context.colors.surface, width: 1.5),
                 ),
                 child: Icon(
                   LucideIcons.penTool,
@@ -315,7 +316,7 @@ class _RapportinoRow extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             dateLabel,
-            style: const TextStyle(fontSize: 10, color: AppColors.MUTED),
+            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
           ),
         ],
       ),

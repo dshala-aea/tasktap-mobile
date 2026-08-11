@@ -7,11 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Admin contract form — create or edit.
 class AdminContractFormScreen extends ConsumerStatefulWidget {
@@ -191,11 +191,11 @@ class _AdminContractFormScreenState
         : 'Nessuna data fine';
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       appBar: AppBar(
         title: Text(_isEditing ? 'Modifica contratto' : 'Nuovo contratto'),
-        backgroundColor: AppColors.BG2,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: context.colors.bg2,
+        foregroundColor: context.colors.ink,
         elevation: 0,
         actions: [
           TextButton(

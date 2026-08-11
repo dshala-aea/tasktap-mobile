@@ -7,6 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../providers/auth_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// User profile screen — shows user info and logout action.
 class ProfiloScreen extends ConsumerWidget {
@@ -18,7 +19,7 @@ class ProfiloScreen extends ConsumerWidget {
     final loginNotifier = ref.read(loginProvider.notifier);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.bg1,
       appBar: AppBar(
         title: Text('Profilo', style: AppTextStyles.titleLarge),
       ),
@@ -33,9 +34,9 @@ class ProfiloScreen extends ConsumerWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: context.colors.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.outline),
+                  border: Border.all(color: context.colors.borderMedium),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,7 +48,7 @@ class ProfiloScreen extends ConsumerWidget {
                       child: Text(
                         _initials(user.displayName ?? user.email),
                         style: AppTextStyles.titleLarge.copyWith(
-                          color: AppColors.onBrand,
+                          color: context.colors.brandOn,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -65,7 +66,7 @@ class ProfiloScreen extends ConsumerWidget {
                     Text(
                       user.email,
                       style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.colors.inkFaint,
                       ),
                     ),
                   ],
@@ -120,7 +121,7 @@ class ProfiloScreen extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(
-              foregroundColor: AppColors.error,
+              foregroundColor: context.colors.red,
             ),
             child: const Text('Disconnetti'),
           ),

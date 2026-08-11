@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'notifiche_provider.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AltroHubScreen
@@ -26,7 +27,7 @@ class AltroHubScreen extends ConsumerWidget {
     final displayName = user?.displayName ?? user?.email ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -161,7 +162,7 @@ class _UserCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.CHARCOAL,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: AppColors.SH,
+          boxShadow: context.colors.shadow,
         ),
         child: Row(
           children: [
@@ -232,7 +233,7 @@ class _GestioneTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: AppColors.SH,
+          boxShadow: context.colors.shadow,
         ),
         child: InkWell(
           onTap: onTap,
@@ -276,13 +277,13 @@ class _SistemaSection extends ConsumerWidget {
           children: [
             // Notifiche — unread badge
             ListRow(
-              leading: _sistemaTileIcon(LucideIcons.bell, AppColors.BLUE),
+              leading: _sistemaTileIcon(LucideIcons.bell, context.colors.blue),
               title: 'Notifiche',
               subtitle: 'Avvisi e aggiornamenti',
               meta: ref.watch(notificheUnreadCountProvider) > 0
                   ? AppBadge(
                       label: '${ref.watch(notificheUnreadCountProvider)}',
-                      bgColor: AppColors.RED,
+                      bgColor: context.colors.red,
                     )
                   : null,
               showDivider: true,
@@ -291,7 +292,7 @@ class _SistemaSection extends ConsumerWidget {
             // Audit log
             ListRow(
               leading:
-                  _sistemaTileIcon(LucideIcons.clipboardCheck, AppColors.GREEN),
+                  _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
               title: 'Audit log',
               subtitle: 'Cronologia attività',
               showDivider: true,
@@ -315,7 +316,7 @@ class _SistemaSection extends ConsumerWidget {
             ),
             // Ruoli e permessi
             ListRow(
-              leading: _sistemaTileIcon(LucideIcons.shieldCheck, AppColors.AMBER),
+              leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.amber),
               title: 'Ruoli e permessi',
               subtitle: 'Gestione accessi',
               showDivider: false,
@@ -367,7 +368,7 @@ class _LogoutRow extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.REDSOFT,
+              color: context.colors.redSoft,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(LucideIcons.logOut, size: 18,
@@ -397,7 +398,7 @@ class _LogoutRow extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(foregroundColor: context.colors.red),
             child: const Text('Esci'),
           ),
         ],

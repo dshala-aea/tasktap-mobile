@@ -4,6 +4,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
 import 'app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass on dark),
 /// icon 17 DARK, optional red dot badge.
@@ -57,7 +58,7 @@ class HeaderIconBtn extends StatelessWidget {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: glass ? Colors.white.withAlpha(46) : AppColors.BG3,
+                    color: glass ? Colors.white.withAlpha(46) : context.colors.bg3,
                     shape: BoxShape.circle,
                     border: glass
                         ? Border.all(
@@ -69,7 +70,7 @@ class HeaderIconBtn extends StatelessWidget {
                   child: Icon(
                     icon,
                     size: 17,
-                    color: glass ? AppColors.WHITE : AppColors.DARK,
+                    color: glass ? AppColors.WHITE : context.colors.ink,
                   ),
                 ),
                 if (showDot)
@@ -80,9 +81,9 @@ class HeaderIconBtn extends StatelessWidget {
                       width: 9,
                       height: 9,
                       decoration: BoxDecoration(
-                        color: AppColors.RED,
+                        color: context.colors.red,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.WHITE, width: 1.5),
+                        border: Border.all(color: context.colors.bg3, width: 1.5),
                       ),
                     ),
                   ),
@@ -131,7 +132,7 @@ class ScreenHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = dark ? AppColors.WHITE : AppColors.DARK;
+    final titleColor = dark ? AppColors.WHITE : context.colors.ink;
     return Padding(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
       child: Row(
@@ -171,7 +172,7 @@ class ScreenHeader extends StatelessWidget {
                       fontWeight: FontWeight.w400,
                       color: dark
                           ? AppColors.WHITE.withAlpha(179)
-                          : AppColors.MUTED,
+                          : context.colors.inkMuted,
                     ),
                   ),
               ],

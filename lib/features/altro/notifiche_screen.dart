@@ -6,10 +6,10 @@ import '../../core/notifications/notification_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import 'notifiche_provider.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -81,7 +81,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
     };
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -103,7 +103,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                         style: GoogleFonts.manrope(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.BLUE,
+                          color: context.colors.blue,
                         ),
                       ),
                     ),
@@ -197,11 +197,11 @@ class _NotificaRow extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.BLUE.withAlpha(26),
+              color: context.colors.blue.withAlpha(26),
               borderRadius: BorderRadius.circular(10),
             ),
             child:
-                const Icon(LucideIcons.bell, size: 20, color: AppColors.BLUE),
+                Icon(LucideIcons.bell, size: 20, color: context.colors.blue),
           ),
           if (!notifica.letta)
             Positioned(
@@ -211,9 +211,9 @@ class _NotificaRow extends StatelessWidget {
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: AppColors.BLUE,
+                  color: context.colors.blue,
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.WHITE, width: 1.5),
+                  border: Border.all(color: context.colors.surface, width: 1.5),
                 ),
               ),
             ),
@@ -223,7 +223,7 @@ class _NotificaRow extends StatelessWidget {
       subtitle: notifica.corpo,
       meta: Text(
         _formatTime(notifica.timestamp),
-        style: GoogleFonts.manrope(fontSize: 10, color: AppColors.MUTED),
+        style: GoogleFonts.manrope(fontSize: 10, color: context.colors.inkMuted),
       ),
       showDivider: !isLast,
       onTap: onTap,

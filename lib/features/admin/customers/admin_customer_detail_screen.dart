@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../clienti/clienti_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Admin customer detail — shows all fields + edit FAB.
 class AdminCustomerDetailScreen extends ConsumerWidget {
@@ -21,7 +21,7 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
         ref.watch(customerDetailProvider(customerId));
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       floatingActionButton: AppFab(
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
@@ -76,26 +76,26 @@ class _CustomerDetailBody extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _infoRow('Ragione sociale', customer.companyName),
+                    _infoRow(context, 'Ragione sociale', customer.companyName),
                     if (customer.taxId != null && customer.taxId!.isNotEmpty)
-                      _infoRow('P.IVA', customer.taxId!),
+                      _infoRow(context, 'P.IVA', customer.taxId!),
                     if (customer.contactPerson != null &&
                         customer.contactPerson!.isNotEmpty)
-                      _infoRow('Referente', customer.contactPerson!),
+                      _infoRow(context, 'Referente', customer.contactPerson!),
                     if (customer.phone != null && customer.phone!.isNotEmpty)
-                      _infoRow('Telefono', customer.phone!),
+                      _infoRow(context, 'Telefono', customer.phone!),
                     if (customer.email != null && customer.email!.isNotEmpty)
-                      _infoRow('Email', customer.email!),
+                      _infoRow(context, 'Email', customer.email!),
                     if (customer.address != null && customer.address!.isNotEmpty)
-                      _infoRow('Indirizzo', customer.address!),
+                      _infoRow(context, 'Indirizzo', customer.address!),
                     if (customer.city != null && customer.city!.isNotEmpty)
-                      _infoRow('Città', customer.city!),
+                      _infoRow(context, 'Città', customer.city!),
                     if (customer.postalCode != null &&
                         customer.postalCode!.isNotEmpty)
-                      _infoRow('CAP', customer.postalCode!),
+                      _infoRow(context, 'CAP', customer.postalCode!),
                     if (customer.country != null &&
                         customer.country!.isNotEmpty)
-                      _infoRow('Paese', customer.country!),
+                      _infoRow(context, 'Paese', customer.country!),
                   ],
                 ),
               ),
@@ -143,7 +143,7 @@ class _CustomerDetailBody extends StatelessWidget {
                     Text(
                       'Stato',
                       style: AppTextStyles.bodyMedium
-                          .copyWith(color: AppColors.MUTED),
+                          .copyWith(color: context.colors.inkMuted),
                     ),
                     const Spacer(),
                     StatusPill(
@@ -160,7 +160,7 @@ class _CustomerDetailBody extends StatelessWidget {
     );
   }
 
-  static Widget _infoRow(String label, String value) {
+  static Widget _infoRow(BuildContext ctx, String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -170,7 +170,7 @@ class _CustomerDetailBody extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: AppTextStyles.bodySmall.copyWith(color: AppColors.MUTED),
+              style: AppTextStyles.bodySmall.copyWith(color: ctx.colors.inkMuted),
             ),
           ),
           Expanded(

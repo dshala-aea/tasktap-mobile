@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// A single tab descriptor with an optional count pill.
 class AppTab {
@@ -66,14 +67,14 @@ class AppTabs extends StatelessWidget {
                       style: GoogleFonts.manrope(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: active ? AppColors.DARK : AppColors.MUTED,
+                        color: active ? context.colors.ink : context.colors.inkMuted,
                       ),
                     ),
                     if (tab.count != null) ...[
                       const SizedBox(width: 6),
                       DecoratedBox(
                         decoration: BoxDecoration(
-                          color: active ? AppColors.DARK : AppColors.BG3,
+                          color: active ? context.colors.surfaceInverse : context.colors.bg3,
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Padding(
@@ -86,7 +87,7 @@ class AppTabs extends StatelessWidget {
                             style: GoogleFonts.manrope(
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
-                              color: active ? AppColors.WHITE : AppColors.MUTED,
+                              color: active ? context.colors.inkInverse : context.colors.inkMuted,
                             ),
                           ),
                         ),

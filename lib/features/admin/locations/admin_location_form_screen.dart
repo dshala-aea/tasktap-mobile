@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Admin location form — create or edit.
 class AdminLocationFormScreen extends ConsumerStatefulWidget {
@@ -163,11 +163,11 @@ class _AdminLocationFormScreenState
     final customers = customersAsync.valueOrNull ?? [];
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       appBar: AppBar(
         title: Text(_isEditing ? 'Modifica sede' : 'Nuova sede'),
-        backgroundColor: AppColors.BG2,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: context.colors.bg2,
+        foregroundColor: context.colors.ink,
         elevation: 0,
         actions: [
           TextButton(

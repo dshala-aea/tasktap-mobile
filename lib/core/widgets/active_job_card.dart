@@ -5,6 +5,7 @@ import '../theme/app_colors.dart';
 import 'app_button.dart';
 import 'app_card.dart';
 import 'status_pill.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Active-job glass card (dashboard hero).
 ///
@@ -73,7 +74,7 @@ class ActiveJobCard extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.INV,
+                      color: context.colors.inkInverse,
                     ),
                   ),
                 const SizedBox(height: 12),

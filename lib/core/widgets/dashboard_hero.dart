@@ -44,6 +44,8 @@ class DashboardHero extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
+            // Constants, not palette tokens: this hero is dark under both themes, so a token
+            // that flips would turn it white in dark mode — the one place the flip is wrong.
             colors: [AppColors.CHARCOAL, AppColors.DARK],
           ),
         ),

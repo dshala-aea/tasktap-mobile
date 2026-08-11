@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Centered empty state — 60 px circle BG3 + icon (26, DIS), Sora 700/16 title,
 /// Manrope 13 MUTED body (max width 280), optional action. Pad 60/30.
@@ -39,11 +39,11 @@ class EmptyState extends StatelessWidget {
             Container(
               width: 60,
               height: 60,
-              decoration: const BoxDecoration(
-                color: AppColors.BG3,
+              decoration: BoxDecoration(
+                color: context.colors.bg3,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 26, color: AppColors.DIS),
+              child: Icon(icon, size: 26, color: context.colors.inkDisabled),
             ),
             const SizedBox(height: 16),
             Text(
@@ -52,7 +52,7 @@ class EmptyState extends StatelessWidget {
               style: GoogleFonts.sora(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.DARK,
+                color: context.colors.ink,
               ),
             ),
             if (body != null) ...[
@@ -65,7 +65,7 @@ class EmptyState extends StatelessWidget {
                   style: GoogleFonts.manrope(
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                     height: 1.4,
                   ),
                 ),

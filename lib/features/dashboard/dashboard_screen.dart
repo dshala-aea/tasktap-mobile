@@ -11,6 +11,7 @@ import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'dashboard_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Dashboard screen — Hero + active job(s) + stats + quick actions + upcoming.
 class DashboardScreen extends ConsumerWidget {
@@ -26,7 +27,7 @@ class DashboardScreen extends ConsumerWidget {
     final upcomingAsync = ref.watch(upcomingSchedulesProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: RefreshIndicator(
         onRefresh: () => ref.read(syncProvider.notifier).performSync(),
         child: CustomScrollView(
@@ -276,7 +277,7 @@ class _UpcomingItem extends ConsumerWidget {
                   style: GoogleFonts.manrope(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
                 if (subtitle.isNotEmpty) ...[
@@ -287,7 +288,7 @@ class _UpcomingItem extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.manrope(
                       fontSize: 12,
-                      color: AppColors.MUTED,
+                      color: context.colors.inkMuted,
                     ),
                   ),
                 ],
@@ -304,14 +305,14 @@ class _UpcomingItem extends ConsumerWidget {
                 style: GoogleFonts.manrope(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.DARK,
+                  color: context.colors.ink,
                 ),
               ),
               Text(
                 timeLabel,
                 style: GoogleFonts.manrope(
                   fontSize: 11,
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                 ),
               ),
             ],

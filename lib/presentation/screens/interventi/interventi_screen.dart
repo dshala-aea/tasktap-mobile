@@ -9,6 +9,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../providers/schedule_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Schedules list for today + next 7 days — reads from the local Drift DB.
 class InterventiScreen extends ConsumerWidget {
@@ -20,7 +21,7 @@ class InterventiScreen extends ConsumerWidget {
     final syncState = ref.watch(syncProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.bg1,
       appBar: AppBar(
         title: Text('Interventi', style: AppTextStyles.titleLarge),
         actions: [
@@ -85,7 +86,7 @@ class _EmptyWeek extends StatelessWidget {
             Text(
               hint,
               style: AppTextStyles.bodyMedium
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: context.colors.inkFaint),
               textAlign: TextAlign.center,
             ),
           ],
@@ -194,7 +195,7 @@ class _InterventiCard extends ConsumerWidget {
                   ? 'Tutto il giorno'
                   : '$timeStart – $timeEnd',
               style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: context.colors.inkFaint),
             ),
             if (customerName != null || location != null)
               Text(
@@ -203,7 +204,7 @@ class _InterventiCard extends ConsumerWidget {
                   ?location?.city,
                 ].join(' · '),
                 style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
+                    .copyWith(color: context.colors.inkFaint),
               ),
           ],
         ),

@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches prodotti assistenza from backend API.
 final adminProdottiAssistenzaProvider =
@@ -25,7 +25,7 @@ class AdminProdottoListScreen extends ConsumerWidget {
     final prodottiAsync = ref.watch(adminProdottiAssistenzaProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: prodottiAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -150,21 +150,21 @@ class _ProdottoRow extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.BG3,
+          color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(
+        child: Icon(
           LucideIcons.wrench,
           size: 20,
-          color: AppColors.MUTED,
+          color: context.colors.inkMuted,
         ),
       ),
       title: name,
       subtitle: customerName,
-      meta: const Icon(
+      meta: Icon(
         LucideIcons.chevronRight,
         size: 16,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
       ),
       showDivider: !isLast,
       onTap: onTap,

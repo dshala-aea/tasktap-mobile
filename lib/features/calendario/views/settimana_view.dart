@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Calendario → Settimana view: 7-column day grid for the selected week with
 /// compact event chips per day. Columns are scrollable horizontally; chips
@@ -63,7 +64,7 @@ class SettimanaView extends ConsumerWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
-                    color: isToday ? AppColors.DARK : Colors.transparent,
+                    color: isToday ? context.colors.surfaceInverse : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -73,7 +74,7 @@ class SettimanaView extends ConsumerWidget {
                           style: GoogleFonts.manrope(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isToday ? AppColors.Y : AppColors.MUTED,
+                            color: isToday ? AppColors.Y : context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -84,7 +85,7 @@ class SettimanaView extends ConsumerWidget {
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color:
-                                isToday ? AppColors.WHITE : AppColors.DARK,
+                                isToday ? context.colors.inkInverse : context.colors.ink,
                           ),
                         ),
                       ],
@@ -98,11 +99,11 @@ class SettimanaView extends ConsumerWidget {
                       onTap: () => onEventTap?.call(s),
                     )),
                 if (daySchedules.isEmpty)
-                  const SizedBox(
+                  SizedBox(
                     height: 32,
                     child: Center(
                       child: Text('–',
-                          style: TextStyle(color: AppColors.DIS, fontSize: 12)),
+                          style: TextStyle(color: context.colors.inkDisabled, fontSize: 12)),
                     ),
                   ),
               ],

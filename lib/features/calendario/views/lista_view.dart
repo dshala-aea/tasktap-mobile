@@ -5,11 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Calendario → Lista view: schedules grouped by day (date section headers)
 /// as ListRows (title, time range, StatusPill, location), soonest first.
@@ -75,7 +75,7 @@ class _DateHeader extends StatelessWidget {
         style: GoogleFonts.sora(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: AppColors.DARK,
+          color: context.colors.ink,
           letterSpacing: 0.2,
         ),
       ),

@@ -15,6 +15,7 @@ import 'views/giorno_view.dart';
 import 'views/lista_view.dart';
 import 'views/mese_view.dart';
 import 'views/settimana_view.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Calendario tab — four view modes (Giorno / Settimana / Mese / Lista)
 /// wired to cached schedules in Drift.
@@ -27,7 +28,7 @@ class CalendarioScreen extends ConsumerWidget {
     final selectedDate = ref.watch(selectedDateProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: Column(
           children: [
@@ -61,7 +62,7 @@ class CalendarioScreen extends ConsumerWidget {
                   .state = CalendarioView.values[i],
             ),
 
-            const Divider(height: 1, color: AppColors.BL),
+            Divider(height: 1, color: context.colors.borderLight),
 
             // ── Week-day scroller strip ──────────────────────────────────────
             if (view != CalendarioView.mese && view != CalendarioView.lista)
@@ -123,7 +124,7 @@ class _WeekDayScroller extends ConsumerWidget {
 
     return Container(
       height: 74,
-      color: AppColors.WHITE,
+      color: context.colors.surface,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
         children: days.map((day) {
@@ -148,7 +149,7 @@ class _WeekDayScroller extends ConsumerWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
-                      color: isSelected ? AppColors.Y : AppColors.MUTED,
+                      color: isSelected ? AppColors.Y : context.colors.inkMuted,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -159,7 +160,7 @@ class _WeekDayScroller extends ConsumerWidget {
                     height: 32,
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? AppColors.DARK
+                          ? context.colors.surfaceInverse
                           : isToday
                               ? AppColors.YSoft
                               : Colors.transparent,
@@ -172,10 +173,10 @@ class _WeekDayScroller extends ConsumerWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: isSelected
-                              ? AppColors.WHITE
+                              ? context.colors.inkInverse
                               : isToday
-                                  ? AppColors.DARK
-                                  : AppColors.DARK,
+                                  ? context.colors.ink
+                                  : context.colors.ink,
                         ),
                       ),
                     ),
@@ -190,7 +191,7 @@ class _WeekDayScroller extends ConsumerWidget {
                       height: 5,
                       decoration: BoxDecoration(
                         color:
-                            isSelected ? AppColors.Y : AppColors.AMBER,
+                            isSelected ? AppColors.Y : context.colors.amber,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -419,7 +420,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: AppColors.BS,
+                color: context.colors.borderStrong,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -430,7 +431,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
             style: GoogleFonts.sora(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: AppColors.DARK,
+              color: context.colors.ink,
             ),
           ),
           const SizedBox(height: 8),
@@ -438,13 +439,13 @@ class _ScheduleInfoSheet extends StatelessWidget {
             children: [
               StatusPill(stato: statusName),
               const SizedBox(width: 12),
-              Icon(LucideIcons.clock, size: 14, color: AppColors.MUTED),
+              Icon(LucideIcons.clock, size: 14, color: context.colors.inkMuted),
               const SizedBox(width: 4),
               Text(
                 timeRange,
                 style: GoogleFonts.manrope(
                   fontSize: 13,
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                 ),
               ),
             ],
@@ -455,7 +456,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
               schedule.description,
               style: GoogleFonts.manrope(
                 fontSize: 13,
-                color: AppColors.FG2,
+                color: context.colors.inkFaint,
                 height: 1.5,
               ),
             ),

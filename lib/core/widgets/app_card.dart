@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Standard TaskTap card — BG1 bg, 14 px radius, default 16 px padding, SH shadow.
 ///
@@ -39,8 +39,8 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? AppColors.BG1;
-    final border = borderColor ?? AppColors.BM;
+    final bg = backgroundColor ?? context.colors.bg1;
+    final border = borderColor ?? context.colors.borderMedium;
 
     final br = BorderRadius.circular(_radius);
 
@@ -48,7 +48,7 @@ class AppCard extends StatelessWidget {
       color: bg,
       borderRadius: br,
       border: Border.all(color: border, width: 0.5),
-      boxShadow: AppColors.SH,
+      boxShadow: context.colors.shadow,
     );
 
     if (onTap != null) {
@@ -114,7 +114,7 @@ class GlassCard extends StatelessWidget {
     final decoration = BoxDecoration(
       borderRadius: br,
       border: Border.all(color: Colors.white.withAlpha(128), width: 0.5),
-      boxShadow: AppColors.SH_INSET,
+      boxShadow: context.colors.shadowInset,
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,

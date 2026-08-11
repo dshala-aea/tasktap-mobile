@@ -4,10 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ImpostazioniScreen
@@ -29,7 +29,7 @@ class ImpostazioniScreen extends ConsumerWidget {
     final displayName = user?.displayName ?? user?.email ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -161,7 +161,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                       'TaskTap v${info.displayVersion}',
                       style: GoogleFonts.manrope(
                         fontSize: 11,
-                        color: AppColors.DIS,
+                        color: context.colors.inkDisabled,
                       ),
                     ),
                   ),
@@ -211,7 +211,7 @@ class _ProfileCard extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.DARK,
+                      color: context.colors.ink,
                     ),
                   ),
                   if (displayName.isNotEmpty && email != null)
@@ -221,7 +221,7 @@ class _ProfileCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.manrope(
                         fontSize: 12,
-                        color: AppColors.MUTED,
+                        color: context.colors.inkMuted,
                       ),
                     ),
                 ],
@@ -251,7 +251,7 @@ class _SettingsSectionTitle extends StatelessWidget {
         style: GoogleFonts.manrope(
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: AppColors.MUTED,
+          color: context.colors.inkMuted,
           letterSpacing: 0.8,
         ),
       ),
@@ -307,7 +307,7 @@ class _ToggleRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         border: showDivider
-            ? const Border(bottom: BorderSide(color: AppColors.BL))
+            ? Border(bottom: BorderSide(color: context.colors.borderLight))
             : null,
       ),
       child: Row(
@@ -316,10 +316,10 @@ class _ToggleRow extends StatelessWidget {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: AppColors.BG3,
+              color: context.colors.bg3,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 17, color: AppColors.FG2),
+            child: Icon(icon, size: 17, color: context.colors.inkFaint),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -332,14 +332,14 @@ class _ToggleRow extends StatelessWidget {
                   style: GoogleFonts.manrope(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
                 Text(
                   subtitle,
                   style: GoogleFonts.manrope(
                     fontSize: 11,
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                   ),
                 ),
               ],
@@ -367,7 +367,7 @@ class _LogoutSettingRow extends StatelessWidget {
         width: 34,
         height: 34,
         decoration: BoxDecoration(
-          color: AppColors.REDSOFT,
+          color: context.colors.redSoft,
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Icon(LucideIcons.logOut, size: 17,
@@ -394,7 +394,7 @@ class _LogoutSettingRow extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(foregroundColor: context.colors.red),
             child: const Text('Esci'),
           ),
         ],

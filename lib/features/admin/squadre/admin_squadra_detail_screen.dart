@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches squadra detail with membri from backend API.
 final adminSquadraDetailProvider = FutureProvider.autoDispose
@@ -27,7 +27,7 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
         ref.watch(adminSquadraDetailProvider(squadra['id'] as String));
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       floatingActionButton: AppFab(
         icon: LucideIcons.userPlus,
         tooltip: 'Aggiungi membro',
@@ -131,7 +131,7 @@ class _SquadraDetailBody extends StatelessWidget {
             child: Text(
               'MEMBRI (${membri.length})',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                     letterSpacing: 1.2,
                   ),
             ),
@@ -231,7 +231,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   letterSpacing: 1.2,
                 ),
           ),
@@ -239,7 +239,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textPrimary,
+                  color: context.colors.ink,
                 ),
           ),
         ],

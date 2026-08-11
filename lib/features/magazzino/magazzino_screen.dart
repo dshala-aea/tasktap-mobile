@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'magazzino_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // TODO(backend): warehouses + movements not synced to mobile.
 // The Articoli catalog itself is NOT synced either — GET /api/Materiali
@@ -35,7 +35,7 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _MagazzinoBody(
           query: _query,
@@ -221,13 +221,13 @@ class _MateriaLeRow extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.BG3,
+          color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(
+        child: Icon(
           LucideIcons.package,
           size: 20,
-          color: AppColors.MUTED,
+          color: context.colors.inkMuted,
         ),
       ),
       title: materiale.name,
@@ -235,10 +235,10 @@ class _MateriaLeRow extends StatelessWidget {
       meta: priceLabel != null
           ? Text(
               priceLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: AppColors.DARK,
+                color: context.colors.ink,
               ),
             )
           : null,

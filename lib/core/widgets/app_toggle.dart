@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Branded toggle switch — 38×22 track, Y (on) / BM (off), 16 white knob, 200 ms.
 ///
@@ -30,7 +31,7 @@ class AppToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trackColor = value ? AppColors.Y : AppColors.BM;
+    final trackColor = value ? AppColors.Y : context.colors.borderMedium;
 
     return Semantics(
       toggled: value,
@@ -61,8 +62,8 @@ class AppToggle extends StatelessWidget {
                     child: Container(
                       width: _knobSize,
                       height: _knobSize,
-                      decoration: const BoxDecoration(
-                        color: AppColors.WHITE,
+                      decoration: BoxDecoration(
+                        color: context.colors.surface,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(

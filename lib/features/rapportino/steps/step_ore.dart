@@ -11,6 +11,7 @@ import '../../../core/widgets/app_card.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Ore
@@ -43,13 +44,13 @@ class StepOre extends ConsumerWidget {
               _SL(title:'Tecnici / Ore lavorate'),
               const SizedBox(height: 12),
               if (state.staffRows.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
                   child: Center(
                     child: Text(
                       'Nessun tecnico aggiunto.\nPremi il pulsante per aggiungere.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.MUTED, fontSize: 15),
+                      style: TextStyle(color: context.colors.inkMuted, fontSize: 15),
                     ),
                   ),
                 )
@@ -215,7 +216,7 @@ class _StaffPickerMessage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
       child: Text(
         text,
-        style: const TextStyle(fontSize: 16, height: 1.4, color: AppColors.FG2),
+        style: TextStyle(fontSize: 16, height: 1.4, color: context.colors.inkFaint),
       ),
     );
   }
@@ -285,16 +286,16 @@ class _StaffTileState extends State<_StaffTile> {
                   color: AppColors.YSoft,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.user, size: 18, color: AppColors.DARK),
+                child: Icon(LucideIcons.user, size: 18, color: context.colors.ink),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   row.displayName.isNotEmpty ? row.displayName : row.userId,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 15,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
               ),
@@ -306,14 +307,14 @@ class _StaffTileState extends State<_StaffTile> {
                 )
               else
                 IconButton(
-                  icon: const Icon(LucideIcons.timer, color: AppColors.MUTED),
+                  icon: Icon(LucideIcons.timer, color: context.colors.inkMuted),
                   tooltip: 'Avvia timer',
                   constraints:
                       const BoxConstraints(minWidth: 44, minHeight: 44),
                   onPressed: widget.onStartTimer,
                 ),
               IconButton(
-                icon: const Icon(LucideIcons.trash2, color: AppColors.RED),
+                icon: Icon(LucideIcons.trash2, color: context.colors.red),
                 tooltip: 'Rimuovi',
                 constraints:
                     const BoxConstraints(minWidth: 44, minHeight: 44),
@@ -358,14 +359,14 @@ class _StaffTileState extends State<_StaffTile> {
             Text(
               'Inizio: ${_fmtTime(row.startTime!)}'
               '${row.endTime != null ? ' → Fine: ${_fmtTime(row.endTime!)}' : ' (in corso)'}',
-              style: const TextStyle(color: AppColors.MUTED, fontSize: 12),
+              style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
             ),
             Text(
               'Ore effettive: ${row.effectiveHours.toStringAsFixed(2)}h',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
-                color: AppColors.DARK,
+                color: context.colors.ink,
               ),
             ),
           ],
@@ -423,10 +424,10 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Text(
           '$hh:$mm:$ss',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 14,
-            color: AppColors.DARK,
+            color: context.colors.ink,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
       ),
@@ -484,17 +485,17 @@ class _TotalOreCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.CHARCOAL,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: AppColors.SH,
+        boxShadow: context.colors.shadow,
       ),
       child: Row(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Totale ore',
                 style: TextStyle(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -514,10 +515,10 @@ class _TotalOreCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const Text(
+              Text(
                 'Tecnici',
                 style: TextStyle(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -525,8 +526,8 @@ class _TotalOreCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$staffCount',
-                style: const TextStyle(
-                  color: AppColors.INV,
+                style: TextStyle(
+                  color: context.colors.inkInverse,
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),

@@ -2,12 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 4 — Riepilogo
@@ -136,21 +136,21 @@ class _SummaryRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.BG3,
+        color: context.colors.bg3,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
           Text(
             label,
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.MUTED),
+            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               value,
               style: AppTextStyles.bodyLarge.copyWith(
-                color: isMissing ? AppColors.RED : AppColors.DARK,
+                color: isMissing ? context.colors.red : context.colors.ink,
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.end,

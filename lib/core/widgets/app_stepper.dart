@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// A single stepper step.
 class StepperStep {
@@ -51,7 +52,7 @@ class AppStepper extends StatelessWidget {
                   style: GoogleFonts.sora(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: i <= currentIndex ? AppColors.DARK : AppColors.MUTED,
+                    color: i <= currentIndex ? context.colors.ink : context.colors.inkMuted,
                   ),
                 ),
               ],
@@ -63,7 +64,7 @@ class AppStepper extends StatelessWidget {
               child: Container(
                 width: 16,
                 height: 2,
-                color: i < currentIndex ? AppColors.Y : AppColors.BS,
+                color: i < currentIndex ? AppColors.Y : context.colors.borderStrong,
               ),
             ),
         ],
@@ -89,17 +90,17 @@ class _Circle extends StatelessWidget {
       height: 22,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: filled ? AppColors.Y : AppColors.BS,
+        color: filled ? AppColors.Y : context.colors.borderStrong,
         shape: BoxShape.circle,
       ),
       child: done
-          ? const Icon(LucideIcons.check, size: 12, color: AppColors.DARK)
+          ? Icon(LucideIcons.check, size: 12, color: context.colors.brandOn)
           : Text(
               '${index + 1}',
               style: GoogleFonts.sora(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: filled ? AppColors.DARK : AppColors.WHITE,
+                color: filled ? context.colors.brandOn : context.colors.ink,
               ),
             ),
     );

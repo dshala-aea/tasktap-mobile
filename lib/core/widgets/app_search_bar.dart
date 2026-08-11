@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Search input — BG3 bg, 12 px radius, pad 10/14, search icon (16, MUTED) +
 /// Manrope 14 input. Spec margin: 0 / 19 / 12.
@@ -30,14 +30,14 @@ class AppSearchBar extends StatelessWidget {
       padding: margin,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: AppColors.BG3,
+          color: context.colors.bg3,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
-              const Icon(LucideIcons.search, size: 16, color: AppColors.MUTED),
+              Icon(LucideIcons.search, size: 16, color: context.colors.inkMuted),
               const SizedBox(width: 10),
               Expanded(
                 child: TextField(
@@ -45,9 +45,9 @@ class AppSearchBar extends StatelessWidget {
                   onChanged: onChanged,
                   style: GoogleFonts.manrope(
                     fontSize: 14,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
-                  cursorColor: AppColors.DARK,
+                  cursorColor: context.colors.ink,
                   decoration: InputDecoration(
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
@@ -55,7 +55,7 @@ class AppSearchBar extends StatelessWidget {
                     hintText: hint,
                     hintStyle: GoogleFonts.manrope(
                       fontSize: 14,
-                      color: AppColors.DIS,
+                      color: context.colors.inkDisabled,
                     ),
                   ),
                 ),

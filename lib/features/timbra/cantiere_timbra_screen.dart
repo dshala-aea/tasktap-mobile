@@ -33,6 +33,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     final cantieriAsync = ref.watch(cantieriProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,9 +229,9 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
           _selectedCantiere = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Uscita cantiere registrata con successo.'),
-            backgroundColor: AppColors.GREEN,
+            backgroundColor: context.colors.green,
           ),
         );
       }
@@ -320,8 +321,8 @@ class _CheckInBody extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.link,
-                      size: 16, color: AppColors.BLUE),
+                  Icon(LucideIcons.link,
+                      size: 16, color: context.colors.blue),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -329,7 +330,7 @@ class _CheckInBody extends StatelessWidget {
                       style: GoogleFonts.manrope(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.DARK,
+                        color: context.colors.ink,
                       ),
                     ),
                   ),
@@ -346,7 +347,7 @@ class _CheckInBody extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
-              color: AppColors.MUTED,
+              color: context.colors.inkMuted,
             ),
           ),
           const SizedBox(height: 8),
@@ -363,7 +364,7 @@ class _CheckInBody extends StatelessWidget {
               child: Text(
                 'Impossibile caricare i cantieri.',
                 style: GoogleFonts.manrope(
-                    fontSize: 13, color: AppColors.error),
+                    fontSize: 13, color: context.colors.red),
               ),
             ),
             data: (cantieri) {
@@ -418,9 +419,9 @@ class _CheckInBody extends StatelessWidget {
                               : Colors.transparent,
                           border: isLast
                               ? null
-                              : const Border(
+                              : Border(
                                   bottom: BorderSide(
-                                      color: AppColors.BM,
+                                      color: context.colors.borderMedium,
                                       width: 0.5)),
                         ),
                         child: Row(
@@ -429,8 +430,8 @@ class _CheckInBody extends StatelessWidget {
                               LucideIcons.hardHat,
                               size: 18,
                               color: isSelected
-                                  ? AppColors.DARK
-                                  : AppColors.MUTED,
+                                  ? context.colors.ink
+                                  : context.colors.inkMuted,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -443,7 +444,7 @@ class _CheckInBody extends StatelessWidget {
                                     style: GoogleFonts.manrope(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.DARK,
+                                      color: context.colors.ink,
                                     ),
                                   ),
                                   if (c.city != null &&
@@ -452,17 +453,17 @@ class _CheckInBody extends StatelessWidget {
                                       c.city!,
                                       style: GoogleFonts.manrope(
                                         fontSize: 12,
-                                        color: AppColors.MUTED,
+                                        color: context.colors.inkMuted,
                                       ),
                                     ),
                                 ],
                               ),
                             ),
                             if (isSelected)
-                              const Icon(
+                              Icon(
                                 LucideIcons.checkCircle2,
                                 size: 18,
-                                color: AppColors.DARK,
+                                color: context.colors.ink,
                               ),
                           ],
                         ),
@@ -534,8 +535,8 @@ class _ActiveSessionBody extends StatelessWidget {
                     Container(
                       width: 10,
                       height: 10,
-                      decoration: const BoxDecoration(
-                        color: AppColors.GREEN,
+                      decoration: BoxDecoration(
+                        color: context.colors.green,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -545,7 +546,7 @@ class _ActiveSessionBody extends StatelessWidget {
                       style: GoogleFonts.manrope(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.GREEN,
+                        color: context.colors.green,
                       ),
                     ),
                   ],
@@ -603,7 +604,7 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.REDSOFT,
+        color: context.colors.redSoft,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -643,13 +644,13 @@ class _ErrorBody extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(LucideIcons.wifiOff, size: 48, color: AppColors.MUTED),
+            Icon(LucideIcons.wifiOff, size: 48, color: context.colors.inkMuted),
             const SizedBox(height: 16),
             Text(
               message,
               style: GoogleFonts.manrope(
                 fontSize: 14,
-                color: AppColors.DARK,
+                color: context.colors.ink,
                 height: 1.5,
               ),
               textAlign: TextAlign.center,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// List row — 12/19 padding, gap 12, bottom 1 px BL divider; leading slot;
 /// Manrope 600/14 title + Manrope 12 MUTED subtitle (both ellipsis); meta slot
@@ -42,7 +42,7 @@ class ListRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
       decoration: BoxDecoration(
         border: showDivider
-            ? const Border(bottom: BorderSide(color: AppColors.BL))
+            ? Border(bottom: BorderSide(color: context.colors.borderLight))
             : null,
       ),
       child: Row(
@@ -63,7 +63,7 @@ class ListRow extends StatelessWidget {
                   style: GoogleFonts.manrope(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
                 if (subtitle != null)
@@ -74,7 +74,7 @@ class ListRow extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
-                      color: AppColors.MUTED,
+                      color: context.colors.inkMuted,
                     ),
                   ),
               ],
@@ -86,10 +86,10 @@ class ListRow extends StatelessWidget {
           ],
           if (onTap != null) ...[
             const SizedBox(width: 8),
-            const Icon(
+            Icon(
               LucideIcons.chevronRight,
               size: 16,
-              color: AppColors.DIS,
+              color: context.colors.inkDisabled,
             ),
           ],
         ],

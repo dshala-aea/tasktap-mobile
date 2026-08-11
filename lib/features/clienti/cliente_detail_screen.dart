@@ -5,10 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'clienti_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 class ClienteDetailScreen extends ConsumerWidget {
   const ClienteDetailScreen({super.key, required this.customerId});
@@ -20,7 +20,7 @@ class ClienteDetailScreen extends ConsumerWidget {
     final customerAsync = ref.watch(customerDetailProvider(customerId));
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: customerAsync.when(
         loading: () => const SafeArea(
           child: Center(child: CircularProgressIndicator()),
@@ -100,7 +100,7 @@ class _ClienteDetailBody extends ConsumerWidget {
                           style: GoogleFonts.sora(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.DARK,
+                            color: context.colors.ink,
                           ),
                         ),
                         if (customer.city != null && customer.city!.isNotEmpty)
@@ -108,7 +108,7 @@ class _ClienteDetailBody extends ConsumerWidget {
                             customer.city!,
                             style: GoogleFonts.manrope(
                               fontSize: 13,
-                              color: AppColors.MUTED,
+                              color: context.colors.inkMuted,
                             ),
                           ),
                       ],
@@ -177,7 +177,7 @@ class _ClienteDetailBody extends ConsumerWidget {
                         customer.notes!,
                         style: GoogleFonts.manrope(
                           fontSize: 13,
-                          color: AppColors.DARK,
+                          color: context.colors.ink,
                           height: 1.5,
                         ),
                       ),
@@ -232,22 +232,22 @@ class _ClienteDetailBody extends ConsumerWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: AppColors.BG3,
+                            color: context.colors.bg3,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             LucideIcons.ticket,
                             size: 20,
-                            color: AppColors.MUTED,
+                            color: context.colors.inkMuted,
                           ),
                         ),
                         title: ticket.title,
                         subtitle: '#$shortId',
                         meta: Text(
                           dateLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.MUTED,
+                            color: context.colors.inkMuted,
                           ),
                         ),
                         showDivider: false,

@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single materiale by id from Drift cache.
 final adminMaterialeDetailProvider =
@@ -29,7 +29,7 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
         ref.watch(adminMaterialeDetailProvider(materialeId));
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       floatingActionButton: AppFab(
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
@@ -104,9 +104,9 @@ class _MaterialeDetailBody extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => Container(
                     height: 180,
-                    color: AppColors.BG3,
-                    child: const Center(
-                      child: Icon(LucideIcons.imageOff, size: 40, color: AppColors.MUTED),
+                    color: context.colors.bg3,
+                    child: Center(
+                      child: Icon(LucideIcons.imageOff, size: 40, color: context.colors.inkMuted),
                     ),
                   ),
                 ),
@@ -125,15 +125,15 @@ class _MaterialeDetailBody extends StatelessWidget {
                         horizontal: 10, vertical: 6),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
+                      color: context.colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
+                    child: Text(
                       'INATTIVO',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.error,
+                        color: context.colors.red,
                       ),
                     ),
                   ),
@@ -194,7 +194,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   letterSpacing: 1.2,
                 ),
           ),
@@ -202,7 +202,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textPrimary,
+                  color: context.colors.ink,
                 ),
           ),
         ],

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Shown where a screen needs backend data that no client code path fetches
 /// (or writes to the local cache) yet.
@@ -37,7 +37,7 @@ class UnavailableState extends StatelessWidget {
   /// Why it's missing — always a concrete reason, never a vague promise.
   final String motivo;
 
-  /// Circle icon, 26px, [AppColors.DIS]. Defaults to a generic "something's
+  /// Circle icon, 26px, [context.colors.inkDisabled]. Defaults to a generic "something's
   /// off" glyph; pass a domain icon (e.g. [LucideIcons.package]) to match
   /// the surrounding screen's iconography.
   final IconData icon;
@@ -53,11 +53,11 @@ class UnavailableState extends StatelessWidget {
             Container(
               width: 60,
               height: 60,
-              decoration: const BoxDecoration(
-                color: AppColors.BG3,
+              decoration: BoxDecoration(
+                color: context.colors.bg3,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 26, color: AppColors.DIS),
+              child: Icon(icon, size: 26, color: context.colors.inkDisabled),
             ),
             const SizedBox(height: 16),
             Text(
@@ -66,7 +66,7 @@ class UnavailableState extends StatelessWidget {
               style: GoogleFonts.sora(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.DARK,
+                color: context.colors.ink,
               ),
             ),
             const SizedBox(height: 6),
@@ -78,7 +78,7 @@ class UnavailableState extends StatelessWidget {
                 style: GoogleFonts.manrope(
                   fontSize: 13,
                   fontWeight: FontWeight.w400,
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   height: 1.4,
                 ),
               ),

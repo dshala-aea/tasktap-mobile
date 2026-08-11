@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Floating action button — 56 px circle, Y bg, large shadow
 /// (0 8px 20px rgba(0,0,0,0.18)), plus icon (24, DARK).
@@ -47,7 +48,7 @@ class AppFab extends StatelessWidget {
                 ),
               ],
             ),
-            child: Icon(icon, size: 24, color: AppColors.DARK),
+            child: Icon(icon, size: 24, color: context.colors.ink),
           ),
         ),
       ),

@@ -8,6 +8,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Assegnazione
@@ -44,19 +45,19 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
       children: [
-        const Text(
+        Text(
           'Assegnazione',
           style: TextStyle(
             fontFamily: 'Sora',
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: AppColors.DARK,
+            color: context.colors.ink,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           'Opzionale — puoi assegnare un tecnico al ticket.',
-          style: AppTextStyles.bodySmall.copyWith(color: AppColors.MUTED),
+          style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
         ),
         const SizedBox(height: 16),
 
@@ -81,13 +82,13 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
-                const Icon(LucideIcons.cloudOff, size: 32, color: AppColors.MUTED),
+                Icon(LucideIcons.cloudOff, size: 32, color: context.colors.inkMuted),
                 const SizedBox(height: 8),
                 Text(
                   'Impossibile caricare i tecnici.\nSeleziona un ticket senza assegnazione.',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                   ),
                 ),
               ],
@@ -100,7 +101,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                 child: Text(
                   'Nessun tecnico disponibile.',
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                   ),
                 ),
               );
@@ -151,10 +152,10 @@ class _AssignmentOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppTappable(
       onTap: onTap,
-      color: isSelected ? AppColors.Y.withValues(alpha: 0.12) : AppColors.WHITE,
+      color: isSelected ? AppColors.Y.withValues(alpha: 0.12) : context.colors.surface,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: isSelected ? AppColors.Y : AppColors.BS,
+        color: isSelected ? AppColors.Y : context.colors.borderStrong,
         width: isSelected ? 2 : 1,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -165,14 +166,14 @@ class _AssignmentOption extends StatelessWidget {
                   ? LucideIcons.circleDot
                   : LucideIcons.circle,
               size: 20,
-              color: isSelected ? AppColors.Y : AppColors.MUTED,
+              color: isSelected ? AppColors.Y : context.colors.inkMuted,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 label,
                 style: AppTextStyles.bodyLarge.copyWith(
-                  color: isSelected ? AppColors.DARK : AppColors.MUTED,
+                  color: isSelected ? context.colors.ink : context.colors.inkMuted,
                   fontWeight:
                       isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),

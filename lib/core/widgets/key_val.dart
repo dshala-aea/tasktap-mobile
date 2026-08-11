@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Key–value display row / column.
 ///
@@ -29,16 +29,16 @@ class KeyVal extends StatelessWidget {
   final bool vertical;
   final bool showDivider;
 
-  static TextStyle get _labelStyle => GoogleFonts.manrope(
+  static TextStyle _labelStyle(BuildContext context) => GoogleFonts.manrope(
         fontSize: 10,
         fontWeight: FontWeight.w700,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
         letterSpacing: 0.3,
       );
 
   @override
   Widget build(BuildContext context) {
-    final Widget content = vertical ? _vertical() : _horizontal();
+    final Widget content = vertical ? _vertical(context) : _horizontal(context);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -48,20 +48,20 @@ class KeyVal extends StatelessWidget {
           Divider(
             height: 1,
             thickness: 1,
-            color: AppColors.BL,
+            color: context.colors.borderLight,
           ),
       ],
     );
   }
 
-  Widget _horizontal() {
+  Widget _horizontal(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           Text(
             label.toUpperCase(),
-            style: _labelStyle,
+            style: _labelStyle(context),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -72,7 +72,7 @@ class KeyVal extends StatelessWidget {
               style: GoogleFonts.manrope(
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
-                color: AppColors.DARK,
+                color: context.colors.ink,
               ),
             ),
           ),
@@ -81,13 +81,13 @@ class KeyVal extends StatelessWidget {
     );
   }
 
-  Widget _vertical() {
+  Widget _vertical(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: _labelStyle),
+          Text(label.toUpperCase(), style: _labelStyle(context)),
           const SizedBox(height: 4),
           Text(
             value,
@@ -95,7 +95,7 @@ class KeyVal extends StatelessWidget {
             style: GoogleFonts.manrope(
               fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: AppColors.DARK,
+              color: context.colors.ink,
             ),
           ),
         ],

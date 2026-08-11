@@ -9,6 +9,7 @@ import '../../../core/widgets/app_text_field.dart';
 // section_title omitted — using inline _SL below to avoid double padding
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 1 — Dettagli
@@ -96,10 +97,10 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
                       state.ticketId != null
                           ? 'Collegato al ticket ${state.ticketId}'
                           : 'Collegato al cantiere ${state.cantiereId}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
-                        color: AppColors.DARK,
+                        color: context.colors.ink,
                       ),
                     ),
                   ),
@@ -242,7 +243,7 @@ class _GpsCapture extends ConsumerWidget {
         children: [
           Icon(
             hasGps ? LucideIcons.mapPin : LucideIcons.mapPinOff,
-            color: hasGps ? AppColors.GREEN : AppColors.MUTED,
+            color: hasGps ? context.colors.green : context.colors.inkMuted,
             size: 20,
           ),
           const SizedBox(width: 8),
@@ -254,7 +255,7 @@ class _GpsCapture extends ConsumerWidget {
                   : 'Posizione GPS non acquisita',
               style: TextStyle(
                 fontSize: 13,
-                color: hasGps ? AppColors.DARK : AppColors.MUTED,
+                color: hasGps ? context.colors.ink : context.colors.inkMuted,
               ),
             ),
           ),
@@ -525,10 +526,10 @@ class _TicketCantierePicker extends ConsumerWidget {
         ),
         const SizedBox(height: 12),
 
-        const Center(
+        Center(
           child: Text(
             '— oppure —',
-            style: TextStyle(color: AppColors.MUTED),
+            style: TextStyle(color: context.colors.inkMuted),
           ),
         ),
         const SizedBox(height: 12),

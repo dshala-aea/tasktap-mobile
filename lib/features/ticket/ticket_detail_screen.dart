@@ -7,7 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../presentation/providers/report_editor_providers.dart';
@@ -15,6 +14,7 @@ import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 class TicketDetailScreen extends ConsumerStatefulWidget {
   const TicketDetailScreen({super.key, required this.ticketId});
@@ -44,7 +44,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: ticketAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Errore: $e')),
@@ -183,7 +183,7 @@ class _TicketDetailBody extends ConsumerWidget {
                               ticket.description!,
                               style: GoogleFonts.manrope(
                                 fontSize: 13,
-                                color: AppColors.DARK,
+                                color: context.colors.ink,
                                 height: 1.5,
                               ),
                             ),
@@ -209,7 +209,7 @@ class _TicketDetailBody extends ConsumerWidget {
                               ticket.technicianNotes!,
                               style: GoogleFonts.manrope(
                                 fontSize: 13,
-                                color: AppColors.DARK,
+                                color: context.colors.ink,
                                 height: 1.5,
                               ),
                             ),
@@ -466,7 +466,7 @@ class _ReportTab extends ConsumerWidget {
               final dateLabel =
                   DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
               return ListRow(
-                leading: const Icon(LucideIcons.fileText, size: 20, color: AppColors.MUTED),
+                leading: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
                 title: r.title.isNotEmpty ? r.title : 'Rapportino',
                 subtitle: dateLabel,
                 meta: StatusPill(stato: r.statoLabel, small: true),
@@ -539,9 +539,9 @@ class _TicketControlStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = flat.control;
     final (icon, color) = switch (c.status) {
-      'Completed' => (LucideIcons.checkCircle, AppColors.GREEN),
-      'NotApplicable' => (LucideIcons.xCircle, AppColors.MUTED),
-      _ => (LucideIcons.square, AppColors.DIS),
+      'Completed' => (LucideIcons.checkCircle, context.colors.green),
+      'NotApplicable' => (LucideIcons.xCircle, context.colors.inkMuted),
+      _ => (LucideIcons.square, context.colors.inkDisabled),
     };
     final valueLabel = _valueLabel(c);
 
@@ -559,14 +559,14 @@ class _TicketControlStatusCard extends StatelessWidget {
                 if (flat.groupPath.isNotEmpty)
                   Text(
                     flat.groupPath,
-                    style: const TextStyle(color: AppColors.MUTED, fontSize: 11),
+                    style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
                   ),
                 Text(
                   c.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
                 if (valueLabel != null)
@@ -574,7 +574,7 @@ class _TicketControlStatusCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       valueLabel,
-                      style: const TextStyle(color: AppColors.MUTED, fontSize: 12),
+                      style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
                     ),
                   ),
               ],
@@ -639,7 +639,7 @@ class _AllegatiTab extends ConsumerWidget {
               final dateLabel =
                   DateFormat('dd/MM/yyyy HH:mm', 'it').format(a.createdAt.toLocal());
               return ListRow(
-                leading: const Icon(LucideIcons.paperclip, size: 20, color: AppColors.MUTED),
+                leading: Icon(LucideIcons.paperclip, size: 20, color: context.colors.inkMuted),
                 title: a.fileName,
                 subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
                 showDivider: a != attachments.last,
@@ -693,7 +693,7 @@ class _FabbisognoTab extends ConsumerWidget {
                 leading: Icon(
                   LucideIcons.package,
                   size: 20,
-                  color: m.disponibile ? AppColors.MUTED : AppColors.RED,
+                  color: m.disponibile ? context.colors.inkMuted : context.colors.red,
                 ),
                 title: m.nome,
                 subtitle: m.codice != null ? '${m.codice} · $qtyLabel' : qtyLabel,
@@ -763,10 +763,10 @@ class _PianificazioniTab extends ConsumerWidget {
                   final dateLabel = DateFormat('EEE d MMM HH:mm', 'it')
                       .format(s.activityDate.toLocal());
                   return ListRow(
-                    leading: const Icon(
+                    leading: Icon(
                       LucideIcons.calendarDays,
                       size: 20,
-                      color: AppColors.MUTED,
+                      color: context.colors.inkMuted,
                     ),
                     title: s.title.isNotEmpty ? s.title : 'Intervento',
                     subtitle: dateLabel,

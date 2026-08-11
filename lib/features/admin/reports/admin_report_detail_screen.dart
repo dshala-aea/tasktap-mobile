@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Admin report detail — read-only with state transition actions.
 class AdminReportDetailScreen extends ConsumerWidget {
@@ -31,11 +31,11 @@ class AdminReportDetailScreen extends ConsumerWidget {
         : '—';
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: AppColors.BG2,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: context.colors.bg2,
+        foregroundColor: context.colors.ink,
         elevation: 0,
         actions: [
           PopupMenuButton<String>(
@@ -69,7 +69,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
                   Text(
                     dateLabel,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.MUTED,
+                          color: context.colors.inkMuted,
                         ),
                   ),
                 ],

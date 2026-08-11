@@ -5,10 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'rapportino_list_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoViewScreen — read-only view for submitted rapportini (D3b).
@@ -24,7 +24,7 @@ class RapportinoViewScreen extends ConsumerWidget {
     final draftAsync = ref.watch(rapportinoByIdProvider(reportId));
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: draftAsync.when(
         loading: () =>
             const Center(child: CircularProgressIndicator()),
@@ -120,16 +120,16 @@ class _RapportinoViewBody extends ConsumerWidget {
                                   dateLabel,
                                   style: GoogleFonts.manrope(
                                     fontSize: 12,
-                                    color: AppColors.MUTED,
+                                    color: context.colors.inkMuted,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const Divider(
+                          Divider(
                             height: 1,
                             thickness: 1,
-                            color: AppColors.BL,
+                            color: context.colors.borderLight,
                           ),
                           KeyVal(
                             label: 'Sede',
@@ -168,7 +168,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                               draft.details!,
                               style: GoogleFonts.manrope(
                                 fontSize: 13,
-                                color: AppColors.DARK,
+                                color: context.colors.ink,
                                 height: 1.5,
                               ),
                             ),
@@ -213,13 +213,13 @@ class _RapportinoViewBody extends ConsumerWidget {
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: AppColors.BG3,
+                                    color: context.colors.bg3,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     LucideIcons.package,
                                     size: 18,
-                                    color: AppColors.MUTED,
+                                    color: context.colors.inkMuted,
                                   ),
                                 ),
                                 title: name,
@@ -322,27 +322,27 @@ class _SignatureBlock extends ConsumerWidget {
       constraints: const BoxConstraints(minHeight: 90),
       decoration: BoxDecoration(
         border: Border.all(
-          color: AppColors.BS,
+          color: context.colors.borderStrong,
           width: 1.5,
           style: BorderStyle.solid,
         ),
         borderRadius: BorderRadius.circular(10),
-        color: AppColors.BG1,
+        color: context.colors.bg1,
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             LucideIcons.penTool,
             size: 28,
-            color: AppColors.MUTED,
+            color: context.colors.inkMuted,
           ),
           const SizedBox(height: 6),
           Text(
             'Firmato il $signedLabel',
             style: GoogleFonts.manrope(
               fontSize: 12,
-              color: AppColors.MUTED,
+              color: context.colors.inkMuted,
             ),
           ),
         ],

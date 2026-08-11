@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Initials avatar circle.
 ///
@@ -65,7 +66,7 @@ class AppAvatar extends StatelessWidget {
             style: GoogleFonts.manrope(
               fontSize: size * 0.36,
               fontWeight: FontWeight.w700,
-              color: AppColors.DARK,
+              color: context.colors.ink,
               height: 1,
             ),
           ),

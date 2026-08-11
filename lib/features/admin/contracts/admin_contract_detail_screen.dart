@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Admin contract detail — read-only with edit FAB.
 class AdminContractDetailScreen extends StatelessWidget {
@@ -36,7 +36,7 @@ class AdminContractDetailScreen extends StatelessWidget {
     final freqLabel = '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       floatingActionButton: AppFab(
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
@@ -111,7 +111,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   letterSpacing: 1.2,
                 ),
           ),
@@ -119,7 +119,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textPrimary,
+                  color: context.colors.ink,
                 ),
           ),
         ],

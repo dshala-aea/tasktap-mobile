@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'clienti_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 class ClientiListScreen extends StatefulWidget {
   const ClientiListScreen({super.key});
@@ -29,7 +29,7 @@ class _ClientiListScreenState extends State<ClientiListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _ClientiListBody(
           query: _query,
@@ -138,10 +138,10 @@ class _ClienteRow extends ConsumerWidget {
       leading: AppAvatar(name: customer.companyName, size: 40),
       title: customer.companyName,
       subtitle: subLabel,
-      meta: const Icon(
+      meta: Icon(
         LucideIcons.chevronRight,
         size: 16,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
       ),
       showDivider: !isLast,
       onTap: () => context.push(AppRoutes.clientiDetail(customer.id)),

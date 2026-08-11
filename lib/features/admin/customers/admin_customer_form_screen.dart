@@ -11,6 +11,7 @@ import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single-step form for creating or editing a customer.
 ///
@@ -143,7 +144,7 @@ class _AdminCustomerFormScreenState
                   ? 'Cliente aggiornato'
                   : 'Cliente creato con successo',
             ),
-            backgroundColor: AppColors.GREEN,
+            backgroundColor: context.colors.green,
           ),
         );
         Navigator.of(context).pop(true);
@@ -153,7 +154,7 @@ class _AdminCustomerFormScreenState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Errore: $e'),
-            backgroundColor: AppColors.RED,
+            backgroundColor: context.colors.red,
           ),
         );
       }
@@ -165,14 +166,14 @@ class _AdminCustomerFormScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       appBar: AppBar(
         backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: AppColors.INV,
+        foregroundColor: context.colors.inkInverse,
         elevation: 0,
         title: Text(
           widget.isEditMode ? 'Modifica cliente' : 'Nuovo cliente',
-          style: AppTextStyles.titleMedium.copyWith(color: AppColors.INV),
+          style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
         ),
       ),
       body: Form(
@@ -196,7 +197,7 @@ class _AdminCustomerFormScreenState
             const SizedBox(height: 24),
 
             // ── Contact ────────────────────────────────────────────────────
-            _sectionLabel('Contatto'),
+            _sectionLabel(context, 'Contatto'),
             const SizedBox(height: 12),
             AppTextField(
               label: 'Referente',
@@ -217,7 +218,7 @@ class _AdminCustomerFormScreenState
             const SizedBox(height: 24),
 
             // ── Address ────────────────────────────────────────────────────
-            _sectionLabel('Indirizzo'),
+            _sectionLabel(context, 'Indirizzo'),
             const SizedBox(height: 12),
             AppTextField(
               label: 'Indirizzo',
@@ -250,7 +251,7 @@ class _AdminCustomerFormScreenState
             const SizedBox(height: 24),
 
             // ── Notes ──────────────────────────────────────────────────────
-            _sectionLabel('Note'),
+            _sectionLabel(context, 'Note'),
             const SizedBox(height: 12),
             AppTextField.multiline(
               label: 'Note',
@@ -271,14 +272,14 @@ class _AdminCustomerFormScreenState
     );
   }
 
-  static Widget _sectionLabel(String text) {
+  static Widget _sectionLabel(BuildContext context, String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Sora',
         fontSize: 15,
         fontWeight: FontWeight.w700,
-        color: AppColors.DARK,
+        color: context.colors.ink,
       ),
     );
   }

@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/local/app_database.dart';
 import 'timbra_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TimbraScreen
@@ -181,12 +182,12 @@ class _DateLabel extends StatelessWidget {
     final formatted = '$day ${now.day} $month ${now.year}';
     return Text(
       formatted,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Manrope',
         fontSize: 13,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.2,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
       ),
       textAlign: TextAlign.center,
     );
@@ -351,10 +352,10 @@ class _PunchButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             guard.reason!,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Manrope',
               fontSize: 12,
-              color: AppColors.MUTED,
+              color: context.colors.inkMuted,
             ),
             textAlign: TextAlign.center,
           ),
@@ -392,7 +393,7 @@ class _PauseButton extends StatelessWidget {
     final isOnPause = shiftState.isOnPause;
     final label = isOnPause ? 'RIPRENDI' : 'PAUSA';
     final icon = isOnPause ? LucideIcons.play : LucideIcons.coffee;
-    final accent = isOnPause ? AppColors.CYAN : AppColors.AMBER;
+    final accent = isOnPause ? context.colors.cyan : context.colors.amber;
     final blocked = guard.blocked;
 
     final button = Semantics(
@@ -445,10 +446,10 @@ class _PauseButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             guard.reason!,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Manrope',
               fontSize: 12,
-              color: AppColors.MUTED,
+              color: context.colors.inkMuted,
             ),
             textAlign: TextAlign.center,
           ),
@@ -491,14 +492,14 @@ class _SessionsCard extends StatelessWidget {
           // Section title + optional pending-sync indicator
           Row(
             children: [
-              const Text(
+              Text(
                 'SESSIONI DI OGGI',
                 style: TextStyle(
                   fontFamily: 'Manrope',
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.4,
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                 ),
               ),
               if (hasPendingSync) ...[
@@ -508,8 +509,8 @@ class _SessionsCard extends StatelessWidget {
                   child: Container(
                     width: 7,
                     height: 7,
-                    decoration: const BoxDecoration(
-                      color: AppColors.AMBER,
+                    decoration: BoxDecoration(
+                      color: context.colors.amber,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -525,8 +526,8 @@ class _SessionsCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   'Nessuna timbratura oggi',
-                  style: const TextStyle(
-                    color: AppColors.MUTED,
+                  style: TextStyle(
+                    color: context.colors.inkMuted,
                     fontSize: 13,
                     fontFamily: 'Manrope',
                   ),
@@ -582,25 +583,25 @@ class _SessionRow extends StatelessWidget {
     }
   }
 
-  Color _color(String type) {
+  Color _color(BuildContext context, String type) {
     switch (type) {
       case 'ingresso':
-        return AppColors.GREEN;
+        return context.colors.green;
       case 'fine':
-        return AppColors.RED;
+        return context.colors.red;
       case 'pausa':
-        return AppColors.AMBER;
+        return context.colors.amber;
       case 'ripresa':
-        return AppColors.CYAN;
+        return context.colors.cyan;
       default:
-        return AppColors.MUTED;
+        return context.colors.inkMuted;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final timeStr = DateFormat('HH:mm').format(session.eventTime.toLocal());
-    final color = _color(session.eventType);
+    final color = _color(context, session.eventType);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

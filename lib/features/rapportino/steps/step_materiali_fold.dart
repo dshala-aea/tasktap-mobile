@@ -17,6 +17,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Materiali  (folds Controlli + Foto/Allegati as sub-sections)
@@ -48,12 +49,12 @@ class StepMaterialiFold extends ConsumerWidget {
           child: Row(
             children: [
               Expanded(
-                child: const Text(
+                child: Text(
                   'Nessun materiale utilizzato',
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
               ),
@@ -71,11 +72,11 @@ class StepMaterialiFold extends ConsumerWidget {
           _SL(title:'Materiali (${state.materialeRows.length})'),
           const SizedBox(height: 8),
           if (state.materialeRows.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Text(
                 'Nessun materiale aggiunto.',
-                style: TextStyle(color: AppColors.MUTED),
+                style: TextStyle(color: context.colors.inkMuted),
               ),
             )
           else
@@ -159,7 +160,7 @@ class StepMaterialiFold extends ConsumerWidget {
                 label: const Text('Fotocamera'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brand,
-                  foregroundColor: AppColors.onBrand,
+                  foregroundColor: context.colors.brandOn,
                   minimumSize: const Size(0, 52),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -349,8 +350,8 @@ class _MaterialeQtyStepper extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(LucideIcons.package,
-              size: 18, color: AppColors.MUTED),
+          Icon(LucideIcons.package,
+              size: 18, color: context.colors.inkMuted),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -358,17 +359,17 @@ class _MaterialeQtyStepper extends StatelessWidget {
               children: [
                 Text(
                   row.displayName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
                 if (row.unitOfMeasure != null)
                   Text(
                     row.unitOfMeasure!,
-                    style: const TextStyle(
-                        color: AppColors.MUTED, fontSize: 11),
+                    style: TextStyle(
+                        color: context.colors.inkMuted, fontSize: 11),
                   ),
               ],
             ),
@@ -389,10 +390,10 @@ class _MaterialeQtyStepper extends StatelessWidget {
                 child: Text(
                   row.quantity.toStringAsFixed(
                       row.quantity == row.quantity.truncateToDouble() ? 0 : 1),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
               ),
@@ -405,8 +406,8 @@ class _MaterialeQtyStepper extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(LucideIcons.trash2,
-                color: AppColors.RED, size: 18),
+            icon: Icon(LucideIcons.trash2,
+                color: context.colors.red, size: 18),
             constraints:
                 const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: onRemove,
@@ -450,13 +451,13 @@ class _QtyBtn extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: onTap != null ? AppColors.BG3 : AppColors.BG4,
+                color: onTap != null ? context.colors.bg3 : context.colors.bg4,
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
                 size: 16,
-                color: onTap != null ? AppColors.DARK : AppColors.DIS,
+                color: onTap != null ? context.colors.ink : context.colors.inkDisabled,
               ),
             ),
           ),
@@ -485,9 +486,9 @@ class _PhotoThumb extends StatelessWidget {
             File(row.localPath),
             fit: BoxFit.cover,
             errorBuilder: (ctx, e, _) => Container(
-              color: AppColors.BG3,
-              child: const Icon(LucideIcons.imageOff,
-                  color: AppColors.MUTED),
+              color: context.colors.bg3,
+              child: Icon(LucideIcons.imageOff,
+                  color: context.colors.inkMuted),
             ),
           ),
         ),
@@ -508,8 +509,8 @@ class _PhotoThumb extends StatelessWidget {
                 height: 44,
                 child: Center(
                   child: Container(
-                    decoration: const BoxDecoration(
-                      color: AppColors.RED,
+                    decoration: BoxDecoration(
+                      color: context.colors.red,
                       shape: BoxShape.circle,
                     ),
                     padding: const EdgeInsets.all(4),
@@ -568,12 +569,12 @@ class _ControlliChecklist extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ticket = ticketId;
     if (ticket == null || ticket.isEmpty) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
         child: Text(
           'I controlli sono legati al ticket: questo rapportino non è '
           'collegato a nessun ticket, quindi non è previsto alcun controllo.',
-          style: TextStyle(color: AppColors.MUTED, fontSize: 13),
+          style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
         ),
       );
     }
@@ -591,17 +592,17 @@ class _ControlliChecklist extends ConsumerWidget {
           e is TicketDetailOfflineException
               ? 'Controlli non disponibili offline: riprova quando torni online.'
               : 'Impossibile caricare i controlli. Riprova più tardi.',
-          style: const TextStyle(color: AppColors.MUTED, fontSize: 13),
+          style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
         ),
       ),
       data: (groups) {
         final flat = flattenTicketControls(groups);
         if (flat.isEmpty) {
-          return const Padding(
+          return Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
               'Nessun controllo previsto per questo intervento.',
-              style: TextStyle(color: AppColors.MUTED, fontSize: 13),
+              style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
             ),
           );
         }
@@ -696,7 +697,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
           if (widget.flat.groupPath.isNotEmpty)
             Text(
               widget.flat.groupPath,
-              style: const TextStyle(color: AppColors.MUTED, fontSize: 11),
+              style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
             ),
           const SizedBox(height: 2),
           Row(
@@ -705,19 +706,19 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
               Expanded(
                 child: Text(
                   c.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
               ),
               if (c.isRequired)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(left: 4),
                   child: Text(
                     '*',
-                    style: TextStyle(color: AppColors.RED, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: context.colors.red, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -727,7 +728,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
               padding: const EdgeInsets.only(top: 2, bottom: 4),
               child: Text(
                 c.description!,
-                style: const TextStyle(color: AppColors.MUTED, fontSize: 12),
+                style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
               ),
             ),
           const SizedBox(height: 8),
@@ -744,14 +745,14 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
         final value = existing?.boolValue ?? c.boolValue ?? false;
         return Row(
           children: [
-            const Text('No', style: TextStyle(color: AppColors.MUTED, fontSize: 12)),
+            Text('No', style: TextStyle(color: context.colors.inkMuted, fontSize: 12)),
             const SizedBox(width: 8),
             AppToggle(
               value: value,
               onChanged: (v) => _save(boolValue: v),
             ),
             const SizedBox(width: 8),
-            const Text('Sì', style: TextStyle(color: AppColors.MUTED, fontSize: 12)),
+            Text('Sì', style: TextStyle(color: context.colors.inkMuted, fontSize: 12)),
           ],
         );
       case ControlType.date:

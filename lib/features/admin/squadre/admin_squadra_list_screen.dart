@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches squadre from backend API.
 final adminSquadreProvider =
@@ -24,7 +24,7 @@ class AdminSquadraListScreen extends ConsumerWidget {
     final squadreAsync = ref.watch(adminSquadreProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: squadreAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -137,10 +137,10 @@ class _SquadraRow extends StatelessWidget {
   final bool isLast;
   final VoidCallback onTap;
 
-  Color _parseColor(String? hex) {
-    if (hex == null || hex.isEmpty) return AppColors.MUTED;
+  Color _parseColor(BuildContext context, String? hex) {
+    if (hex == null || hex.isEmpty) return context.colors.inkMuted;
     final clean = hex.replaceFirst('#', '');
-    if (clean.length != 6) return AppColors.MUTED;
+    if (clean.length != 6) return context.colors.inkMuted;
     return Color(int.parse('FF$clean', radix: 16));
   }
 
@@ -151,21 +151,21 @@ class _SquadraRow extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: _parseColor(colore).withValues(alpha: 0.15),
+          color: _parseColor(context, colore).withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(
           LucideIcons.users,
           size: 20,
-          color: _parseColor(colore),
+          color: _parseColor(context, colore),
         ),
       ),
       title: nome,
       subtitle: specializzazione.isNotEmpty ? specializzazione : '—',
-      meta: const Icon(
+      meta: Icon(
         LucideIcons.chevronRight,
         size: 16,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
       ),
       showDivider: !isLast,
       onTap: onTap,

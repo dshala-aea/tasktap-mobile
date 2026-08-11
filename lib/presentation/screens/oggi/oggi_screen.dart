@@ -9,6 +9,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../providers/schedule_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Today's schedule screen — reads schedules from the local Drift DB.
 class OggiScreen extends ConsumerWidget {
@@ -20,7 +21,7 @@ class OggiScreen extends ConsumerWidget {
     final syncState = ref.watch(syncProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.bg1,
       appBar: AppBar(
         title: Text('Oggi', style: AppTextStyles.titleLarge),
         actions: [
@@ -103,7 +104,7 @@ class _SyncStatusBar extends StatelessWidget {
           horizontal: AppSpacing.base, vertical: AppSpacing.xs),
       child: Text(label,
           style: AppTextStyles.bodySmall
-              .copyWith(color: AppColors.textSecondary)),
+              .copyWith(color: context.colors.inkFaint)),
     );
   }
 }
@@ -130,7 +131,7 @@ class _EmptyToday extends StatelessWidget {
             Text(
               'Tira giù per aggiornare, o attendi la sincronizzazione automatica.',
               style: AppTextStyles.bodyMedium
-                  .copyWith(color: AppColors.textSecondary),
+                  .copyWith(color: context.colors.inkFaint),
               textAlign: TextAlign.center,
             ),
           ],
@@ -193,14 +194,14 @@ class _ScheduleCard extends ConsumerWidget {
             Row(
               children: [
                 Icon(LucideIcons.clock,
-                    size: 16, color: AppColors.textSecondary),
+                    size: 16, color: context.colors.inkFaint),
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   schedule.allDay
                       ? 'Tutto il giorno'
                       : '$timeStart – $timeEnd',
                   style: AppTextStyles.bodySmall
-                      .copyWith(color: AppColors.textSecondary),
+                      .copyWith(color: context.colors.inkFaint),
                 ),
               ],
             ),
@@ -217,7 +218,7 @@ class _ScheduleCard extends ConsumerWidget {
               Text(
                 schedule.description,
                 style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary),
+                    .copyWith(color: context.colors.inkFaint),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -282,13 +283,13 @@ class _LocationRow extends StatelessWidget {
     return Row(
       children: [
         Icon(LucideIcons.mapPin,
-            size: 14, color: AppColors.textSecondary),
+            size: 14, color: context.colors.inkFaint),
         const SizedBox(width: AppSpacing.xs),
         Expanded(
           child: Text(
             parts.join(' · '),
             style: AppTextStyles.bodySmall
-                .copyWith(color: AppColors.textSecondary),
+                .copyWith(color: context.colors.inkFaint),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -330,7 +331,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
           Text(
             subtitle,
             style: AppTextStyles.bodyMedium
-                .copyWith(color: AppColors.textSecondary),
+                .copyWith(color: context.colors.inkFaint),
             textAlign: TextAlign.center,
           ),
         ],

@@ -12,6 +12,7 @@ import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
 import 'steps/step_ore.dart';
 import 'steps/step_riepilogo.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoFormScreen
@@ -84,10 +85,10 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       appBar: AppBar(
         backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: AppColors.INV,
+        foregroundColor: context.colors.inkInverse,
         elevation: 0,
         titleSpacing: 0,
         title: Column(
@@ -96,13 +97,13 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           children: [
             Text(
               'Rapportino',
-              style: AppTextStyles.titleMedium.copyWith(color: AppColors.INV),
+              style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
             ),
             if (contextSubtitle != null)
               Text(
                 contextSubtitle,
                 style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   fontSize: 11,
                 ),
               ),
@@ -193,7 +194,7 @@ class _BottomNavBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        color: AppColors.WHITE,
+        color: context.colors.surface,
         padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
         child: Row(
           children: [

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme/app_colors.dart';
 import 'app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Compact rounded badge pill.
 ///
@@ -11,7 +11,7 @@ import 'app_tappable.dart';
 /// ```dart
 /// AppBadge(label: '3');
 /// AppBadge(label: 'Nuovo', small: true);
-/// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: AppColors.DARK);
+/// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: context.colors.ink);
 /// ```
 class AppBadge extends StatelessWidget {
   const AppBadge({
@@ -29,8 +29,8 @@ class AppBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = bgColor ?? AppColors.BG3;
-    final fg = fgColor ?? AppColors.DARK;
+    final bg = bgColor ?? context.colors.bg3;
+    final fg = fgColor ?? context.colors.ink;
     final fontSize = small ? 9.0 : 10.0;
     final vPad = small ? 2.0 : 3.0;
     final hPad = small ? 7.0 : 9.0;
@@ -78,9 +78,9 @@ class AppChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = active ? AppColors.DARK : AppColors.WHITE;
-    final fg = active ? AppColors.WHITE : AppColors.DARK;
-    final borderColor = active ? AppColors.DARK : AppColors.BM;
+    final bg = active ? context.colors.surfaceInverse : context.colors.surface;
+    final fg = active ? context.colors.inkInverse : context.colors.ink;
+    final borderColor = active ? context.colors.surfaceInverse : context.colors.borderMedium;
 
     const radius = 5.0;
 

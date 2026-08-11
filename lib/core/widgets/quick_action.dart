@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Quick action — 50 px yellow circle + icon (20) + centered Manrope 700/10
 /// label.
@@ -41,7 +42,7 @@ class QuickAction extends StatelessWidget {
                   color: AppColors.Y,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 20, color: AppColors.DARK),
+                child: Icon(icon, size: 20, color: context.colors.ink),
               ),
               const SizedBox(height: 6),
               Text(
@@ -52,7 +53,7 @@ class QuickAction extends StatelessWidget {
                 style: GoogleFonts.manrope(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.DARK,
+                  color: context.colors.ink,
                 ),
               ),
             ],

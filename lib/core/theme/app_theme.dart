@@ -2,68 +2,84 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
+import 'app_palette.dart';
 import 'app_spacing.dart';
 import 'app_text_styles.dart';
 
-/// Builds the TaskTap [ThemeData].
+/// Builds the TaskTap [ThemeData] for one [Brightness].
 ///
-/// Brand yellow Y `#FFF10E` as primary, DARK `#363636` as foreground.
-/// Typography: Sora (display / titles) + Manrope (body / labels).
-ThemeData buildAppTheme() {
+/// Brand yellow Y `#FFF10E` is primary in both themes — it is the brand, and it reads on either
+/// ground. Everything else comes from [AppPalette], which is also attached as a theme extension so
+/// widgets can reach tokens the Material [ColorScheme] has no slot for (four background steps,
+/// three border weights, the card shadow).
+///
+/// Typography: Sora (display / titles) + Manrope (body / labels). The text styles carry no colour
+/// of their own; it is applied here, once, from the palette's ink.
+ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
+  final isDark = brightness == Brightness.dark;
+  final p = isDark ? AppPalette.dark : AppPalette.light;
+
   final colorScheme = ColorScheme(
-    brightness: Brightness.light,
+    brightness: brightness,
     primary: AppColors.Y,
-    onPrimary: AppColors.DARK,
+    onPrimary: p.brandOn,
     primaryContainer: AppColors.YSoft,
-    onPrimaryContainer: AppColors.DARK,
-    secondary: AppColors.DARK,
-    onSecondary: AppColors.WHITE,
-    secondaryContainer: AppColors.BM,
-    onSecondaryContainer: AppColors.DARK,
-    tertiary: AppColors.BLUE,
-    onTertiary: AppColors.WHITE,
+    onPrimaryContainer: p.ink,
+    secondary: p.ink,
+    onSecondary: p.inkInverse,
+    secondaryContainer: p.borderMedium,
+    onSecondaryContainer: p.ink,
+    tertiary: p.blue,
+    onTertiary: p.inkInverse,
     tertiaryContainer: Color(0x14000000), // placeholder — no spec value
-    onTertiaryContainer: AppColors.BLUE,
-    error: AppColors.error,
-    onError: AppColors.WHITE,
-    errorContainer: AppColors.REDSOFT,
-    onErrorContainer: AppColors.error,
-    surface: AppColors.WHITE,
-    onSurface: AppColors.DARK,
-    surfaceContainerHighest: AppColors.BG1,
-    onSurfaceVariant: AppColors.FG2,
-    outline: AppColors.BM,
-    outlineVariant: AppColors.BL,
-    shadow: Color(0x1A000000),
+    onTertiaryContainer: p.blue,
+    error: p.red,
+    onError: Colors.white,
+    errorContainer: p.redSoft,
+    onErrorContainer: p.red,
+    surface: p.surface,
+    onSurface: p.ink,
+    surfaceContainerHighest: p.bg1,
+    onSurfaceVariant: p.inkFaint,
+    outline: p.borderMedium,
+    outlineVariant: p.borderLight,
+    shadow: p.shadow.first.color,
     scrim: Color(0x80000000),
-    inverseSurface: AppColors.DARK,
-    onInverseSurface: AppColors.WHITE,
+    inverseSurface: p.surfaceInverse,
+    onInverseSurface: p.inkInverse,
     inversePrimary: AppColors.Y,
   );
 
-  final textTheme = buildTextTheme();
+  // The styles carry no colour of their own (see AppTextStyles), so it is applied here in one
+  // place. `bodyColor` covers body/label/title, `displayColor` the display and headline sizes.
+  final textTheme = buildTextTheme().apply(bodyColor: p.ink, displayColor: p.ink);
 
   return ThemeData(
     useMaterial3: true,
+    brightness: brightness,
     colorScheme: colorScheme,
     textTheme: textTheme,
-    scaffoldBackgroundColor: AppColors.BG1,
+    // Everything the ColorScheme has no slot for: the four background steps, the three border
+    // weights, the card shadow, and the ink/surface pair that must not be confused for each other.
+    extensions: <ThemeExtension<dynamic>>[p],
+    scaffoldBackgroundColor: p.bg1,
 
     // ── AppBar ─────────────────────────────────────────────────────────────
     appBarTheme: AppBarTheme(
-      backgroundColor: AppColors.WHITE,
-      foregroundColor: AppColors.DARK,
+      backgroundColor: p.surface,
+      foregroundColor: p.ink,
       elevation: 0,
       scrolledUnderElevation: 1,
-      shadowColor: const Color(0x0F000000),
+      shadowColor: p.shadow.first.color,
       surfaceTintColor: Colors.transparent,
-      titleTextStyle: AppTextStyles.titleLarge,
-      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      titleTextStyle: AppTextStyles.titleLarge.copyWith(color: p.ink),
+      // Status-bar icons are the inverse of the bar behind them.
+      systemOverlayStyle: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
     ),
 
     // ── Bottom Navigation Bar ──────────────────────────────────────────────
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: AppColors.WHITE,
+      backgroundColor: p.surface,
       indicatorColor: AppColors.Y,
       indicatorShape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
@@ -71,31 +87,33 @@ ThemeData buildAppTheme() {
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
           return AppTextStyles.labelMedium.copyWith(
-            color: AppColors.DARK,
+            // On the yellow indicator, so brandOn — not ink, which inverts with the theme while
+            // the yellow beneath it does not.
+            color: p.brandOn,
             fontWeight: FontWeight.w700,
           );
         }
-        return AppTextStyles.labelMedium;
+        return AppTextStyles.labelMedium.copyWith(color: p.inkMuted);
       }),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return const IconThemeData(color: AppColors.DARK, size: 22);
+          return IconThemeData(color: p.brandOn, size: 22);
         }
-        return const IconThemeData(color: AppColors.DIS, size: 22);
+        return IconThemeData(color: p.inkDisabled, size: 22);
       }),
       height: AppSpacing.bottomNavHeight,
       elevation: 4,
-      shadowColor: const Color(0x1A000000),
+      shadowColor: p.shadow.first.color,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
     ),
 
     // ── Card ───────────────────────────────────────────────────────────────
     cardTheme: CardThemeData(
-      color: AppColors.BG1,
+      color: p.bg1,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
-        side: const BorderSide(color: AppColors.BL),
+        side: BorderSide(color: p.borderLight),
       ),
       margin: EdgeInsets.zero,
     ),
@@ -104,7 +122,7 @@ ThemeData buildAppTheme() {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.Y,
-        foregroundColor: AppColors.DARK,
+        foregroundColor: p.ink,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xl,
@@ -121,8 +139,8 @@ ThemeData buildAppTheme() {
     // ── Outlined Button ────────────────────────────────────────────────────
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.DARK,
-        side: const BorderSide(color: AppColors.BM),
+        foregroundColor: p.ink,
+        side: BorderSide(color: p.borderMedium),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xl,
           vertical: AppSpacing.md,
@@ -138,7 +156,7 @@ ThemeData buildAppTheme() {
     // ── Text Button ────────────────────────────────────────────────────────
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: AppColors.DARK,
+        foregroundColor: p.ink,
         textStyle: AppTextStyles.labelLarge,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.base,
@@ -150,18 +168,18 @@ ThemeData buildAppTheme() {
     // ── Input Decoration ───────────────────────────────────────────────────
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.WHITE,
+      fillColor: p.surface,
       contentPadding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
         vertical: AppSpacing.md,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: const BorderSide(color: AppColors.BM),
+        borderSide: BorderSide(color: p.borderMedium),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: const BorderSide(color: AppColors.BM),
+        borderSide: BorderSide(color: p.borderMedium),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
@@ -169,39 +187,39 @@ ThemeData buildAppTheme() {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: const BorderSide(color: AppColors.error),
+        borderSide: BorderSide(color: p.red),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: const BorderSide(color: AppColors.error, width: 2),
+        borderSide: BorderSide(color: p.red, width: 2),
       ),
       labelStyle: AppTextStyles.bodyMedium.copyWith(
-        color: AppColors.FG2,
+        color: p.inkFaint,
       ),
       hintStyle: AppTextStyles.bodyMedium.copyWith(
-        color: AppColors.DIS,
+        color: p.inkDisabled,
       ),
-      errorStyle: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
+      errorStyle: AppTextStyles.bodySmall.copyWith(color: p.red),
       floatingLabelStyle: AppTextStyles.labelMedium.copyWith(
-        color: AppColors.DARK,
+        color: p.ink,
       ),
     ),
 
     // ── Divider ────────────────────────────────────────────────────────────
-    dividerTheme: const DividerThemeData(
-      color: AppColors.DIV,
+    dividerTheme: DividerThemeData(
+      color: p.divider,
       space: 1,
       thickness: 1,
     ),
 
     // ── Chip ───────────────────────────────────────────────────────────────
     chipTheme: ChipThemeData(
-      backgroundColor: AppColors.BG3,
+      backgroundColor: p.bg3,
       selectedColor: AppColors.Y,
-      labelStyle: AppTextStyles.labelMedium,
+      labelStyle: AppTextStyles.labelMedium.copyWith(color: p.ink),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.sm),
-        side: const BorderSide(color: AppColors.BM),
+        side: BorderSide(color: p.borderMedium),
       ),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
@@ -210,9 +228,9 @@ ThemeData buildAppTheme() {
     ),
 
     // ── FAB ────────────────────────────────────────────────────────────────
-    floatingActionButtonTheme: const FloatingActionButtonThemeData(
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: AppColors.Y,
-      foregroundColor: AppColors.DARK,
+      foregroundColor: p.ink,
       elevation: 2,
     ),
 

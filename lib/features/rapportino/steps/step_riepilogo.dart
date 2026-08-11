@@ -18,6 +18,7 @@ import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 4 — Riepilogo
@@ -162,7 +163,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
 
               if (subState == DraftSubmissionState.submitted) {
                 return _StatusCard(
-                  color: AppColors.GREEN,
+                  color: context.colors.green,
                   icon: LucideIcons.checkCircle2,
                   title: 'Rapportino inviato con successo.',
                 );
@@ -171,7 +172,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               if (subState == DraftSubmissionState.uploadingMedia ||
                   subState == DraftSubmissionState.submitting) {
                 return _StatusCard(
-                  color: AppColors.BLUE,
+                  color: context.colors.blue,
                   icon: LucideIcons.refreshCw,
                   title: subState == DraftSubmissionState.uploadingMedia
                       ? 'Caricamento media in corso...'
@@ -185,7 +186,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _StatusCard(
-                      color: AppColors.RED,
+                      color: context.colors.red,
                       icon: LucideIcons.alertCircle,
                       title: 'Invio fallito',
                       subtitle: draft?.submissionError,
@@ -208,7 +209,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                 children: [
                   if (validation.isValid)
                     _StatusCard(
-                      color: AppColors.GREEN,
+                      color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
                       subtitle:
@@ -218,8 +219,8 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     const SizedBox(height: 8),
                     Text(
                       _submitError!,
-                      style: const TextStyle(
-                          color: AppColors.RED, fontSize: 12),
+                      style: TextStyle(
+                          color: context.colors.red, fontSize: 12),
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -257,22 +258,22 @@ class _ValidationPanel extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF8E1),
-        border: Border.all(color: AppColors.AMBER),
+        border: Border.all(color: context.colors.amber),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(LucideIcons.alertTriangle, color: AppColors.AMBER, size: 20),
+              Icon(LucideIcons.alertTriangle, color: context.colors.amber, size: 20),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Da completare prima dell\'invio:',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
               ),
@@ -285,14 +286,14 @@ class _ValidationPanel extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(LucideIcons.circle,
-                      size: 6, color: AppColors.AMBER),
+                  Icon(LucideIcons.circle,
+                      size: 6, color: context.colors.amber),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       msg,
-                      style: const TextStyle(
-                          color: AppColors.DARK, fontSize: 14),
+                      style: TextStyle(
+                          color: context.colors.ink, fontSize: 14),
                     ),
                   ),
                 ],
@@ -409,9 +410,9 @@ class _SignatureBlock extends ConsumerWidget {
                 File(localPath!),
                 height: 120,
                 fit: BoxFit.contain,
-                errorBuilder: (ctx, e, _) => const Icon(
+                errorBuilder: (ctx, e, _) => Icon(
                   LucideIcons.imageOff,
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   size: 40,
                 ),
               ),
@@ -419,22 +420,22 @@ class _SignatureBlock extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(LucideIcons.checkCircle2,
-                    color: AppColors.GREEN, size: 16),
+                Icon(LucideIcons.checkCircle2,
+                    color: context.colors.green, size: 16),
                 const SizedBox(width: 6),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Firma acquisita',
-                    style: TextStyle(color: AppColors.GREEN, fontSize: 13),
+                    style: TextStyle(color: context.colors.green, fontSize: 13),
                   ),
                 ),
                 TextButton(
                   onPressed: () => _clearSig(ref),
                   style: TextButton.styleFrom(
                       minimumSize: const Size(44, 44)),
-                  child: const Text(
+                  child: Text(
                     'Cancella',
-                    style: TextStyle(color: AppColors.RED),
+                    style: TextStyle(color: context.colors.red),
                   ),
                 ),
               ],
@@ -444,9 +445,9 @@ class _SignatureBlock extends ConsumerWidget {
             Container(
               height: 120,
               decoration: BoxDecoration(
-                color: AppColors.BG2,
+                color: context.colors.bg2,
                 border: Border.all(
-                  color: AppColors.BS,
+                  color: context.colors.borderStrong,
                   style: BorderStyle.solid,
                 ),
                 borderRadius: BorderRadius.circular(8),
@@ -454,8 +455,8 @@ class _SignatureBlock extends ConsumerWidget {
               child: Center(
                 child: Text(
                   'Firma $label non acquisita',
-                  style: const TextStyle(
-                      color: AppColors.MUTED, fontSize: 13),
+                  style: TextStyle(
+                      color: context.colors.inkMuted, fontSize: 13),
                 ),
               ),
             ),
@@ -528,7 +529,7 @@ class _SigDialogState extends State<_SigDialog> {
     super.initState();
     _ctrl = SignatureController(
       penStrokeWidth: 3,
-      penColor: AppColors.DARK,
+      penColor: context.colors.ink,
       exportBackgroundColor: Colors.white,
     );
   }
@@ -546,7 +547,7 @@ class _SigDialogState extends State<_SigDialog> {
         children: [
           AppBar(
             backgroundColor: AppColors.CHARCOAL,
-            foregroundColor: AppColors.INV,
+            foregroundColor: context.colors.inkInverse,
             title: const Text('Acquisisci firma'),
             leading: IconButton(
               icon: const Icon(LucideIcons.x),
@@ -555,9 +556,9 @@ class _SigDialogState extends State<_SigDialog> {
             actions: [
               TextButton(
                 onPressed: () => _ctrl.clear(),
-                child: const Text(
+                child: Text(
                   'Cancella',
-                  style: TextStyle(color: AppColors.MUTED),
+                  style: TextStyle(color: context.colors.inkMuted),
                 ),
               ),
               TextButton(
@@ -581,17 +582,17 @@ class _SigDialogState extends State<_SigDialog> {
               ),
             ],
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.all(12),
             child: Text(
               'Firma nell\'area sottostante',
-              style: TextStyle(color: AppColors.MUTED),
+              style: TextStyle(color: context.colors.inkMuted),
             ),
           ),
           Expanded(
             child: Signature(
               controller: _ctrl,
-              backgroundColor: AppColors.BG1,
+              backgroundColor: context.colors.bg1,
             ),
           ),
         ],

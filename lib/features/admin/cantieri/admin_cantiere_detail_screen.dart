@@ -5,10 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single cantiere by id from Drift cache.
 final adminCantiereDetailProvider =
@@ -30,7 +30,7 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
         ref.watch(adminCantiereDetailProvider(cantiereId));
 
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       floatingActionButton: AppFab(
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
@@ -146,7 +146,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.MUTED,
+                  color: context.colors.inkMuted,
                   letterSpacing: 1.2,
                 ),
           ),
@@ -154,7 +154,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textPrimary,
+                  color: context.colors.ink,
                 ),
           ),
         ],

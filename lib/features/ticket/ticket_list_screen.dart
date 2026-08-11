@@ -4,13 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'ticket_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Filter options for the ticket list.
 enum _TicketFilter { tutti, aperti, inCorso, inAttesa, completati }
@@ -54,7 +54,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _TicketListBody(
           filter: _filter,
@@ -221,11 +221,11 @@ class _PendingTicketsSection extends StatelessWidget {
         children: [
           Text(
             'In sospeso (${pendingTickets.length})',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Sora',
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: AppColors.DARK,
+              color: context.colors.ink,
             ),
           ),
           const SizedBox(height: 8),
@@ -261,7 +261,7 @@ class _PendingTicketRow extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isFailed ? AppColors.REDSOFT : AppColors.BG3,
+        color: isFailed ? context.colors.redSoft : context.colors.bg3,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -269,7 +269,7 @@ class _PendingTicketRow extends ConsumerWidget {
           Icon(
             isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
             size: 18,
-            color: isFailed ? AppColors.RED : AppColors.MUTED,
+            color: isFailed ? context.colors.red : context.colors.inkMuted,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -281,21 +281,21 @@ class _PendingTicketRow extends ConsumerWidget {
                   ticket.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.DARK,
+                    color: context.colors.ink,
                   ),
                 ),
                 Text(
                   subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Manrope',
                     fontSize: 11,
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                   ),
                 ),
               ],
@@ -339,10 +339,10 @@ class _TicketRow extends ConsumerWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.BG3,
+          color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(LucideIcons.ticket, size: 20, color: AppColors.MUTED),
+        child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
       ),
       title: ticket.title,
       subtitle: '#$shortId',
@@ -354,7 +354,7 @@ class _TicketRow extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             dateLabel,
-            style: const TextStyle(fontSize: 10, color: AppColors.MUTED),
+            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
           ),
         ],
       ),

@@ -5,10 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// All cantieri from Drift cache, alphabetical.
 ///
@@ -43,7 +43,7 @@ class _AdminCantiereListScreenState extends State<AdminCantiereListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _AdminCantiereListBody(
           query: _query,
@@ -159,21 +159,21 @@ class _AdminCantiereRow extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.BG3,
+          color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(
+        child: Icon(
           LucideIcons.hardHat,
           size: 20,
-          color: AppColors.MUTED,
+          color: context.colors.inkMuted,
         ),
       ),
       title: cantiere.name,
       subtitle: cityLabel,
-      meta: const Icon(
+      meta: Icon(
         LucideIcons.chevronRight,
         size: 16,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
       ),
       showDivider: !isLast,
       onTap: () => context.push('/altro/cantieri/${cantiere.id}'),

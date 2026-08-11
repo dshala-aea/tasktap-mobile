@@ -5,10 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// All materiali from Drift cache, alphabetical.
 ///
@@ -45,7 +45,7 @@ class _AdminMaterialeListScreenState extends State<AdminMaterialeListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _AdminMaterialeListBody(
           query: _query,
@@ -230,7 +230,7 @@ class _AdminMaterialeRow extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.BG3,
+          color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
         child: materiale.imageUrl != null
@@ -239,17 +239,17 @@ class _AdminMaterialeRow extends StatelessWidget {
                 child: Image.network(
                   materiale.imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => const Icon(
+                  errorBuilder: (_, _, _) => Icon(
                     LucideIcons.package,
                     size: 20,
-                    color: AppColors.MUTED,
+                    color: context.colors.inkMuted,
                   ),
                 ),
               )
-            : const Icon(
+            : Icon(
                 LucideIcons.package,
                 size: 20,
-                color: AppColors.MUTED,
+                color: context.colors.inkMuted,
               ),
       ),
       title: materiale.name,
@@ -261,7 +261,7 @@ class _AdminMaterialeRow extends StatelessWidget {
           Text(
             priceLabel,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textPrimary,
+                  color: context.colors.ink,
                   fontWeight: FontWeight.w600,
                 ),
           ),
@@ -270,12 +270,12 @@ class _AdminMaterialeRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               margin: const EdgeInsets.only(top: 2),
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
+                color: context.colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
-                child: const Text(
+                child: Text(
                   'Inattivo',
-                  style: TextStyle(fontSize: 10, color: AppColors.error),
+                  style: TextStyle(fontSize: 10, color: context.colors.red),
               ),
             ),
         ],

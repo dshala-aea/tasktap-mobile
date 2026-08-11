@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Signature pad placeholder.
 ///
@@ -41,15 +41,15 @@ class SignaturePadPlaceholder extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: CustomPaint(
-          painter: signed ? null : _DashedBorderPainter(),
+          painter: signed ? null : _DashedBorderPainter(border: context.colors.borderStrong),
           child: Container(
             height: 90,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: signed ? AppColors.BG2 : Colors.transparent,
+              color: signed ? context.colors.bg2 : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
               border: signed
-                  ? Border.all(color: AppColors.BS, width: 1.5)
+                  ? Border.all(color: context.colors.borderStrong, width: 1.5)
                   : null,
             ),
             child: Column(
@@ -58,7 +58,7 @@ class SignaturePadPlaceholder extends StatelessWidget {
                 Icon(
                   signed ? LucideIcons.checkCircle : LucideIcons.penTool,
                   size: 22,
-                  color: signed ? AppColors.GREEN : AppColors.MUTED,
+                  color: signed ? context.colors.green : context.colors.inkMuted,
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -66,7 +66,7 @@ class SignaturePadPlaceholder extends StatelessWidget {
                   style: GoogleFonts.manrope(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: signed ? AppColors.DARK : AppColors.MUTED,
+                    color: signed ? context.colors.ink : context.colors.inkMuted,
                   ),
                 ),
               ],
@@ -80,6 +80,12 @@ class SignaturePadPlaceholder extends StatelessWidget {
 
 /// Paints a dashed rounded-rectangle border (1.5 px BS, 10 px radius).
 class _DashedBorderPainter extends CustomPainter {
+  /// A painter is outside the widget tree, so the colour is resolved by the caller
+  /// and handed in rather than read from a context this class does not have.
+  const _DashedBorderPainter({required this.border});
+
+  final Color border;
+
   static const double _radius = 10;
   static const double _dash = 6;
   static const double _gap = 4;
@@ -87,7 +93,7 @@ class _DashedBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.BS
+      ..color = border
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 

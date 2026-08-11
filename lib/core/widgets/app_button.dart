@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Button variant.
 ///
@@ -144,25 +145,25 @@ class AppButton extends StatelessWidget {
 
   // ── Colour tokens ────────────────────────────────────────────────────────
 
-  Color get _bg => switch (variant) {
+  Color _bg(BuildContext context) => switch (variant) {
         AppButtonVariant.primary   => AppColors.Y,
-        AppButtonVariant.secondary => AppColors.BG3,
-        AppButtonVariant.dark      => AppColors.DARK,
+        AppButtonVariant.secondary => context.colors.bg3,
+        AppButtonVariant.dark      => context.colors.surfaceInverse,
         AppButtonVariant.ghost     => Colors.transparent,
-        AppButtonVariant.danger    => AppColors.REDSOFT,
+        AppButtonVariant.danger    => context.colors.redSoft,
       };
 
-  Color get _fg => switch (variant) {
-        AppButtonVariant.primary   => AppColors.DARK,
-        AppButtonVariant.secondary => AppColors.MUTED,
-        AppButtonVariant.dark      => AppColors.INV,
-        AppButtonVariant.ghost     => AppColors.DARK,
+  Color _fg(BuildContext context) => switch (variant) {
+        AppButtonVariant.primary   => context.colors.brandOn,
+        AppButtonVariant.secondary => context.colors.inkMuted,
+        AppButtonVariant.dark      => context.colors.inkInverse,
+        AppButtonVariant.ghost     => context.colors.ink,
         AppButtonVariant.danger    => const Color(0xFFB80000),
       };
 
-  List<BoxShadow> get _shadows => switch (variant) {
-        AppButtonVariant.primary => AppColors.SH,
-        AppButtonVariant.dark    => AppColors.SH,
+  List<BoxShadow> _shadows(BuildContext context) => switch (variant) {
+        AppButtonVariant.primary => context.colors.shadow,
+        AppButtonVariant.dark    => context.colors.shadow,
         _                        => const [],
       };
 
@@ -171,7 +172,7 @@ class AppButton extends StatelessWidget {
     final textStyle = GoogleFonts.manrope(
       fontSize: _fontSize,
       fontWeight: FontWeight.w700,
-      color: onPressed == null && !isLoading ? _fg.withAlpha(100) : _fg,
+      color: onPressed == null && !isLoading ? _fg(context).withAlpha(100) : _fg(context),
       letterSpacing: 0.1,
     );
 
@@ -182,7 +183,7 @@ class AppButton extends StatelessWidget {
         height: _fontSize,
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(_fg),
+          valueColor: AlwaysStoppedAnimation<Color>(_fg(context)),
         ),
       );
     } else if (icon != null) {
@@ -190,7 +191,7 @@ class AppButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconTheme(
-            data: IconThemeData(color: _fg, size: _iconSize),
+            data: IconThemeData(color: _fg(context), size: _iconSize),
             child: icon!,
           ),
           SizedBox(width: _hPad * 0.4),
@@ -201,16 +202,16 @@ class AppButton extends StatelessWidget {
       content = Text(label, style: textStyle);
     }
 
-    final bgDisabled = _bg == Colors.transparent
+    final bgDisabled = _bg(context) == Colors.transparent
         ? Colors.transparent
-        : _bg.withAlpha(120);
-    final fgDisabled = _fg.withAlpha(100);
+        : _bg(context).withAlpha(120);
+    final fgDisabled = _fg(context).withAlpha(100);
 
     Widget button = DecoratedBox(
       decoration: BoxDecoration(
-        color: onPressed != null || isLoading ? _bg : bgDisabled,
+        color: onPressed != null || isLoading ? _bg(context) : bgDisabled,
         borderRadius: BorderRadius.circular(_radius),
-        boxShadow: onPressed != null ? _shadows : const [],
+        boxShadow: onPressed != null ? _shadows(context) : const [],
       ),
       child: Material(
         color: Colors.transparent,
@@ -218,8 +219,8 @@ class AppButton extends StatelessWidget {
         child: InkWell(
           onTap: isLoading ? null : onPressed,
           borderRadius: BorderRadius.circular(_radius),
-          splashColor: _fg.withAlpha(30),
-          highlightColor: _fg.withAlpha(15),
+          splashColor: _fg(context).withAlpha(30),
+          highlightColor: _fg(context).withAlpha(15),
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: _hPad,
@@ -227,7 +228,7 @@ class AppButton extends StatelessWidget {
             ),
             child: DefaultTextStyle(
               style: textStyle.copyWith(
-                color: onPressed == null && !isLoading ? fgDisabled : _fg,
+                color: onPressed == null && !isLoading ? fgDisabled : _fg(context),
               ),
               child: content,
             ),

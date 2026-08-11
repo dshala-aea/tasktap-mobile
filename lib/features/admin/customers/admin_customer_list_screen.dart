@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Admin customer list — shows all customers (active + inactive) with FAB to
 /// create new ones.  Tapping a row navigates to the detail/edit screen.
@@ -34,7 +34,7 @@ class _AdminCustomerListScreenState extends State<AdminCustomerListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _AdminCustomerListBody(
           query: _query,
@@ -174,10 +174,10 @@ class _AdminCustomerRow extends StatelessWidget {
       leading: AppAvatar(name: customer.companyName, size: 40),
       title: '${customer.companyName}$statusLabel',
       subtitle: cityLabel,
-      meta: const Icon(
+      meta: Icon(
         LucideIcons.chevronRight,
         size: 16,
-        color: AppColors.MUTED,
+        color: context.colors.inkMuted,
       ),
       showDivider: !isLast,
       onTap: () => context.push('/altro/clienti/${customer.id}'),

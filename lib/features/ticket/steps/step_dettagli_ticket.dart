@@ -2,10 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Dettagli Ticket
@@ -130,11 +130,11 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: 'Sora',
         fontSize: 15,
         fontWeight: FontWeight.w700,
-        color: AppColors.DARK,
+        color: context.colors.ink,
       ),
     );
   }

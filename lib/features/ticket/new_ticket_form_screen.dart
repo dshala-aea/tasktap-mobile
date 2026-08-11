@@ -14,6 +14,7 @@ import 'steps/step_dettagli_ticket.dart';
 import 'new_ticket_form_state.dart';
 import 'steps/step_riepilogo_ticket.dart';
 import 'ticket_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Form steps enum
@@ -142,20 +143,20 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
 
     if (outcome.isQueuedOffline) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
             'Sei offline: il ticket è stato salvato e verrà inviato '
             'automaticamente alla riconnessione.',
           ),
-          backgroundColor: AppColors.AMBER,
+          backgroundColor: context.colors.amber,
         ),
       );
       Navigator.of(context).pop(true); // return true = created (locally)
     } else if (outcome.isSubmitted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Ticket creato con successo'),
-          backgroundColor: AppColors.GREEN,
+          backgroundColor: context.colors.green,
         ),
       );
       Navigator.of(context).pop(true);
@@ -170,7 +171,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
             'riuscito (${outcome.error}). Per evitare duplicati, controlla '
             'la lista ticket prima di riprovare dalla sezione "In sospeso".',
           ),
-          backgroundColor: AppColors.RED,
+          backgroundColor: context.colors.red,
         ),
       );
     }
@@ -179,15 +180,15 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       appBar: AppBar(
         backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: AppColors.INV,
+        foregroundColor: context.colors.inkInverse,
         elevation: 0,
         titleSpacing: 0,
         title: Text(
           'Nuovo ticket',
-          style: AppTextStyles.titleMedium.copyWith(color: AppColors.INV),
+          style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
         ),
       ),
       body: Column(
@@ -289,7 +290,7 @@ class _BottomNavBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        color: AppColors.WHITE,
+        color: context.colors.surface,
         padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
         child: Row(
           children: [

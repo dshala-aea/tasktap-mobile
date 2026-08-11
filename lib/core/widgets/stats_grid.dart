@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// A single statistic (label + value).
 class StatItem {
@@ -34,13 +34,13 @@ class StatsGrid extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var row = 0; row < items.length; row += 2) ...[
-          if (row > 0) const Divider(height: 1, color: AppColors.DIV),
+          if (row > 0) Divider(height: 1, color: context.colors.divider),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: _Cell(item: items[row])),
-                const VerticalDivider(width: 1, color: AppColors.DIV),
+                VerticalDivider(width: 1, color: context.colors.divider),
                 Expanded(
                   child: row + 1 < items.length
                       ? _Cell(item: items[row + 1])
@@ -73,7 +73,7 @@ class _Cell extends StatelessWidget {
             style: GoogleFonts.manrope(
               fontSize: 12,
               fontWeight: FontWeight.w400,
-              color: AppColors.MUTED,
+              color: context.colors.inkMuted,
               height: 1.2,
             ),
           ),
@@ -83,7 +83,7 @@ class _Cell extends StatelessWidget {
             style: GoogleFonts.manrope(
               fontSize: 36,
               fontWeight: FontWeight.w500,
-              color: AppColors.DARK,
+              color: context.colors.ink,
               letterSpacing: -1,
             ),
           ),

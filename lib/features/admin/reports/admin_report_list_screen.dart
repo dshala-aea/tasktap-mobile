@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Filter options for the admin report list.
 enum _ReportFilter { tutti, bozza, inviato, controllato, fatturato }
@@ -52,7 +52,7 @@ class _AdminReportListScreenState extends State<AdminReportListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.BG2,
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: _AdminReportListBody(
           filter: _filter,
@@ -228,11 +228,11 @@ class _StatoIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, icon) = switch (stato) {
-      'Bozza' => (AppColors.MUTED, LucideIcons.fileEdit),
+      'Bozza' => (context.colors.inkMuted, LucideIcons.fileEdit),
       'Inviato' => (const Color(0xFF2563EB), LucideIcons.send),
       'Controllato' => (const Color(0xFF4CAF50), LucideIcons.checkCircle),
       'Fatturato' => (const Color(0xFF7C3AED), LucideIcons.receipt),
-      _ => (AppColors.MUTED, LucideIcons.fileText),
+      _ => (context.colors.inkMuted, LucideIcons.fileText),
     };
 
     return Container(

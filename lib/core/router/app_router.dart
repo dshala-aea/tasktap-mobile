@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../theme/app_colors.dart';
 import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
@@ -47,6 +46,7 @@ import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
 import '../../features/timbra/cantiere_timbra_screen.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Route path constants.
 abstract final class AppRoutes {
@@ -516,7 +516,7 @@ GoRouter buildRouter(WidgetRef ref) {
                           state.extra as ({String titolo, String motivo})?;
                       final titolo = args?.titolo ?? 'Sezione non disponibile';
                       return Scaffold(
-                        backgroundColor: AppColors.BG2,
+                        backgroundColor: context.colors.bg2,
                         body: SafeArea(
                           child: Column(
                             children: [

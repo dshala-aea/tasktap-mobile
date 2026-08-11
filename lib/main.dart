@@ -11,6 +11,7 @@ import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/providers/auth_providers.dart';
+import 'features/altro/impostazioni_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -137,10 +138,18 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       });
     }
 
+    // Impostazioni → "Tema scuro". The switch existed, was persisted to SharedPreferences, and
+    // nothing read it — so it has been reporting a preference the app never honoured. It drives
+    // themeMode now. Explicit light/dark rather than ThemeMode.system: the setting is a choice the
+    // technician made, and silently overriding it with the phone's would be the same defect again.
+    final darkTheme = ref.watch(impostazioniProvider.select((s) => s.temaScuro));
+
     return MaterialApp.router(
       title: 'TaskTap',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      darkTheme: buildAppTheme(brightness: Brightness.dark),
+      themeMode: darkTheme ? ThemeMode.dark : ThemeMode.light,
       routerConfig: _router,
     );
   }

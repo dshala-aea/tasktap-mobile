@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/sync/connectivity_provider.dart';
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ensureOnlineOrWarn
@@ -27,12 +27,12 @@ bool ensureOnlineOrWarn(BuildContext context, WidgetRef ref) {
   if (isOnline) return true;
 
   ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(
+    SnackBar(
       content: Text(
         'Sei offline: impossibile salvare in questo momento. '
         'I dati inseriti restano nel modulo: riprova quando torni online.',
       ),
-      backgroundColor: AppColors.RED,
+      backgroundColor: context.colors.red,
     ),
   );
   return false;

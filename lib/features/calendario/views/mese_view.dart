@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Calendario → Mese view: month calendar grid (weeks × 7). Each day cell
 /// shows event dots / count. Tapping a day selects it and switches to Giorno.
@@ -73,7 +74,7 @@ class MeseView extends ConsumerWidget {
             style: GoogleFonts.sora(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: AppColors.DARK,
+              color: context.colors.ink,
             ),
           ),
         ),
@@ -89,7 +90,7 @@ class MeseView extends ConsumerWidget {
                           style: GoogleFonts.manrope(
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.MUTED,
+                            color: context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -124,7 +125,7 @@ class MeseView extends ConsumerWidget {
                           child: AppTappable(
                             onTap: () => onDayTap?.call(day),
                             color: isSelected
-                                ? AppColors.DARK
+                                ? context.colors.surfaceInverse
                                 : isToday
                                     ? AppColors.YSoft
                                     : Colors.transparent,
@@ -141,10 +142,10 @@ class MeseView extends ConsumerWidget {
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: isSelected
-                                        ? AppColors.WHITE
+                                        ? context.colors.inkInverse
                                         : inMonth
-                                            ? AppColors.DARK
-                                            : AppColors.DIS,
+                                            ? context.colors.ink
+                                            : context.colors.inkDisabled,
                                   ),
                                 ),
                                 if (count > 0)
@@ -191,7 +192,7 @@ class _EventDots extends StatelessWidget {
             height: 4,
             margin: const EdgeInsets.symmetric(horizontal: 1),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.Y : AppColors.AMBER,
+              color: isSelected ? AppColors.Y : context.colors.amber,
               shape: BoxShape.circle,
             ),
           );
