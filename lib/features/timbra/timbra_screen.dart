@@ -10,6 +10,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/local/app_database.dart';
 import 'timbra_providers.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TimbraScreen
@@ -277,6 +278,11 @@ class _PunchButton extends StatelessWidget {
       button: true,
       enabled: !blocked,
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
+      // The one press target deliberately left without a splash. It is a 180dp gradient disc
+      // with a coloured glow; ink over that reads as a smudge rather than a press, and the
+      // control answers a tap within the frame anyway — it swaps to a spinner while the
+      // timbratura is recorded. The secondary pause button below it did get converted, because
+      // it is flat and its own state change is a small icon swap.
       child: GestureDetector(
         onTap: isLoading || blocked ? null : onTap,
         child: Opacity(
@@ -393,18 +399,15 @@ class _PauseButton extends StatelessWidget {
       button: true,
       enabled: !blocked,
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
-      child: GestureDetector(
-        onTap: isLoading || blocked ? null : onTap,
-        child: Opacity(
-          opacity: blocked ? 0.4 : 1,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(13),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: accent.withAlpha(120)),
-            ),
-            child: Row(
+      child: Opacity(
+        opacity: blocked ? 0.4 : 1,
+        child: AppTappable(
+          onTap: isLoading || blocked ? null : onTap,
+          color: Colors.white.withAlpha(13),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: accent.withAlpha(120)),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isLoading)
@@ -428,7 +431,6 @@ class _PauseButton extends StatelessWidget {
                 ),
               ],
             ),
-          ),
         ),
       ),
     );

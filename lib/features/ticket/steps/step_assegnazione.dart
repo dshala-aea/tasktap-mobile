@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Assegnazione
@@ -148,19 +149,16 @@ class _AssignmentOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return AppTappable(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.Y.withValues(alpha: 0.12) : AppColors.WHITE,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.Y : AppColors.BS,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
+      color: isSelected ? AppColors.Y.withValues(alpha: 0.12) : AppColors.WHITE,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: isSelected ? AppColors.Y : AppColors.BS,
+        width: isSelected ? 2 : 1,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
           children: [
             Icon(
               isSelected
@@ -181,7 +179,6 @@ class _AssignmentOption extends StatelessWidget {
               ),
             ),
           ],
-        ),
       ),
     );
   }

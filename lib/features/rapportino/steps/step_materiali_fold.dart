@@ -16,6 +16,7 @@ import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Materiali  (folds Controlli + Foto/Allegati as sub-sections)
@@ -433,12 +434,14 @@ class _QtyBtn extends StatelessWidget {
       button: true,
       enabled: onTap != null,
       label: label,
-      child: GestureDetector(
+      // The circle stays 32dp — it is a deliberate part of the row's density — but the tap
+      // area around it is padded out to 48dp. A quantity stepper is tapped repeatedly, with
+      // gloves on, and a miss here silently bills the customer for the wrong number of parts.
+      // Which is also why it is the control that most needs to acknowledge a press: the row's
+      // number changing is the only other confirmation, and it is small and far from the thumb.
+      child: AppTappable(
         onTap: onTap,
-        // The circle stays 32dp — it is a deliberate part of the row's density — but the tap
-        // area around it is padded out to 48dp. A quantity stepper is tapped repeatedly, with
-        // gloves on, and a miss here silently bills the customer for the wrong number of parts.
-        behavior: HitTestBehavior.opaque,
+        borderRadius: BorderRadius.circular(24),
         child: SizedBox(
           width: 48,
           height: 48,
@@ -497,9 +500,9 @@ class _PhotoThumb extends StatelessWidget {
           child: Semantics(
             button: true,
             label: 'Rimuovi foto',
-            child: GestureDetector(
+            child: AppTappable(
               onTap: onRemove,
-              behavior: HitTestBehavior.opaque,
+              borderRadius: BorderRadius.circular(22),
               child: SizedBox(
                 width: 44,
                 height: 44,

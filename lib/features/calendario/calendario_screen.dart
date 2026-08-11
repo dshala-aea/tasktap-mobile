@@ -133,6 +133,10 @@ class _WeekDayScroller extends ConsumerWidget {
           final hasDots = (grouped[key] ?? []).isNotEmpty;
 
           return Expanded(
+            // Left as a GestureDetector for the same reason as the bottom nav: the day disc
+            // below is an AnimatedContainer that moves on every selection, so the tap is already
+            // answered. The three calendar *views* were converted, because an appointment block
+            // does nothing visible when tapped until the next screen renders.
             child: GestureDetector(
               onTap: () => onDateSelected(day),
               behavior: HitTestBehavior.opaque,

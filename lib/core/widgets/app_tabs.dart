@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import 'app_tappable.dart';
 
 /// A single tab descriptor with an optional count pill.
 class AppTab {
@@ -47,21 +48,17 @@ class AppTabs extends StatelessWidget {
             button: true,
             selected: active,
             label: tab.label,
-            child: GestureDetector(
+            child: AppTappable(
               onTap: () => onSelected(i),
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: active ? AppColors.Y : Colors.transparent,
-                      width: 2,
-                    ),
-                  ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              border: Border(
+                bottom: BorderSide(
+                  color: active ? AppColors.Y : Colors.transparent,
+                  width: 2,
                 ),
-                child: Row(
+              ),
+              child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
@@ -97,7 +94,6 @@ class AppTabs extends StatelessWidget {
                     ],
                   ],
                 ),
-              ),
             ),
           );
         },

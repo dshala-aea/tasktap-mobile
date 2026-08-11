@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import 'notifiche_provider.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -90,19 +91,19 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                 showBack: true,
                 actions: [
                   if (unread > 0)
-                    GestureDetector(
+                    // A bare text action, so the splash is the only thing that confirms the
+                    // press at all — the list it clears is below the fold on a full inbox.
+                    AppTappable(
                       onTap: () =>
                           ref.read(notificheProvider.notifier).segnaLette(),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          'Segna tutte',
-                          style: GoogleFonts.manrope(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.BLUE,
-                          ),
+                      borderRadius: BorderRadius.circular(6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      child: Text(
+                        'Segna tutte',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.BLUE,
                         ),
                       ),
                     ),

@@ -10,6 +10,7 @@ import '../../../core/widgets/app_card.dart';
 // section_title omitted — using inline _SL below
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Ore
@@ -414,16 +415,13 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
     final mm = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
     final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
 
-    return GestureDetector(
+    return AppTappable(
       onTap: widget.onStop,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.YSoft,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.Y),
-        ),
-        child: Text(
+      color: AppColors.YSoft,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppColors.Y),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Text(
           '$hh:$mm:$ss',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
@@ -431,7 +429,6 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
             color: AppColors.DARK,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
-        ),
       ),
     );
   }

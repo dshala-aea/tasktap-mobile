@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import 'app_tappable.dart';
 
 /// Compact rounded badge pill.
 ///
@@ -83,29 +84,22 @@ class AppChip extends StatelessWidget {
 
     const radius = 5.0;
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: borderColor, width: 1),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            child: Center(
-              child: Text(
-                label,
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: fg,
-                  letterSpacing: 0.1,
-                ),
-              ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+      child: AppTappable(
+        onTap: onTap,
+        color: bg,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: borderColor, width: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.manrope(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: fg,
+              letterSpacing: 0.1,
             ),
           ),
         ),

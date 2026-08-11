@@ -105,6 +105,11 @@ class _NavTab extends StatelessWidget {
       button: true,
       selected: active,
       label: item.label,
+      // Stays a GestureDetector, unlike the rest of the app's press targets (see
+      // core/widgets/app_tappable.dart). The pill below animates its colour, padding and label
+      // on every selection change, so a tap is already answered — visibly and immediately, by a
+      // larger movement than a splash. Wrapping it in an AppTappable would hide the ink behind
+      // the AnimatedContainer's own fill anyway, and lose the animation to keep it.
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,

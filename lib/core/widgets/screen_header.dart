@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import 'app_tappable.dart';
 
 /// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass on dark),
 /// icon 17 DARK, optional red dot badge.
@@ -40,9 +41,11 @@ class HeaderIconBtn extends StatelessWidget {
     return Semantics(
       button: true,
       label: label,
-      child: GestureDetector(
+      // Splash covers the whole 44dp target, not the 38dp disc drawn inside it — the same
+      // relationship Material's own IconButton has between its ink and its glyph.
+      child: AppTappable(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
+        borderRadius: BorderRadius.circular(22),
         child: SizedBox(
           width: 44,
           height: 44,
