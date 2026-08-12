@@ -723,7 +723,6 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Returns the current authenticated user\u0027s profile from the database.",
         "responses": {
           "200": {
             "description": "OK"
@@ -771,6 +770,139 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/billing/subscription": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "The tenant\u0027s subscription as it stands: status, dates, seats and entitled modules.",
+        "description": "     Every field here already lived on the tenant row; nothing projected it, so the office web\n     could not show a plan, a renewal date or how many days of trial were left. That is why\n     Impostazioni \u2192 Fatturazione was an \u0022unavailable\u0022 panel while checkout and seat changes both\n     worked \u2014 the writes existed and the read did not.\n\n     No tier field, deliberately. Nothing persists whether a tenant is on starter or pro:\nthe tier is a Stripe product, and what reaches this database is the set of module keys it\ngranted. Reporting a tier would mean inferring one from that set, which is a guess that\ngoes wrong the first time someone is granted an add-on outside their tier. The modules are\nthe truth, so the modules are what this returns.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/plans": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "The tiers and add-ons that can be bought, so a client need not hardcode them.",
+        "description": "     This is the same list Task\u0026lt;IActionResult\u0026gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct) validates against \u2014 read from the catalog\n     constants rather than restated \u2014 because the alternative was a UI carrying its own copy of\n     \u0022starter, pro, fatturazione, cantieri, contratti, ai\u0022 and going stale independently of the\n     two that already exist here.\n\n     No prices. They live in Stripe, keyed by the lookup keys below, and a copy here\nwould be a third place for them to disagree \u2014 the one that shows a customer a number\nbefore they reach Checkout. A client that needs to display prices should read them from\nStripe with these keys, so what is quoted and what is charged come from one source.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanCatalogueDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanCatalogueDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanCatalogueDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/portal": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "A Stripe Billing Portal session, for changing a card, cancelling, or fetching invoices.",
+        "description": "Those are Stripe\u0027s job, not ours: rebuilding them would mean handling card data and dunning\nrules that the portal already does and that we would own for ever after. The service method\nbehind this has existed since the Stripe client was written and nothing exposed it.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BillingPortalRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BillingPortalRequest"
+                  }
+                ]
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BillingPortalRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPortalResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPortalResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingPortalResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -11836,26 +11968,47 @@
           "WorkLog"
         ],
         "summary": "Start work (clock in).",
+        "description": "     The body is optional, and has to be: every property on StartWorkLogRequest is\n     nullable, because an attendance-only punch names no location, customer, ticket or commessa \u2014\n     which is exactly what the office web sends when someone clocks in from the Presenze panel.\n\n     It was declared required, so a POST with no body never reached this method: ASP.NET rejects\nit during model binding with 415 Unsupported Media Type, before the action, before\nthe permission filter, before anything that could log a useful reason. Clock-in was the only\none of the five day actions that broke \u2014 end already took an optional body, and\nbreak-start, break-end and submit take none at all.",
         "requestBody": {
           "description": "Start work request.",
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StartWorkLogRequest"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StartWorkLogRequest"
+                  }
+                ]
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/StartWorkLogRequest"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StartWorkLogRequest"
+                  }
+                ]
               }
             },
             "application/*\u002Bjson": {
               "schema": {
-                "$ref": "#/components/schemas/StartWorkLogRequest"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StartWorkLogRequest"
+                  }
+                ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -12264,6 +12417,83 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FileResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/WorkLog/monthly-grid/{year}/{month}": {
+      "get": {
+        "tags": [
+          "WorkLog"
+        ],
+        "summary": "A month of hours as worker \u00D7 day cells, for the presenze grid.",
+        "description": "     The summary endpoint below answers \u0022how much did each person work this month\u0022; this answers\n     \u0022which days did they work, and how\u0022. Both come from one aggregation pass, so a cell and the\n     total above it cannot disagree.\n\n     Every day of the month is present, worked or not \u2014 a grid with holes is a grid whose columns\nstop lining up, and an absent day is information the person approving hours needs to see.\nUsers are those with at least one log in the month: a roster of everyone who ever existed is\na different question, and one the caller can already answer.",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "month",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "rounding",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyGridResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyGridResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyGridResponse"
                 }
               }
             }
@@ -13172,6 +13402,32 @@
           }
         },
         "description": "Basic primary key response for created/updated entities."
+      },
+      "BillingPortalRequest": {
+        "required": [
+          "returnUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "returnUrl": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Where Stripe sends the user back to when they are done."
+          }
+        }
+      },
+      "BillingPortalResponse": {
+        "required": [
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
       },
       "Cantiere": {
         "type": "object",
@@ -14982,8 +15238,7 @@
         "required": [
           "activityDate",
           "timeStart",
-          "timeEnd",
-          "userId"
+          "timeEnd"
         ],
         "type": "object",
         "properties": {
@@ -15007,15 +15262,21 @@
             "type": "string"
           },
           "userId": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The individually assigned technician. Optional, and it has to be: ADR-0009 made assignment\na set of rows precisely so a schedule could name a squadra and no individual, which\nGuid? ScheduleConflictDto.UserId has been nullable for ever since. Requiring it here\ncontradicted that and made a team-only schedule impossible to express.",
             "format": "uuid"
           },
           "statusId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
+              "null",
               "integer",
               "string"
             ],
+            "description": "Initial stato. Optional: omitted means the tenant\u0027s default status, matching how a ticket\nis created.",
             "format": "int32"
           },
           "locationId": {
@@ -15213,17 +15474,21 @@
           "statusId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
+              "null",
               "integer",
               "string"
             ],
+            "description": "Initial stato. Omitted means the tenant\u0027s default status.",
             "format": "int32"
           },
           "typeId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
+              "null",
               "integer",
               "string"
             ],
+            "description": "Tipo intervento. Required in substance \u2014 unlike stato there is no default to fall back on,\nsince TicketType carries no IsDefault and picking the lowest id would file work under\nwhichever type happened to be seeded first.",
             "format": "int32"
           },
           "agentId": {
@@ -17232,6 +17497,139 @@
         },
         "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
+      "MonthlyGridCell": {
+        "required": [
+          "giorno",
+          "ore",
+          "orePausa",
+          "oreNotturno",
+          "festivo"
+        ],
+        "type": "object",
+        "properties": {
+          "giorno": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "ore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "orePausa": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "oreNotturno": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "festivo": {
+            "type": "boolean"
+          }
+        },
+        "description": "One person on one day."
+      },
+      "MonthlyGridResponse": {
+        "required": [
+          "year",
+          "month",
+          "giorni",
+          "righe"
+        ],
+        "type": "object",
+        "properties": {
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "month": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "giorni": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Days in the month, so a client need not recompute the calendar.",
+            "format": "int32"
+          },
+          "righe": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyGridRow"
+            }
+          }
+        },
+        "description": "A month of hours as worker \u00D7 day cells."
+      },
+      "MonthlyGridRow": {
+        "required": [
+          "userId",
+          "fullName",
+          "celle",
+          "oreTotali",
+          "oreStraordinario"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "celle": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyGridCell"
+            }
+          },
+          "oreTotali": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "oreStraordinario": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        },
+        "description": "One person\u0027s month. OreStraordinario is the month\u0027s, not any day\u0027s \u2014\novertime is a weekly figure and has no per-cell meaning."
+      },
       "MonthlySummaryEntry": {
         "required": [
           "userId",
@@ -18216,6 +18614,52 @@
           }
         },
         "description": "Ready-to-render payload for \u0060GET /api/app/pianificazione/unscheduled\u0060. Application-tier\ncontract: Italian property names, no \u0060[JsonPropertyName]\u0060."
+      },
+      "PlanCatalogueDto": {
+        "required": [
+          "tiers",
+          "addOns",
+          "officeSeat",
+          "fieldSeat"
+        ],
+        "type": "object",
+        "properties": {
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanOptionDto"
+            }
+          },
+          "addOns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanOptionDto"
+            }
+          },
+          "officeSeat": {
+            "$ref": "#/components/schemas/PlanOptionDto"
+          },
+          "fieldSeat": {
+            "$ref": "#/components/schemas/PlanOptionDto"
+          }
+        },
+        "description": "What can be bought. Prices are deliberately absent \u2014 see the endpoint\u0027s remarks."
+      },
+      "PlanOptionDto": {
+        "required": [
+          "key",
+          "priceLookupKey"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "priceLookupKey": {
+            "type": "string"
+          }
+        },
+        "description": "A buyable thing and the Stripe price lookup key to quote it from."
       },
       "ProblemDetails": {
         "type": "object",
@@ -19456,6 +19900,19 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "squadra": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -20592,6 +21049,93 @@
           }
         },
         "description": "One technician\u0027s time \u002B travel contribution to the report."
+      },
+      "SubscriptionStateDto": {
+        "required": [
+          "status",
+          "trialEndsAt",
+          "trialDaysLeft",
+          "gracePeriodEndsAt",
+          "currentPeriodEnd",
+          "officeSeats",
+          "fieldSeats",
+          "moduli",
+          "hasSubscription",
+          "lastSyncedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "One of the \u0060SubscriptionStatusEnum\u0060 names."
+          },
+          "trialEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "trialDaysLeft": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Whole days remaining, 0 once past, null when no trial date is set.",
+            "format": "int32"
+          },
+          "gracePeriodEndsAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "currentPeriodEnd": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "moduli": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Entitled module keys. There is no tier field \u2014 see the endpoint\u0027s remarks."
+          },
+          "hasSubscription": {
+            "type": "boolean",
+            "description": "False while a tenant is on trial and has never reached Stripe."
+          },
+          "lastSyncedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "The tenant\u0027s subscription as it stands."
       },
       "SyncColleagueDto": {
         "required": [
@@ -22791,14 +23335,19 @@
         }
       },
       "UpdateTicketStatusRequest": {
+        "required": [
+          "statusId"
+        ],
         "type": "object",
         "properties": {
           "statusId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
+              "null",
               "integer",
               "string"
             ],
+            "description": "The stato to move the ticket to. Required \u2014 that is the whole request.",
             "format": "int32"
           }
         }
