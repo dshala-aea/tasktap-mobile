@@ -65,7 +65,7 @@ dependencies:
   # DSN is supplied via --dart-define=SENTRY_DSN=... at build time.
   # When the dart-define is absent (tests, local runs without a DSN) Sentry
   # is NOT initialised and the app still works normally.
-  sentry_flutter: ^8.14.0
+  sentry_flutter: ^9.27.0
 
 dev_dependencies:
   flutter_test:
