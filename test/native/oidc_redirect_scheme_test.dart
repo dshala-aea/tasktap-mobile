@@ -51,48 +51,48 @@ void main() {
 
     /// The redirect has to come back to the task that is waiting for it.
     ///
-    /// MainActivity carries `android:taskAffinity=""` from Flutter's template. AppAuth's own
-    /// activities default to the application id, which is a different task — so the browser's
-    /// redirect starts AuthorizationManagementActivity somewhere the pending request is not, and
-    /// AppAuth gives up with "No stored state - unable to handle response". The app shows no
-    /// error: it simply stays on the login screen having done every other thing correctly.
-    test('AppAuth shares MainActivity\'s task affinity', () {
-      final mainAffinity = RegExp(
-        r'android:name="\.MainActivity"[\s\S]*?android:taskAffinity="([^"]*)"',
-      ).firstMatch(manifest);
+    /// AppAuth's AuthorizationManagementActivity is `launchMode="singleTask"`, and a singleTask
+    /// activity is placed in the task matching its affinity. An activity with an EMPTY affinity
+    /// belongs to no task, so Android gives it a fresh one each launch — the instance holding the
+    /// pending authorization request is never the instance that receives the browser's redirect,
+    /// and AppAuth reports "No stored state - unable to handle response". The app shows no error;
+    /// it stays on the login screen.
+    ///
+    /// Flutter's template puts `android:taskAffinity=""` on MainActivity to stop another app
+    /// claiming this one's task. It cannot stay while AppAuth is in use, and giving AppAuth the
+    /// same empty affinity does not rescue it — emptiness is what breaks singleTask.
+    test('MainActivity does not strip the task affinity AppAuth needs', () {
+      final element = RegExp(r'<activity[\s\S]*?android:name="\.MainActivity"[\s\S]*?>')
+          .firstMatch(manifest);
+      expect(element, isNotNull, reason: 'MainActivity must be declared');
 
-      // Nothing to align if the template ever stops setting it — the defaults then agree already.
-      if (mainAffinity == null) return;
+      final affinity =
+          RegExp(r'android:taskAffinity="([^"]*)"').firstMatch(element!.group(0)!);
 
+      if (affinity == null) return; // Default affinity — the application id. Correct.
+
+      expect(
+        affinity.group(1),
+        isNotEmpty,
+        reason: 'an empty taskAffinity puts AppAuth\'s singleTask activity in a new task every '
+            'time, so the sign-in response arrives where no request is stored',
+      );
+
+      // A non-default affinity is allowed, but AppAuth has to be moved onto it too.
       for (final activity in const [
         'net.openid.appauth.RedirectUriReceiverActivity',
         'net.openid.appauth.AuthorizationManagementActivity',
       ]) {
-        // Bounded to the one <activity … /> element. Scanning further than its closing bracket
-        // finds the NEXT activity's affinity and calls a missing attribute a match — which is
-        // exactly what this test did on its first run, passing against a manifest with the
-        // attribute deleted.
-        final element = RegExp(
+        final appAuth = RegExp(
           '<activity[^>]*android:name="${RegExp.escape(activity)}"[^>]*/>',
         ).firstMatch(manifest);
 
+        expect(appAuth, isNotNull, reason: '$activity must be declared to share that affinity');
         expect(
-          element,
-          isNotNull,
-          reason: '$activity must be declared in the app manifest so its task affinity can be '
-              'aligned with MainActivity',
+          RegExp(r'android:taskAffinity="([^"]*)"').firstMatch(appAuth!.group(0)!)?.group(1),
+          affinity.group(1),
+          reason: activity,
         );
-
-        final declared =
-            RegExp(r'android:taskAffinity="([^"]*)"').firstMatch(element!.group(0)!);
-
-        expect(
-          declared,
-          isNotNull,
-          reason: '$activity must declare a taskAffinity matching MainActivity, or the sign-in '
-              'redirect lands in a second task and AppAuth reports "No stored state"',
-        );
-        expect(declared!.group(1), mainAffinity.group(1), reason: activity);
       }
     });
 
