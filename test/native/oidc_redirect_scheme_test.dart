@@ -20,9 +20,11 @@ import 'package:tasktap_mobile/core/config/env.dart';
 void main() {
   group('OIDC redirect', () {
     late final String gradle;
+    late final String manifest;
 
     setUpAll(() {
       gradle = File('android/app/build.gradle.kts').readAsStringSync();
+      manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     });
 
     test('Android registers the scheme Dart redirects to', () {
@@ -45,6 +47,53 @@ void main() {
             'without it the sign-in callback reaches no activity and login hangs',
       );
       expect(placeholder!.group(1), scheme);
+    });
+
+    /// The redirect has to come back to the task that is waiting for it.
+    ///
+    /// MainActivity carries `android:taskAffinity=""` from Flutter's template. AppAuth's own
+    /// activities default to the application id, which is a different task — so the browser's
+    /// redirect starts AuthorizationManagementActivity somewhere the pending request is not, and
+    /// AppAuth gives up with "No stored state - unable to handle response". The app shows no
+    /// error: it simply stays on the login screen having done every other thing correctly.
+    test('AppAuth shares MainActivity\'s task affinity', () {
+      final mainAffinity = RegExp(
+        r'android:name="\.MainActivity"[\s\S]*?android:taskAffinity="([^"]*)"',
+      ).firstMatch(manifest);
+
+      // Nothing to align if the template ever stops setting it — the defaults then agree already.
+      if (mainAffinity == null) return;
+
+      for (final activity in const [
+        'net.openid.appauth.RedirectUriReceiverActivity',
+        'net.openid.appauth.AuthorizationManagementActivity',
+      ]) {
+        // Bounded to the one <activity … /> element. Scanning further than its closing bracket
+        // finds the NEXT activity's affinity and calls a missing attribute a match — which is
+        // exactly what this test did on its first run, passing against a manifest with the
+        // attribute deleted.
+        final element = RegExp(
+          '<activity[^>]*android:name="${RegExp.escape(activity)}"[^>]*/>',
+        ).firstMatch(manifest);
+
+        expect(
+          element,
+          isNotNull,
+          reason: '$activity must be declared in the app manifest so its task affinity can be '
+              'aligned with MainActivity',
+        );
+
+        final declared =
+            RegExp(r'android:taskAffinity="([^"]*)"').firstMatch(element!.group(0)!);
+
+        expect(
+          declared,
+          isNotNull,
+          reason: '$activity must declare a taskAffinity matching MainActivity, or the sign-in '
+              'redirect lands in a second task and AppAuth reports "No stored state"',
+        );
+        expect(declared!.group(1), mainAffinity.group(1), reason: activity);
+      }
     });
 
     /// A scheme has to be globally unique on the device: a second app claiming it can intercept

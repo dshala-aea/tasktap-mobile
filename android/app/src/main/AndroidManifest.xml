@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
@@ -27,6 +28,33 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!--
+            AppAuth's two activities, pulled into MainActivity's task.
+
+            MainActivity declares android:taskAffinity="" — Flutter's template sets it so another
+            app cannot claim this one's task. AppAuth's activities arrive from the library manifest
+            with the default affinity (the application id), which puts them in a DIFFERENT task.
+
+            The sign-in then fails at the last step: the browser redirects to
+            RedirectUriReceiverActivity, which starts AuthorizationManagementActivity in that other
+            task, where nothing holds the pending request. AppAuth logs
+
+                W/AppAuth: No stored state - unable to handle response
+
+            and the app sits on the login screen having done everything right. Both activities are
+            given the same empty affinity here so the redirect comes back to the task that is
+            waiting for it. tools:replace, because the library already sets the attribute.
+        -->
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            android:taskAffinity=""
+            android:exported="true"
+            tools:replace="android:taskAffinity" />
+        <activity
+            android:name="net.openid.appauth.AuthorizationManagementActivity"
+            android:taskAffinity=""
+            tools:replace="android:taskAffinity" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
