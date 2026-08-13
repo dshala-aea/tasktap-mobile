@@ -11879,18 +11879,55 @@
         }
       }
     },
-    "/api/WorkLog/today": {
+    "/api/WorkLog/active": {
       "get": {
         "tags": [
           "WorkLog"
         ],
         "summary": "The signed-in user\u0027s own day: status, running totals, and the actions available on it now,\neach with a reason when it is not (ADR-0013 \u00A7C.5).",
         "description": "Deliberately the caller\u0027s own day and not addressable by user id \u2014 a manager reading\nsomebody else\u0027s attendance is the Phase B queue, which has its own permission. The\nread permission is still required because this returns recorded hours.\n\nThe action list is what the client may offer. It is not a promise the command will\nsucceed: it can go stale between this call and the next write (another device, an\napproval, a payroll lock), which is why every command re-checks.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/WorkLog/today": {
+      "get": {
+        "tags": [
+          "WorkLog"
+        ],
         "parameters": [
           {
             "name": "date",
             "in": "query",
-            "description": "The day to report on. Defaults to today (Europe/Rome).",
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -13165,6 +13202,50 @@
   },
   "components": {
     "schemas": {
+      "ActiveTracker": {
+        "required": [
+          "kind",
+          "id",
+          "startedAtUtc",
+          "label",
+          "entityId"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ActiveTrackerKind"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startedAtUtc": {
+            "type": "string",
+            "description": "The instant it started, already assembled from the two columns that hold it \u2014 see the read\nmodel for why the client must not do that itself.",
+            "format": "date-time"
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What it is against: the cantiere\u0027s name, the ticket\u0027s title. Null for attendance, which is\nagainst nothing but the day."
+          },
+          "entityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The cantiere or ticket, so a client can link to it. Null for attendance.",
+            "format": "uuid"
+          }
+        },
+        "description": "One running tracker."
+      },
+      "ActiveTrackerKind": {
+        "type": "integer",
+        "description": "What kind of time this is. The three are not interchangeable: attendance is the working day,\ncantiere is time on a site, ticket is time against a job."
+      },
       "AddManualTicketWorkLogRequest": {
         "type": "object",
         "properties": {
