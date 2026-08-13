@@ -28,6 +28,18 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // The custom scheme the identity provider redirects back to after sign-in.
+        //
+        // flutter_appauth registers its RedirectUriReceiverActivity against this placeholder; with
+        // it unset the build has no intent-filter for the callback, so Android hands the redirect
+        // to nothing. The browser sits on the last page and the app waits for a result that can
+        // never arrive — sign-in does not fail, it hangs, which is why the OIDC work read as
+        // "code-complete" while no phone had ever completed a login.
+        //
+        // Must equal the scheme of Env.oidcRedirectUri (it.tasktap.app://callback) and the
+        // redirect URI registered on the Zitadel Native application. All three or none.
+        manifestPlaceholders["appAuthRedirectScheme"] = "it.tasktap.app"
     }
 
     signingConfigs {
