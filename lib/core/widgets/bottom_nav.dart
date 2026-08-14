@@ -74,11 +74,18 @@ class AppBottomNav extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // Flexible, so the bar fits the phone rather than the phone fitting the bar. The
+                // tabs' natural width is padding + icon + the active label, which came to two
+                // pixels more than a 5.9" screen has and drew the striped overflow bar across the
+                // bottom of every screen. Turn the system font size up and it is far more than
+                // two. Loose fit: a tab still takes only what it needs when there is room.
                 for (var i = 0; i < tabs.length; i++)
-                  _NavTab(
-                    item: tabs[i],
-                    active: i == currentIndex,
-                    onTap: () => onTap(i),
+                  Flexible(
+                    child: _NavTab(
+                      item: tabs[i],
+                      active: i == currentIndex,
+                      onTap: () => onTap(i),
+                    ),
                   ),
               ],
             ),
@@ -136,12 +143,19 @@ class _NavTab extends StatelessWidget {
               ),
               if (active) ...[
                 const SizedBox(width: 8),
-                Text(
-                  item.label,
-                  style: GoogleFonts.sora(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.brandOn,
+                // The label is what gives when space runs out — an icon nobody can read is worse
+                // than a word that ends in an ellipsis, and the icon is what marks the tab.
+                Flexible(
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.sora(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.brandOn,
+                    ),
                   ),
                 ),
               ],

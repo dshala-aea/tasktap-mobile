@@ -1,6 +1,8 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/config/env.dart';
@@ -75,6 +77,22 @@ Future<void> runTaskTapApp() async {
       debugPrint('Firebase init failed (push disabled): $e');
     }
   }
+
+  // ── Date formatting ─────────────────────────────────────────────────────────
+  //
+  // Every screen that shows a date builds it with DateFormat(..., 'it'), and intl ships no locale
+  // data until it is asked to load some. Without this the first such widget throws
+  //
+  //     LocaleDataException: Locale data has not been initialized,
+  //     call initializeDateFormatting(<locale>).
+  //
+  // which is an exception during build, so the screen is replaced by an error box rather than
+  // showing a wrong date. Twenty-five call sites across the app depend on this one line.
+  //
+  // Intl.defaultLocale is set alongside it so the handful of DateFormat calls that pass no locale
+  // format the same way as the ones that do, instead of falling back to en_US.
+  await initializeDateFormatting('it', null);
+  Intl.defaultLocale = 'it';
 
   // Auth is Zitadel OIDC (see ZitadelAuthRepository) — no SDK init needed here;
   // the session is restored from the stored refresh token by the repository.

@@ -6,6 +6,7 @@ import '../../core/config/env.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/notifications/notification_api_client.dart';
+import '../../data/sync/sync_service.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Domain model
@@ -65,8 +66,16 @@ class AppNotifica {
 // Provider
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Database provider — lazy singleton.
-final _databaseProvider = Provider<AppDatabase>((ref) => AppDatabase());
+// The database provider lives in sync_service.dart. This file used to declare a second one, and
+// a second Provider means a second AppDatabase over the same file: two connections, two write
+// paths, and the race Drift warns about —
+//
+//     It looks like you've created the database class AppDatabase multiple times. When these two
+//     databases use the same QueryExecutor, race conditions will occur and might corrupt the
+//     database.
+//
+// Notifications are cached offline, so the corruption would land on a technician's own device
+// with no server copy to restore from.
 
 /// Notifier that manages notifications backed by Drift cache + backend API.
 ///
@@ -180,7 +189,7 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
 final notificheProvider =
     StateNotifierProvider<NotificheNotifier, List<AppNotifica>>(
   (ref) {
-    final db = ref.watch(_databaseProvider);
+    final db = ref.watch(appDatabaseProvider);
     final dio = ref.watch(dioProvider);
     return NotificheNotifier(db, dio);
   },

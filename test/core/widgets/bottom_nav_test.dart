@@ -22,6 +22,36 @@ void main() {
       expect(find.text('Altro'), findsNothing);
     });
 
+    /// The bar has to fit the phone it is on.
+    ///
+    /// Padding + icon + the active tab's label came to two pixels more than a 5.9" screen has,
+    /// so a striped overflow bar sat across the bottom of every screen on the device — and two
+    /// pixels is the best case: the same layout at a larger system font size overflows by far
+    /// more. Regression for the RenderFlex exception seen on a Mi A2.
+    testWidgets('fits a narrow phone without overflowing', (tester) async {
+      // The width the failing device reported for this Row, and a text scale a person with poor
+      // eyesight would actually set.
+      tester.view.physicalSize = const Size(720, 1440);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      for (final scale in const [1.0, 1.3]) {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+            child: _wrap(AppBottomNav(currentIndex: 0, onTap: (_) {})),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the nav bar overflowed at text scale $scale',
+        );
+      }
+    });
+
     testWidgets('changing currentIndex moves the active label', (tester) async {
       await tester.pumpWidget(_wrap(
         AppBottomNav(currentIndex: 1, onTap: (_) {}),
