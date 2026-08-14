@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'rapportino_list_providers.dart';
+import '../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -26,8 +27,7 @@ class RapportinoViewScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: draftAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => SafeArea(
           child: Column(
             children: [
@@ -49,8 +49,7 @@ class RapportinoViewScreen extends ConsumerWidget {
                   EmptyState(
                     icon: LucideIcons.fileX,
                     title: 'Rapportino non trovato',
-                    body:
-                        'Il rapportino richiesto non è disponibile in cache.',
+                    body: 'Il rapportino richiesto non è disponibile in cache.',
                   ),
                 ],
               ),
@@ -79,25 +78,30 @@ class _RapportinoViewBody extends ConsumerWidget {
     final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
 
     final statusLabel = rapportinoStatusLabel(draft);
-    final dateLabel = DateFormat('dd/MM/yyyy', 'it').format(
-      (draft.updatedAt ?? draft.createdAt).toLocal(),
-    );
+    final dateLabel = DateFormat(
+      'dd/MM/yyyy',
+      'it',
+    ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
     final staff = staffAsync.valueOrNull ?? [];
     final materiali = materialiAsync.valueOrNull ?? [];
 
+    // Names, not user ids. This joined raw GUIDs — on the read-only view of the document that
+    // becomes an invoice, where "who did the work" is the line a customer actually reads back.
+    // The colleagues mirror is synced, so this still resolves with the radio off; an id the mirror
+    // does not know falls through as itself rather than vanishing from the list.
     final tecnicoLabel = staff.isNotEmpty
-        ? staff.map((s) => s.userId).join(', ')
-        : draft.insertedUserId;
+        ? staff
+              .map((s) => ref.watch(colleagueNameProvider(s.userId)).valueOrNull ?? s.userId)
+              .join(', ')
+        : (ref.watch(colleagueNameProvider(draft.insertedUserId)).valueOrNull ??
+              draft.insertedUserId);
 
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ScreenHeader(
-            title: draft.title,
-            showBack: true,
-          ),
+          ScreenHeader(title: draft.title, showBack: true),
           Expanded(
             child: CustomScrollView(
               slivers: [
@@ -126,27 +130,14 @@ class _RapportinoViewBody extends ConsumerWidget {
                               ],
                             ),
                           ),
-                          Divider(
-                            height: 1,
-                            thickness: 1,
-                            color: context.colors.borderLight,
-                          ),
+                          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
                           KeyVal(
                             label: 'Sede',
-                            value: draft.locationId.isEmpty
-                                ? '—'
-                                : draft.locationId,
+                            value: draft.locationId.isEmpty ? '—' : draft.locationId,
                           ),
                           KeyVal(label: 'Tecnico', value: tecnicoLabel),
-                          KeyVal(
-                            label: 'Cliente',
-                            value: draft.customerId ?? '—',
-                          ),
-                          KeyVal(
-                            label: 'Ore',
-                            value: oreLabel,
-                            showDivider: false,
-                          ),
+                          KeyVal(label: 'Cliente', value: draft.customerId ?? '—'),
+                          KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
                         ],
                       ),
                     ),
@@ -193,12 +184,9 @@ class _RapportinoViewBody extends ConsumerWidget {
                               child: SectionTitle(title: 'Materiali'),
                             ),
                             ...materiali.map((m) {
-                              final name =
-                                  m.freeTextName ?? m.materialeId ?? '—';
+                              final name = m.freeTextName ?? m.materialeId ?? '—';
                               final qty = m.quantity.toStringAsFixed(
-                                m.quantity.truncateToDouble() == m.quantity
-                                    ? 0
-                                    : 2,
+                                m.quantity.truncateToDouble() == m.quantity ? 0 : 2,
                               );
                               final priceStr = m.unitPrice != null
                                   ? '€${m.unitPrice!.toStringAsFixed(2)}'
@@ -246,7 +234,8 @@ class _RapportinoViewBody extends ConsumerWidget {
                             const SizedBox(height: 8),
                             _SignatureBlock(
                               allegatoId: draft.customerSignatureAllegatoId,
-                              signedAt: draft.customerSignoffAt ??
+                              signedAt:
+                                  draft.customerSignoffAt ??
                                   draft.inviatoAt ??
                                   draft.updatedAt ??
                                   draft.createdAt,
@@ -299,10 +288,7 @@ class _RapportinoViewBody extends ConsumerWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _SignatureBlock extends ConsumerWidget {
-  const _SignatureBlock({
-    required this.allegatoId,
-    required this.signedAt,
-  });
+  const _SignatureBlock({required this.allegatoId, required this.signedAt});
 
   /// The allegato id for the customer signature (not null at call site).
   final String? allegatoId;
@@ -310,9 +296,7 @@ class _SignatureBlock extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final signedLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(
-      signedAt.toLocal(),
-    );
+    final signedLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(signedAt.toLocal());
 
     // We can't easily resolve a local path from allegatoId here without
     // querying the allegati table — show a placeholder icon + date stamp.
@@ -332,18 +316,11 @@ class _SignatureBlock extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            LucideIcons.penTool,
-            size: 28,
-            color: context.colors.inkMuted,
-          ),
+          Icon(LucideIcons.penTool, size: 28, color: context.colors.inkMuted),
           const SizedBox(height: 6),
           Text(
             'Firmato il $signedLabel',
-            style: GoogleFonts.manrope(
-              fontSize: 12,
-              color: context.colors.inkMuted,
-            ),
+            style: GoogleFonts.manrope(fontSize: 12, color: context.colors.inkMuted),
           ),
         ],
       ),

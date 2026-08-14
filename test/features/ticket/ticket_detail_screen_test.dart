@@ -195,6 +195,30 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('names the assigned technician instead of showing their id', (tester) async {
+      await seedBase(db);
+      await db
+          .into(db.colleagues)
+          .insert(ColleaguesCompanion.insert(id: 'user-1', displayName: 'Mario Rossi'));
+      await pump(tester);
+
+      expect(find.text('Mario Rossi'), findsOneWidget);
+      expect(find.text('user-1'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('falls back to the id when the mirror does not know them', (tester) async {
+      // A colleague who left, or a sync that has not landed. An unfamiliar id is still something
+      // to read out over the phone; a blank is not.
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.text('user-1'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('a ticket that already has an owner offers no self-assign', (tester) async {
       // seedBase assigns user-1. Offering "take this" for a ticket somebody already holds invites
       // a technician to quietly reassign work away from a colleague.

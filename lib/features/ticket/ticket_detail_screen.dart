@@ -113,7 +113,13 @@ class _TicketDetailBody extends ConsumerWidget {
 
     final customerName = customerAsync.valueOrNull?.companyName ?? ticket.customerId;
     final locationName = locationAsync.valueOrNull?.name ?? ticket.locationId;
-    final tecnicoLabel = ticket.assignedUserId ?? '—';
+    // Was the raw `assignedUserId` — a GUID, rendered at a technician as the answer to "who has
+    // this job". Resolved from the synced colleagues mirror, so it still reads offline; falls back
+    // to the id when the mirror does not know it rather than showing nothing.
+    final assignedId = ticket.assignedUserId;
+    final tecnicoLabel = assignedId == null
+        ? '—'
+        : (ref.watch(colleagueNameProvider(assignedId)).valueOrNull ?? assignedId);
 
     return SafeArea(
       child: Column(
