@@ -25,10 +25,10 @@ class MockDio extends Mock implements Dio {}
 
 // Helper: build a Dio Response for a given status code + data.
 Response<T> _okResponse<T>(T data, String path) => Response<T>(
-      data: data,
-      statusCode: 200,
-      requestOptions: RequestOptions(path: path),
-    );
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 Widget _buildDetail({
   required AppDatabase db,
@@ -89,48 +89,62 @@ void main() {
     Dio? dio,
     bool isOnline = false,
   }) async {
-    await tester.pumpWidget(_buildDetail(
-      db: db,
-      repo: repo,
-      ticketId: ticketId,
-      dio: dio,
-      isOnline: isOnline,
-    ));
+    await tester.pumpWidget(
+      _buildDetail(db: db, repo: repo, ticketId: ticketId, dio: dio, isOnline: isOnline),
+    );
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
   }
 
   Future<void> seedBase(AppDatabase db) async {
-    await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-        id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'));
-    await db.into(db.ticketTypes).insert(TicketTypesCompanion.insert(
-        id: const Value(1), tenantId: 'tenant-1', name: 'Assistenza'));
-    await db.into(db.customers).insert(CustomersCompanion.insert(
-          id: 'cust-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          companyName: 'ACME Srl',
-        ));
-    await db.into(db.locations).insert(LocationsCompanion.insert(
-          id: 'loc-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          customerId: 'cust-1',
-          name: 'Sede Milano',
-        ));
-    await db.into(db.tickets).insert(TicketsCompanion.insert(
-          id: 'ticket-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 6, 1, 9),
-          title: 'Perdita idrica bagno',
-          customerId: 'cust-1',
-          locationId: 'loc-1',
-          statusId: 1,
-          typeId: 1,
-          description: const Value('Acqua che perde dal tubo.'),
-          assignedUserId: const Value('user-1'),
-        ));
+    await db
+        .into(db.ticketStatuses)
+        .insert(
+          TicketStatusesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'),
+        );
+    await db
+        .into(db.ticketTypes)
+        .insert(
+          TicketTypesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Assistenza'),
+        );
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'ACME Srl',
+          ),
+        );
+    await db
+        .into(db.locations)
+        .insert(
+          LocationsCompanion.insert(
+            id: 'loc-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            customerId: 'cust-1',
+            name: 'Sede Milano',
+          ),
+        );
+    await db
+        .into(db.tickets)
+        .insert(
+          TicketsCompanion.insert(
+            id: 'ticket-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1, 9),
+            title: 'Perdita idrica bagno',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+            statusId: 1,
+            typeId: 1,
+            description: const Value('Acqua che perde dal tubo.'),
+            assignedUserId: const Value('user-1'),
+          ),
+        );
   }
 
   group('TicketDetailScreen', () {
@@ -179,22 +193,68 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('a ticket that already has an owner offers no self-assign', (tester) async {
+      // seedBase assigns user-1. Offering "take this" for a ticket somebody already holds invites
+      // a technician to quietly reassign work away from a colleague.
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.text('Prendi in carico'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('an unowned ticket offers self-assign', (tester) async {
+      await seedBase(db);
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+        const TicketsCompanion(assignedUserId: Value(null)),
+      );
+      await pump(tester);
+
+      expect(find.text('Prendi in carico'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the status pill opens the status sheet', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+
+      // The pill was a label; it is a control now, so it has to answer a tap.
+      await tester.tap(find.byType(StatusPill));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cambia stato'), findsOneWidget);
+      // The ticket's current status is marked rather than merely listed, so a technician can see
+      // what they are changing from.
+      expect(find.text('Aperto'), findsWidgets);
+
+      await tester.tapAt(const Offset(10, 10)); // dismiss
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('Pianificazioni tab shows schedules', (tester) async {
       await seedBase(db);
-      await db.into(db.schedules).insert(SchedulesCompanion.insert(
-            id: 'sched-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            ticketId: const Value('ticket-1'),
-            activityDate: DateTime.utc(2026, 7, 10),
-            timeStartMinutes: 480,
-            timeEndMinutes: 1020,
-            userId: 'user-1',
-            statusId: 1,
-            locationId: 'loc-1',
-            title: 'Sopralluogo',
-            description: '',
-          ));
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: const Value('ticket-1'),
+              activityDate: DateTime.utc(2026, 7, 10),
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'user-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Sopralluogo',
+              description: '',
+            ),
+          );
 
       await pump(tester);
 
@@ -223,8 +283,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows description card when description is present',
-        (tester) async {
+    testWidgets('shows description card when description is present', (tester) async {
       await seedBase(db);
       await pump(tester);
 
@@ -261,26 +320,27 @@ void main() {
     testWidgets('shows rapportini returned by the backend', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<Map<String, dynamic>>(
-            '/api/Reports',
-            queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer((_) async => _okResponse(
+      when(
+        () => dio.get<Map<String, dynamic>>(
+          '/api/Reports',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
             {
-              'items': [
-                {
-                  'id': 'rep-1',
-                  'title': 'Sostituzione valvola',
-                  'stato': 1,
-                  'createdAt': '2026-07-01T10:00:00Z',
-                },
-              ],
-              'page': 1,
-              'pageSize': 100,
-              'totalItems': 1,
-              'totalPages': 1,
+              'id': 'rep-1',
+              'title': 'Sostituzione valvola',
+              'stato': 1,
+              'createdAt': '2026-07-01T10:00:00Z',
             },
-            '/api/Reports',
-          ));
+          ],
+          'page': 1,
+          'pageSize': 100,
+          'totalItems': 1,
+          'totalPages': 1,
+        }, '/api/Reports'),
+      );
 
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
@@ -294,23 +354,27 @@ void main() {
     testWidgets('shows an honest empty state when there are no rapportini', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<Map<String, dynamic>>(
-            '/api/Reports',
-            queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer((_) async => _okResponse(
-            {'items': <dynamic>[], 'page': 1, 'pageSize': 100, 'totalItems': 0, 'totalPages': 0},
-            '/api/Reports',
-          ));
+      when(
+        () => dio.get<Map<String, dynamic>>(
+          '/api/Reports',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': <dynamic>[],
+          'page': 1,
+          'pageSize': 100,
+          'totalItems': 0,
+          'totalPages': 0,
+        }, '/api/Reports'),
+      );
 
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
 
       expect(find.text('Nessun rapportino'), findsOneWidget);
-      expect(
-        find.text('Non ci sono rapportini registrati per questo ticket.'),
-        findsOneWidget,
-      );
+      expect(find.text('Non ci sono rapportini registrati per questo ticket.'), findsOneWidget);
       await resetAndDispose(tester);
     });
 
@@ -363,9 +427,9 @@ void main() {
     testWidgets('shows the real checklist resolved from the template', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/ticket-1/controls')).thenAnswer(
-        (_) async => _okResponse(controlsJson, '/api/tickets/ticket-1/controls'),
-      );
+      when(
+        () => dio.get<List<dynamic>>('/api/tickets/ticket-1/controls'),
+      ).thenAnswer((_) async => _okResponse(controlsJson, '/api/tickets/ticket-1/controls'));
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Controllo');
@@ -375,13 +439,12 @@ void main() {
       await resetAndDispose(tester);
     });
 
-    testWidgets('says honestly that no controls are planned, not "coming soon"',
-        (tester) async {
+    testWidgets('says honestly that no controls are planned, not "coming soon"', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/ticket-1/controls')).thenAnswer(
-        (_) async => _okResponse(<dynamic>[], '/api/tickets/ticket-1/controls'),
-      );
+      when(
+        () => dio.get<List<dynamic>>('/api/tickets/ticket-1/controls'),
+      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/tickets/ticket-1/controls'));
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Controllo');
@@ -418,9 +481,9 @@ void main() {
     testWidgets('shows attachments uploaded to the ticket', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments')).thenAnswer(
-        (_) async => _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'),
-      );
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+      ).thenAnswer((_) async => _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'));
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Allegati');
@@ -432,9 +495,9 @@ void main() {
     testWidgets('shows an honest empty state when there are no attachments', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments')).thenAnswer(
-        (_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'),
-      );
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'));
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Allegati');
@@ -472,9 +535,9 @@ void main() {
     testWidgets('shows materials planned for the ticket', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/materiali')).thenAnswer(
-        (_) async => _okResponse(materialiJson, '/api/Tickets/ticket-1/materiali'),
-      );
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/materiali'),
+      ).thenAnswer((_) async => _okResponse(materialiJson, '/api/Tickets/ticket-1/materiali'));
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Fabbisogno');
@@ -486,9 +549,9 @@ void main() {
     testWidgets('shows an honest empty state when nothing is planned', (tester) async {
       await seedBase(db);
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/materiali')).thenAnswer(
-        (_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/materiali'),
-      );
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/materiali'),
+      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/materiali'));
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Fabbisogno');

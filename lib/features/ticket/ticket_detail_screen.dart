@@ -7,8 +7,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
@@ -117,18 +119,15 @@ class _TicketDetailBody extends ConsumerWidget {
         children: [
           ScreenHeader(title: '#$shortId', subtitle: ticket.title, showBack: true),
 
-          // Status pill + type chip row
+          // Status pill + type chip + the two workflow controls.
+          //
+          // Both controls live in this existing row on purpose. The bottom action stack already
+          // carries four buttons and has twice been squeezed until something below it stopped
+          // laying out; this row is already on screen and costs nothing to reuse. It is also where
+          // they belong — changing a status is editing the thing the pill displays.
           Padding(
             padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-            child: Row(
-              children: [
-                if (statusName.isNotEmpty) StatusPill(stato: statusName),
-                if (typeName.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  AppChip(label: typeName, active: false),
-                ],
-              ],
-            ),
+            child: _TicketStatusRow(ticket: ticket, statusName: statusName, typeName: typeName),
           ),
 
           Expanded(
@@ -956,6 +955,186 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Status row: the two workflow controls
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// The status pill (tap to change it) plus "Prendi in carico" when nobody owns the ticket.
+///
+/// `PUT /api/Tickets/{id}/status` and `POST /api/Tickets/{id}/self-assign` were both live with no
+/// caller, so a technician could see a ticket was Aperto and unassigned and had no way to take it
+/// or move it along.
+///
+/// ## Why the two refresh differently
+///
+/// The screen reads its ticket from the Drift mirror, so a server-only write leaves the row on
+/// screen stale until the next sync — which is what the existing assign sheet does today.
+///
+/// A **status** change writes through to the mirror as well: the id we send is the id the server
+/// accepted, so copying it locally states nothing we do not know. A **self-assign** does not. The
+/// server sets `AssignedUserId` from its own notion of the caller, and this client's `AuthUser.id`
+/// is not guaranteed to be that value — writing it locally would be guessing an identifier into a
+/// record, which is the one thing this app does not do. So self-assign asks for a sync and lets
+/// the server's answer land.
+class _TicketStatusRow extends ConsumerStatefulWidget {
+  const _TicketStatusRow({required this.ticket, required this.statusName, required this.typeName});
+
+  final Ticket ticket;
+  final String statusName;
+  final String typeName;
+
+  @override
+  ConsumerState<_TicketStatusRow> createState() => _TicketStatusRowState();
+}
+
+class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
+  bool _busy = false;
+
+  void _report(String message, {bool ok = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: ok ? context.colors.green : context.colors.red,
+      ),
+    );
+  }
+
+  Future<void> _selfAssign() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(ticketWorkflowApiClientProvider).selfAssign(widget.ticket.id);
+      _report('Ticket assegnato a te.', ok: true);
+      // No local write — see the class doc. The sync brings back whatever id the server actually
+      // recorded, and the Drift stream under this screen updates itself when it lands.
+      await ref.read(syncProvider.notifier).performSync();
+    } on TicketWorkflowFailure catch (e) {
+      _report(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _changeStatus(int statusId, String label) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(ticketWorkflowApiClientProvider)
+          .updateStatus(ticketId: widget.ticket.id, statusId: statusId);
+
+      // Safe to mirror: this is the value the server just accepted, not a value we invented.
+      final db = ref.read(appDatabaseProvider);
+      await (db.update(db.tickets)..where((t) => t.id.equals(widget.ticket.id))).write(
+        TicketsCompanion(statusId: Value(statusId), updatedAt: Value(DateTime.now().toUtc())),
+      );
+
+      _report('Stato aggiornato: $label', ok: true);
+    } on TicketWorkflowFailure catch (e) {
+      _report(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openStatusSheet() async {
+    final statuses = ref.read(ticketStatusMapProvider).valueOrNull ?? {};
+    if (statuses.isEmpty) {
+      _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
+      return;
+    }
+
+    final chosen = await showModalBottomSheet<MapEntry<int, String>>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(19, 16, 19, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Cambia stato',
+                      style: GoogleFonts.sora(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: ctx.colors.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final entry in statuses.entries)
+              ListRow(
+                title: entry.value,
+                strapped: entry.key == widget.ticket.statusId,
+                meta: entry.key == widget.ticket.statusId
+                    ? Icon(LucideIcons.check, size: 16, color: ctx.colors.ink)
+                    : null,
+                onTap: () => Navigator.of(ctx).pop(entry),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (chosen == null || chosen.key == widget.ticket.statusId) return;
+    await _changeStatus(chosen.key, chosen.value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final unassigned = widget.ticket.assignedUserId == null;
+
+    return Row(
+      children: [
+        if (widget.statusName.isNotEmpty)
+          // A 44dp target around the pill: the pill itself is a 20dp badge, and this is now a
+          // control rather than a label.
+          AppTappable(
+            onTap: _busy ? null : _openStatusSheet,
+            borderRadius: AppRack.insetShape,
+            semanticLabel: 'Stato: ${widget.statusName}. Tocca per cambiare.',
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StatusPill(stato: widget.statusName),
+                  const SizedBox(width: 4),
+                  Icon(LucideIcons.chevronRight, size: 14, color: c.inkMuted),
+                ],
+              ),
+            ),
+          ),
+        if (widget.typeName.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          AppChip(label: widget.typeName, active: false),
+        ],
+        const Spacer(),
+        if (_busy)
+          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+        else if (unassigned)
+          AppButton(
+            label: 'Prendi in carico',
+            size: AppButtonSize.sm,
+            fullWidth: false,
+            onPressed: _selfAssign,
+          ),
+      ],
     );
   }
 }

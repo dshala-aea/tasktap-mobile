@@ -5,6 +5,7 @@ export 'app_fab.dart';
 export 'app_search_bar.dart';
 export 'app_stepper.dart';
 export 'app_tabs.dart';
+export 'app_tappable.dart';
 export 'app_text_field.dart';
 export 'app_toggle.dart';
 export 'avatar.dart';
