@@ -15,11 +15,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class StepClienteSede extends ConsumerStatefulWidget {
-  const StepClienteSede({
-    super.key,
-    required this.state,
-    required this.onChanged,
-  });
+  const StepClienteSede({super.key, required this.state, required this.onChanged});
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
@@ -38,18 +34,12 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
     final allLocationsAsync = ref.watch(allLocationsProvider);
     final allLocations = allLocationsAsync.valueOrNull ?? [];
     final locations = widget.state.customerId != null
-        ? allLocations
-            .where((l) => l.customerId == widget.state.customerId)
-            .toList()
+        ? allLocations.where((l) => l.customerId == widget.state.customerId).toList()
         : <Location>[];
 
-    final selectedCustomer = customers
-        .where((c) => c.id == widget.state.customerId)
-        .firstOrNull;
+    final selectedCustomer = customers.where((c) => c.id == widget.state.customerId).firstOrNull;
 
-    final selectedLocation = locations
-        .where((l) => l.id == widget.state.locationId)
-        .firstOrNull;
+    final selectedLocation = locations.where((l) => l.id == widget.state.locationId).firstOrNull;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
@@ -65,16 +55,9 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           key: ValueKey('cliente-${widget.state.customerId}'),
           initialValue: widget.state.customerId,
           isExpanded: true,
-          decoration: const InputDecoration(
-            hintText: 'Seleziona cliente…',
-          ),
+          decoration: const InputDecoration(hintText: 'Seleziona cliente…'),
           items: customers
-              .map(
-                (c) => DropdownMenuItem(
-                  value: c.id,
-                  child: Text(c.companyName),
-                ),
-              )
+              .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
               .toList(),
           onChanged: (id) {
             widget.onChanged(
@@ -108,14 +91,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
                 ? 'Seleziona sede…'
                 : 'Prima seleziona un cliente',
           ),
-          items: locations
-              .map(
-                (l) => DropdownMenuItem(
-                  value: l.id,
-                  child: Text(l.name),
-                ),
-              )
-              .toList(),
+          items: locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))).toList(),
           onChanged: widget.state.customerId != null
               ? (id) => widget.onChanged(widget.state.copyWith(locationId: id))
               : null,
@@ -143,15 +119,11 @@ class _CustomerSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.bg3,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (customer.contactPerson != null &&
-              customer.contactPerson!.isNotEmpty)
+          if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
             _InfoRow(label: 'Referente', value: customer.contactPerson!),
           if (customer.phone != null && customer.phone!.isNotEmpty)
             _InfoRow(label: 'Telefono', value: customer.phone!),
@@ -170,22 +142,17 @@ class _LocationSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final parts = <String>[
-      if (location.address != null && location.address!.isNotEmpty)
-        location.address!,
+      if (location.address != null && location.address!.isNotEmpty) location.address!,
       if (location.city != null && location.city!.isNotEmpty) location.city!,
     ];
 
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.bg3,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (parts.isNotEmpty)
-            _InfoRow(label: 'Indirizzo', value: parts.join(', ')),
+          if (parts.isNotEmpty) _InfoRow(label: 'Indirizzo', value: parts.join(', ')),
           if (location.phone != null && location.phone!.isNotEmpty)
             _InfoRow(label: 'Telefono', value: location.phone!),
         ],
@@ -227,15 +194,9 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Text(
-            '$label: ',
-            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-          ),
+          Text('$label: ', style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted)),
           Expanded(
-            child: Text(
-              value,
-              style: AppTextStyles.bodySmall.copyWith(color: context.colors.ink),
-            ),
+            child: Text(value, style: AppTextStyles.bodySmall.copyWith(color: context.colors.ink)),
           ),
         ],
       ),

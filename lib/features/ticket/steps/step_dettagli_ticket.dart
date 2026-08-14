@@ -14,11 +14,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class StepDettagliTicket extends ConsumerStatefulWidget {
-  const StepDettagliTicket({
-    super.key,
-    required this.state,
-    required this.onChanged,
-  });
+  const StepDettagliTicket({super.key, required this.state, required this.onChanged});
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
@@ -42,8 +38,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
   void didUpdateWidget(covariant StepDettagliTicket oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Sync controllers if the state was reset externally (e.g. back nav).
-    if (oldWidget.state.title != widget.state.title &&
-        _titleCtrl.text != widget.state.title) {
+    if (oldWidget.state.title != widget.state.title && _titleCtrl.text != widget.state.title) {
       _titleCtrl.text = widget.state.title ?? '';
     }
     if (oldWidget.state.description != widget.state.description &&
@@ -73,8 +68,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
           hint: 'Es. Manutenzione periodica',
           controller: _titleCtrl,
           onChanged: (v) => widget.onChanged(widget.state.copyWith(title: v)),
-          validator: (v) =>
-              (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
         ),
 
         const SizedBox(height: 20),
@@ -84,8 +78,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
           label: 'Descrizione',
           hint: 'Dettagli aggiuntivi…',
           controller: _descCtrl,
-          onChanged: (v) =>
-              widget.onChanged(widget.state.copyWith(description: v)),
+          onChanged: (v) => widget.onChanged(widget.state.copyWith(description: v)),
           maxLines: 4,
         ),
 
@@ -102,16 +95,9 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
           key: ValueKey('tipo-${widget.state.typeId}'),
           initialValue: widget.state.typeId,
           isExpanded: true,
-          decoration: const InputDecoration(
-            hintText: 'Seleziona tipo…',
-          ),
+          decoration: const InputDecoration(hintText: 'Seleziona tipo…'),
           items: types.entries
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e.key,
-                  child: Text(e.value),
-                ),
-              )
+              .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
               .toList(),
           onChanged: (id) =>
               id != null ? widget.onChanged(widget.state.copyWith(typeId: id)) : null,

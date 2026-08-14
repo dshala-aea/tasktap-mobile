@@ -14,6 +14,7 @@ import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_providers.dart';
+import 'ticket_workflow_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 class TicketDetailScreen extends ConsumerStatefulWidget {
@@ -22,8 +23,7 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
   final String ticketId;
 
   @override
-  ConsumerState<TicketDetailScreen> createState() =>
-      _TicketDetailScreenState();
+  ConsumerState<TicketDetailScreen> createState() => _TicketDetailScreenState();
 }
 
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
@@ -53,10 +53,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             return SafeArea(
               child: Column(
                 children: [
-                  ScreenHeader(
-                    title: 'Ticket',
-                    showBack: true,
-                  ),
+                  ScreenHeader(title: 'Ticket', showBack: true),
                   EmptyState(
                     icon: LucideIcons.xCircle,
                     title: 'Ticket non trovato',
@@ -101,10 +98,8 @@ class _TicketDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statusName = statusMap[ticket.statusId] ?? '';
     final typeName = typeMap[ticket.typeId] ?? '';
-    final shortId =
-        ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
-    final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it')
-        .format(ticket.createdAt.toLocal());
+    final shortId = ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
+    final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(ticket.createdAt.toLocal());
     final closedLabel = ticket.closedAt != null
         ? DateFormat('dd/MM/yyyy', 'it').format(ticket.closedAt!.toLocal())
         : '—';
@@ -112,8 +107,7 @@ class _TicketDetailBody extends ConsumerWidget {
     final customerAsync = ref.watch(customerByIdProvider(ticket.customerId));
     final locationAsync = ref.watch(locationByIdProvider(ticket.locationId));
 
-    final customerName =
-        customerAsync.valueOrNull?.companyName ?? ticket.customerId;
+    final customerName = customerAsync.valueOrNull?.companyName ?? ticket.customerId;
     final locationName = locationAsync.valueOrNull?.name ?? ticket.locationId;
     final tecnicoLabel = ticket.assignedUserId ?? '—';
 
@@ -121,11 +115,7 @@ class _TicketDetailBody extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ScreenHeader(
-            title: '#$shortId',
-            subtitle: ticket.title,
-            showBack: true,
-          ),
+          ScreenHeader(title: '#$shortId', subtitle: ticket.title, showBack: true),
 
           // Status pill + type chip row
           Padding(
@@ -144,6 +134,20 @@ class _TicketDetailBody extends ConsumerWidget {
           Expanded(
             child: CustomScrollView(
               slivers: [
+                // Timer: status and control together, at the top of the content.
+                //
+                // Deliberately not in the bottom action stack, which already carries four
+                // buttons. Adding a fifth control there cost 74dp of the scroll viewport on every
+                // ticket — enough that the tab strip below it stopped being laid out at all on a
+                // short screen, since slivers build lazily. It belongs with the content anyway:
+                // it reports state as much as it offers an action.
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+                    child: _TicketTimerBar(ticketId: ticket.id),
+                  ),
+                ),
+
                 // KeyVal card
                 SliverToBoxAdapter(
                   child: Padding(
@@ -156,11 +160,7 @@ class _TicketDetailBody extends ConsumerWidget {
                           KeyVal(label: 'Sede', value: locationName),
                           KeyVal(label: 'Tecnico', value: tecnicoLabel),
                           KeyVal(label: 'Data', value: dateLabel),
-                          KeyVal(
-                            label: 'Chiusura',
-                            value: closedLabel,
-                            showDivider: false,
-                          ),
+                          KeyVal(label: 'Chiusura', value: closedLabel, showDivider: false),
                         ],
                       ),
                     ),
@@ -168,8 +168,7 @@ class _TicketDetailBody extends ConsumerWidget {
                 ),
 
                 // Descrizione card
-                if (ticket.description != null &&
-                    ticket.description!.isNotEmpty)
+                if (ticket.description != null && ticket.description!.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
@@ -194,8 +193,7 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
 
                 // Note tecnico card
-                if (ticket.technicianNotes != null &&
-                    ticket.technicianNotes!.isNotEmpty)
+                if (ticket.technicianNotes != null && ticket.technicianNotes!.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
@@ -221,19 +219,12 @@ class _TicketDetailBody extends ConsumerWidget {
 
                 // Tabs
                 SliverToBoxAdapter(
-                  child: AppTabs(
-                    tabs: tabs,
-                    selectedIndex: tabIndex,
-                    onSelected: onTabSelected,
-                  ),
+                  child: AppTabs(tabs: tabs, selectedIndex: tabIndex, onSelected: onTabSelected),
                 ),
 
                 // Tab content
                 SliverToBoxAdapter(
-                  child: _TabContent(
-                    tabIndex: tabIndex,
-                    ticketId: ticket.id,
-                  ),
+                  child: _TabContent(tabIndex: tabIndex, ticketId: ticket.id),
                 ),
 
                 const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
@@ -260,9 +251,7 @@ class _TicketDetailBody extends ConsumerWidget {
                     Expanded(
                       child: AppButton.secondary(
                         label: 'Cliente',
-                        onPressed: () => context.push(
-                          AppRoutes.clientiDetail(ticket.customerId),
-                        ),
+                        onPressed: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
                       ),
                     ),
                   ],
@@ -273,8 +262,7 @@ class _TicketDetailBody extends ConsumerWidget {
                     Expanded(
                       child: AppButton(
                         label: 'Crea rapportino',
-                        onPressed: () =>
-                            _createRapportino(context, ref, ticket),
+                        onPressed: () => _createRapportino(context, ref, ticket),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -300,11 +288,7 @@ class _TicketDetailBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _createRapportino(
-    BuildContext context,
-    WidgetRef ref,
-    Ticket ticket,
-  ) async {
+  Future<void> _createRapportino(BuildContext context, WidgetRef ref, Ticket ticket) async {
     final repo = ref.read(draftReportRepositoryProvider);
     final id = 'draft-${DateTime.now().millisecondsSinceEpoch}';
     await repo.createDraft(
@@ -326,11 +310,7 @@ class _TicketDetailBody extends ConsumerWidget {
     }
   }
 
-  void _showAssignSheet(
-    BuildContext context,
-    WidgetRef ref,
-    Ticket ticket,
-  ) {
+  void _showAssignSheet(BuildContext context, WidgetRef ref, Ticket ticket) {
     final api = ref.read(adminApiClientProvider);
     showModalBottomSheet<void>(
       context: context,
@@ -338,10 +318,7 @@ class _TicketDetailBody extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => _AssignSheet(
-        api: api,
-        ticket: ticket,
-      ),
+      builder: (ctx) => _AssignSheet(api: api, ticket: ticket),
     );
   }
 }
@@ -372,10 +349,7 @@ class _TabLoading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: CircularProgressIndicator(),
-      ),
+      child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
     );
   }
 }
@@ -406,16 +380,8 @@ class _TabError extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(19, 0, 19, 0),
       child: offline
-          ? UnavailableState(
-              icon: LucideIcons.wifiOff,
-              titolo: offlineTitle,
-              motivo: offlineBody,
-            )
-          : UnavailableState(
-              icon: icon,
-              titolo: errorTitle,
-              motivo: errorBody,
-            ),
+          ? UnavailableState(icon: LucideIcons.wifiOff, titolo: offlineTitle, motivo: offlineBody)
+          : UnavailableState(icon: icon, titolo: errorTitle, motivo: errorBody),
     );
   }
 }
@@ -446,7 +412,8 @@ class _ReportTab extends ConsumerWidget {
         icon: LucideIcons.fileText,
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Rapportini non disponibili offline',
-        offlineBody: 'La lista dei rapportini di questo ticket richiede una '
+        offlineBody:
+            'La lista dei rapportini di questo ticket richiede una '
             'connessione: riprova quando torni online.',
         errorTitle: 'Impossibile caricare i rapportini',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
@@ -463,8 +430,7 @@ class _ReportTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
           child: Column(
             children: reports.map((r) {
-              final dateLabel =
-                  DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
+              final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
               return ListRow(
                 leading: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
                 title: r.title.isNotEmpty ? r.title : 'Rapportino',
@@ -508,7 +474,8 @@ class _ControlloTab extends ConsumerWidget {
           return const _EmptyTab(
             icon: LucideIcons.clipboardCheck,
             label: 'Nessun controllo previsto',
-            body: 'Questo ticket non ha un template di manutenzione collegato: non è previsto '
+            body:
+                'Questo ticket non ha un template di manutenzione collegato: non è previsto '
                 'alcun controllo per questo intervento.',
           );
         }
@@ -619,7 +586,8 @@ class _AllegatiTab extends ConsumerWidget {
         icon: LucideIcons.paperclip,
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Allegati non disponibili offline',
-        offlineBody: 'Gli allegati di questo ticket richiedono una connessione: riprova quando '
+        offlineBody:
+            'Gli allegati di questo ticket richiedono una connessione: riprova quando '
             'torni online.',
         errorTitle: 'Impossibile caricare gli allegati',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
@@ -636,8 +604,7 @@ class _AllegatiTab extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
           child: Column(
             children: attachments.map((a) {
-              final dateLabel =
-                  DateFormat('dd/MM/yyyy HH:mm', 'it').format(a.createdAt.toLocal());
+              final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(a.createdAt.toLocal());
               return ListRow(
                 leading: Icon(LucideIcons.paperclip, size: 20, color: context.colors.inkMuted),
                 title: a.fileName,
@@ -669,7 +636,8 @@ class _FabbisognoTab extends ConsumerWidget {
         icon: LucideIcons.package,
         offline: e is TicketDetailOfflineException,
         offlineTitle: 'Fabbisogno non disponibile offline',
-        offlineBody: 'I materiali pianificati per questo ticket richiedono una connessione: '
+        offlineBody:
+            'I materiali pianificati per questo ticket richiedono una connessione: '
             'riprova quando torni online.',
         errorTitle: 'Impossibile caricare il fabbisogno',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
@@ -697,7 +665,9 @@ class _FabbisognoTab extends ConsumerWidget {
                 ),
                 title: m.nome,
                 subtitle: m.codice != null ? '${m.codice} · $qtyLabel' : qtyLabel,
-                meta: !m.disponibile ? const AppChip(label: 'Non disponibile', active: false) : null,
+                meta: !m.disponibile
+                    ? const AppChip(label: 'Non disponibile', active: false)
+                    : null,
                 showDivider: m != materiali.last,
               );
             }).toList(),
@@ -709,11 +679,7 @@ class _FabbisognoTab extends ConsumerWidget {
 }
 
 class _EmptyTab extends StatelessWidget {
-  const _EmptyTab({
-    required this.icon,
-    required this.label,
-    required this.body,
-  });
+  const _EmptyTab({required this.icon, required this.label, required this.body});
 
   final IconData icon;
   final String label;
@@ -739,10 +705,7 @@ class _PianificazioniTab extends ConsumerWidget {
 
     return schedulesAsync.when(
       loading: () => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(),
-        ),
+        child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
       ),
       error: (e, _) => const _EmptyTab(
         icon: LucideIcons.calendar,
@@ -753,15 +716,16 @@ class _PianificazioniTab extends ConsumerWidget {
           ? const _EmptyTab(
               icon: LucideIcons.calendarOff,
               label: 'Nessuna pianificazione',
-              body:
-                  'Le pianificazioni collegate a questo ticket appariranno qui.',
+              body: 'Le pianificazioni collegate a questo ticket appariranno qui.',
             )
           : Padding(
               padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
               child: Column(
                 children: schedules.map((s) {
-                  final dateLabel = DateFormat('EEE d MMM HH:mm', 'it')
-                      .format(s.activityDate.toLocal());
+                  final dateLabel = DateFormat(
+                    'EEE d MMM HH:mm',
+                    'it',
+                  ).format(s.activityDate.toLocal());
                   return ListRow(
                     leading: Icon(
                       LucideIcons.calendarDays,
@@ -823,16 +787,14 @@ class _AssignSheetState extends State<_AssignSheet> {
     try {
       await widget.api.assignTicket(widget.ticket.id, _selectedUserId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Assegnazione aggiornata')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Assegnazione aggiornata')));
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -842,39 +804,27 @@ class _AssignSheetState extends State<_AssignSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        19,
-        19,
-        19,
-        MediaQuery.of(context).viewInsets.bottom + 19,
-      ),
+      padding: EdgeInsets.fromLTRB(19, 19, 19, MediaQuery.of(context).viewInsets.bottom + 19),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Assegna tecnico',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Assegna tecnico', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else
             DropdownButtonFormField<String>(
               initialValue: _selectedUserId,
-              decoration: const InputDecoration(
-                labelText: 'Tecnico',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Tecnico', border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Non assegnato'),
+                const DropdownMenuItem(value: null, child: Text('Non assegnato')),
+                ..._technicians.map(
+                  (t) => DropdownMenuItem(
+                    value: t['id'] as String,
+                    child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                  ),
                 ),
-                ..._technicians.map((t) => DropdownMenuItem(
-                      value: t['id'] as String,
-                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
-                    )),
               ],
               onChanged: (v) => setState(() => _selectedUserId = v),
             ),
@@ -886,6 +836,124 @@ class _AssignSheetState extends State<_AssignSheet> {
               onPressed: _isSaving ? null : _save,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Timer bar
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Start and stop the clock against this ticket.
+///
+/// The routes behind it (`POST .../worklogs/start|stop`) have been live the whole time with no
+/// call site, so a technician could open a ticket and read every detail of it while having no way
+/// to book a minute of the work against it.
+///
+/// The bar takes the rack's strap when a clock is running: the same yellow mark the dashboard puts
+/// on a live tracker and the ticket list puts on the in-corso row. A technician who has left a
+/// timer going overnight should see the same signal wherever they land.
+class _TicketTimerBar extends ConsumerStatefulWidget {
+  const _TicketTimerBar({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  ConsumerState<_TicketTimerBar> createState() => _TicketTimerBarState();
+}
+
+class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+      // Re-read rather than patching local state: the server owns whether a clock is running, and
+      // this screen has just changed it.
+      ref.invalidate(ticketWorklogsProvider(widget.ticketId));
+      await ref.read(ticketWorklogsProvider(widget.ticketId).future);
+    } on TicketWorkflowFailure catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: context.colors.red));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final async = ref.watch(ticketWorklogsProvider(widget.ticketId));
+
+    // Offline is stated, not hidden behind a disabled button with no explanation. These writes
+    // have no idempotent upsert to queue against, so there is nothing to promise here.
+    if (async.hasError && async.error is TicketDetailOfflineException) {
+      return AppCard(
+        child: Row(
+          children: [
+            Icon(LucideIcons.cloudOff, size: 16, color: c.inkMuted),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Timer non disponibile offline',
+                style: TextStyle(fontSize: 12, color: c.inkMuted),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
+    final isRunning = running != null;
+
+    return AppCard(
+      strapped: isRunning,
+      child: Row(
+        children: [
+          Icon(
+            isRunning ? LucideIcons.timer : LucideIcons.clock,
+            size: 18,
+            color: isRunning ? c.ink : c.inkMuted,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              switch ((async.isLoading, isRunning)) {
+                (true, _) => 'Verifica timer…',
+                (false, true) => 'Timer in corso',
+                (false, false) => 'Nessun timer attivo',
+              },
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isRunning ? FontWeight.w700 : FontWeight.w500,
+                color: isRunning ? c.ink : c.inkMuted,
+              ),
+            ),
+          ),
+          if (_busy)
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            AppButton(
+              label: isRunning ? 'Ferma' : 'Avvia',
+              size: AppButtonSize.sm,
+              fullWidth: false,
+              variant: isRunning ? AppButtonVariant.dark : AppButtonVariant.primary,
+              onPressed: async.isLoading
+                  ? null
+                  : () => _run(() {
+                      final api = ref.read(ticketWorkflowApiClientProvider);
+                      return isRunning
+                          ? api.stopTimer(widget.ticketId)
+                          : api.startTimer(widget.ticketId);
+                    }),
+            ),
         ],
       ),
     );

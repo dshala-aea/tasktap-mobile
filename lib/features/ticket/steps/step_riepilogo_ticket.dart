@@ -70,19 +70,11 @@ class StepRiepilogoTicket extends ConsumerWidget {
         const SizedBox(height: 12),
 
         // ── Location ───────────────────────────────────────────────────────
-        _SummaryRow(
-          label: 'Sede',
-          value: locationName ?? '—',
-          isMissing: state.locationId == null,
-        ),
+        _SummaryRow(label: 'Sede', value: locationName ?? '—', isMissing: state.locationId == null),
         const SizedBox(height: 12),
 
         // ── Type ───────────────────────────────────────────────────────────
-        _SummaryRow(
-          label: 'Tipo',
-          value: typeName ?? '—',
-          isMissing: state.typeId == null,
-        ),
+        _SummaryRow(label: 'Tipo', value: typeName ?? '—', isMissing: state.typeId == null),
         const SizedBox(height: 12),
 
         // ── Status ─────────────────────────────────────────────────────────
@@ -121,11 +113,7 @@ class StepRiepilogoTicket extends ConsumerWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-    this.isMissing = false,
-  });
+  const _SummaryRow({required this.label, required this.value, this.isMissing = false});
 
   final String label;
   final String value;
@@ -135,16 +123,10 @@ class _SummaryRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: context.colors.bg3,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
-          Text(
-            label,
-            style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
-          ),
+          Text(label, style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted)),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

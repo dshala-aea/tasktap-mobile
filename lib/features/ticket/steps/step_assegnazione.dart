@@ -24,11 +24,7 @@ final techniciansProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 });
 
 class StepAssegnazione extends ConsumerStatefulWidget {
-  const StepAssegnazione({
-    super.key,
-    required this.state,
-    required this.onChanged,
-  });
+  const StepAssegnazione({super.key, required this.state, required this.onChanged});
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
@@ -65,9 +61,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
         _AssignmentOption(
           label: 'Nessuna assegnazione',
           isSelected: widget.state.assignedUserId == null,
-          onTap: () => widget.onChanged(
-            widget.state.copyWith(assignedUserId: null),
-          ),
+          onTap: () => widget.onChanged(widget.state.copyWith(assignedUserId: null)),
         ),
 
         const SizedBox(height: 12),
@@ -87,9 +81,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                 Text(
                   'Impossibile caricare i tecnici.\nSeleziona un ticket senza assegnazione.',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: context.colors.inkMuted,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               ],
             ),
@@ -100,9 +92,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   'Nessun tecnico disponibile.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: context.colors.inkMuted,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               );
             }
@@ -120,8 +110,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                   child: _AssignmentOption(
                     label: name,
                     isSelected: widget.state.assignedUserId == id,
-                    onTap: () =>
-                        widget.onChanged(widget.state.copyWith(assignedUserId: id)),
+                    onTap: () => widget.onChanged(widget.state.copyWith(assignedUserId: id)),
                   ),
                 );
               }).toList(),
@@ -138,11 +127,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _AssignmentOption extends StatelessWidget {
-  const _AssignmentOption({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _AssignmentOption({required this.label, required this.isSelected, required this.onTap});
 
   final String label;
   final bool isSelected;
@@ -160,26 +145,23 @@ class _AssignmentOption extends StatelessWidget {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
-          children: [
-            Icon(
-              isSelected
-                  ? LucideIcons.circleDot
-                  : LucideIcons.circle,
-              size: 20,
-              color: isSelected ? AppColors.Y : context.colors.inkMuted,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.bodyLarge.copyWith(
-                  color: isSelected ? context.colors.ink : context.colors.inkMuted,
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
+        children: [
+          Icon(
+            isSelected ? LucideIcons.circleDot : LucideIcons.circle,
+            size: 20,
+            color: isSelected ? AppColors.Y : context.colors.inkMuted,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: isSelected ? context.colors.ink : context.colors.inkMuted,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
-          ],
+          ),
+        ],
       ),
     );
   }

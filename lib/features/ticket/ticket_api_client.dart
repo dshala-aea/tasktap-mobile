@@ -28,8 +28,7 @@ class TicketApiClient {
       '/api/tickets',
       data: {
         'title': title,
-        if (description != null && description.isNotEmpty)
-          'description': description,
+        if (description != null && description.isNotEmpty) 'description': description,
         'customerId': customerId,
         'locationId': locationId,
         'assignedUserId': ?assignedUserId,
