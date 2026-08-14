@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, six commits, **667/667 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, eight commits, **670/670 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
@@ -152,10 +152,14 @@ technician `/api/app/*` endpoints, real settings, and AI.
 
 1. ~~**Ticket workflow writes**~~ — **done** (`eab8dff`). `TicketWorkflowApiClient` covers status,
    self-assign, history and worklogs start/stop/manual/list; the detail screen has a timer bar.
-   Still unsurfaced, and cheap to add on top of the client that now exists: a **self-assign
-   control** (the client method is there, no UI calls it), a **status-change control**, and the
-   **history** and **worklog list** views (`ticketHistoryProvider` and `ticketWorklogsProvider` are
-   both wired and unused by any screen).
+   Self-assign and status change are surfaced too (`8f36b46`), in the status row rather than the
+   bottom action stack — that stack has now twice been squeezed until something under it stopped
+   laying out, so treat it as full.
+
+   Still unsurfaced, and cheap on top of what exists: the **history** view
+   (`ticketHistoryProvider`) and the **worklog list** (`ticketWorklogsProvider` — the timer bar
+   reads it for running-state only and never lists the entries). Both providers are wired and no
+   screen calls them.
 
    Two facts worth keeping: the backend refuses `worklogs/start` when the caller has an open timer
    on **any** ticket, not just the one on screen; and these routes have no idempotent upsert, so
