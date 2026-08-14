@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, eight commits, **670/670 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, ten commits, **676/676 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
@@ -156,10 +156,12 @@ technician `/api/app/*` endpoints, real settings, and AI.
    bottom action stack — that stack has now twice been squeezed until something under it stopped
    laying out, so treat it as full.
 
-   Still unsurfaced, and cheap on top of what exists: the **history** view
-   (`ticketHistoryProvider`) and the **worklog list** (`ticketWorklogsProvider` — the timer bar
-   reads it for running-state only and never lists the entries). Both providers are wired and no
-   screen calls them.
+   History and the worklog list are surfaced too, as the Ore and Storico tabs (`e9…`). Nothing on
+   the ticket workflow remains unsurfaced.
+
+   Note the ticket detail now carries **seven** tabs, and at 800dp the strip scrolls — a widget
+   test tapping the right-most labels needs a wider surface or the tap lands on whatever is
+   beneath. See `tapWideTab` in `ticket_detail_screen_test.dart`.
 
    Two facts worth keeping: the backend refuses `worklogs/start` when the caller has an open timer
    on **any** ticket, not just the one on screen; and these routes have no idempotent upsert, so
