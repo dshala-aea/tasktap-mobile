@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Search input — BG3 bg, 12 px radius, pad 10/14, search icon (16, MUTED) +
 /// Manrope 14 input. Spec margin: 0 / 19 / 12.
@@ -28,13 +29,18 @@ class AppSearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: margin,
-      child: DecoratedBox(
+      child: Container(
+        // A compartment, not a pill: the search field is a slot cut into the rack, so it takes
+        // the inset radius and a machined edge. It also gains a real border — on a bone ground
+        // the old borderless bg3 fill had almost no edge at all outdoors.
+        constraints: const BoxConstraints(minHeight: 44),
         decoration: BoxDecoration(
           color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: AppRack.insetShape,
+          border: Border.all(color: context.colors.borderMedium),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               Icon(LucideIcons.search, size: 16, color: context.colors.inkMuted),

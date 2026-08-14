@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/widgets/app_card.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -12,7 +14,8 @@ void main() {
       expect(find.text('contenuto'), findsOneWidget);
     });
 
-    testWidgets('default background is BG1 with SH shadow', (tester) async {
+    testWidgets('is a cell: bone label card, flush leading edge, no drop shadow',
+        (tester) async {
       await tester.pumpWidget(_wrap(const AppCard(child: Text('x'))));
       final box = tester
           .widget<DecoratedBox>(
@@ -24,9 +27,14 @@ void main() {
                 .first,
           )
           .decoration as BoxDecoration;
-      expect(box.color, equals(AppColors.BG1));
-      expect(box.boxShadow, equals(AppColors.SH));
-      expect(box.borderRadius, equals(BorderRadius.circular(14)));
+
+      // A card was BG1 with a soft shadow and a 14px radius — the moulded rounded-card idiom.
+      // A cell is the bone label card, square where it butts the rail, machined on the other
+      // three corners, and carries no shadow at all: depth is the ledge, which survives a dark
+      // ground and direct sunlight where a 10%-black shadow does not.
+      expect(box.color, equals(AppPalette.light.labelCard));
+      expect(box.boxShadow, isNull);
+      expect(box.borderRadius, equals(AppRack.cellShape));
     });
 
     testWidgets('honours a custom background color', (tester) async {
@@ -67,7 +75,7 @@ void main() {
       expect(find.text('glass'), findsOneWidget);
     });
 
-    testWidgets('uses a translucent white gradient + 14px radius',
+    testWidgets('uses a translucent white gradient + the rack corner language',
         (tester) async {
       await tester.pumpWidget(_wrap(
         const ColoredBox(
@@ -86,7 +94,9 @@ void main() {
           )
           .decoration as BoxDecoration;
       expect(box.gradient, isA<LinearGradient>());
-      expect(box.borderRadius, equals(BorderRadius.circular(14)));
+      // Glass keeps its translucency but takes the rack's corner language, so it does not read as
+      // a survivor from the previous design system sitting on the dashboard hero.
+      expect(box.borderRadius, equals(AppRack.freeShape));
     });
 
     testWidgets('pressable variant fires onTap', (tester) async {

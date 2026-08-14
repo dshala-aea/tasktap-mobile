@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_rack.dart';
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -46,7 +47,7 @@ class HeaderIconBtn extends StatelessWidget {
       // relationship Material's own IconButton has between its ink and its glyph.
       child: AppTappable(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: AppRack.insetShape,
         child: SizedBox(
           width: 44,
           height: 44,
@@ -59,13 +60,16 @@ class HeaderIconBtn extends StatelessWidget {
                   height: 38,
                   decoration: BoxDecoration(
                     color: glass ? Colors.white.withAlpha(46) : context.colors.bg3,
-                    shape: BoxShape.circle,
-                    border: glass
-                        ? Border.all(
-                            color: Colors.white.withAlpha(128),
-                            width: 0.5,
-                          )
-                        : null,
+                    // A machined square, not a moulded disc. This one change re-skins every
+                    // header action in the app — back, bell, profile, search, filter — across
+                    // twenty-nine screens, because they all come through here.
+                    borderRadius: AppRack.insetShape,
+                    border: Border.all(
+                      color: glass
+                          ? Colors.white.withAlpha(128)
+                          : context.colors.borderMedium,
+                      width: glass ? 0.5 : 1,
+                    ),
                   ),
                   child: Icon(
                     icon,
@@ -133,8 +137,18 @@ class ScreenHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final titleColor = dark ? AppColors.WHITE : context.colors.ink;
-    return Padding(
+    return Container(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
+      // The top plate of the load bay. Headers used to float with no edge at all, so a scrolled
+      // list ran up underneath the title with nothing marking where the rack began; the rail now
+      // starts at this line.
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: dark ? Colors.white.withAlpha(38) : context.colors.borderMedium,
+          ),
+        ),
+      ),
       child: Row(
         children: [
           if (showBack)
@@ -160,6 +174,7 @@ class ScreenHeader extends StatelessWidget {
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: titleColor,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 if (subtitle != null)

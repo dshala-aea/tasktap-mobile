@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Compact rounded badge pill.
 ///
@@ -38,7 +39,10 @@ class AppBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(9),
+        // 3, not 9. A badge is ink printed on the label card, and printed marks on a machined
+        // label are not lozenges. At this size the difference is small and it is the difference
+        // between the app looking drawn and looking specified.
+        borderRadius: BorderRadius.circular(3),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
@@ -82,7 +86,7 @@ class AppChip extends StatelessWidget {
     final fg = active ? context.colors.inkInverse : context.colors.ink;
     final borderColor = active ? context.colors.surfaceInverse : context.colors.borderMedium;
 
-    const radius = 5.0;
+    const radius = AppRack.insetRadius;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44, minWidth: 44),

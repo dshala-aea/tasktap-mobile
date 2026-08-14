@@ -50,21 +50,26 @@ void main() {
       expect(pressed, isTrue);
     });
 
-    testWidgets('icon container is 60x60 circle', (tester) async {
+    testWidgets('is a shadow board: cut outline, no icon disc', (tester) async {
       await tester.pumpWidget(_wrap(
         const EmptyState(
           icon: LucideIcons.inbox,
           title: 'Test',
         ),
       ));
-      final container = tester.widget<Container>(
+
+      // The 60px grey disc is gone. An empty state is now a cut silhouette — the outline of what
+      // belongs in this slot — which says "something is missing" rather than "nothing here", the
+      // distinction the app's third product principle exists to protect.
+      expect(find.byType(CustomPaintShadowBoard), findsOneWidget);
+      expect(
         find.ancestor(
           of: find.byIcon(LucideIcons.inbox),
           matching: find.byType(Container),
-        ).first,
+        ),
+        findsNothing,
+        reason: 'the icon should sit directly on the board, not inside a disc',
       );
-      expect(container.constraints?.maxWidth, equals(60));
-      expect(container.constraints?.maxHeight, equals(60));
     });
 
     testWidgets('no action widget when action not provided', (tester) async {

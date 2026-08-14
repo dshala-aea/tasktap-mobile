@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_palette.dart';
+import 'app_rack.dart';
 import 'app_spacing.dart';
 import 'app_text_styles.dart';
 
@@ -108,11 +109,15 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
 
     // ── Card ───────────────────────────────────────────────────────────────
+    //
+    // Material's own Card, for the places Flutter reaches for one on our behalf (dialogs, menus,
+    // banners). Given the rack's material and corner language so a framework-supplied surface
+    // does not arrive wearing the previous design system.
     cardTheme: CardThemeData(
-      color: p.bg1,
+      color: p.labelCard,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+        borderRadius: AppRack.freeShape,
         side: BorderSide(color: p.borderLight),
       ),
       margin: EdgeInsets.zero,

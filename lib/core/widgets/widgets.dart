@@ -15,6 +15,7 @@ export 'empty_state.dart';
 export 'key_val.dart';
 export 'list_row.dart';
 export 'quick_action.dart';
+export 'rack.dart';
 export 'screen_header.dart';
 export 'section_title.dart';
 export 'signature_pad.dart';
