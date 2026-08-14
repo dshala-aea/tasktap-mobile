@@ -5,7 +5,6 @@ import '../theme/app_colors.dart';
 import 'app_button.dart';
 import 'app_card.dart';
 import 'status_pill.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Active-job glass card (dashboard hero).
 ///
@@ -38,14 +37,25 @@ class ActiveJobCard extends StatelessWidget {
   final String stato;
   final String title;
   final String? client;
-  final String elapsed;
+
+  /// A pre-formatted `HH:MM:SS`, or null when nothing is actually running.
+  ///
+  /// Nullable on purpose. The dashboard used to pass a literal `'00:00:00'` for a job the
+  /// calendar called in-progress but that had no running clock behind it, which put a stopped
+  /// timer on the hero that looked exactly like a running one reading zero. A technician who
+  /// believes that has not started their clock.
+  final String? elapsed;
+
   final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final segments = elapsed.split(':');
+    final segments = elapsed?.split(':');
 
     return GlassCard(
+      // A live clock is strapped, the same yellow mark the rest of the app uses for "this one is
+      // running". Nothing else on the hero earns it.
+      strapped: elapsed != null,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -74,7 +84,12 @@ class ActiveJobCard extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
-                      color: context.colors.inkInverse,
+                      // A fixed light ink, not `inkInverse`. The hero is a dark gradient in both
+                      // themes, but `inkInverse` flips to near-black in the dark palette — so
+                      // this line, and only this line on the card, went unreadable the moment a
+                      // technician turned dark mode on. The title beside it was already a fixed
+                      // white, which is why the bug was invisible in review.
+                      color: AppColors.WHITE.withAlpha(191),
                     ),
                   ),
                 const SizedBox(height: 12),
@@ -88,15 +103,29 @@ class ActiveJobCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < segments.length; i++) ...[
-                _TimerTile(value: segments[i]),
-                if (i < segments.length - 1) const SizedBox(width: 4),
+          if (segments != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < segments.length; i++) ...[
+                  _TimerTile(value: segments[i]),
+                  if (i < segments.length - 1) const SizedBox(width: 4),
+                ],
               ],
-            ],
-          ),
+            )
+          else
+            // Says the true thing instead of drawing a zeroed clock.
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Non avviato',
+                style: GoogleFonts.manrope(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.WHITE.withAlpha(153),
+                ),
+              ),
+            ),
         ],
       ),
     );

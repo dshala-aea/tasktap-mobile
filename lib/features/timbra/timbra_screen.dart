@@ -32,8 +32,7 @@ class TimbraScreen extends ConsumerStatefulWidget {
   ConsumerState<TimbraScreen> createState() => _TimbraScreenState();
 }
 
-class _TimbraScreenState extends ConsumerState<TimbraScreen>
-    with TickerProviderStateMixin {
+class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProviderStateMixin {
   late Timer _clockTimer;
   DateTime _now = DateTime.now();
 
@@ -52,9 +51,10 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 0.85,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
   }
 
   @override
@@ -86,7 +86,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
     _updatePulse(shiftState.isOnShift);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: AppColors.punchGround,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -174,8 +174,18 @@ class _DateLabel extends StatelessWidget {
     // Displays as e.g. "LUN 22 GIU 2026"
     final dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
     final monthNames = [
-      'GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU',
-      'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC',
+      'GEN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAG',
+      'GIU',
+      'LUG',
+      'AGO',
+      'SET',
+      'OTT',
+      'NOV',
+      'DIC',
     ];
     final day = dayNames[now.weekday - 1];
     final month = monthNames[now.month - 1];
@@ -264,7 +274,7 @@ class _PunchButton extends StatelessWidget {
         ? const RadialGradient(
             center: Alignment(0, -0.3),
             radius: 0.85,
-            colors: [Color(0xFFFF6B6B), Color(0xFFCC3333)],
+            colors: [AppColors.stopLight, AppColors.stopDark],
           )
         : const RadialGradient(
             center: Alignment(0, -0.3),
@@ -289,54 +299,47 @@ class _PunchButton extends StatelessWidget {
         child: Opacity(
           opacity: blocked ? 0.4 : 1,
           child: Container(
-          width: 180,
-          height: 180,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: gradient,
-            boxShadow: [
-              BoxShadow(
-                color: isOnShift
-                    ? const Color(0xFFCC3333).withAlpha(100)
-                    : AppColors.Y.withAlpha(80),
-                blurRadius: 32,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: isLoading
-              ? const Center(
-                  child: SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF1A1A1A),
-                      strokeWidth: 3,
-                    ),
-                  ),
-                )
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      icon,
-                      size: 36,
-                      color: isOnShift ? Colors.white : const Color(0xFF1A1A1A),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.0,
-                        color:
-                            isOnShift ? Colors.white : const Color(0xFF1A1A1A),
+            width: 180,
+            height: 180,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: gradient,
+              boxShadow: [
+                BoxShadow(
+                  color: isOnShift ? AppColors.stopDark.withAlpha(100) : AppColors.Y.withAlpha(80),
+                  blurRadius: 32,
+                  spreadRadius: 4,
+                ),
+              ],
+            ),
+            child: isLoading
+                ? const Center(
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(
+                        color: AppColors.punchGround,
+                        strokeWidth: 3,
                       ),
                     ),
-                  ],
-                ),
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 36, color: isOnShift ? Colors.white : AppColors.punchGround),
+                      const SizedBox(height: 8),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                          color: isOnShift ? Colors.white : AppColors.punchGround,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
       ),
@@ -352,11 +355,7 @@ class _PunchButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             guard.reason!,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              color: context.colors.inkMuted,
-            ),
+            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -409,29 +408,29 @@ class _PauseButton extends StatelessWidget {
           border: Border.all(color: accent.withAlpha(120)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isLoading)
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                  )
-                else
-                  Icon(icon, size: 16, color: accent),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.0,
-                    color: accent,
-                  ),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isLoading)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                )
+              else
+                Icon(icon, size: 16, color: accent),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: accent,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -446,11 +445,7 @@ class _PauseButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             guard.reason!,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              color: context.colors.inkMuted,
-            ),
+            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -509,10 +504,7 @@ class _SessionsCard extends StatelessWidget {
                   child: Container(
                     width: 7,
                     height: 7,
-                    decoration: BoxDecoration(
-                      color: context.colors.amber,
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: BoxDecoration(color: context.colors.amber, shape: BoxShape.circle),
                   ),
                 ),
               ],

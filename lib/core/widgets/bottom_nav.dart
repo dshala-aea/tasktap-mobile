@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_rack.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -122,8 +123,14 @@ class _NavTab extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
+          // The rack's own drawer movement, and it stops when the OS says stop. Both platforms
+          // require this: "Remove animations" on Android and Reduce Motion on iOS both surface as
+          // MediaQuery.disableAnimations, and a nav bar that keeps sliding through it is the
+          // single most noticeable place to ignore the setting.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : AppRack.drawerOut,
+          curve: AppRack.slideOut,
           constraints: const BoxConstraints(minHeight: 44),
           padding: EdgeInsets.symmetric(
             horizontal: active ? 16 : 14,
@@ -139,7 +146,13 @@ class _NavTab extends StatelessWidget {
               Icon(
                 item.icon,
                 size: 18,
-                color: active ? context.colors.brandOn : context.colors.inkDisabled,
+                // Inactive tabs were `inkDisabled` — #B4B4B4, which measures 1.9:1 on the white
+                // pill. These are the app's five primary destinations, they are icon-only when
+                // inactive, and a technician navigates by them one-handed in direct sun. 1.9:1
+                // is not a low-emphasis treatment there, it is an invisible one. `inkMuted`
+                // clears the 4.5:1 floor at 5.3:1 and still reads as clearly unselected against
+                // the yellow pill.
+                color: active ? context.colors.brandOn : context.colors.inkMuted,
               ),
               if (active) ...[
                 const SizedBox(width: 8),

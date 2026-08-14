@@ -175,6 +175,14 @@ void main() {
       // The dashboard hero's gradient: dark under both themes, so a flipping token would be
       // the bug. Its call site says so. (CHARCOAL is already above.)
       'DARK',
+      // The timbratura screens' ground and their end-shift disc. Fixed-dark under both themes:
+      // the punch clock is a full-bleed dark surface read at arm's length in a van cab, and it
+      // stays dark when the app is in light mode. A palette token would invert it.
+      //
+      // `stopLight`/`stopDark` are the one danger red lightened and darkened. They are constants
+      // rather than palette entries because they only ever appear on `punchGround`, which does
+      // not flip — so there is no second theme for them to have a value in.
+      'punchGround', 'stopLight', 'stopDark',
     };
 
     final offenders = <String>[];

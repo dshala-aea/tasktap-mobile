@@ -66,8 +66,7 @@ class ImpostazioniState {
       syncOffline: syncOffline ?? this.syncOffline,
       geoLocazione: geoLocazione ?? this.geoLocazione,
       temaScuro: temaScuro ?? this.temaScuro,
-      autenticazioneBiometrica:
-          autenticazioneBiometrica ?? this.autenticazioneBiometrica,
+      autenticazioneBiometrica: autenticazioneBiometrica ?? this.autenticazioneBiometrica,
     );
   }
 }
@@ -93,8 +92,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       syncOffline: prefs.getBool(_kSyncOffline) ?? true,
       geoLocazione: prefs.getBool(_kGeoLocazione) ?? false,
       temaScuro: prefs.getBool(_kTemaScuro) ?? false,
-      autenticazioneBiometrica:
-          prefs.getBool(_kAutenticazioneBiometrica) ?? false,
+      autenticazioneBiometrica: prefs.getBool(_kAutenticazioneBiometrica) ?? false,
     );
   }
 
@@ -102,15 +100,14 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   void toggle({required String key}) {
     state = switch (key) {
       'pushAbilitate' => state.copyWith(pushAbilitate: !state.pushAbilitate),
-      'notificheInterventi' =>
-        state.copyWith(notificheInterventi: !state.notificheInterventi),
-      'notificheRapportini' =>
-        state.copyWith(notificheRapportini: !state.notificheRapportini),
+      'notificheInterventi' => state.copyWith(notificheInterventi: !state.notificheInterventi),
+      'notificheRapportini' => state.copyWith(notificheRapportini: !state.notificheRapportini),
       'syncOffline' => state.copyWith(syncOffline: !state.syncOffline),
       'geoLocazione' => state.copyWith(geoLocazione: !state.geoLocazione),
       'temaScuro' => state.copyWith(temaScuro: !state.temaScuro),
       'autenticazioneBiometrica' => state.copyWith(
-          autenticazioneBiometrica: !state.autenticazioneBiometrica),
+        autenticazioneBiometrica: !state.autenticazioneBiometrica,
+      ),
       _ => state,
     };
 
@@ -128,26 +125,26 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   }
 
   bool _valueForKey(String key) => switch (key) {
-        'pushAbilitate' => state.pushAbilitate,
-        'notificheInterventi' => state.notificheInterventi,
-        'notificheRapportini' => state.notificheRapportini,
-        'syncOffline' => state.syncOffline,
-        'geoLocazione' => state.geoLocazione,
-        'temaScuro' => state.temaScuro,
-        'autenticazioneBiometrica' => state.autenticazioneBiometrica,
-        _ => false,
-      };
+    'pushAbilitate' => state.pushAbilitate,
+    'notificheInterventi' => state.notificheInterventi,
+    'notificheRapportini' => state.notificheRapportini,
+    'syncOffline' => state.syncOffline,
+    'geoLocazione' => state.geoLocazione,
+    'temaScuro' => state.temaScuro,
+    'autenticazioneBiometrica' => state.autenticazioneBiometrica,
+    _ => false,
+  };
 
   String _prefKeyForKey(String key) => switch (key) {
-        'pushAbilitate' => _kPushAbilitate,
-        'notificheInterventi' => _kNotificheInterventi,
-        'notificheRapportini' => _kNotificheRapportini,
-        'syncOffline' => _kSyncOffline,
-        'geoLocazione' => _kGeoLocazione,
-        'temaScuro' => _kTemaScuro,
-        'autenticazioneBiometrica' => _kAutenticazioneBiometrica,
-        _ => key,
-      };
+    'pushAbilitate' => _kPushAbilitate,
+    'notificheInterventi' => _kNotificheInterventi,
+    'notificheRapportini' => _kNotificheRapportini,
+    'syncOffline' => _kSyncOffline,
+    'geoLocazione' => _kGeoLocazione,
+    'temaScuro' => _kTemaScuro,
+    'autenticazioneBiometrica' => _kAutenticazioneBiometrica,
+    _ => key,
+  };
 
   Future<void> _persist(String key, bool value) async {
     final prefs = await SharedPreferences.getInstance();
@@ -179,7 +176,6 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 // Provider
 // ══════════════════════════════════════════════════════════════════════════════
 
-final impostazioniProvider =
-    StateNotifierProvider<ImpostazioniNotifier, ImpostazioniState>(
+final impostazioniProvider = StateNotifierProvider<ImpostazioniNotifier, ImpostazioniState>(
   (ref) => ImpostazioniNotifier(ref.watch(authRepositoryProvider)),
 );

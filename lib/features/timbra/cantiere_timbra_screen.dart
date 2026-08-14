@@ -34,6 +34,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -50,8 +51,7 @@ final cantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
 });
 
 /// AsyncNotifier that loads the current open CantiereWorkLogDto (or null).
-class ActiveCantiereLogNotifier
-    extends AutoDisposeAsyncNotifier<CantiereWorkLogDto?> {
+class ActiveCantiereLogNotifier extends AutoDisposeAsyncNotifier<CantiereWorkLogDto?> {
   @override
   Future<CantiereWorkLogDto?> build() async {
     final client = ref.watch(cantiereWorklogApiClientProvider);
@@ -74,19 +74,14 @@ class ActiveCantiereLogNotifier
 }
 
 final activeCantiereLogProvider =
-    AutoDisposeAsyncNotifierProvider<ActiveCantiereLogNotifier,
-        CantiereWorkLogDto?>(() {
-  return ActiveCantiereLogNotifier();
-});
+    AutoDisposeAsyncNotifierProvider<ActiveCantiereLogNotifier, CantiereWorkLogDto?>(() {
+      return ActiveCantiereLogNotifier();
+    });
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class CantiereTimbraScreen extends ConsumerStatefulWidget {
-  const CantiereTimbraScreen({
-    super.key,
-    this.ticketId,
-    this.customerId,
-  });
+  const CantiereTimbraScreen({super.key, this.ticketId, this.customerId});
 
   /// The ticket that launched this screen (optional context link).
   final String? ticketId;
@@ -95,8 +90,7 @@ class CantiereTimbraScreen extends ConsumerStatefulWidget {
   final String? customerId;
 
   @override
-  ConsumerState<CantiereTimbraScreen> createState() =>
-      _CantiereTimbraScreenState();
+  ConsumerState<CantiereTimbraScreen> createState() => _CantiereTimbraScreenState();
 }
 
 class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
@@ -115,18 +109,13 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ScreenHeader(
-              title: 'Timbra cantiere',
-              showBack: true,
-            ),
+            ScreenHeader(title: 'Timbra cantiere', showBack: true),
             Expanded(
               child: activeLogAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => _ErrorBody(
                   message: _networkErrorMessage(e),
-                  onRetry: () =>
-                      ref.read(activeCantiereLogProvider.notifier).refresh(),
+                  onRetry: () => ref.read(activeCantiereLogProvider.notifier).refresh(),
                 ),
                 data: (activeLog) {
                   if (activeLog != null) {
@@ -144,8 +133,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                     selectedCantiere: _selectedCantiere,
                     isLoading: _isLoading,
                     errorMessage: _errorMessage,
-                    onCantiereSelected: (c) =>
-                        setState(() => _selectedCantiere = c),
+                    onCantiereSelected: (c) => setState(() => _selectedCantiere = c),
                     onStart: _handleStartCantiere,
                   );
                 },
@@ -162,8 +150,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   Future<void> _handleStartCantiere() async {
     final cantiere = _selectedCantiere;
     if (cantiere == null) {
-      setState(
-          () => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
+      setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
     }
     setState(() {
@@ -172,14 +159,12 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     });
 
     try {
-      final location =
-          await ref.read(locationServiceProvider).getCurrentPosition();
+      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
       await client.startCantiere(
         StartCantiereRequest(
           cantiereId: cantiere.id,
-          customerId:
-              cantiere.customerId ?? widget.customerId ?? '',
+          customerId: cantiere.customerId ?? widget.customerId ?? '',
           ticketId: widget.ticketId,
           arrivalLatitude: location?.lat,
           arrivalLongitude: location?.lng,
@@ -213,14 +198,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     });
 
     try {
-      final location =
-          await ref.read(locationServiceProvider).getCurrentPosition();
+      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
       await client.endCantiere(
-        EndCantiereRequest(
-          departureLatitude: location?.lat,
-          departureLongitude: location?.lng,
-        ),
+        EndCantiereRequest(departureLatitude: location?.lat, departureLongitude: location?.lng),
       );
       if (mounted) {
         ref.read(activeCantiereLogProvider.notifier).clearActive();
@@ -306,8 +287,7 @@ class _CheckInBody extends StatelessWidget {
     // and the clock-in button below must not offer an action that can
     // never succeed.
     final cantieriValue = cantieriAsync.valueOrNull;
-    final noCantieriAvailable =
-        cantieriValue != null && cantieriValue.isEmpty;
+    final noCantieriAvailable = cantieriValue != null && cantieriValue.isEmpty;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
@@ -317,12 +297,10 @@ class _CheckInBody extends StatelessWidget {
           // Context banner (linked ticket)
           if (ticketId != null) ...[
             AppCard(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(LucideIcons.link,
-                      size: 16, color: context.colors.blue),
+                  Icon(LucideIcons.link, size: 16, color: context.colors.blue),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -354,36 +332,29 @@ class _CheckInBody extends StatelessWidget {
 
           cantieriAsync.when(
             loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
             ),
             error: (e, _) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'Impossibile caricare i cantieri.',
-                style: GoogleFonts.manrope(
-                    fontSize: 13, color: context.colors.red),
+                style: GoogleFonts.manrope(fontSize: 13, color: context.colors.red),
               ),
             ),
             data: (cantieri) {
               // Prefer cantieri matching the ticket's customerId.
               final preferred = customerId != null
-                  ? cantieri
-                      .where((c) => c.customerId == customerId)
-                      .toList()
+                  ? cantieri.where((c) => c.customerId == customerId).toList()
                   : <CantieriData>[];
-              final others = cantieri
-                  .where((c) => !preferred.contains(c))
-                  .toList();
+              final others = cantieri.where((c) => !preferred.contains(c)).toList();
               final ordered = [...preferred, ...others];
 
               if (ordered.isEmpty) {
                 return const UnavailableState(
                   icon: LucideIcons.hardHat,
                   titolo: 'Selezione cantiere non disponibile',
-                  motivo: "L'elenco cantieri non è ancora sincronizzato su "
+                  motivo:
+                      "L'elenco cantieri non è ancora sincronizzato su "
                       'questo dispositivo: non è possibile scegliere un '
                       'cantiere né timbrare l\'ingresso finché questa '
                       'sincronizzazione non sarà collegata.',
@@ -402,42 +373,35 @@ class _CheckInBody extends StatelessWidget {
                     return InkWell(
                       onTap: () => onCantiereSelected(c),
                       borderRadius: i == 0
-                          ? const BorderRadius.vertical(
-                              top: Radius.circular(12))
+                          ? const BorderRadius.vertical(top: Radius.circular(12))
                           : (isLast
-                              ? const BorderRadius.vertical(
-                                  bottom: Radius.circular(12))
-                              : BorderRadius.zero),
+                                ? const BorderRadius.vertical(bottom: Radius.circular(12))
+                                : BorderRadius.zero),
                       child: Container(
-                        constraints:
-                            const BoxConstraints(minHeight: 56),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                        constraints: const BoxConstraints(minHeight: 56),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.YSoft
-                              : Colors.transparent,
+                          color: isSelected ? AppColors.YSoft : Colors.transparent,
                           border: isLast
                               ? null
                               : Border(
                                   bottom: BorderSide(
-                                      color: context.colors.borderMedium,
-                                      width: 0.5)),
+                                    color: context.colors.borderMedium,
+                                    width: 0.5,
+                                  ),
+                                ),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               LucideIcons.hardHat,
                               size: 18,
-                              color: isSelected
-                                  ? context.colors.ink
-                                  : context.colors.inkMuted,
+                              color: isSelected ? context.colors.ink : context.colors.inkMuted,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     c.name,
@@ -447,8 +411,7 @@ class _CheckInBody extends StatelessWidget {
                                       color: context.colors.ink,
                                     ),
                                   ),
-                                  if (c.city != null &&
-                                      c.city!.isNotEmpty)
+                                  if (c.city != null && c.city!.isNotEmpty)
                                     Text(
                                       c.city!,
                                       style: GoogleFonts.manrope(
@@ -460,11 +423,7 @@ class _CheckInBody extends StatelessWidget {
                               ),
                             ),
                             if (isSelected)
-                              Icon(
-                                LucideIcons.checkCircle2,
-                                size: 18,
-                                color: context.colors.ink,
-                              ),
+                              Icon(LucideIcons.checkCircle2, size: 18, color: context.colors.ink),
                           ],
                         ),
                       ),
@@ -490,8 +449,7 @@ class _CheckInBody extends StatelessWidget {
             label: 'Timbra ingresso cantiere',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
-            onPressed:
-                (isLoading || noCantieriAvailable) ? null : onStart,
+            onPressed: (isLoading || noCantieriAvailable) ? null : onStart,
             size: AppButtonSize.lg,
           ),
         ],
@@ -517,8 +475,7 @@ class _ActiveSessionBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateLabel =
-        DateFormat('dd/MM/yyyy', 'it').format(activeLog.workDate.toLocal());
+    final dateLabel = DateFormat('dd/MM/yyyy', 'it').format(activeLog.workDate.toLocal());
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
@@ -603,21 +560,17 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.redSoft,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: context.colors.redSoft, borderRadius: AppRack.insetShape),
       child: Row(
         children: [
-          const Icon(LucideIcons.alertTriangle,
-              size: 16, color: Color(0xFFCC0000)),
+          Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
               style: GoogleFonts.manrope(
                 fontSize: 13,
-                color: const Color(0xFFCC0000),
+                color: context.colors.red,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -648,18 +601,11 @@ class _ErrorBody extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message,
-              style: GoogleFonts.manrope(
-                fontSize: 14,
-                color: context.colors.ink,
-                height: 1.5,
-              ),
+              style: GoogleFonts.manrope(fontSize: 14, color: context.colors.ink, height: 1.5),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            AppButton.secondary(
-              label: 'Riprova',
-              onPressed: onRetry,
-            ),
+            AppButton.secondary(label: 'Riprova', onPressed: onRetry),
           ],
         ),
       ),

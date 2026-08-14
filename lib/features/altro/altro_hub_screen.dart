@@ -6,6 +6,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'notifiche_provider.dart';
@@ -28,50 +29,42 @@ class AltroHubScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: ScreenHeader(title: 'Altro'),
-            ),
+      body: Rack(
+        child: SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: ScreenHeader(title: 'Altro')),
 
-            // ── Dark user card ─────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: _UserCard(displayName: displayName, email: user?.email),
-            ),
-
-            // ── Gestione section ───────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: SectionTitle(title: 'Gestione'),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 19),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.4,
-                ),
-                delegate: SliverChildListDelegate(_buildGestioneTiles(context)),
+              // ── Dark user card ─────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: _UserCard(displayName: displayName, email: user?.email),
               ),
-            ),
 
-            // ── Sistema section ────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: SectionTitle(title: 'Sistema'),
-            ),
-            SliverToBoxAdapter(
-              child: _SistemaSection(),
-            ),
+              // ── Gestione section ───────────────────────────────────────────
+              const SliverToBoxAdapter(child: SectionTitle(title: 'Gestione')),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 19),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 1.4,
+                  ),
+                  delegate: SliverChildListDelegate(_buildGestioneTiles(context)),
+                ),
+              ),
 
-            // ── Danger: Logout ─────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: _LogoutRow(ref: ref),
-            ),
+              // ── Sistema section ────────────────────────────────────────────
+              const SliverToBoxAdapter(child: SectionTitle(title: 'Sistema')),
+              SliverToBoxAdapter(child: _SistemaSection()),
 
-            const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
-          ],
+              // ── Danger: Logout ─────────────────────────────────────────────
+              SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
+
+              const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
+            ],
+          ),
         ),
       ),
     );
@@ -82,61 +75,51 @@ class AltroHubScreen extends ConsumerWidget {
       _GestioneTile(
         icon: LucideIcons.clipboardList,
         label: 'Interventi',
-        color: const Color(0xFF2563EB), // BLUE
         onTap: () => context.go(AppRoutes.ticket),
       ),
       _GestioneTile(
         icon: LucideIcons.fileText,
         label: 'Rapportini',
-        color: const Color(0xFF06AED5), // CYAN
         onTap: () => context.go(AppRoutes.altroRapportini),
       ),
       _GestioneTile(
         icon: LucideIcons.users,
         label: 'Clienti',
-        color: const Color(0xFF4CAF50), // GREEN
         onTap: () => context.push(AppRoutes.altroClienti),
       ),
       _GestioneTile(
         icon: LucideIcons.mapPin,
         label: 'Sedi',
-        color: const Color(0xFF8B5CF6), // violet
         onTap: () => context.push('/altro/sedi'),
       ),
       _GestioneTile(
         icon: LucideIcons.hardHat,
         label: 'Cantieri',
-        color: const Color(0xFFF97316), // orange
         onTap: () => context.push('/altro/cantieri'),
       ),
       _GestioneTile(
         icon: LucideIcons.package,
         label: 'Prodotti',
-        color: const Color(0xFFF4A261), // warm orange
         onTap: () => context.push('/altro/prodotti'),
       ),
       _GestioneTile(
         icon: LucideIcons.warehouse,
         label: 'Magazzino',
-        color: const Color(0xFFFFB200), // AMBER
         onTap: () => context.push(AppRoutes.altroMagazzino),
       ),
       _GestioneTile(
         icon: LucideIcons.fileSignature,
         label: 'Contratti',
-        color: const Color(0xFF7C3AED), // violet
         onTap: () => context.push('/altro/contratti'),
       ),
       _GestioneTile(
         icon: LucideIcons.users2,
         label: 'Squadre',
-        color: const Color(0xFF06AED5), // CYAN
         onTap: () => context.push('/altro/squadre'),
       ),
       _GestioneTile(
         icon: LucideIcons.calendarDays,
         label: 'Pianificazioni',
-        color: const Color(0xFF2563EB), // BLUE
         onTap: () => context.push('/altro/pianificazioni'),
       ),
     ];
@@ -161,15 +144,12 @@ class _UserCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: AppColors.CHARCOAL,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppRack.freeShape,
           boxShadow: context.colors.shadow,
         ),
         child: Row(
           children: [
-            AppAvatar(
-              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
-              size: 52,
-            ),
+            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 52),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -212,51 +192,50 @@ class _UserCard extends StatelessWidget {
 // Gestione tile
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// A drawer in the parts wall.
+///
+/// This was a saturated colour tile — ten of them, in ten hues. The colour was decoration, not
+/// information: cyan meant Rapportini and also Squadre, blue meant Interventi and also
+/// Pianificazioni, so no hue identified anything and the grid read as a toybox above a list of
+/// dense work screens. Operate mode spends the accent on primary actions, current selection and
+/// state; this was none of those.
+///
+/// It is now a labelled cell like every other container in the app. What distinguishes ten
+/// drawers in a real van is the label and the silhouette on it, which is exactly what is left.
 class _GestioneTile extends StatelessWidget {
-  const _GestioneTile({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.onTap,
-  });
+  const _GestioneTile({required this.icon, required this.label, required this.onTap});
 
   final IconData icon;
   final String label;
-  final Color color;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: context.colors.shadow,
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Icon(icon, size: 22, color: AppColors.WHITE),
-                Text(
-                  label,
-                  style: GoogleFonts.manrope(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.WHITE,
-                  ),
-                ),
-              ],
+    final c = context.colors;
+    return RackCell(
+      onTap: onTap,
+      flush: false,
+      minHeight: 84,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 22, color: c.inkFaint),
+          const SizedBox(height: 14),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.sora(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: c.ink,
+              letterSpacing: -0.1,
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -291,8 +270,7 @@ class _SistemaSection extends ConsumerWidget {
             ),
             // Audit log
             ListRow(
-              leading:
-                  _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
+              leading: _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
               title: 'Audit log',
               subtitle: 'Cronologia attività',
               showDivider: true,
@@ -307,8 +285,7 @@ class _SistemaSection extends ConsumerWidget {
             ),
             // Impostazioni
             ListRow(
-              leading:
-                  _sistemaTileIcon(LucideIcons.settings, AppColors.CHARCOAL),
+              leading: _sistemaTileIcon(LucideIcons.settings, AppColors.CHARCOAL),
               title: 'Impostazioni',
               subtitle: 'App, notifiche, account',
               showDivider: true,
@@ -339,10 +316,7 @@ class _SistemaSection extends ConsumerWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: color.withAlpha(26), borderRadius: BorderRadius.circular(8)),
       child: Icon(icon, size: 18, color: color),
     );
   }
@@ -369,10 +343,9 @@ class _LogoutRow extends StatelessWidget {
             height: 36,
             decoration: BoxDecoration(
               color: context.colors.redSoft,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRack.insetShape,
             ),
-            child: const Icon(LucideIcons.logOut, size: 18,
-                color: Color(0xFFAA0000)),
+            child: Icon(LucideIcons.logOut, size: 18, color: context.colors.red),
           ),
           title: 'Esci dall\'account',
           subtitle: 'Disconnetti questo dispositivo',
@@ -388,14 +361,9 @@ class _LogoutRow extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Esci dall\'account'),
-        content: const Text(
-          'Sei sicuro di voler uscire dall\'account?',
-        ),
+        content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: context.colors.red),

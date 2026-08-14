@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
@@ -17,20 +18,20 @@ enum _TicketFilter { tutti, aperti, inCorso, inAttesa, completati }
 
 extension _TicketFilterLabel on _TicketFilter {
   String get label => switch (this) {
-        _TicketFilter.tutti => 'Tutti',
-        _TicketFilter.aperti => 'Aperti',
-        _TicketFilter.inCorso => 'In corso',
-        _TicketFilter.inAttesa => 'In attesa',
-        _TicketFilter.completati => 'Completati',
-      };
+    _TicketFilter.tutti => 'Tutti',
+    _TicketFilter.aperti => 'Aperti',
+    _TicketFilter.inCorso => 'In corso',
+    _TicketFilter.inAttesa => 'In attesa',
+    _TicketFilter.completati => 'Completati',
+  };
 
   String? get statusMatch => switch (this) {
-        _TicketFilter.tutti => null,
-        _TicketFilter.aperti => 'aperto',
-        _TicketFilter.inCorso => 'in corso',
-        _TicketFilter.inAttesa => 'in attesa',
-        _TicketFilter.completati => 'completato',
-      };
+    _TicketFilter.tutti => null,
+    _TicketFilter.aperti => 'aperto',
+    _TicketFilter.inCorso => 'in corso',
+    _TicketFilter.inAttesa => 'in attesa',
+    _TicketFilter.completati => 'completato',
+  };
 }
 
 class TicketListScreen extends StatefulWidget {
@@ -55,13 +56,15 @@ class _TicketListScreenState extends State<TicketListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: SafeArea(
-        child: _TicketListBody(
-          filter: _filter,
-          query: _query,
-          searchCtrl: _searchCtrl,
-          onFilterChanged: (f) => setState(() => _filter = f),
-          onQueryChanged: (q) => setState(() => _query = q),
+      body: Rack(
+        child: SafeArea(
+          child: _TicketListBody(
+            filter: _filter,
+            query: _query,
+            searchCtrl: _searchCtrl,
+            onFilterChanged: (f) => setState(() => _filter = f),
+            onQueryChanged: (q) => setState(() => _query = q),
+          ),
         ),
       ),
       floatingActionButton: AppFab(
@@ -110,9 +113,9 @@ class _TicketListBody extends ConsumerWidget {
     // Filter + search.
     final filtered = allTickets.where((t) {
       final statusName = statusMap[t.statusId]?.toLowerCase() ?? '';
-      final matchFilter =
-          filter.statusMatch == null || statusName == filter.statusMatch;
-      final matchQuery = query.isEmpty ||
+      final matchFilter = filter.statusMatch == null || statusName == filter.statusMatch;
+      final matchQuery =
+          query.isEmpty ||
           t.title.toLowerCase().contains(query.toLowerCase()) ||
           t.id.toLowerCase().contains(query.toLowerCase());
       return matchFilter && matchQuery;
@@ -122,71 +125,61 @@ class _TicketListBody extends ConsumerWidget {
       onRefresh: () => ref.read(syncProvider.notifier).performSync(),
       child: CustomScrollView(
         slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Ticket',
-            subtitle: '${allTickets.length} totali · $inCorsoCount in corso',
-            actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.filter,
-                label: 'Filtra interventi',
-                onTap: () {},
-              ),
-            ],
-          ),
-        ),
-        if (pendingTickets.isNotEmpty)
           SliverToBoxAdapter(
-            child: _PendingTicketsSection(pendingTickets: pendingTickets),
-          ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca ticket…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _TicketFilter.values.map((f) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: AppChip(
-                      label: f.label,
-                      active: filter == f,
-                      onTap: () => onFilterChanged(f),
-                    ),
-                  );
-                }).toList(),
-              ),
+            // The filter icon that used to sit here was `onTap: () {}` — and redundant besides: the
+            // status chips twelve pixels below it are the filter, and they work. A dead control
+            // next to a live one doing the same job teaches the technician to distrust both.
+            child: ScreenHeader(
+              title: 'Ticket',
+              subtitle: '${allTickets.length} totali · $inCorsoCount in corso',
             ),
           ),
-        ),
-        if (ticketsAsync.isLoading)
-          const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          )
-        else if (filtered.isEmpty)
+          if (pendingTickets.isNotEmpty)
+            SliverToBoxAdapter(child: _PendingTicketsSection(pendingTickets: pendingTickets)),
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.ticket,
-              title: 'Nessun ticket',
-              body: 'I ticket sincronizzati appariranno qui.',
+            child: AppSearchBar(
+              controller: searchCtrl,
+              hint: 'Cerca ticket…',
+              onChanged: onQueryChanged,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _TicketFilter.values.map((f) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: AppChip(
+                        label: f.label,
+                        active: filter == f,
+                        onTap: () => onFilterChanged(f),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+          if (ticketsAsync.isLoading)
+            const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              ),
+            )
+          else if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.ticket,
+                title: 'Nessun ticket',
+                body: 'I ticket sincronizzati appariranno qui.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final ticket = filtered[i];
                 final statusName = statusMap[ticket.statusId] ?? '';
                 return _TicketRow(
@@ -194,11 +187,9 @@ class _TicketListBody extends ConsumerWidget {
                   statusName: statusName,
                   isLast: i == filtered.length - 1,
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
         ],
       ),
     );
@@ -250,11 +241,9 @@ class _PendingTicketRow extends ConsumerWidget {
     final isFailed = state == PendingTicketState.failed;
 
     final String subtitle = switch (state) {
-      PendingTicketState.pendingSync =>
-        'In attesa di connessione — verrà inviato automaticamente',
+      PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
       PendingTicketState.submitting => 'Invio in corso…',
-      PendingTicketState.failed =>
-        'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+      PendingTicketState.failed => 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
       PendingTicketState.submitted => 'Inviato',
     };
 
@@ -306,8 +295,7 @@ class _PendingTicketRow extends ConsumerWidget {
             AppButton(
               label: 'Riprova',
               size: AppButtonSize.sm,
-              onPressed: () =>
-                  ref.read(ticketCreationQueueProvider).retry(ticket.id),
+              onPressed: () => ref.read(ticketCreationQueueProvider).retry(ticket.id),
             ),
           ],
         ],
@@ -317,11 +305,7 @@ class _PendingTicketRow extends ConsumerWidget {
 }
 
 class _TicketRow extends ConsumerWidget {
-  const _TicketRow({
-    required this.ticket,
-    required this.statusName,
-    required this.isLast,
-  });
+  const _TicketRow({required this.ticket, required this.statusName, required this.isLast});
 
   final Ticket ticket;
   final String statusName;
@@ -329,19 +313,18 @@ class _TicketRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shortId =
-        ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
-    final dateLabel =
-        DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
+    final shortId = ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
+    final dateLabel = DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
 
     return ListRow(
+      // The one ticket you are actually on gets the strap, the same yellow mark the running
+      // timbratura carries on the dashboard. Scanning a list of thirty for "which one am I on"
+      // is the single most common thing a technician does on this screen.
+      strapped: statusName.toLowerCase() == 'in corso',
       leading: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(10),
-        ),
+        decoration: BoxDecoration(color: context.colors.bg3, borderRadius: AppRack.insetShape),
         child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
       ),
       title: ticket.title,
@@ -352,10 +335,7 @@ class _TicketRow extends ConsumerWidget {
         children: [
           if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
           const SizedBox(height: 2),
-          Text(
-            dateLabel,
-            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
-          ),
+          Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
         ],
       ),
       showDivider: !isLast,

@@ -11,18 +11,20 @@ class StatItem {
   final String value;
 }
 
-/// 2×2 stats grid with DIV dividers.
+/// The day's manifest: counts in one strip, the way a load list prints them.
 ///
-/// Spec: Manrope 12 MUTED label (pre-line) + Manrope 500/36 DARK value.
+/// This was a 2×2 grid of 36pt figures — the hero-metric template. Two problems, and only one of
+/// them was taste:
 ///
-/// ```dart
-/// StatsGrid(items: const [
-///   StatItem(label: 'Ticket\naperti', value: '8'),
-///   StatItem(label: 'Ore\noggi', value: '6.5'),
-///   StatItem(label: 'Rapportini', value: '12'),
-///   StatItem(label: 'In attesa', value: '3'),
-/// ]);
-/// ```
+/// 1. Four 36pt numbers and their labels took roughly half the viewport above the fold, which
+///    pushed "Prossimi interventi" — the only actionable content on the dashboard — below it. The
+///    numbers are glanceable at 20pt; the appointments are not readable at zero.
+/// 2. A count of four is a quantity, not a headline. The van's load list prints quantities in a
+///    row with rules between them, and that is both the truthful form and the compact one.
+///
+/// The API is unchanged, so the dashboard's four [StatItem]s render as a strip without a diff at
+/// the call site. Labels may still contain the old newlines; they are flattened here rather than
+/// at every call site.
 class StatsGrid extends StatelessWidget {
   const StatsGrid({super.key, required this.items});
 
@@ -30,27 +32,16 @@ class StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var row = 0; row < items.length; row += 2) ...[
-          if (row > 0) Divider(height: 1, color: context.colors.divider),
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: _Cell(item: items[row])),
-                VerticalDivider(width: 1, color: context.colors.divider),
-                Expanded(
-                  child: row + 1 < items.length
-                      ? _Cell(item: items[row + 1])
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ),
-          ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) VerticalDivider(width: 1, color: context.colors.divider),
+            Expanded(child: _Cell(item: items[i])),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -62,29 +53,37 @@ class _Cell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    // The labels were authored for a two-line grid cell.
+    final label = item.label.replaceAll('\n', ' ');
+
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            item.label,
+            label.toUpperCase(),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.manrope(
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: context.colors.inkMuted,
-              height: 1.2,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: c.inkMuted,
+              letterSpacing: 0.4,
+              height: 1.3,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
+          // Sora, and only 20pt. This is the label stamped on the drawer, not a headline.
           Text(
             item.value,
-            style: GoogleFonts.manrope(
-              fontSize: 36,
-              fontWeight: FontWeight.w500,
-              color: context.colors.ink,
-              letterSpacing: -1,
+            style: GoogleFonts.sora(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: c.ink,
+              letterSpacing: -0.5,
             ),
           ),
         ],

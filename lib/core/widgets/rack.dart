@@ -299,6 +299,10 @@ class ShadowBoard extends StatelessWidget {
     final c = context.colors;
     return Semantics(
       label: reason == null ? label : '$label. $reason',
+      // Without this the board is announced three times: once as this composed phrase, then again
+      // as each Text's own node. A screen-reader user hears the whole empty state twice over
+      // before reaching the action.
+      excludeSemantics: true,
       child: CustomPaint(
         painter: SilhouettePainter(color: c.silhouette),
         child: ConstrainedBox(

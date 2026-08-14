@@ -33,25 +33,15 @@ class ImpostazioniScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: ScreenHeader(
-                title: 'Impostazioni',
-                showBack: true,
-              ),
-            ),
+            SliverToBoxAdapter(child: ScreenHeader(title: 'Impostazioni', showBack: true)),
 
             // ── Profile card ───────────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _ProfileCard(
-                displayName: displayName,
-                email: user?.email,
-              ),
+              child: _ProfileCard(displayName: displayName, email: user?.email),
             ),
 
             // ── Notifiche ──────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Notifiche'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -67,8 +57,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Interventi',
                     subtitle: 'Nuovi interventi assegnati',
                     value: settings.notificheInterventi,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheInterventi'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheInterventi'),
                     showDivider: false,
                   ),
                   _ToggleRow(
@@ -76,8 +65,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Rapportini',
                     subtitle: 'Aggiornamenti sui rapportini',
                     value: settings.notificheRapportini,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheRapportini'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheRapportini'),
                     showDivider: false,
                   ),
                 ],
@@ -85,9 +73,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── App ───────────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'App'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'App')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -118,9 +104,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Account ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Account'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Account')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -129,8 +113,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Autenticazione biometrica',
                     subtitle: 'Accesso con impronta o Face ID',
                     value: settings.autenticazioneBiometrica,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'autenticazioneBiometrica'),
+                    onChanged: (_) => notifier.toggle(key: 'autenticazioneBiometrica'),
                     showDivider: false,
                   ),
                 ],
@@ -138,15 +121,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Sistema ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Sistema'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
             SliverToBoxAdapter(
-              child: _SettingsGroup(
-                children: [
-                  _LogoutSettingRow(ref: ref),
-                ],
-              ),
+              child: _SettingsGroup(children: [_LogoutSettingRow(ref: ref)]),
             ),
 
             // ── Version footer ─────────────────────────────────────────────
@@ -159,10 +136,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     error: (_, _) => const SizedBox.shrink(),
                     data: (info) => Text(
                       'TaskTap v${info.displayVersion}',
-                      style: GoogleFonts.manrope(
-                        fontSize: 11,
-                        color: context.colors.inkDisabled,
-                      ),
+                      style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkDisabled),
                     ),
                   ),
                 ),
@@ -194,10 +168,7 @@ class _ProfileCard extends StatelessWidget {
       child: AppCard(
         child: Row(
           children: [
-            AppAvatar(
-              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
-              size: 48,
-            ),
+            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 48),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -219,10 +190,7 @@ class _ProfileCard extends StatelessWidget {
                       email!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
-                        fontSize: 12,
-                        color: context.colors.inkMuted,
-                      ),
+                      style: GoogleFonts.manrope(fontSize: 12, color: context.colors.inkMuted),
                     ),
                 ],
               ),
@@ -306,9 +274,7 @@ class _ToggleRow extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        border: showDivider
-            ? Border(bottom: BorderSide(color: context.colors.borderLight))
-            : null,
+        border: showDivider ? Border(bottom: BorderSide(color: context.colors.borderLight)) : null,
       ),
       child: Row(
         children: [
@@ -337,10 +303,7 @@ class _ToggleRow extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: GoogleFonts.manrope(
-                    fontSize: 11,
-                    color: context.colors.inkMuted,
-                  ),
+                  style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkMuted),
                 ),
               ],
             ),
@@ -370,8 +333,7 @@ class _LogoutSettingRow extends StatelessWidget {
           color: context.colors.redSoft,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Icon(LucideIcons.logOut, size: 17,
-            color: Color(0xFFAA0000)),
+        child: Icon(LucideIcons.logOut, size: 17, color: context.colors.red),
       ),
       title: 'Esci dall\'account',
       subtitle: 'Disconnetti questo dispositivo',
@@ -385,13 +347,9 @@ class _LogoutSettingRow extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Esci dall\'account'),
-        content:
-            const Text('Sei sicuro di voler uscire dall\'account?'),
+        content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: context.colors.red),
