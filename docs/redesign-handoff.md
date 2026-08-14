@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, four commits, **657/657 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, six commits, **667/667 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
@@ -150,11 +150,16 @@ break endpoints are the online/kiosk route. Wiring them would be a regression.
 Ordered by technician value. The user's Phase-3 scope was: technician-critical writes, the
 technician `/api/app/*` endpoints, real settings, and AI.
 
-1. **Ticket workflow writes** — `PUT /api/Tickets/{id}/status`, `POST /api/Tickets/{id}/self-assign`,
-   `GET /api/Tickets/{id}/history`, `POST /api/tickets/{id}/worklogs/start|stop|manual`. Actions a
-   technician takes on site with no path in the app today. Highest remaining value.
-   Note: the app already has a server-projected `availableActions` convention — render what the
-   server offers, do not derive it client-side.
+1. ~~**Ticket workflow writes**~~ — **done** (`eab8dff`). `TicketWorkflowApiClient` covers status,
+   self-assign, history and worklogs start/stop/manual/list; the detail screen has a timer bar.
+   Still unsurfaced, and cheap to add on top of the client that now exists: a **self-assign
+   control** (the client method is there, no UI calls it), a **status-change control**, and the
+   **history** and **worklog list** views (`ticketHistoryProvider` and `ticketWorklogsProvider` are
+   both wired and unused by any screen).
+
+   Two facts worth keeping: the backend refuses `worklogs/start` when the caller has an open timer
+   on **any** ticket, not just the one on screen; and these routes have no idempotent upsert, so
+   they must stay online-only rather than being queued.
 2. **Technician `/api/app/*`** — `interventi/{id}`, `rapportini/{id}`, `clienti/{id}/overview`,
    `pianificazione/calendar`. Honour `sezioniNonDisponibili` wherever present.
 3. **Report tail** — `firma-cliente`, `firma-tecnico`, `invia`, `pdf`, `annulla`, `mail`. Overlaps
