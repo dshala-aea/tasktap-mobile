@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
@@ -28,6 +29,39 @@ final dioProvider = Provider<Dio>((ref) {
   // session (access token) that the login flow established.
   final authRepo = ref.watch(authRepositoryProvider);
   dio.interceptors.add(AuthInterceptor(dio: dio, authRepo: authRepo));
+
+  // What the network actually did, in debug builds only.
+  //
+  // A screen that shows no data looks the same whether the request 401'd, timed out, or was never
+  // made — and the app has no way to tell you which. One line per request and per failure turns
+  // "the API doesn't work on the phone" into a status code and a path.
+  //
+  // Method, path and status only: never headers (the bearer token is one) and never bodies (they
+  // carry customer data, and logcat is readable by anything with the right permission on an older
+  // Android). Stripped from release builds by the assert trick, so nothing reaches a technician's
+  // device.
+  assert(() {
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          debugPrint('→ ${options.method} ${options.uri.path}');
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          debugPrint('← ${response.statusCode} ${response.requestOptions.uri.path}');
+          handler.next(response);
+        },
+        onError: (error, handler) {
+          debugPrint(
+            '✗ ${error.type.name} ${error.response?.statusCode ?? ''} '
+            '${error.requestOptions.uri} — ${error.message}',
+          );
+          handler.next(error);
+        },
+      ),
+    );
+    return true;
+  }());
 
   return dio;
 });
