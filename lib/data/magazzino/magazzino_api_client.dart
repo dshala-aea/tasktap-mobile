@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../api/json_parse.dart';
 
 /// Stock levels and stock movements, from the `/api/app/*` endpoints built for this client.
 ///
@@ -19,24 +20,6 @@ import '../api/dio_client.dart';
 /// the count is from Tuesday is worse than telling them the figure is unavailable. So these read
 /// straight through, and the screen states plainly when it could not reach the server rather than
 /// showing a cached quantity.
-
-/// Numbers arrive as either a JSON number or a string.
-///
-/// The backend serialises decimals as strings on some paths and as numbers on others (both shapes
-/// are declared in the OpenAPI snapshot as `number|string`). Parsing defensively here rather than
-/// casting keeps a quantity of `"4.0"` from throwing at the top of a technician's stock list.
-double _num(Object? v) {
-  if (v is num) return v.toDouble();
-  if (v is String) return double.tryParse(v) ?? 0;
-  return 0;
-}
-
-int _int(Object? v) {
-  if (v is int) return v;
-  if (v is num) return v.toInt();
-  if (v is String) return int.tryParse(v) ?? 0;
-  return 0;
-}
 
 /// One material's stock in one warehouse.
 class GiacenzaDto {
@@ -75,13 +58,13 @@ class GiacenzaDto {
     id: json['id'] as String? ?? '',
     magazzinoId: json['magazzinoId'] as String? ?? '',
     materialeId: json['materialeId'] as String? ?? '',
-    quantita: _num(json['quantita']),
+    quantita: asDoubleOr0(json['quantita']),
     sottoScorta: json['sottoScorta'] as bool? ?? false,
     magazzinoNome: json['magazzinoNome'] as String?,
     magazzinoTipo: json['magazzinoTipo'] as String?,
     materialeNome: json['materialeNome'] as String?,
     unitOfMeasure: json['unitOfMeasure'] as String?,
-    stockMinimo: json['stockMinimo'] == null ? null : _num(json['stockMinimo']),
+    stockMinimo: asDouble(json['stockMinimo']),
   );
 }
 
@@ -118,7 +101,7 @@ class MovimentoDto {
     data: DateTime.tryParse(json['data'] as String? ?? '')?.toUtc() ?? DateTime.now().toUtc(),
     tipo: json['tipo'] as String? ?? '',
     materialeId: json['materialeId'] as String? ?? '',
-    quantita: _num(json['quantita']),
+    quantita: asDoubleOr0(json['quantita']),
     userId: json['userId'] as String? ?? '',
     magazzinoOrigineNome: json['magazzinoOrigineNome'] as String?,
     magazzinoDestinazioneNome: json['magazzinoDestinazioneNome'] as String?,
@@ -152,10 +135,10 @@ class PagedResult<T> {
             .cast<Map<String, dynamic>>()
             .map(item)
             .toList(),
-        pagina: _int(json['pagina']),
-        dimensionePagina: _int(json['dimensionePagina']),
-        totaleElementi: _int(json['totaleElementi']),
-        totalePagine: _int(json['totalePagine']),
+        pagina: asIntOr0(json['pagina']),
+        dimensionePagina: asIntOr0(json['dimensionePagina']),
+        totaleElementi: asIntOr0(json['totaleElementi']),
+        totalePagine: asIntOr0(json['totalePagine']),
       );
 }
 
