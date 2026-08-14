@@ -8,8 +8,10 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
+import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -50,12 +52,31 @@ class DashboardScreen extends ConsumerWidget {
                   onTap: () {},
                 ),
               ],
-              child: inProgressAsync.when(
-                data: (jobs) =>
-                    jobs.isEmpty ? const _NoActiveJobGlass() : _ActiveJobSection(jobs: jobs),
-                loading: () => const _HeroLoadingIndicator(),
-                error: (err, stack) => const _NoActiveJobGlass(),
-              ),
+              // What is running right now, from GET /api/worklog/active, in preference to what
+              // the calendar says should be. A schedule marked in-progress is an intention; a
+              // running tracker is the clock somebody is being paid against, and the two disagree
+              // whenever a technician starts late, stays on, or is somewhere else entirely.
+              child: ref.watch(activeTrackersProvider).when(
+                    data: (trackers) => trackers.isEmpty
+                        ? inProgressAsync.when(
+                            data: (jobs) => jobs.isEmpty
+                                ? const _NoActiveJobGlass()
+                                : _ActiveJobSection(jobs: jobs),
+                            loading: () => const _HeroLoadingIndicator(),
+                            error: (err, stack) => const _NoActiveJobGlass(),
+                          )
+                        : _ActiveTrackersSection(trackers: trackers),
+                    loading: () => const _HeroLoadingIndicator(),
+                    // The endpoint being unreachable is not evidence that nothing is running, so
+                    // fall back to the calendar rather than claiming the day is idle.
+                    error: (err, stack) => inProgressAsync.when(
+                      data: (jobs) => jobs.isEmpty
+                          ? const _NoActiveJobGlass()
+                          : _ActiveJobSection(jobs: jobs),
+                      loading: () => const _HeroLoadingIndicator(),
+                      error: (e, st) => const _NoActiveJobGlass(),
+                    ),
+                  ),
             ),
           ),
 
@@ -235,6 +256,55 @@ class _ActiveJobSection extends ConsumerWidget {
       onOpen: null,
     );
   }
+}
+
+// ── Running timers ─────────────────────────────────────────────────────────────
+
+/// Every tracker that is running, one card each.
+///
+/// A list, not a value: attendance, cantiere and ticket time are three independent clocks and all
+/// three can run at once — clocked in, on a site, with a ticket open. Showing one would hide the
+/// other two, and the hidden one is the one that gets left running overnight.
+class _ActiveTrackersSection extends ConsumerWidget {
+  const _ActiveTrackersSection({required this.trackers});
+
+  final List<ActiveTracker> trackers;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // One clock for the whole section, ticking each second. Until it produces its first value the
+    // cards still show a correct elapsed time — computed from the device clock, not from nothing.
+    final now = ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < trackers.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          ActiveJobCard(
+            stato: _statoFor(trackers[i].kind),
+            title: trackers[i].label ?? _titleFor(trackers[i].kind),
+            client: null,
+            elapsed: formatElapsed(trackers[i].elapsedAt(now)),
+            onOpen: null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _statoFor(ActiveTrackerKind kind) => switch (kind) {
+        ActiveTrackerKind.attendance => 'Timbrato',
+        ActiveTrackerKind.cantiere => 'In cantiere',
+        ActiveTrackerKind.ticket => 'In corso',
+      };
+
+  /// Attendance is against the day rather than a thing, so the kind is the only honest title.
+  static String _titleFor(ActiveTrackerKind kind) => switch (kind) {
+        ActiveTrackerKind.attendance => 'Giornata di lavoro',
+        ActiveTrackerKind.cantiere => 'Cantiere',
+        ActiveTrackerKind.ticket => 'Intervento',
+      };
 }
 
 // ── Upcoming intervento card ───────────────────────────────────────────────────
