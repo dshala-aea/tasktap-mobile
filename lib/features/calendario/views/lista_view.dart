@@ -10,16 +10,13 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Calendario → Lista view: schedules grouped by day (date section headers)
 /// as ListRows (title, time range, StatusPill, location), soonest first.
 /// Shows an EmptyState when there are no schedules.
 class ListaView extends ConsumerWidget {
-  const ListaView({
-    super.key,
-    required this.schedules,
-    this.onTapTicket,
-  });
+  const ListaView({super.key, required this.schedules, this.onTapTicket});
 
   /// All schedules to display — already sorted by date/time.
   final List<Schedule> schedules;
@@ -45,17 +42,11 @@ class ListaView extends ConsumerWidget {
       // Section header
       children.add(_DateHeader(date: entry.key, formatter: dayFmt));
       for (final s in entry.value) {
-        children.add(_ScheduleListRow(
-          schedule: s,
-          onTapTicket: onTapTicket,
-        ));
+        children.add(_ScheduleListRow(schedule: s, onTapTicket: onTapTicket));
       }
     }
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
-      children: children,
-    );
+    return ListView(padding: const EdgeInsets.only(bottom: 32), children: children);
   }
 }
 
@@ -82,8 +73,7 @@ class _DateHeader extends StatelessWidget {
     );
   }
 
-  static String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  static String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 class _ScheduleListRow extends StatelessWidget {
@@ -103,15 +93,8 @@ class _ScheduleListRow extends StatelessWidget {
       leading: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(
-          color: statusPair.background,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(
-          LucideIcons.clock,
-          size: 18,
-          color: statusPair.foreground,
-        ),
+        decoration: BoxDecoration(color: statusPair.background, borderRadius: AppRack.insetShape),
+        child: Icon(LucideIcons.clock, size: 18, color: statusPair.foreground),
       ),
       title: schedule.title,
       subtitle: timeRange,

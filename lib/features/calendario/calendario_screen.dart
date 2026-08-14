@@ -41,8 +41,11 @@ class CalendarioScreen extends ConsumerWidget {
                   label: 'Vai a oggi',
                   onTap: () {
                     final today = DateTime.now();
-                    ref.read(selectedDateProvider.notifier).state =
-                        DateTime(today.year, today.month, today.day);
+                    ref.read(selectedDateProvider.notifier).state = DateTime(
+                      today.year,
+                      today.month,
+                      today.day,
+                    );
                   },
                 ),
               ],
@@ -57,9 +60,8 @@ class CalendarioScreen extends ConsumerWidget {
                 AppTab(label: 'Lista'),
               ],
               selectedIndex: view.index,
-              onSelected: (i) => ref
-                  .read(calendarioViewProvider.notifier)
-                  .state = CalendarioView.values[i],
+              onSelected: (i) =>
+                  ref.read(calendarioViewProvider.notifier).state = CalendarioView.values[i],
             ),
 
             Divider(height: 1, color: context.colors.borderLight),
@@ -68,8 +70,7 @@ class CalendarioScreen extends ConsumerWidget {
             if (view != CalendarioView.mese && view != CalendarioView.lista)
               _WeekDayScroller(
                 selectedDate: selectedDate,
-                onDateSelected: (d) =>
-                    ref.read(selectedDateProvider.notifier).state = d,
+                onDateSelected: (d) => ref.read(selectedDateProvider.notifier).state = d,
               ),
 
             // ── Body ─────────────────────────────────────────────────────────
@@ -77,10 +78,8 @@ class CalendarioScreen extends ConsumerWidget {
               child: _CalendarioBody(
                 view: view,
                 selectedDate: selectedDate,
-                onSelectDate: (d) =>
-                    ref.read(selectedDateProvider.notifier).state = d,
-                onSwitchView: (v) =>
-                    ref.read(calendarioViewProvider.notifier).state = v,
+                onSelectDate: (d) => ref.read(selectedDateProvider.notifier).state = d,
+                onSwitchView: (v) => ref.read(calendarioViewProvider.notifier).state = v,
               ),
             ),
           ],
@@ -93,10 +92,7 @@ class CalendarioScreen extends ConsumerWidget {
 // ── Week-day scroller strip ───────────────────────────────────────────────────
 
 class _WeekDayScroller extends ConsumerWidget {
-  const _WeekDayScroller({
-    required this.selectedDate,
-    required this.onDateSelected,
-  });
+  const _WeekDayScroller({required this.selectedDate, required this.onDateSelected});
 
   final DateTime selectedDate;
   final void Function(DateTime) onDateSelected;
@@ -104,8 +100,7 @@ class _WeekDayScroller extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Build 7 days centred on selectedDate's week (Mon-Sun).
-    final monday = selectedDate.subtract(
-        Duration(days: selectedDate.weekday - 1));
+    final monday = selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
     final days = List.generate(7, (i) => monday.add(Duration(days: i)));
 
     // Fetch schedules for the week to show event dots.
@@ -119,8 +114,7 @@ class _WeekDayScroller extends ConsumerWidget {
     final dayAbbr = DateFormat('EEE', 'it');
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
-    final selectedKey =
-        DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final selectedKey = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
 
     return Container(
       height: 74,
@@ -162,8 +156,8 @@ class _WeekDayScroller extends ConsumerWidget {
                       color: isSelected
                           ? context.colors.surfaceInverse
                           : isToday
-                              ? AppColors.YSoft
-                              : Colors.transparent,
+                          ? AppColors.YSoft
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Center(
@@ -175,8 +169,8 @@ class _WeekDayScroller extends ConsumerWidget {
                           color: isSelected
                               ? context.colors.inkInverse
                               : isToday
-                                  ? context.colors.ink
-                                  : context.colors.ink,
+                              ? context.colors.ink
+                              : context.colors.ink,
                         ),
                       ),
                     ),
@@ -190,8 +184,7 @@ class _WeekDayScroller extends ConsumerWidget {
                       width: 5,
                       height: 5,
                       decoration: BoxDecoration(
-                        color:
-                            isSelected ? AppColors.Y : context.colors.amber,
+                        color: isSelected ? AppColors.Y : context.colors.amber,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -225,34 +218,34 @@ class _CalendarioBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (view) {
       CalendarioView.giorno => _GiornoBody(
-          selectedDate: selectedDate,
-          onTapTicket: (id) => context.push(AppRoutes.ticketDetailPath(id)),
-          onTapSchedule: (s) => _showScheduleSheet(context, s),
-        ),
+        selectedDate: selectedDate,
+        onTapTicket: (id) => context.push(AppRoutes.ticketDetailPath(id)),
+        onTapSchedule: (s) => _showScheduleSheet(context, s),
+      ),
       CalendarioView.settimana => _SettimanaBody(
-          selectedDate: selectedDate,
-          onDayTap: (d) {
-            onSelectDate(d);
-            onSwitchView(CalendarioView.giorno);
-          },
-          onEventTap: (s) {
-            if (s.ticketId != null) {
-              context.push(AppRoutes.ticketDetailPath(s.ticketId!));
-            } else {
-              _showScheduleSheet(context, s);
-            }
-          },
-        ),
+        selectedDate: selectedDate,
+        onDayTap: (d) {
+          onSelectDate(d);
+          onSwitchView(CalendarioView.giorno);
+        },
+        onEventTap: (s) {
+          if (s.ticketId != null) {
+            context.push(AppRoutes.ticketDetailPath(s.ticketId!));
+          } else {
+            _showScheduleSheet(context, s);
+          }
+        },
+      ),
       CalendarioView.mese => _MeseBody(
-          selectedDate: selectedDate,
-          onDayTap: (d) {
-            onSelectDate(d);
-            onSwitchView(CalendarioView.giorno);
-          },
-        ),
+        selectedDate: selectedDate,
+        onDayTap: (d) {
+          onSelectDate(d);
+          onSwitchView(CalendarioView.giorno);
+        },
+      ),
       CalendarioView.lista => _ListaBody(
-          onTapTicket: (id) => context.push(AppRoutes.ticketDetailPath(id)),
-        ),
+        onTapTicket: (id) => context.push(AppRoutes.ticketDetailPath(id)),
+      ),
     };
   }
 
@@ -270,11 +263,7 @@ class _CalendarioBody extends ConsumerWidget {
 // ── Giorno body ───────────────────────────────────────────────────────────────
 
 class _GiornoBody extends ConsumerWidget {
-  const _GiornoBody({
-    required this.selectedDate,
-    this.onTapTicket,
-    this.onTapSchedule,
-  });
+  const _GiornoBody({required this.selectedDate, this.onTapTicket, this.onTapSchedule});
 
   final DateTime selectedDate;
   final void Function(String)? onTapTicket;
@@ -288,13 +277,9 @@ class _GiornoBody extends ConsumerWidget {
     final async = ref.watch(schedulesInRangeProvider(range));
 
     return async.when(
-      data: (schedules) => GiornoView(
-        schedules: schedules,
-        onTapTicket: onTapTicket,
-        onTapSchedule: onTapSchedule,
-      ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      data: (schedules) =>
+          GiornoView(schedules: schedules, onTapTicket: onTapTicket, onTapSchedule: onTapSchedule),
+      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -303,11 +288,7 @@ class _GiornoBody extends ConsumerWidget {
 // ── Settimana body ────────────────────────────────────────────────────────────
 
 class _SettimanaBody extends ConsumerWidget {
-  const _SettimanaBody({
-    required this.selectedDate,
-    this.onDayTap,
-    this.onEventTap,
-  });
+  const _SettimanaBody({required this.selectedDate, this.onDayTap, this.onEventTap});
 
   final DateTime selectedDate;
   final void Function(DateTime)? onDayTap;
@@ -328,8 +309,7 @@ class _SettimanaBody extends ConsumerWidget {
         onDayTap: onDayTap,
         onEventTap: onEventTap,
       ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -347,8 +327,7 @@ class _MeseBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Fetch the entire month ± buffer for the grid cells from adjacent months.
     final monthStart = DateTime(selectedDate.year, selectedDate.month, 1);
-    final monthEnd =
-        DateTime(selectedDate.year, selectedDate.month + 1, 1);
+    final monthEnd = DateTime(selectedDate.year, selectedDate.month + 1, 1);
     final range = DateRange(start: monthStart, end: monthEnd);
     final async = ref.watch(schedulesInRangeProvider(range));
 
@@ -359,8 +338,7 @@ class _MeseBody extends ConsumerWidget {
         schedules: schedules,
         onDayTap: onDayTap,
       ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -383,12 +361,8 @@ class _ListaBody extends ConsumerWidget {
     final async = ref.watch(schedulesInRangeProvider(range));
 
     return async.when(
-      data: (schedules) => ListaView(
-        schedules: schedules,
-        onTapTicket: onTapTicket,
-      ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      data: (schedules) => ListaView(schedules: schedules, onTapTicket: onTapTicket),
+      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -408,8 +382,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
     final statusName = scheduleStatusName(schedule.statusId);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-          24, 16, 24, 16 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(24, 16, 24, 16 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,10 +416,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 timeRange,
-                style: GoogleFonts.manrope(
-                  fontSize: 13,
-                  color: context.colors.inkMuted,
-                ),
+                style: GoogleFonts.manrope(fontSize: 13, color: context.colors.inkMuted),
               ),
             ],
           ),
@@ -454,11 +424,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               schedule.description,
-              style: GoogleFonts.manrope(
-                fontSize: 13,
-                color: context.colors.inkFaint,
-                height: 1.5,
-              ),
+              style: GoogleFonts.manrope(fontSize: 13, color: context.colors.inkFaint, height: 1.5),
             ),
           ],
           const SizedBox(height: 24),
