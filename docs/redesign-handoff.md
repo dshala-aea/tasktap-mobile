@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, ten commits, **676/676 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, thirteen commits, **683/683 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
@@ -166,7 +166,18 @@ technician `/api/app/*` endpoints, real settings, and AI.
    Two facts worth keeping: the backend refuses `worklogs/start` when the caller has an open timer
    on **any** ticket, not just the one on screen; and these routes have no idempotent upsert, so
    they must stay online-only rather than being queued.
-2. **Technician `/api/app/*`** — `interventi/{id}`, `rapportini/{id}`, `clienti/{id}/overview`,
+2. **Technician `/api/app/*`** — assessed in full; most of it is worth less than it looks.
+   - `clienti/{id}/overview` — **done**, additive (pec/sdiCode/codiceFiscale/provincia + four
+     counts, none of which the mirror has columns for).
+   - `interventi/{id}` — its real win was resolving the technician's name, now done offline from
+     the `colleagues` mirror. The rest (linked schedules, linked rapportini) is already on the
+     detail's tabs from local data. Low value.
+   - `pianificazione/calendar` — duplicates the offline calendar with resolved names. Wiring it
+     would trade offline for cosmetics. **Do not.**
+   - `rapportini/{id}` — rich and authoritative for a *submitted* report (staff hours, materiali,
+     controlli, firme, allegati, audit trail). Belongs with the Phase 4 wizard, not standalone.
+
+   Original list, for reference: — `interventi/{id}`, `rapportini/{id}`, `clienti/{id}/overview`,
    `pianificazione/calendar`. Honour `sezioniNonDisponibili` wherever present.
 3. **Report tail** — `firma-cliente`, `firma-tecnico`, `invia`, `pdf`, `annulla`, `mail`. Overlaps
    Phase 4's rapportino wizard; do them together.
