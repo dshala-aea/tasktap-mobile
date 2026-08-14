@@ -175,7 +175,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders AppTabs with 5 tabs', (tester) async {
+    testWidgets('renders AppTabs with all seven tabs', (tester) async {
       await seedBase(db);
       // A taller surface, for the same reason the Pianificazioni test below already uses one: the
       // tab strip lives well down a CustomScrollView, slivers build lazily, and on the default
@@ -188,6 +188,8 @@ void main() {
       expect(find.byType(AppTabs), findsOneWidget);
       expect(find.text('Report'), findsOneWidget);
       expect(find.text('Pianificazioni'), findsOneWidget);
+      expect(find.text('Ore'), findsOneWidget);
+      expect(find.text('Storico'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -568,6 +570,161 @@ void main() {
 
       expect(find.text('Fabbisogno non disponibile offline'), findsOneWidget);
       expect(find.text('Nessun fabbisogno'), findsNothing);
+      await resetAndDispose(tester);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Ore (index 5) and Storico (index 6). Both read through to the server —
+  // neither has a Drift mirror — so both are stubbed on a MockDio.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// Ore and Storico are the sixth and seventh tabs. At the 800dp width `tapTab` uses, the strip
+  /// scrolls horizontally and a tap on the right-most labels lands on whatever is under them, so
+  /// these two groups widen the surface enough for all seven to be laid out at once.
+  Future<void> tapWideTab(WidgetTester tester, String label) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 1200));
+    await tester.pump();
+    await tester.ensureVisible(find.text(label));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+  }
+
+  group('TicketDetailScreen — Ore tab (index 5)', () {
+    MockDio dioWithWorklogs(List<Map<String, dynamic>> entries) {
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/tickets/ticket-1/worklogs')).thenAnswer(
+        (_) async => _okResponse<List<dynamic>>(entries, '/api/tickets/ticket-1/worklogs'),
+      );
+      return dio;
+    }
+
+    testWidgets('totals only the closed entries', (tester) async {
+      await seedBase(db);
+      final dio = dioWithWorklogs([
+        {
+          'id': 'w1',
+          'ticketId': 'ticket-1',
+          'userId': 'u1',
+          'workDate': '2026-07-01T00:00:00Z',
+          'startTime': '08:00:00',
+          'endTime': '10:30:00',
+          'isManualEntry': false,
+        },
+        {
+          'id': 'w2',
+          'ticketId': 'ticket-1',
+          'userId': 'u1',
+          'workDate': '2026-07-02T00:00:00Z',
+          'startTime': '09:00:00',
+          'endTime': '10:00:00',
+          'isManualEntry': true,
+        },
+        {
+          'id': 'w3',
+          'ticketId': 'ticket-1',
+          'userId': 'u1',
+          'workDate': '2026-07-03T00:00:00Z',
+          'startTime': '09:00:00',
+          'endTime': null,
+          'isManualEntry': false,
+        },
+      ]);
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapWideTab(tester, 'Ore');
+
+      // 2:30 + 1:00 from the two closed entries. Deliberately a sum no single row also shows, so
+      // the assertion cannot pass by matching a row's own duration.
+      expect(find.text('3:30'), findsOneWidget);
+      expect(find.textContaining('non è incluso nel totale'), findsOneWidget);
+      // The open entry names itself as still running rather than reporting a duration. Asserting
+      // on the row's subtitle, not on its '—' meta: the Chiusura KeyVal above renders a dash too,
+      // so that finder matches two unrelated things.
+      expect(find.textContaining('→ in corso'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says honestly when nothing has been booked', (tester) async {
+      await seedBase(db);
+      await pump(tester, dio: dioWithWorklogs([]), isOnline: true);
+      await tapWideTab(tester, 'Ore');
+
+      expect(find.text('Nessuna ora registrata'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+      await seedBase(db);
+      await pump(tester, isOnline: false);
+      await tapWideTab(tester, 'Ore');
+
+      expect(find.text('Ore non disponibili offline'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+  });
+
+  group('TicketDetailScreen — Storico tab (index 6)', () {
+    testWidgets('renders a status change by name, not by raw id', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history')).thenAnswer(
+        (_) async => _okResponse<List<dynamic>>([
+          {
+            'id': 'h1',
+            'ticketId': 'ticket-1',
+            'fieldName': 'StatusId',
+            'oldValue': null,
+            'newValue': '1',
+            'changedByUserId': 'u1',
+            'changedAt': '2026-07-01T10:00:00Z',
+          },
+        ], '/api/Tickets/ticket-1/history'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapWideTab(tester, 'Storico');
+
+      // The audit table stores column names and raw values. Showing "StatusId: → 1" would put
+      // database identifiers in front of a technician.
+      expect(find.text('Stato'), findsOneWidget);
+      expect(find.text('— → Aperto'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('keeps an untranslated field rather than dropping the change', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/history')).thenAnswer(
+        (_) async => _okResponse<List<dynamic>>([
+          {
+            'id': 'h1',
+            'ticketId': 'ticket-1',
+            'fieldName': 'SomeFutureColumn',
+            'oldValue': 'a',
+            'newValue': 'b',
+            'changedByUserId': 'u1',
+            'changedAt': '2026-07-01T10:00:00Z',
+          },
+        ], '/api/Tickets/ticket-1/history'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapWideTab(tester, 'Storico');
+
+      // A change nobody has a label for still happened; hiding it would make the trail lie.
+      expect(find.text('SomeFutureColumn'), findsOneWidget);
+      expect(find.text('a → b'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+      await seedBase(db);
+      await pump(tester, isOnline: false);
+      await tapWideTab(tester, 'Storico');
+
+      expect(find.text('Storico non disponibile offline'), findsOneWidget);
       await resetAndDispose(tester);
     });
   });

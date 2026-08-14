@@ -37,6 +37,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     AppTab(label: 'Pianificazioni'),
     AppTab(label: 'Allegati'),
     AppTab(label: 'Fabbisogno'),
+    AppTab(label: 'Ore'),
+    AppTab(label: 'Storico'),
   ];
 
   @override
@@ -336,6 +338,8 @@ class _TabContent extends ConsumerWidget {
       2 => _PianificazioniTab(ticketId: ticketId),
       3 => _AllegatiTab(ticketId: ticketId),
       4 => _FabbisognoTab(ticketId: ticketId),
+      5 => _OreTab(ticketId: ticketId),
+      6 => _StoricoTab(ticketId: ticketId),
       _ => const SizedBox.shrink(),
     };
   }
@@ -1136,5 +1140,244 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
           ),
       ],
     );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Ore tab — the time booked against this ticket
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Every worklog entry on the ticket, newest first.
+///
+/// The timer bar above already reads this provider, but only to answer "is a clock running". The
+/// entries themselves — who booked what, and how long — had no surface at all, so a technician
+/// could start and stop a timer and never see what it recorded.
+class _OreTab extends ConsumerWidget {
+  const _OreTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(ticketWorklogsProvider(ticketId));
+
+    return async.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => _TabError(
+        icon: LucideIcons.clock,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Ore non disponibili offline',
+        offlineBody:
+            'Le ore registrate su questo ticket si leggono solo online: '
+            'riprova quando torni in copertura.',
+        errorTitle: 'Impossibile caricare le ore',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ),
+      data: (entries) {
+        if (entries.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.clock,
+            label: 'Nessuna ora registrata',
+            body: 'Avvia il timer o aggiungi le ore manualmente per registrarle su questo ticket.',
+          );
+        }
+
+        // Only closed entries contribute. A running one has no duration yet, and counting it as
+        // zero would quietly understate the total on exactly the ticket being worked.
+        final closed = entries.where((e) => !e.isRunning);
+        final total = closed.fold<Duration>(Duration.zero, (a, e) => a + e.duration!);
+        final running = entries.where((e) => e.isRunning).length;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppCard(
+                strapped: running > 0,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Totale registrato',
+                        style: GoogleFonts.manrope(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.inkMuted,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _hhmm(total),
+                      style: GoogleFonts.sora(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: context.colors.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (running > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, bottom: 2),
+                  child: Text(
+                    // Stated, so the total is not mistaken for the whole story while a clock runs.
+                    running == 1
+                        ? 'Un timer è ancora in corso e non è incluso nel totale.'
+                        : '$running timer sono ancora in corso e non sono inclusi nel totale.',
+                    style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkMuted),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              for (final e in entries) _WorklogRow(entry: e),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WorklogRow extends StatelessWidget {
+  const _WorklogRow({required this.entry});
+
+  final TicketWorkLogDto entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final dateLabel = DateFormat('EEE d MMM', 'it').format(entry.workDate.toLocal());
+    final span = entry.endTime == null
+        ? '${_hhmm(entry.startTime)} → in corso'
+        : '${_hhmm(entry.startTime)} – ${_hhmm(entry.endTime!)}';
+
+    return ListRow(
+      strapped: entry.isRunning,
+      leading: Icon(
+        entry.isManualEntry ? LucideIcons.pencil : LucideIcons.timer,
+        size: 20,
+        color: entry.isRunning ? c.ink : c.inkMuted,
+      ),
+      title: dateLabel,
+      subtitle: [
+        span,
+        if (entry.isManualEntry) 'inserimento manuale',
+        if (entry.description != null && entry.description!.isNotEmpty) entry.description!,
+      ].join(' · '),
+      meta: Text(
+        // An open entry shows a dash, not 0:00 — the same refusal to draw a stopped-looking clock
+        // that the dashboard hero and TicketWorkLogDto.duration both make.
+        entry.duration == null ? '—' : _hhmm(entry.duration!),
+        style: GoogleFonts.sora(
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
+          color: entry.isRunning ? c.inkMuted : c.ink,
+        ),
+      ),
+    );
+  }
+}
+
+/// `H:MM`, counting hours past 24 rather than wrapping — an overnight entry reads 26:10, not 2:10.
+String _hhmm(Duration d) {
+  final h = d.inHours;
+  final m = d.inMinutes.remainder(60).abs().toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Storico tab — the ticket's audit trail
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Field-by-field history, newest first.
+///
+/// The backend records the change as raw column names and raw values (`StatusId`, `1` → `2`),
+/// because it is an audit table rather than a display projection. Rendering that verbatim would
+/// put database identifiers in front of a technician, so field names are translated and the two
+/// id-valued fields are resolved through the maps this screen already holds.
+class _StoricoTab extends ConsumerWidget {
+  const _StoricoTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(ticketHistoryProvider(ticketId));
+    final statusMap = ref.watch(ticketStatusMapProvider).valueOrNull ?? {};
+    final typeMap = ref.watch(ticketTypeMapProvider).valueOrNull ?? {};
+
+    return async.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => _TabError(
+        icon: LucideIcons.history,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Storico non disponibile offline',
+        offlineBody:
+            'La cronologia delle modifiche si legge solo online: '
+            'riprova quando torni in copertura.',
+        errorTitle: 'Impossibile caricare lo storico',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ),
+      data: (entries) {
+        if (entries.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.history,
+            label: 'Nessuna modifica registrata',
+            body: 'Le modifiche a questo ticket compariranno qui.',
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          child: Column(
+            children: [
+              for (final e in entries)
+                ListRow(
+                  leading: Icon(LucideIcons.history, size: 20, color: context.colors.inkMuted),
+                  title: _fieldLabel(e.fieldName),
+                  subtitle: _change(e, statusMap, typeMap),
+                  meta: Text(
+                    DateFormat('dd/MM HH:mm', 'it').format(e.changedAt.toLocal()),
+                    style: TextStyle(fontSize: 11, color: context.colors.inkMuted),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// The audit table stores column names. Untranslated ones fall through as-is rather than being
+  /// hidden: a change nobody can name still happened, and dropping it would make the trail lie.
+  static String _fieldLabel(String field) => switch (field) {
+    'StatusId' => 'Stato',
+    'AssignedUserId' => 'Tecnico assegnato',
+    'TypeId' => 'Tipo',
+    'Title' => 'Titolo',
+    'Description' => 'Descrizione',
+    'TechnicianNotes' => 'Note tecnico',
+    'InternalNotes' => 'Note interne',
+    'ClosedAt' => 'Chiusura',
+    _ => field,
+  };
+
+  static String _change(
+    TicketHistoryEntryDto e,
+    Map<int, String> statusMap,
+    Map<int, String> typeMap,
+  ) {
+    String render(String? v) {
+      if (v == null || v.isEmpty) return '—';
+      final asInt = int.tryParse(v);
+      if (asInt != null) {
+        if (e.fieldName == 'StatusId') return statusMap[asInt] ?? v;
+        if (e.fieldName == 'TypeId') return typeMap[asInt] ?? v;
+      }
+      return v;
+    }
+
+    return '${render(e.oldValue)} → ${render(e.newValue)}';
   }
 }
