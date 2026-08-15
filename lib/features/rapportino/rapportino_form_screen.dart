@@ -67,15 +67,12 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
   Widget build(BuildContext context) {
     final editorState = ref.watch(reportEditorProvider(widget.reportId));
 
-    // Build header context string from ticket/cantiere if linked.
-    String? contextSubtitle;
-    if (editorState.ticketId != null && editorState.ticketId!.isNotEmpty) {
-      contextSubtitle = 'Ticket: ${editorState.ticketId}';
-    } else if (editorState.cantiereId != null && editorState.cantiereId!.isNotEmpty) {
-      contextSubtitle = 'Cantiere: ${editorState.cantiereId}';
-    } else if (editorState.ticketFreeText?.isNotEmpty ?? false) {
-      contextSubtitle = 'Ticket: ${editorState.ticketFreeText}';
-    }
+    // The subtitle used to read "Ticket: 3f2a1c8e-…" — the raw id, in the most prominent piece of
+    // secondary text on the screen. What it is linked to is now named properly at the top of
+    // Dettagli, where the name is resolvable; repeating it here as a GUID was worse than silence.
+    // From Ore onwards it carries the rapportino's own title instead, so the header answers "which
+    // one am I in" once the field that names it has scrolled out of reach.
+    final subtitle = _isFirst || editorState.title.isEmpty ? null : editorState.title;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -84,7 +81,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
       // light mode. ScreenHeader's own dark variant renders both lines correctly.
       appBar: ScreenHeaderBar(
         title: 'Rapportino',
-        subtitle: contextSubtitle,
+        subtitle: subtitle,
         backgroundColor: AppColors.CHARCOAL,
         actions: [
           // Autosave indicator
@@ -163,13 +160,24 @@ class _BottomNavBar extends StatelessWidget {
         child: Row(
           children: [
             if (!isFirst) ...[
-              Expanded(
-                child: AppButton.secondary(
+              // Full width only while it is sharing the bar with Avanti. On Riepilogo the real
+              // action is Invia, sitting just above; a full-width secondary button underneath it
+              // was the largest control on the screen and pointed backwards.
+              if (isLast)
+                AppButton.secondary(
                   label: 'Indietro',
                   onPressed: onBack,
                   size: AppButtonSize.lg,
+                  fullWidth: false,
+                )
+              else
+                Expanded(
+                  child: AppButton.secondary(
+                    label: 'Indietro',
+                    onPressed: onBack,
+                    size: AppButtonSize.lg,
+                  ),
                 ),
-              ),
               if (!isLast) const SizedBox(width: 12),
             ],
             if (!isLast)

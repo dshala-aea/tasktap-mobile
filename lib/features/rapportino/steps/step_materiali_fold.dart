@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
+import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
@@ -166,15 +167,12 @@ class StepMaterialiFold extends ConsumerWidget {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final materialiAsync = ref.read(allMaterialiProvider);
 
-    final nameCtrl = TextEditingController();
+    final catalogo = materialiAsync.valueOrNull ?? const <MaterialiData>[];
+
     final qtyCtrl = TextEditingController(text: '1');
     final uomCtrl = TextEditingController();
     String? selectedMaterialeId;
-    bool freeTextMode = true;
-
-    materialiAsync.whenData((list) {
-      if (list.isNotEmpty) freeTextMode = false;
-    });
+    String freeTextName = '';
 
     showDialog<void>(
       context: context,
@@ -185,39 +183,32 @@ class StepMaterialiFold extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                materialiAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Nome materiale'),
-                  ),
-                  data: (list) {
-                    if (list.isEmpty || freeTextMode) {
-                      return Column(
-                        children: [
-                          TextField(
-                            controller: nameCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Nome materiale (testo libero)',
-                            ),
-                          ),
-                          if (list.isNotEmpty)
-                            TextButton(
-                              onPressed: () => setDialogState(() => freeTextMode = false),
-                              child: const Text('Seleziona da catalogo'),
-                            ),
-                        ],
-                      );
+                // Same single field as the rest of the wizard. This dialog is opened once per
+                // material — often a dozen times on one job — so the catalogo/testo-libero mode
+                // switch was being paid over and over on the same rapportino.
+                AppLookupField(
+                  label: 'Materiale',
+                  hint: 'Cerca a catalogo o scrivi il nome',
+                  items: [
+                    for (final m in catalogo)
+                      LookupItem(id: m.id, name: m.name, subtitle: m.code),
+                  ],
+                  onSelected: (id) {
+                    selectedMaterialeId = id;
+                    freeTextName = '';
+                    // The catalogue knows the unit. Asking the technician to type "pz" after
+                    // picking a part that is already measured in pieces is a question with a
+                    // known answer.
+                    for (final m in catalogo) {
+                      if (m.id == id && (m.unitOfMeasure?.isNotEmpty ?? false)) {
+                        uomCtrl.text = m.unitOfMeasure!;
+                      }
                     }
-                    return DropdownButtonFormField<String>(
-                      initialValue: selectedMaterialeId,
-                      decoration: const InputDecoration(labelText: 'Materiale da catalogo'),
-                      isExpanded: true,
-                      items: list
-                          .map((m) => DropdownMenuItem(value: m.id, child: Text(m.name)))
-                          .toList(),
-                      onChanged: (v) => setDialogState(() => selectedMaterialeId = v),
-                    );
+                    setDialogState(() {});
+                  },
+                  onFreeText: (v) {
+                    selectedMaterialeId = null;
+                    freeTextName = v;
                   },
                 ),
                 const SizedBox(height: 8),
@@ -249,12 +240,15 @@ class StepMaterialiFold extends ConsumerWidget {
               onPressed: () {
                 final qty = double.tryParse(qtyCtrl.text) ?? 1.0;
                 final id = 'mat-${DateTime.now().millisecondsSinceEpoch}';
+                final typed = freeTextName.trim();
                 notifier.addMateriale(
                   MaterialeRow(
                     id: id,
                     reportId: reportId,
-                    materialeId: freeTextMode ? null : selectedMaterialeId,
-                    freeTextName: freeTextMode ? nameCtrl.text.trim() : null,
+                    materialeId: selectedMaterialeId,
+                    // Whichever one holds the answer. There is no mode to consult any more, so
+                    // the row records what is actually there.
+                    freeTextName: selectedMaterialeId == null && typed.isNotEmpty ? typed : null,
                     quantity: qty,
                     unitOfMeasure: uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
                   ),

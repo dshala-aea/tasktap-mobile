@@ -35,17 +35,16 @@ class StepDettagli extends ConsumerStatefulWidget {
 class _StepDettagliState extends ConsumerState<StepDettagli> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _detailsCtrl;
-  late final TextEditingController _customerFreeTextCtrl;
   late final TextEditingController _workAddressCtrl;
-  late final TextEditingController _ticketFreeTextCtrl;
-  late final TextEditingController _cantiereFreeTextCtrl;
-  late final TextEditingController _locationFreeTextCtrl;
 
   bool _aiBusy = false;
-  bool _customerFreeTextMode = false;
-  bool _locationFreeTextMode = false;
-  bool _ticketFreeTextMode = false;
-  bool _cantiereFreeTextMode = false;
+
+  /// Whether the optional ticket/cantiere link is expanded.
+  ///
+  /// Starts closed. A rapportino is almost always opened from the thing it is about, so the link
+  /// is already made; when it is not, it is genuinely optional and does not deserve two pickers
+  /// and an "— oppure —" divider sitting between the technician and the next step.
+  bool _showCollegamento = false;
 
   @override
   void initState() {
@@ -53,27 +52,16 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     final s = ref.read(reportEditorProvider(widget.reportId));
     _titleCtrl = TextEditingController(text: s.title);
     _detailsCtrl = TextEditingController(text: s.details);
-    _customerFreeTextCtrl = TextEditingController(text: s.customerFreeText ?? '');
     _workAddressCtrl = TextEditingController(text: s.workAddress ?? '');
-    _ticketFreeTextCtrl = TextEditingController(text: s.ticketFreeText ?? '');
-    _cantiereFreeTextCtrl = TextEditingController(text: s.cantiereFreeText ?? '');
-    _locationFreeTextCtrl = TextEditingController(text: s.locationFreeText ?? '');
-
-    _customerFreeTextMode = s.customerFreeText?.isNotEmpty ?? false;
-    _locationFreeTextMode = s.locationFreeText?.isNotEmpty ?? false;
-    _ticketFreeTextMode = s.ticketFreeText?.isNotEmpty ?? false;
-    _cantiereFreeTextMode = s.cantiereFreeText?.isNotEmpty ?? false;
+    _showCollegamento =
+        (s.ticketFreeText?.isNotEmpty ?? false) || (s.cantiereFreeText?.isNotEmpty ?? false);
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
     _detailsCtrl.dispose();
-    _customerFreeTextCtrl.dispose();
     _workAddressCtrl.dispose();
-    _ticketFreeTextCtrl.dispose();
-    _cantiereFreeTextCtrl.dispose();
-    _locationFreeTextCtrl.dispose();
     super.dispose();
   }
 
@@ -81,48 +69,41 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   Widget build(BuildContext context) {
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     final state = ref.watch(reportEditorProvider(widget.reportId));
-    final customers = ref.watch(allCustomersProvider);
+    final customers = ref.watch(allCustomersProvider).valueOrNull ?? const [];
+    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
+    final tickets = ref.watch(allTicketsProvider).valueOrNull ?? const [];
+    final cantieri = ref.watch(allCantieriProvider).valueOrNull ?? const [];
+
+    // A rapportino opened from a ticket or a cantiere already knows what it is about. Naming it
+    // once at the top and dropping the pickers is the difference between confirming a fact and
+    // re-entering it.
+    final linkedTicket = _findName(tickets.map((t) => (t.id, t.title)), state.ticketId);
+    final linkedCantiere = _findName(cantieri.map((c) => (c.id, c.name)), state.cantiereId);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 16, 19, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Context card (ticket/cantiere pre-linked) ──────────────────────
-          if (state.ticketId != null || state.cantiereId != null) ...[
-            AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.link, size: 18, color: AppColors.Y),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      state.ticketId != null
-                          ? 'Collegato al ticket ${state.ticketId}'
-                          : 'Collegato al cantiere ${state.cantiereId}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: context.colors.ink,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          if (linkedTicket != null || linkedCantiere != null) ...[
+            _LinkedChip(
+              label: linkedTicket != null ? 'Ticket' : 'Cantiere',
+              value: linkedTicket ?? linkedCantiere!,
             ),
             const SizedBox(height: 16),
           ],
 
-          // ── Titolo e descrizione ───────────────────────────────────────────
-          StepLabel(title: 'Titolo e descrizione'),
-          const SizedBox(height: 8),
           _AiDraftButton(
             scheduleId: state.scheduleId,
             ticketId: state.ticketId,
             busy: _aiBusy,
             onDraft: _generateAiDraft,
           ),
+
+          // No section headings above these. Every one of them restated the label of the single
+          // field beneath it — "Titolo e descrizione" over a field called "Titolo", "Cliente *"
+          // over a field called "Cliente". Saying it twice is not emphasis, it is one more line
+          // to scroll past on a phone held in one hand.
           AppTextField(
             controller: _titleCtrl,
             label: 'Titolo *',
@@ -130,101 +111,105 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
             onChanged: (v) => notifier.setTitle(v),
           ),
           const SizedBox(height: 12),
-          AppTextField(
-            controller: _detailsCtrl,
-            label: 'Descrizione',
-            hint: 'Descrizione intervento...',
-            maxLines: 3,
-            onChanged: (v) => notifier.setDetails(v),
-          ),
-          const SizedBox(height: 20),
 
-          // ── Cliente ───────────────────────────────────────────────────────
-          StepLabel(title: 'Cliente *'),
-          const SizedBox(height: 8),
-          customers.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (e, _) => _FreeTextField(
-              ctrl: _customerFreeTextCtrl,
-              label: 'Nome cliente',
-              onChanged: (v) => notifier.setCustomerFreeText(v),
-            ),
-            data: (list) {
-              if (list.isEmpty || _customerFreeTextMode) {
-                return _FreeTextField(
-                  ctrl: _customerFreeTextCtrl,
-                  label: 'Nome cliente (testo libero)',
-                  onChanged: (v) => notifier.setCustomerFreeText(v),
-                  trailing: list.isNotEmpty
-                      ? TextButton(
-                          onPressed: () => setState(() => _customerFreeTextMode = false),
-                          child: const Text('Da lista'),
-                        )
-                      : null,
-                );
-              }
-              final selected = state.customerId;
-              return _CachePicker(
-                label: 'Seleziona cliente',
-                items: list.map((c) => _NamedItem(id: c.id, name: c.companyName)).toList(),
-                selectedId: selected,
-                onSelected: (id) => notifier.setCustomerFromCache(id),
-                onFreeText: () {
-                  setState(() => _customerFreeTextMode = true);
-                  notifier.setCustomerFromCache('');
-                },
-              );
-            },
+          AppLookupField(
+            label: 'Cliente *',
+            hint: 'Cerca o scrivi il nome',
+            items: [
+              for (final c in customers) LookupItem(id: c.id, name: c.companyName),
+            ],
+            selectedId: state.customerId,
+            initialText: state.customerFreeText,
+            emptyCacheHint: 'Nessun cliente sincronizzato — scrivi il nome, verrà collegato dopo.',
+            onSelected: notifier.setCustomerFromCache,
+            onFreeText: notifier.setCustomerFreeText,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
 
-          // ── Indirizzo di lavoro ────────────────────────────────────────────
-          StepLabel(title: 'Indirizzo di lavoro'),
-          const SizedBox(height: 8),
+          AppLookupField(
+            label: 'Sede',
+            hint: 'Cerca o scrivi l\'ubicazione',
+            items: [
+              for (final l in locations) LookupItem(id: l.id, name: l.name),
+            ],
+            selectedId: state.locationId,
+            initialText: state.locationFreeText,
+            onSelected: notifier.setLocationFromCache,
+            onFreeText: notifier.setLocationFreeText,
+          ),
+          const SizedBox(height: 12),
+
           AppTextField(
             controller: _workAddressCtrl,
-            label: 'Indirizzo',
+            label: 'Indirizzo di lavoro',
             hint: 'Via, numero civico...',
             onChanged: (v) => notifier.setWorkAddress(v),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
 
-          // ── Ubicazione / Sede ──────────────────────────────────────────────
-          StepLabel(title: 'Ubicazione / Sede'),
-          const SizedBox(height: 8),
-          _LocationPicker(
-            reportId: widget.reportId,
-            freeTextMode: _locationFreeTextMode,
-            freeTextCtrl: _locationFreeTextCtrl,
-            onFreeTextChanged: (v) => notifier.setLocationFreeText(v),
-            onToggleFreeText: (v) => setState(() => _locationFreeTextMode = v),
-            onCacheSelected: (id) => notifier.setLocationFromCache(id),
+          AppTextField(
+            controller: _detailsCtrl,
+            label: 'Descrizione',
+            hint: 'Cosa hai trovato, cosa hai fatto...',
+            maxLines: 3,
+            onChanged: (v) => notifier.setDetails(v),
           ),
-          const SizedBox(height: 20),
 
-          // ── Ticket o Cantiere (opzionale) ──────────────────────────────────
-          StepLabel(title: 'Ticket o Cantiere (opzionale)'),
-          const SizedBox(height: 8),
-          _TicketCantierePicker(
-            reportId: widget.reportId,
-            ticketFreeTextMode: _ticketFreeTextMode,
-            cantiereFreeTextMode: _cantiereFreeTextMode,
-            ticketCtrl: _ticketFreeTextCtrl,
-            cantiereCtrl: _cantiereFreeTextCtrl,
-            onTicketFreeText: (v) => notifier.setTicketFreeText(v),
-            onCantiereFreeText: (v) => notifier.setCantiereFreeText(v),
-            onToggleTicketFreeText: (v) => setState(() => _ticketFreeTextMode = v),
-            onToggleCantiereFreeText: (v) => setState(() => _cantiereFreeTextMode = v),
-            onTicketFromCache: (id) => notifier.setTicketFromCache(id),
-            onCantiereFromCache: (id) => notifier.setCantiereFromCache(id),
-          ),
-          const SizedBox(height: 20),
+          // ── Collegamento, only when there isn't one already ─────────────────
+          if (linkedTicket == null && linkedCantiere == null) ...[
+            const SizedBox(height: 8),
+            if (!_showCollegamento)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _showCollegamento = true),
+                  icon: const Icon(LucideIcons.link, size: 16),
+                  label: const Text('Collega a ticket o cantiere'),
+                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                ),
+              )
+            else ...[
+              const SizedBox(height: 4),
+              AppLookupField(
+                label: 'Ticket',
+                hint: 'Cerca o scrivi il riferimento',
+                items: [
+                  for (final t in tickets) LookupItem(id: t.id, name: t.title),
+                ],
+                initialText: state.ticketFreeText,
+                onSelected: notifier.setTicketFromCache,
+                onFreeText: notifier.setTicketFreeText,
+              ),
+              const SizedBox(height: 12),
+              AppLookupField(
+                label: 'Cantiere',
+                hint: 'Cerca o scrivi il nome',
+                items: [
+                  for (final c in cantieri) LookupItem(id: c.id, name: c.name),
+                ],
+                initialText: state.cantiereFreeText,
+                onSelected: notifier.setCantiereFromCache,
+                onFreeText: notifier.setCantiereFreeText,
+              ),
+            ],
+          ],
 
-          // ── GPS ────────────────────────────────────────────────────────────
+          const SizedBox(height: 16),
           _GpsCapture(reportId: widget.reportId),
         ],
       ),
     );
+  }
+
+  /// The display name for an id, or null when there is nothing resolved to show.
+  static String? _findName(Iterable<(String, String)> pairs, String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final (candidateId, name) in pairs) {
+      if (candidateId == id) return name;
+    }
+    // Resolved to an id the cache does not hold yet. Showing the raw GUID would be worse than
+    // showing nothing — it reads as corruption, and it is not information.
+    return null;
   }
 
   /// Ask the server for a drafted title and description for this intervento.
@@ -396,242 +381,38 @@ class _GpsCapture extends ConsumerWidget {
 
 // ── Shared helper widgets (same logic as old step_dati helpers) ───────────────
 
-class _FreeTextField extends StatelessWidget {
-  const _FreeTextField({
-    required this.ctrl,
-    required this.label,
-    required this.onChanged,
-    this.trailing,
-  });
+/// The ticket or cantiere this rapportino belongs to, stated once.
+///
+/// Replaces a card that read "Collegato al ticket 3f2a1c8e-…" — a GUID presented to a technician
+/// as if it were the name of something. It identified nothing they could recognise, and it was
+/// the first thing on the screen.
+class _LinkedChip extends StatelessWidget {
+  const _LinkedChip({required this.label, required this.value});
 
-  final TextEditingController ctrl;
   final String label;
-  final ValueChanged<String> onChanged;
-  final Widget? trailing;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        const Icon(LucideIcons.link, size: 14, color: AppColors.Y),
+        const SizedBox(width: 6),
+        Text(
+          '$label · ',
+          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+        ),
         Expanded(
-          child: AppTextField(controller: ctrl, label: label, onChanged: onChanged),
-        ),
-        ?trailing,
-      ],
-    );
-  }
-}
-
-class _NamedItem {
-  const _NamedItem({required this.id, required this.name});
-
-  final String id;
-  final String name;
-}
-
-class _CachePicker extends StatelessWidget {
-  const _CachePicker({
-    required this.label,
-    required this.items,
-    required this.selectedId,
-    required this.onSelected,
-    required this.onFreeText,
-  });
-
-  final String label;
-  final List<_NamedItem> items;
-  final String? selectedId;
-  final ValueChanged<String> onSelected;
-  final VoidCallback onFreeText;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: selectedId?.isNotEmpty == true ? selectedId : null,
-          decoration: InputDecoration(
-            labelText: label,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: context.colors.ink,
+            ),
           ),
-          isExpanded: true,
-          items: items
-              .map(
-                (item) => DropdownMenuItem(
-                  value: item.id,
-                  child: Text(item.name, overflow: TextOverflow.ellipsis),
-                ),
-              )
-              .toList(),
-          onChanged: (v) {
-            if (v != null) onSelected(v);
-          },
-        ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: onFreeText,
-            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-            child: const Text('Non trovo → testo libero'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _LocationPicker extends ConsumerWidget {
-  const _LocationPicker({
-    required this.reportId,
-    required this.freeTextMode,
-    required this.freeTextCtrl,
-    required this.onFreeTextChanged,
-    required this.onToggleFreeText,
-    required this.onCacheSelected,
-  });
-
-  final String reportId;
-  final bool freeTextMode;
-  final TextEditingController freeTextCtrl;
-  final ValueChanged<String> onFreeTextChanged;
-  final ValueChanged<bool> onToggleFreeText;
-  final ValueChanged<String> onCacheSelected;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final locAsync = ref.watch(allLocationsProvider);
-
-    return locAsync.when(
-      loading: () => const LinearProgressIndicator(),
-      error: (e, _) =>
-          _FreeTextField(ctrl: freeTextCtrl, label: 'Ubicazione', onChanged: onFreeTextChanged),
-      data: (list) {
-        if (list.isEmpty || freeTextMode) {
-          return _FreeTextField(
-            ctrl: freeTextCtrl,
-            label: 'Ubicazione (testo libero)',
-            onChanged: onFreeTextChanged,
-            trailing: list.isNotEmpty
-                ? TextButton(
-                    onPressed: () => onToggleFreeText(false),
-                    child: const Text('Da lista'),
-                  )
-                : null,
-          );
-        }
-        final selected = ref.read(reportEditorProvider(reportId)).locationId;
-        return _CachePicker(
-          label: 'Seleziona ubicazione',
-          items: list.map((l) => _NamedItem(id: l.id, name: l.name)).toList(),
-          selectedId: selected,
-          onSelected: onCacheSelected,
-          onFreeText: () => onToggleFreeText(true),
-        );
-      },
-    );
-  }
-}
-
-class _TicketCantierePicker extends ConsumerWidget {
-  const _TicketCantierePicker({
-    required this.reportId,
-    required this.ticketFreeTextMode,
-    required this.cantiereFreeTextMode,
-    required this.ticketCtrl,
-    required this.cantiereCtrl,
-    required this.onTicketFreeText,
-    required this.onCantiereFreeText,
-    required this.onToggleTicketFreeText,
-    required this.onToggleCantiereFreeText,
-    required this.onTicketFromCache,
-    required this.onCantiereFromCache,
-  });
-
-  final String reportId;
-  final bool ticketFreeTextMode;
-  final bool cantiereFreeTextMode;
-  final TextEditingController ticketCtrl;
-  final TextEditingController cantiereCtrl;
-  final ValueChanged<String> onTicketFreeText;
-  final ValueChanged<String> onCantiereFreeText;
-  final ValueChanged<bool> onToggleTicketFreeText;
-  final ValueChanged<bool> onToggleCantiereFreeText;
-  final ValueChanged<String> onTicketFromCache;
-  final ValueChanged<String> onCantiereFromCache;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tickets = ref.watch(allTicketsProvider);
-    final cantieri = ref.watch(allCantieriProvider);
-    final state = ref.watch(reportEditorProvider(reportId));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Ticket ────────────────────────────────────────────────────────
-        tickets.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (e, _) =>
-              _FreeTextField(ctrl: ticketCtrl, label: 'Rif. Ticket', onChanged: onTicketFreeText),
-          data: (list) {
-            if (list.isEmpty || ticketFreeTextMode) {
-              return _FreeTextField(
-                ctrl: ticketCtrl,
-                label: 'Rif. Ticket (testo libero)',
-                onChanged: onTicketFreeText,
-                trailing: list.isNotEmpty
-                    ? TextButton(
-                        onPressed: () => onToggleTicketFreeText(false),
-                        child: const Text('Da lista'),
-                      )
-                    : null,
-              );
-            }
-            return _CachePicker(
-              label: 'Seleziona ticket',
-              items: list.map((t) => _NamedItem(id: t.id, name: t.title)).toList(),
-              selectedId: state.ticketId,
-              onSelected: onTicketFromCache,
-              onFreeText: () => onToggleTicketFreeText(true),
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-
-        Center(
-          child: Text('— oppure —', style: TextStyle(color: context.colors.inkMuted)),
-        ),
-        const SizedBox(height: 12),
-
-        // ── Cantiere ─────────────────────────────────────────────────────
-        cantieri.when(
-          loading: () => const LinearProgressIndicator(),
-          error: (e, _) =>
-              _FreeTextField(ctrl: cantiereCtrl, label: 'Cantiere', onChanged: onCantiereFreeText),
-          data: (list) {
-            if (list.isEmpty || cantiereFreeTextMode) {
-              return _FreeTextField(
-                ctrl: cantiereCtrl,
-                label: 'Cantiere (testo libero)',
-                onChanged: onCantiereFreeText,
-                trailing: list.isNotEmpty
-                    ? TextButton(
-                        onPressed: () => onToggleCantiereFreeText(false),
-                        child: const Text('Da lista'),
-                      )
-                    : null,
-              );
-            }
-            return _CachePicker(
-              label: 'Seleziona cantiere',
-              items: list.map((c) => _NamedItem(id: c.id, name: c.name)).toList(),
-              selectedId: state.cantiereId,
-              onSelected: onCantiereFromCache,
-              onFreeText: () => onToggleCantiereFreeText(true),
-            );
-          },
         ),
       ],
     );

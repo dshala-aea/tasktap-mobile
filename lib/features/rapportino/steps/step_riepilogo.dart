@@ -17,6 +17,7 @@ import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -56,6 +57,41 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     }
   }
 
+  /// The customer as a person would name it: the cached company name, else what was typed.
+  ///
+  /// Falls back to the free text rather than the id — an unresolvable id is not worth printing,
+  /// and a name typed by hand is still the answer to "who is this for".
+  static String _customerLabel(WidgetRef ref, ReportEditorState state) {
+    final id = state.customerId;
+    if (id != null && id.isNotEmpty) {
+      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) {
+        if (c.id == id) return c.companyName;
+      }
+    }
+    final typed = state.customerFreeText;
+    return (typed?.isNotEmpty ?? false) ? typed! : '—';
+  }
+
+  /// Ticket or cantiere as one line. They are alternatives, so four rows for them was three too
+  /// many, and "(lib.)" was internal vocabulary for a distinction the reader does not have.
+  static String? _riferimento(WidgetRef ref, ReportEditorState state) {
+    final ticketId = state.ticketId;
+    if (ticketId != null && ticketId.isNotEmpty) {
+      for (final t in ref.watch(allTicketsProvider).valueOrNull ?? const <Ticket>[]) {
+        if (t.id == ticketId) return 'Ticket · ${t.title}';
+      }
+    }
+    final cantiereId = state.cantiereId;
+    if (cantiereId != null && cantiereId.isNotEmpty) {
+      for (final c in ref.watch(allCantieriProvider).valueOrNull ?? const <CantieriData>[]) {
+        if (c.id == cantiereId) return 'Cantiere · ${c.name}';
+      }
+    }
+    if (state.ticketFreeText?.isNotEmpty ?? false) return 'Ticket · ${state.ticketFreeText}';
+    if (state.cantiereFreeText?.isNotEmpty ?? false) return 'Cantiere · ${state.cantiereFreeText}';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(reportEditorProvider(widget.reportId));
@@ -74,21 +110,20 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           ],
 
           // ── Summary ────────────────────────────────────────────────────────
-          StepLabel(title: 'Riepilogo dati'),
-          const SizedBox(height: 8),
+          //
+          // This card is the last thing read before two people sign. It used to print raw GUIDs:
+          // `Cliente  3f2a1c8e-…`, and separate `Ticket` / `Ticket (lib.)` rows for what is one
+          // fact stored two ways. Nobody can check a rapportino against a GUID, so the step that
+          // exists to be checked could not be.
           AppCard(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
                 KeyVal(label: 'Titolo', value: state.title.isEmpty ? '—' : state.title),
-                KeyVal(label: 'Cliente', value: state.customerId ?? state.customerFreeText ?? '—'),
+                KeyVal(label: 'Cliente', value: _customerLabel(ref, state)),
                 KeyVal(label: 'Indirizzo', value: state.workAddress ?? '—'),
-                if (state.ticketId != null) KeyVal(label: 'Ticket', value: state.ticketId!),
-                if (state.ticketFreeText != null)
-                  KeyVal(label: 'Ticket (lib.)', value: state.ticketFreeText!),
-                if (state.cantiereId != null) KeyVal(label: 'Cantiere', value: state.cantiereId!),
-                if (state.cantiereFreeText != null)
-                  KeyVal(label: 'Cantiere (lib.)', value: state.cantiereFreeText!),
+                if (_riferimento(ref, state) case final riferimento?)
+                  KeyVal(label: 'Riferimento', value: riferimento),
                 KeyVal(label: 'Tecnici', value: '${state.staffRows.length}'),
                 KeyVal(
                   label: 'Ore totali',
