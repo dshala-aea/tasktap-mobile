@@ -80,8 +80,9 @@ void main() {
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // The step should contain a titolo text field
-      expect(find.text('Titolo *'), findsWidgets);
+      // Field labels are static text above the field now, not Material floating labels inside
+      // it, and a required marker is a coloured span — so this is rich text.
+      expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
       // Avanti button visible on step 1
       expect(find.text('Avanti'), findsOneWidget);
       // Indietro NOT visible on step 1
@@ -123,7 +124,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Back on step 1
-      expect(find.text('Titolo *'), findsWidgets);
+      expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
       expect(find.text('Indietro'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());

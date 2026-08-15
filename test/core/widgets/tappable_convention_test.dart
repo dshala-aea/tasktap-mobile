@@ -16,6 +16,9 @@ void main() {
   const allowed = <String, String>{
     'lib/core/widgets/app_toggle.dart': 'the thumb animates on tap — the movement is the feedback',
     'lib/core/widgets/signature_pad.dart': 'a drag, not a press; there is nothing to splash',
+    'lib/core/widgets/app_stepper.dart':
+        'the segment animates its own fill on tap, and the target is transparent padding around '
+        'a 4dp bar — a splash would paint over the header band it sits on',
     'lib/core/widgets/bottom_nav.dart':
         'the pill animates colour, padding and label on every selection',
     'lib/features/calendario/calendario_screen.dart':

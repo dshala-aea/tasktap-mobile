@@ -100,10 +100,20 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
       body: Column(
         children: [
           // ── Stepper ────────────────────────────────────────────────────────
+          //
+          // The bar names the step, so the header does not have to: two dark bands stacked under
+          // each other, one saying "Rapportino" and the other repeating "Dettagli" in 10px under
+          // a numbered disc, was most of the first viewport spent on chrome.
           Container(
             color: AppColors.CHARCOAL,
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: AppStepper(steps: _kSteps, currentIndex: _stepIndex),
+            padding: const EdgeInsets.fromLTRB(19, 0, 19, 8),
+            child: AppStepper(
+              steps: _kSteps,
+              currentIndex: _stepIndex,
+              // Jump straight back to a step already filled in. Correcting the cliente from the
+              // summary used to mean pressing Indietro three times.
+              onStepSelected: (i) => setState(() => _step = _FormStep.values[i]),
+            ),
           ),
 
           // ── Step content ───────────────────────────────────────────────────

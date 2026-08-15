@@ -81,6 +81,22 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('the hero is a header when nothing is running, not a panel', (tester) async {
+      // minHeight was 430 unconditionally: with no clock running that is most of a phone screen
+      // given to an empty gradient with a name at the top, and the day's work starting below the
+      // fold. The band's height should say whether it is holding anything.
+      await pumpDashboard(tester);
+
+      final heroHeight = tester.getSize(find.byType(DashboardHero)).height;
+      expect(
+        heroHeight,
+        lessThan(220),
+        reason: 'an empty hero should be the greeting and no more',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('leads with today, not with a grid of counts', (tester) async {
       // The 2x2 StatsGrid rendered "Interventi oggi 3 / In corso 1 / Completati 2 / Prossimi 5"
       // across the width of the screen, above everything. Every one of those numbers is the

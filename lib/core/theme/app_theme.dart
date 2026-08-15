@@ -158,20 +158,35 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
 
     // ── Input Decoration ───────────────────────────────────────────────────
+    //
+    // Quiet by default, loud only on focus.
+    //
+    // Every field used to be filled *and* boxed on all four sides with a mid-weight border, which
+    // is what a Material floating label needs — something to notch itself into. AppTextField puts
+    // the label above the field now, so the box has nothing to hold and the border can go back to
+    // being a hairline. A form of eight fields was eight heavy rectangles competing with each
+    // other and with the content; it is now eight inset panels.
+    //
+    // Focus keeps the full 2px yellow. It is the one state that has to be unmistakable at arm's
+    // length, and it is the app's own colour rather than the platform's.
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: p.surface,
+      fillColor: p.bg3,
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.base,
+        horizontal: AppSpacing.md,
         vertical: AppSpacing.md,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: BorderSide(color: p.borderMedium),
+        borderSide: BorderSide(color: p.borderLight),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: BorderSide(color: p.borderMedium),
+        borderSide: BorderSide(color: p.borderLight),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
+        borderSide: BorderSide(color: p.borderLight),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
