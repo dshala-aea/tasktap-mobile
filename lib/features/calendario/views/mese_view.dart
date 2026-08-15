@@ -58,25 +58,14 @@ class MeseView extends ConsumerWidget {
     }
 
     final weekCount = (gridDays.length / 7).ceil();
-    final monthFmt = DateFormat('MMMM y', 'it');
     final dayNameFmt = DateFormat('EEE', 'it');
     final weekdays = List.generate(7, (i) => gridStart.add(Duration(days: i)));
 
     return Column(
       children: [
-        // Month + year title
-        Padding(
-          padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
-          child: Text(
-            _capitalize(monthFmt.format(month)),
-            style: TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: context.colors.ink,
-            ),
-          ),
-        ),
+        // No month title here. The period bar above the body names the period for every view and
+        // is what moves between them; a second "Agosto 2026" underneath it said the same thing
+        // twice and drifted out of step the moment either one was changed.
         // Weekday header row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -167,8 +156,6 @@ class MeseView extends ConsumerWidget {
       ],
     );
   }
-
-  static String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 class _EventDots extends StatelessWidget {

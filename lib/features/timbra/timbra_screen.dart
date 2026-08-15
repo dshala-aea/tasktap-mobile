@@ -87,78 +87,107 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
 
     return Scaffold(
       backgroundColor: AppColors.punchGround,
+      // The whole screen used to be one SingleChildScrollView, so the punch button — the only
+      // reason to open this screen — could be scrolled off it, and on a small phone it started
+      // that way: roughly 500dp of clock and gaps sat above the session list before anything
+      // scrolled. A clock-in control you have to go looking for is the wrong control.
+      //
+      // The controls are fixed now and only the list of today's sessions scrolls, inside its own
+      // box. Gaps came down with it — 40dp twice, and a 180dp disc, on a surface that has to fit
+      // an iPhone SE.
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(24, 32, 24, context.navClearance),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // ── Date ──────────────────────────────────────────────────────
-              _DateLabel(now: _now),
-              const SizedBox(height: 8),
-
-              // ── Live clock ────────────────────────────────────────────────
-              _LiveClock(now: _now, pulseAnim: _pulseAnim),
-              const SizedBox(height: 40),
-
-              // ── Punch button ──────────────────────────────────────────────
-              _PunchButton(
-                shiftState: shiftState,
-                isLoading: punchState is AsyncLoading,
-                guard: ref.watch(punchGuardProvider),
-                onTap: () {
-                  ref.read(punchNotifierProvider.notifier).punch(shiftState);
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // ── Error snack (shown inline below button) ───────────────────
-              if (punchState is AsyncError<void>)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Errore: ${punchState.error}',
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-
-              // ── Pause / resume (only meaningful while on shift) ───────────
-              if (shiftState.isOnShift) ...[
-                const SizedBox(height: 16),
-                _PauseButton(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(24, 20, 24, context.navClearance),
+          // Fixed when there is room, scrolling when there is not.
+          //
+          // The screen was one SingleChildScrollView, so the punch button — the only reason to
+          // open it — could be scrolled off, and on a small phone it started that way. Pinning
+          // everything instead is the other failure: the controls take about 400dp, so on a 600dp
+          // viewport the session list is squeezed to a few pixels and shows nothing.
+          //
+          // So: measure. Above the threshold the controls hold still and only the sessions move,
+          // which is what a technician glancing at the screen needs. Below it the page scrolls as
+          // a whole, because a crushed list is worse than a scroll.
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
+              final content = <Widget>[
+                _DateLabel(now: _now),
+                const SizedBox(height: 6),
+                _LiveClock(now: _now, pulseAnim: _pulseAnim),
+                const SizedBox(height: 28),
+                _PunchButton(
                   shiftState: shiftState,
                   isLoading: punchState is AsyncLoading,
-                  guard: ref.watch(pauseGuardProvider),
+                  guard: ref.watch(punchGuardProvider),
                   onTap: () {
-                    ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                    ref.read(punchNotifierProvider.notifier).punch(shiftState);
                   },
                 ),
-              ],
+                if (punchState is AsyncError<void>)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Errore: ${punchState.error}',
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                if (shiftState.isOnShift) ...[
+                  const SizedBox(height: 12),
+                  _PauseButton(
+                    shiftState: shiftState,
+                    isLoading: punchState is AsyncLoading,
+                    guard: ref.watch(pauseGuardProvider),
+                    onTap: () {
+                      ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                    },
+                  ),
+                ],
+                const SizedBox(height: 20),
+              ];
 
-              const SizedBox(height: 40),
-
-              // ── Sessioni di oggi ─────────────────────────────────────────
-              sessionsAsync.when(
+              final sessions = sessionsAsync.when(
                 loading: () => const SizedBox.shrink(),
                 error: (e, _) => Text(
                   'Errore sessioni: $e',
                   style: const TextStyle(color: Colors.redAccent, fontSize: 12),
                 ),
-                data: (sessions) => _SessionsCard(
-                  sessions: sessions,
+                data: (list) => _SessionsCard(
+                  sessions: list,
                   total: total,
                   now: _now,
                   hasPendingSync: ref.watch(hasPendingSyncProvider),
+                  fillHeight: fits,
                 ),
-              ),
-            ],
+              );
+
+              if (!fits) {
+                return SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [...content, sessions],
+                  ),
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  ...content,
+                  Expanded(child: sessions),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 }
+
+/// Below this the controls alone would leave the session list unreadable, so the page scrolls.
+const double _kFixedLayoutMinHeight = 640;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // _DateLabel
@@ -221,21 +250,28 @@ class _LiveClock extends StatelessWidget {
       liveRegion: true,
       child: ScaleTransition(
         scale: pulseAnim,
-        child: Text(
-          timeStr,
-          style: TextStyle(
-            fontFamily: 'Sora',
-            fontSize: 72,
-            // w300, not w100. This is the number a technician checks at arm's length, outdoors,
-            // to decide whether they are on the clock. Hairline strokes at 72px look elegant on a
-            // desk monitor and disappear under sun glare on a scratched screen — the one viewing
-            // condition this screen is actually used in. Still light enough to stay display type.
-            fontWeight: FontWeight.w300,
-            color: AppColors.Y,
-            letterSpacing: -2,
-            height: 1.0,
+        // Scales down rather than overflowing. At 72px "HH:mm:ss" wants 327dp, which is wider
+        // than a 360dp phone once the screen's 24dp gutters are taken off — the clock was
+        // overflowing on every common Android width and clipping on the narrow ones. scaleDown
+        // never enlarges, so on a normal phone this is exactly the size it was.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            timeStr,
+            style: TextStyle(
+              fontFamily: 'Sora',
+              fontSize: 72,
+              // w300, not w100. This is the number a technician checks at arm's length, outdoors,
+              // to decide whether they are on the clock. Hairline strokes at 72px look elegant on a
+              // desk monitor and disappear under sun glare on a scratched screen — the one viewing
+              // condition this screen is actually used in. Still light enough to stay display type.
+              fontWeight: FontWeight.w300,
+              color: AppColors.Y,
+              letterSpacing: -2,
+              height: 1.0,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );
@@ -290,7 +326,7 @@ class _PunchButton extends StatelessWidget {
       button: true,
       enabled: !blocked,
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
-      // The one press target deliberately left without a splash. It is a 180dp gradient disc
+      // The one press target deliberately left without a splash. It is a 156dp gradient disc
       // with a coloured glow; ink over that reads as a smudge rather than a press, and the
       // control answers a tap within the frame anyway — it swaps to a spinner while the
       // timbratura is recorded. The secondary pause button below it did get converted, because
@@ -300,8 +336,12 @@ class _PunchButton extends StatelessWidget {
         child: Opacity(
           opacity: blocked ? 0.4 : 1,
           child: Container(
-            width: 180,
-            height: 180,
+            // 156, down from 180. Still three and a half times the minimum target and the
+            // largest thing on the screen after the clock; the extra 24dp was buying nothing and
+            // was the difference between the session list being readable on a small phone and
+            // being a sliver.
+            width: 156,
+            height: 156,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: gradient,
@@ -465,12 +505,17 @@ class _SessionsCard extends StatelessWidget {
     required this.total,
     required this.now,
     required this.hasPendingSync,
+    required this.fillHeight,
   });
 
   final List<WorkSession> sessions;
   final Duration total;
   final DateTime now;
   final bool hasPendingSync;
+
+  /// True when the card was given a bounded box to fill, so its rows scroll inside it. False in
+  /// the scrolling fallback, where the card is its natural height and the page moves instead.
+  final bool fillHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -483,6 +528,7 @@ class _SessionsCard extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section title + optional pending-sync indicator
@@ -513,28 +559,46 @@ class _SessionsCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
+          // The heading and the running total are pinned; only the rows between them move. A
+          // long shift with many pauses used to push the day's total off the bottom, which is
+          // the one number on this card anybody is looking for.
           if (sessions.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'Nessuna timbratura oggi',
-                  style: TextStyle(
-                    color: context.colors.inkMuted,
-                    fontSize: 13,
-                    fontFamily: 'Manrope',
-                  ),
-                ),
+            if (fillHeight) const Expanded(child: _NoSessionsYet()) else const _NoSessionsYet()
+          else
+            Flexible(
+              fit: FlexFit.loose,
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: fillHeight
+                    ? const ClampingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                itemCount: sessions.length,
+                itemBuilder: (context, i) => _SessionRow(session: sessions[i]),
               ),
-            )
-          else ...[
-            ...sessions.map((s) => _SessionRow(session: s)),
-            const Divider(color: Colors.white12, height: 24),
-          ],
+            ),
+          if (sessions.isNotEmpty) const Divider(color: Colors.white12, height: 24),
 
           // Total row
           _TotalRow(total: total),
         ],
+      ),
+    );
+  }
+}
+
+class _NoSessionsYet extends StatelessWidget {
+  const _NoSessionsYet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'Nessuna timbratura oggi',
+          style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Manrope'),
+        ),
       ),
     );
   }
@@ -643,18 +707,25 @@ class _TotalRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Two unconstrained Texts in a spaceBetween Row overflowed the card on any narrow phone —
+    // 55dp at 320 and still 15dp at 360, the commonest Android width there is. The label yields,
+    // because the number is the reason the row exists.
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Totale ore',
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+        Flexible(
+          child: Text(
+            'Totale ore',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
         ),
+        const SizedBox(width: 12),
         Text(
           _format(total),
           style: const TextStyle(

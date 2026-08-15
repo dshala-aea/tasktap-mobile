@@ -237,4 +237,48 @@ void main() {
       await _teardownTimer(tester);
     });
   });
+
+  /// The screen's height budget, which used to be spent badly in both directions.
+  ///
+  /// It began as one SingleChildScrollView, so the punch button — the only reason to open the
+  /// screen — could be scrolled off it and on a small phone started that way. Pinning everything
+  /// instead is the opposite failure: the controls take about 400dp, so on a 640dp viewport the
+  /// session list gets a few pixels and shows nothing at all.
+  group('layout adapts to the height it is given', () {
+    testWidgets('a tall phone holds the controls still and scrolls only the sessions', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // The punch control is not inside anything that scrolls, so it cannot leave the screen.
+      expect(
+        find.ancestor(
+          of: find.text('INIZIA TURNO'),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsNothing,
+      );
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('a short phone scrolls the page rather than crushing the list', (tester) async {
+      // A squeezed session card is worse than a scroll: the day's total is the one number on it
+      // anybody is looking for, and at a few pixels tall nothing renders at all.
+      await tester.binding.setSurfaceSize(const Size(320, 560));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'no overflow at the smallest supported size');
+      await _teardownTimer(tester);
+    });
+  });
+
+
 }
