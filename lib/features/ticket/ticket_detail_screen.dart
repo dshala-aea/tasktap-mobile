@@ -124,7 +124,23 @@ class _TicketDetailBody extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ScreenHeader(title: '#$shortId', subtitle: ticket.title, showBack: true),
+          ScreenHeader(
+            title: '#$shortId',
+            subtitle: ticket.title,
+            showBack: true,
+            actions: [
+              HeaderIconBtn(
+                icon: LucideIcons.userCheck,
+                label: 'Assegna',
+                onTap: () => _showAssignSheet(context, ref, ticket),
+              ),
+              HeaderIconBtn(
+                icon: LucideIcons.briefcase,
+                label: 'Scheda cliente',
+                onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
+              ),
+            ],
+          ),
 
           // Status pill + type chip + the two workflow controls.
           //
@@ -154,76 +170,42 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
                 ),
 
-                // KeyVal card
+                // One card, not three.
+                //
+                // The facts, the description and the technician's notes each had an AppCard of
+                // their own, stacked down the screen with 16dp between them, and each of the last
+                // two carried a `SectionTitle` — the *page-level* heading, 18px with its own
+                // padding, nested inside a container that was already padded. Three containers
+                // for three parts of one ticket pushed the tabs off the first screen and made the
+                // boundaries between them louder than the content.
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
                     child: AppCard(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           KeyVal(label: 'Cliente', value: customerName),
                           KeyVal(label: 'Sede', value: locationName),
                           KeyVal(label: 'Tecnico', value: tecnicoLabel),
                           KeyVal(label: 'Data', value: dateLabel),
-                          KeyVal(label: 'Chiusura', value: closedLabel, showDivider: false),
+                          KeyVal(
+                            label: 'Chiusura',
+                            value: closedLabel,
+                            showDivider: (ticket.description?.isNotEmpty ?? false) ||
+                                (ticket.technicianNotes?.isNotEmpty ?? false),
+                          ),
+                          if (ticket.description?.isNotEmpty ?? false)
+                            _Prose(title: 'Descrizione', body: ticket.description!),
+                          if (ticket.technicianNotes?.isNotEmpty ?? false)
+                            _Prose(title: 'Note tecnico', body: ticket.technicianNotes!),
+                          const SizedBox(height: 14),
                         ],
                       ),
                     ),
                   ),
                 ),
-
-                // Descrizione card
-                if (ticket.description != null && ticket.description!.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
-                      child: AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SectionTitle(title: 'Descrizione'),
-                            const SizedBox(height: 4),
-                            Text(
-                              ticket.description!,
-                              style: TextStyle(
-                                fontFamily: 'Manrope',
-                                fontSize: 13,
-                                color: context.colors.ink,
-                                height: 1.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Note tecnico card
-                if (ticket.technicianNotes != null && ticket.technicianNotes!.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
-                      child: AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SectionTitle(title: 'Note tecnico'),
-                            const SizedBox(height: 4),
-                            Text(
-                              ticket.technicianNotes!,
-                              style: TextStyle(
-                                fontFamily: 'Manrope',
-                                fontSize: 13,
-                                color: context.colors.ink,
-                                height: 1.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
 
                 // Tabs
                 SliverToBoxAdapter(
@@ -241,52 +223,36 @@ class _TicketDetailBody extends ConsumerWidget {
           ),
 
           // Bottom actions
+          //
+          // Two rows of two equal buttons — Assegna / Cliente / Crea rapportino / Timbra cantiere —
+          // held about 130dp of permanent chrome above the nav bar on every ticket, and gave four
+          // controls the same weight, so none of them led.
+          //
+          // What a technician does on a ticket is start the work and write it up. Those two stay,
+          // one leading. "Assegna" is a dispatcher's action and "Cliente" is navigation; both moved
+          // to the header, where the screen's secondary controls already live.
           Padding(
             padding: const EdgeInsets.fromLTRB(19, 8, 19, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton.secondary(
-                        label: 'Assegna',
-                        icon: const Icon(LucideIcons.userCheck, size: 16),
-                        onPressed: () => _showAssignSheet(context, ref, ticket),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: AppButton.secondary(
-                        label: 'Cliente',
-                        onPressed: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
-                      ),
-                    ),
-                  ],
+                Expanded(
+                  child: AppButton(
+                    label: 'Crea rapportino',
+                    onPressed: () => _createRapportino(context, ref, ticket),
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Crea rapportino',
-                        onPressed: () => _createRapportino(context, ref, ticket),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton.dark(
+                    label: 'Timbra cantiere',
+                    icon: const Icon(LucideIcons.mapPin),
+                    onPressed: () => context.push(
+                      AppRoutes.cantiereTimbraPath(
+                        ticketId: ticket.id,
+                        customerId: ticket.customerId,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: AppButton.dark(
-                        label: 'Timbra cantiere',
-                        icon: const Icon(LucideIcons.mapPin),
-                        onPressed: () => context.push(
-                          AppRoutes.cantiereTimbraPath(
-                            ticketId: ticket.id,
-                            customerId: ticket.customerId,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -325,6 +291,40 @@ class _TicketDetailBody extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => _AssignSheet(api: api, ticket: ticket),
+    );
+  }
+}
+
+/// A titled paragraph inside the ticket's fact card.
+///
+/// Uses [StepLabel], the in-card heading, rather than [SectionTitle], the page-level one that was
+/// nested here before — 18px with its own 20/19/10 padding, inside a card that already pads.
+class _Prose extends StatelessWidget {
+  const _Prose({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          StepLabel(title: title),
+          const SizedBox(height: 4),
+          Text(
+            body,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 13,
+              color: context.colors.ink,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

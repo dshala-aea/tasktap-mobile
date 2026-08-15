@@ -299,12 +299,27 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows bottom action buttons', (tester) async {
+    testWidgets('the bottom bar holds the two doing-actions, one leading', (tester) async {
+      // Was four equal buttons in two rows: Assegna / Cliente / Crea rapportino / Timbra cantiere,
+      // about 130dp of permanent chrome with no rank between them. What a technician does on a
+      // ticket is start the work and write it up.
       await seedBase(db);
       await pump(tester);
 
-      expect(find.text('Cliente'), findsOneWidget);
       expect(find.text('Crea rapportino'), findsOneWidget);
+      expect(find.text('Timbra cantiere'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('assegna and the customer sheet moved to the header', (tester) async {
+      // Reachable, not prominent: a dispatcher action and a navigation link do not belong in the
+      // same weight as the two things the person on site came here to do.
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.bySemanticsLabel('Assegna'), findsOneWidget);
+      expect(find.bySemanticsLabel('Scheda cliente'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
