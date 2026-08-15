@@ -1,7 +1,6 @@
 // lib/features/calendario/views/giorno_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
@@ -61,7 +60,8 @@ class GiornoView extends ConsumerWidget {
                           padding: const EdgeInsets.only(right: 8, top: 4),
                           child: Text(
                             '${h.toString().padLeft(2, '0')}:00',
-                            style: GoogleFonts.manrope(
+                            style: TextStyle(
+                              fontFamily: 'Manrope',
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
                               color: context.colors.inkMuted,
@@ -167,7 +167,8 @@ class _EventBlock extends StatelessWidget {
               schedule.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: pair.foreground,
@@ -181,7 +182,8 @@ class _EventBlock extends StatelessWidget {
               '${formatMinutes(schedule.timeEndMinutes)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
                 color: pair.foreground.withAlpha(179),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -67,7 +66,8 @@ class _Cell extends StatelessWidget {
             label.toUpperCase(),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 9,
               fontWeight: FontWeight.w700,
               color: c.inkMuted,
@@ -79,7 +79,8 @@ class _Cell extends StatelessWidget {
           // Sora, and only 20pt. This is the label stamped on the drawer, not a headline.
           Text(
             item.value,
-            style: GoogleFonts.sora(
+            style: TextStyle(
+              fontFamily: 'Sora',
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: c.ink,

@@ -1,7 +1,6 @@
 // lib/features/calendario/views/settimana_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
@@ -72,7 +71,8 @@ class SettimanaView extends ConsumerWidget {
                       children: [
                         Text(
                           dayAbbr.format(day).toUpperCase(),
-                          style: GoogleFonts.manrope(
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: isToday ? AppColors.Y : context.colors.inkMuted,
@@ -82,7 +82,8 @@ class SettimanaView extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${day.day}',
-                          style: GoogleFonts.sora(
+                          style: TextStyle(
+                            fontFamily: 'Sora',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: isToday ? context.colors.inkInverse : context.colors.ink,
@@ -140,7 +141,8 @@ class _WeekEventChip extends StatelessWidget {
           schedule.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.manrope(
+          style: TextStyle(
+            fontFamily: 'Manrope',
             fontSize: 10,
             fontWeight: FontWeight.w600,
             color: pair.foreground,

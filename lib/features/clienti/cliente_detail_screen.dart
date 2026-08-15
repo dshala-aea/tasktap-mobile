@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -91,7 +90,8 @@ class _ClienteDetailBody extends ConsumerWidget {
                       children: [
                         Text(
                           customer.companyName,
-                          style: GoogleFonts.sora(
+                          style: TextStyle(
+                            fontFamily: 'Sora',
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                             color: context.colors.ink,
@@ -100,7 +100,8 @@ class _ClienteDetailBody extends ConsumerWidget {
                         if (customer.city != null && customer.city!.isNotEmpty)
                           Text(
                             customer.city!,
-                            style: GoogleFonts.manrope(
+                            style: TextStyle(
+                              fontFamily: 'Manrope',
                               fontSize: 13,
                               color: context.colors.inkMuted,
                             ),
@@ -164,7 +165,8 @@ class _ClienteDetailBody extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         customer.notes!,
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 13,
                           color: context.colors.ink,
                           height: 1.5,
@@ -274,7 +276,7 @@ class _ClienteOverviewSection extends ConsumerWidget {
                 e is ClienteOverviewOfflineException
                     ? 'Dati fiscali e conteggi non disponibili offline.'
                     : 'Dati fiscali e conteggi non caricati.',
-                style: GoogleFonts.manrope(fontSize: 12, color: c.inkMuted),
+                style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: c.inkMuted),
               ),
             ),
           ],
@@ -333,7 +335,8 @@ class _ClienteOverviewSection extends ConsumerWidget {
                       // to book work against a deactivated customer should find out here.
                       Text(
                         'Cliente non attivo',
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: c.red,

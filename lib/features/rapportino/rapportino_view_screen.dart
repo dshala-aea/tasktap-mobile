@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -123,7 +122,8 @@ class _RapportinoViewBody extends ConsumerWidget {
                                 const SizedBox(width: 8),
                                 Text(
                                   dateLabel,
-                                  style: GoogleFonts.manrope(
+                                  style: TextStyle(
+                                    fontFamily: 'Manrope',
                                     fontSize: 12,
                                     color: context.colors.inkMuted,
                                   ),
@@ -158,7 +158,8 @@ class _RapportinoViewBody extends ConsumerWidget {
                             const SizedBox(height: 4),
                             Text(
                               draft.details!,
-                              style: GoogleFonts.manrope(
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
                                 fontSize: 13,
                                 color: context.colors.ink,
                                 height: 1.5,
@@ -321,7 +322,7 @@ class _SignatureBlock extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             'Firmato il $signedLabel',
-            style: GoogleFonts.manrope(fontSize: 12, color: context.colors.inkMuted),
+            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
           ),
         ],
       ),

@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -146,7 +145,8 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                     t.label ?? _title(t.kind),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: AppColors.onDarkMuted,
@@ -154,7 +154,8 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                   ),
                   Text(
                     formatElapsed(t.elapsedAt(widget.now)),
-                    style: GoogleFonts.sora(
+                    style: TextStyle(
+                      fontFamily: 'Sora',
                       fontSize: 19,
                       fontWeight: FontWeight.w700,
                       color: onBreak ? AppColors.onDarkMuted : AppColors.onDark,
@@ -172,7 +173,8 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                 padding: const EdgeInsets.only(right: 4),
                 child: Text(
                   'in pausa',
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: AppColors.onDarkMuted,

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'app_tappable.dart';
@@ -60,7 +59,8 @@ class AppTabs extends StatelessWidget {
                 children: [
                   Text(
                     tab.label,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: active ? context.colors.ink : context.colors.inkMuted,
@@ -77,7 +77,8 @@ class AppTabs extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                         child: Text(
                           '${tab.count}',
-                          style: GoogleFonts.manrope(
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
                             fontSize: 9,
                             fontWeight: FontWeight.w700,
                             color: active ? context.colors.inkInverse : context.colors.inkMuted,

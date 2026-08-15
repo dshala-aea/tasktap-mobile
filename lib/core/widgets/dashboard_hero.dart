@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 
@@ -70,7 +69,8 @@ class DashboardHero extends StatelessWidget {
                             children: [
                               Text(
                                 greeting,
-                                style: GoogleFonts.manrope(
+                                style: TextStyle(
+                                  fontFamily: 'Manrope',
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
                                   color: AppColors.WHITE,
@@ -81,7 +81,8 @@ class DashboardHero extends StatelessWidget {
                                 userName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.sora(
+                                style: TextStyle(
+                                  fontFamily: 'Sora',
                                   fontSize: 26,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.Y,

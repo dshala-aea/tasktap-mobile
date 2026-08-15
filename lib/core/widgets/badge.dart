@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -42,7 +41,8 @@ class AppBadge extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         child: Text(
           label,
-          style: GoogleFonts.manrope(
+          style: TextStyle(
+            fontFamily: 'Manrope',
             fontSize: fontSize,
             fontWeight: FontWeight.w500,
             color: fg,
@@ -88,7 +88,8 @@ class AppChip extends StatelessWidget {
         child: Center(
           child: Text(
             label,
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 11,
               fontWeight: FontWeight.w500,
               color: fg,

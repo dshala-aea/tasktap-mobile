@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/notifications/notification_service.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/widgets/widgets.dart';
@@ -99,7 +98,8 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                       child: Text(
                         'Segna tutte',
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: context.colors.blue,
@@ -214,7 +214,7 @@ class _NotificaRow extends StatelessWidget {
       subtitle: notifica.corpo,
       meta: Text(
         _formatTime(notifica.timestamp),
-        style: GoogleFonts.manrope(fontSize: 10, color: context.colors.inkMuted),
+        style: TextStyle(fontFamily: 'Manrope', fontSize: 10, color: context.colors.inkMuted),
       ),
       showDivider: !isLast,
       onTap: onTap,

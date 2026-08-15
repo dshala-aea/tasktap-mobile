@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -140,7 +139,8 @@ class _WeekDayScroller extends ConsumerWidget {
                 children: [
                   Text(
                     dayAbbr.format(day).toUpperCase(),
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
                       color: isSelected ? AppColors.Y : context.colors.inkMuted,
@@ -163,7 +163,8 @@ class _WeekDayScroller extends ConsumerWidget {
                     child: Center(
                       child: Text(
                         '${day.day}',
-                        style: GoogleFonts.sora(
+                        style: TextStyle(
+                          fontFamily: 'Sora',
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: isSelected
@@ -401,7 +402,8 @@ class _ScheduleInfoSheet extends StatelessWidget {
           const SizedBox(height: 20),
           Text(
             schedule.title,
-            style: GoogleFonts.sora(
+            style: TextStyle(
+              fontFamily: 'Sora',
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -416,7 +418,11 @@ class _ScheduleInfoSheet extends StatelessWidget {
               const SizedBox(width: 4),
               Text(
                 timeRange,
-                style: GoogleFonts.manrope(fontSize: 13, color: context.colors.inkMuted),
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 13,
+                  color: context.colors.inkMuted,
+                ),
               ),
             ],
           ),
@@ -424,7 +430,12 @@ class _ScheduleInfoSheet extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               schedule.description,
-              style: GoogleFonts.manrope(fontSize: 13, color: context.colors.inkFaint, height: 1.5),
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 13,
+                color: context.colors.inkFaint,
+                height: 1.5,
+              ),
             ),
           ],
           const SizedBox(height: 24),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
@@ -45,7 +44,8 @@ class AppStepper extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.sora(
+                  style: TextStyle(
+                    fontFamily: 'Sora',
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: i <= currentIndex ? context.colors.ink : context.colors.inkMuted,
@@ -93,7 +93,8 @@ class _Circle extends StatelessWidget {
           ? Icon(LucideIcons.check, size: 12, color: context.colors.brandOn)
           : Text(
               '${index + 1}',
-              style: GoogleFonts.sora(
+              style: TextStyle(
+                fontFamily: 'Sora',
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: filled ? context.colors.brandOn : context.colors.ink,

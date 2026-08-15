@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -53,7 +52,8 @@ class AppAvatar extends StatelessWidget {
         child: Center(
           child: Text(
             _initials(),
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: size * 0.36,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,

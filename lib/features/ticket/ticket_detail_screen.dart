@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
@@ -187,7 +186,8 @@ class _TicketDetailBody extends ConsumerWidget {
                             const SizedBox(height: 4),
                             Text(
                               ticket.description!,
-                              style: GoogleFonts.manrope(
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
                                 fontSize: 13,
                                 color: context.colors.ink,
                                 height: 1.5,
@@ -212,7 +212,8 @@ class _TicketDetailBody extends ConsumerWidget {
                             const SizedBox(height: 4),
                             Text(
                               ticket.technicianNotes!,
-                              style: GoogleFonts.manrope(
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
                                 fontSize: 13,
                                 color: context.colors.ink,
                                 height: 1.5,
@@ -1073,7 +1074,8 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                   Expanded(
                     child: Text(
                       'Cambia stato',
-                      style: GoogleFonts.sora(
+                      style: TextStyle(
+                        fontFamily: 'Sora',
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: ctx.colors.ink,
@@ -1204,7 +1206,8 @@ class _OreTab extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         'Totale registrato',
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: context.colors.inkMuted,
@@ -1213,7 +1216,8 @@ class _OreTab extends ConsumerWidget {
                     ),
                     Text(
                       _hhmm(total),
-                      style: GoogleFonts.sora(
+                      style: TextStyle(
+                        fontFamily: 'Sora',
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         color: context.colors.ink,
@@ -1230,7 +1234,11 @@ class _OreTab extends ConsumerWidget {
                     running == 1
                         ? 'Un timer è ancora in corso e non è incluso nel totale.'
                         : '$running timer sono ancora in corso e non sono inclusi nel totale.',
-                    style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkMuted),
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      color: context.colors.inkMuted,
+                    ),
                   ),
                 ),
               const SizedBox(height: 10),
@@ -1273,7 +1281,8 @@ class _WorklogRow extends StatelessWidget {
         // An open entry shows a dash, not 0:00 — the same refusal to draw a stopped-looking clock
         // that the dashboard hero and TicketWorkLogDto.duration both make.
         entry.duration == null ? '—' : _hhmm(entry.duration!),
-        style: GoogleFonts.sora(
+        style: TextStyle(
+          fontFamily: 'Sora',
           fontSize: 14,
           fontWeight: FontWeight.w700,
           color: entry.isRunning ? c.inkMuted : c.ink,

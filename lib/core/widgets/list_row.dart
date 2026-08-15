@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -73,7 +72,8 @@ class ListRow extends StatelessWidget {
                     // read at arm's length to decide whether this is the right cell — and the
                     // subtitle below it is what you read once you have decided. Two faces doing
                     // two jobs is the only reason this app carries two faces.
-                    style: GoogleFonts.sora(
+                    style: TextStyle(
+                      fontFamily: 'Sora',
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: c.ink,
@@ -86,7 +86,8 @@ class ListRow extends StatelessWidget {
                       subtitle!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
                         color: c.inkMuted,

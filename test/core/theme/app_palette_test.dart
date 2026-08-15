@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
@@ -26,10 +25,9 @@ double contrast(Color a, Color b) {
 }
 
 void main() {
-  // buildAppTheme() builds a TextTheme through GoogleFonts, which otherwise tries to fetch the
-  // font over the network and fails the test on a build machine with no internet — and would
-  // fail it for the wrong reason on one with internet, by being slow.
-  setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
+  // No GoogleFonts guard needed any more: Sora and Manrope are bundled assets declared in
+  // pubspec.yaml, so buildAppTheme() constructs its TextTheme without touching the network. The
+  // guard below fails if anything reintroduces the runtime package.
 
   group('the light palette is exactly what shipped', () {
     /// The migration renamed ~460 call sites from `AppColors.X` to `context.colors.y`. The one
@@ -252,6 +250,56 @@ void main() {
       isEmpty,
       reason: 'Use ScreenHeaderBar for a Scaffold header, or ScreenHeader inside a body.',
     );
+  });
+
+  group('the pinned typefaces are bundled, not fetched', () {
+    test('nothing in lib reaches for the runtime font package', () {
+      // Sora and Manrope are brand commitments, and this app's design center is offline. The
+      // google_fonts package downloads a family on first use and renders the platform font until
+      // it arrives, so a technician's first run in a plant room got the system sans.
+      final offenders = <String>[];
+      for (final entity in Directory('lib').listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        if (entity.readAsStringSync().contains('GoogleFonts')) {
+          offenders.add(entity.path.replaceAll(r'\', '/'));
+        }
+      }
+
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            "Use TextStyle(fontFamily: 'Sora'|'Manrope'). The families are declared in "
+            'pubspec.yaml and ship with the build.',
+      );
+    });
+
+    test('every declared font asset exists on disk', () {
+      // A declared asset that is not there fails silently to the platform font — the same failure
+      // the runtime package had, just moved. Eighteen call sites already wrote
+      // `fontFamily: 'Sora'` against a family nobody had declared, and rendered as system sans on
+      // every device until this landed.
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      final assets = RegExp(
+        r'asset:\s*(assets/fonts/[^\s]+)',
+      ).allMatches(pubspec).map((m) => m.group(1)!).toList();
+
+      expect(assets, hasLength(7), reason: 'Sora 400/600/700 + Manrope 400/500/600/700');
+      for (final a in assets) {
+        expect(File(a).existsSync(), isTrue, reason: '$a is declared but missing');
+        expect(File(a).lengthSync(), greaterThan(10000), reason: '$a looks truncated');
+      }
+    });
+
+    test('both families are declared for every weight the app asks for', () {
+      final pubspec = File('pubspec.yaml').readAsStringSync();
+      for (final w in [400, 600, 700]) {
+        expect(pubspec, contains('Sora-$w.ttf'), reason: 'Sora $w is used in lib/');
+      }
+      for (final w in [400, 500, 600, 700]) {
+        expect(pubspec, contains('Manrope-$w.ttf'), reason: 'Manrope $w is used in lib/');
+      }
+    });
   });
 
   /// Colour that reaches a widget as a constant cannot respond to the theme. The exceptions are

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
@@ -137,7 +136,11 @@ class ImpostazioniScreen extends ConsumerWidget {
                     error: (_, _) => const SizedBox.shrink(),
                     data: (info) => Text(
                       'TaskTap v${info.displayVersion}',
-                      style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkDisabled),
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 11,
+                        color: context.colors.inkDisabled,
+                      ),
                     ),
                   ),
                 ),
@@ -180,7 +183,8 @@ class _ProfileCard extends StatelessWidget {
                     displayName.isNotEmpty ? displayName : (email ?? '—'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: context.colors.ink,
@@ -191,7 +195,11 @@ class _ProfileCard extends StatelessWidget {
                       email!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(fontSize: 12, color: context.colors.inkMuted),
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontSize: 12,
+                        color: context.colors.inkMuted,
+                      ),
                     ),
                 ],
               ),
@@ -217,7 +225,8 @@ class _SettingsSectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(19, 20, 19, 8),
       child: Text(
         title.toUpperCase(),
-        style: GoogleFonts.manrope(
+        style: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: context.colors.inkMuted,
@@ -296,7 +305,8 @@ class _ToggleRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -304,7 +314,11 @@ class _ToggleRow extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkMuted),
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 11,
+                    color: context.colors.inkMuted,
+                  ),
                 ),
               ],
             ),

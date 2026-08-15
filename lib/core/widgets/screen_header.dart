@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
@@ -164,7 +163,8 @@ class ScreenHeader extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.sora(
+                  style: TextStyle(
+                    fontFamily: 'Sora',
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: titleColor,
@@ -176,7 +176,8 @@ class ScreenHeader extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
                       color: dark ? AppColors.WHITE.withAlpha(179) : context.colors.inkMuted,

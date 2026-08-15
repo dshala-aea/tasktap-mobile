@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -29,7 +28,8 @@ class KeyVal extends StatelessWidget {
   final bool vertical;
   final bool showDivider;
 
-  static TextStyle _labelStyle(BuildContext context) => GoogleFonts.manrope(
+  static TextStyle _labelStyle(BuildContext context) => TextStyle(
+    fontFamily: 'Manrope',
     fontSize: 10,
     fontWeight: FontWeight.w700,
     color: context.colors.inkMuted,
@@ -61,7 +61,8 @@ class KeyVal extends StatelessWidget {
               value,
               textAlign: TextAlign.end,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
                 color: context.colors.ink,
@@ -84,7 +85,8 @@ class KeyVal extends StatelessWidget {
           Text(
             value,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: context.colors.ink,

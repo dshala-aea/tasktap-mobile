@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'app_button.dart';
@@ -70,7 +69,8 @@ class ActiveJobCard extends StatelessWidget {
                   title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.sora(
+                  style: TextStyle(
+                    fontFamily: 'Sora',
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: AppColors.WHITE,
@@ -81,7 +81,8 @@ class ActiveJobCard extends StatelessWidget {
                     client!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 11,
                       fontWeight: FontWeight.w400,
                       // A fixed light ink, not `inkInverse`. The hero is a dark gradient in both
@@ -119,7 +120,8 @@ class ActiveJobCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'Non avviato',
-                style: GoogleFonts.manrope(
+                style: TextStyle(
+                  fontFamily: 'Manrope',
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: AppColors.WHITE.withAlpha(153),
@@ -149,7 +151,8 @@ class _TimerTile extends StatelessWidget {
       ),
       child: Text(
         value,
-        style: GoogleFonts.manrope(
+        style: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: AppColors.WHITE,

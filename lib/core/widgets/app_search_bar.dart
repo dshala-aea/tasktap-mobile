@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -49,14 +48,18 @@ class AppSearchBar extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   onChanged: onChanged,
-                  style: GoogleFonts.manrope(fontSize: 14, color: context.colors.ink),
+                  style: TextStyle(fontFamily: 'Manrope', fontSize: 14, color: context.colors.ink),
                   cursorColor: context.colors.ink,
                   decoration: InputDecoration(
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
                     hintText: hint,
-                    hintStyle: GoogleFonts.manrope(fontSize: 14, color: context.colors.inkDisabled),
+                    hintStyle: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 14,
+                      color: context.colors.inkDisabled,
+                    ),
                   ),
                 ),
               ),

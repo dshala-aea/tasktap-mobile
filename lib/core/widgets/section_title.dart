@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -29,7 +28,8 @@ class SectionTitle extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: GoogleFonts.sora(
+              style: TextStyle(
+                fontFamily: 'Sora',
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: context.colors.ink,
@@ -62,7 +62,12 @@ class StepLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: GoogleFonts.sora(fontSize: 15, fontWeight: FontWeight.w700, color: context.colors.ink),
+      style: TextStyle(
+        fontFamily: 'Sora',
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: context.colors.ink,
+      ),
     );
   }
 }

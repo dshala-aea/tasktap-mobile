@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
@@ -147,7 +146,8 @@ class _NavTab extends StatelessWidget {
                     maxLines: 1,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(
+                    style: TextStyle(
+                      fontFamily: 'Sora',
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: context.colors.brandOn,

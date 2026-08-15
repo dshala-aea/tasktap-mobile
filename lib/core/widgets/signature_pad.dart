@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -54,7 +53,8 @@ class SignaturePadPlaceholder extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   caption,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: signed ? context.colors.ink : context.colors.inkMuted,

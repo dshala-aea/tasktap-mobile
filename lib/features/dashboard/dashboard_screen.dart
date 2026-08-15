@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -212,7 +211,8 @@ class _UpcomingItem extends ConsumerWidget {
                   schedule.title.isNotEmpty ? schedule.title : 'Intervento',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -224,7 +224,11 @@ class _UpcomingItem extends ConsumerWidget {
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(fontSize: 12, color: context.colors.inkMuted),
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 12,
+                      color: context.colors.inkMuted,
+                    ),
                   ),
                 ],
               ],
@@ -237,7 +241,8 @@ class _UpcomingItem extends ConsumerWidget {
             children: [
               Text(
                 dateLabel,
-                style: GoogleFonts.manrope(
+                style: TextStyle(
+                  fontFamily: 'Manrope',
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: context.colors.ink,
@@ -245,7 +250,11 @@ class _UpcomingItem extends ConsumerWidget {
               ),
               Text(
                 timeLabel,
-                style: GoogleFonts.manrope(fontSize: 11, color: context.colors.inkMuted),
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  color: context.colors.inkMuted,
+                ),
               ),
             ],
           ),

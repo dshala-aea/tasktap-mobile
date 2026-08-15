@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
@@ -159,7 +158,8 @@ class _UserCard extends StatelessWidget {
                     displayName.isNotEmpty ? displayName : (email ?? '—'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(
+                    style: TextStyle(
+                      fontFamily: 'Sora',
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: AppColors.WHITE,
@@ -171,7 +171,8 @@ class _UserCard extends StatelessWidget {
                       email!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 12,
                         color: AppColors.WHITE.withAlpha(153),
                       ),
@@ -227,7 +228,8 @@ class _GestioneTile extends StatelessWidget {
             label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.sora(
+            style: TextStyle(
+              fontFamily: 'Sora',
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: c.ink,

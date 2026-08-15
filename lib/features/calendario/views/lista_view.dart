@@ -1,7 +1,6 @@
 // lib/features/calendario/views/lista_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -63,7 +62,8 @@ class _DateHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(19, 20, 19, 6),
       child: Text(
         _capitalize(label),
-        style: GoogleFonts.sora(
+        style: TextStyle(
+          fontFamily: 'Sora',
           fontSize: 13,
           fontWeight: FontWeight.w700,
           color: context.colors.ink,

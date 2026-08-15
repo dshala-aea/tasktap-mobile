@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -224,7 +223,8 @@ class _LiveClock extends StatelessWidget {
         scale: pulseAnim,
         child: Text(
           timeStr,
-          style: GoogleFonts.sora(
+          style: TextStyle(
+            fontFamily: 'Sora',
             fontSize: 72,
             // w300, not w100. This is the number a technician checks at arm's length, outdoors,
             // to decide whether they are on the clock. Hairline strokes at 72px look elegant on a

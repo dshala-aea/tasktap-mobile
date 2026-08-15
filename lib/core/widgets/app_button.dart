@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -169,7 +168,8 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = GoogleFonts.manrope(
+    final textStyle = TextStyle(
+      fontFamily: 'Manrope',
       fontSize: _fontSize,
       fontWeight: FontWeight.w700,
       color: onPressed == null && !isLoading ? _fg(context).withAlpha(100) : _fg(context),

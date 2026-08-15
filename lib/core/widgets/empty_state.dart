@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -56,7 +55,8 @@ class EmptyState extends StatelessWidget {
                   Text(
                     title,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.sora(
+                    style: TextStyle(
+                      fontFamily: 'Sora',
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: c.ink,
@@ -67,7 +67,8 @@ class EmptyState extends StatelessWidget {
                     Text(
                       body!,
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
                         color: c.inkMuted,
@@ -80,7 +81,8 @@ class EmptyState extends StatelessWidget {
                     Text(
                       reason!,
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
                         color: c.inkFaint,

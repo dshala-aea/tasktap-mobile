@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -83,7 +82,8 @@ class UnavailableState extends StatelessWidget {
                       Text(
                         titolo,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.sora(
+                        style: TextStyle(
+                          fontFamily: 'Sora',
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: c.ink,
@@ -93,7 +93,8 @@ class UnavailableState extends StatelessWidget {
                       Text(
                         motivo,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 13,
                           fontWeight: FontWeight.w400,
                           color: c.inkMuted,

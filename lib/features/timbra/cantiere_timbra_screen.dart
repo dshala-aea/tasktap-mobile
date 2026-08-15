@@ -23,7 +23,6 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -305,7 +304,8 @@ class _CheckInBody extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Collegato al ticket',
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: context.colors.ink,
@@ -321,7 +321,8 @@ class _CheckInBody extends StatelessWidget {
           // Section header
           Text(
             'Seleziona cantiere',
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
@@ -338,7 +339,7 @@ class _CheckInBody extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'Impossibile caricare i cantieri.',
-                style: GoogleFonts.manrope(fontSize: 13, color: context.colors.red),
+                style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.red),
               ),
             ),
             data: (cantieri) {
@@ -405,7 +406,8 @@ class _CheckInBody extends StatelessWidget {
                                 children: [
                                   Text(
                                     c.name,
-                                    style: GoogleFonts.manrope(
+                                    style: TextStyle(
+                                      fontFamily: 'Manrope',
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                       color: context.colors.ink,
@@ -414,7 +416,8 @@ class _CheckInBody extends StatelessWidget {
                                   if (c.city != null && c.city!.isNotEmpty)
                                     Text(
                                       c.city!,
-                                      style: GoogleFonts.manrope(
+                                      style: TextStyle(
+                                        fontFamily: 'Manrope',
                                         fontSize: 12,
                                         color: context.colors.inkMuted,
                                       ),
@@ -500,7 +503,8 @@ class _ActiveSessionBody extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       'Sessione cantiere attiva',
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: context.colors.green,
@@ -568,7 +572,8 @@ class _ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 13,
                 color: context.colors.red,
                 fontWeight: FontWeight.w500,
@@ -601,7 +606,12 @@ class _ErrorBody extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message,
-              style: GoogleFonts.manrope(fontSize: 14, color: context.colors.ink, height: 1.5),
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                color: context.colors.ink,
+                height: 1.5,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),

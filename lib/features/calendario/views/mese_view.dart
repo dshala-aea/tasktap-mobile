@@ -1,7 +1,6 @@
 // lib/features/calendario/views/mese_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
@@ -70,7 +69,8 @@ class MeseView extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
           child: Text(
             _capitalize(monthFmt.format(month)),
-            style: GoogleFonts.sora(
+            style: TextStyle(
+              fontFamily: 'Sora',
               fontSize: 16,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -87,7 +87,8 @@ class MeseView extends ConsumerWidget {
                     child: Center(
                       child: Text(
                         dayNameFmt.format(d).toUpperCase(),
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: context.colors.inkMuted,
@@ -139,7 +140,8 @@ class MeseView extends ConsumerWidget {
                               children: [
                                 Text(
                                   '${day.day}',
-                                  style: GoogleFonts.manrope(
+                                  style: TextStyle(
+                                    fontFamily: 'Manrope',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: isSelected
