@@ -168,7 +168,11 @@ class CantiereWorklogApiClient {
   Future<List<CantiereWorkLogDto>> getActive() async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/cantiereworklog',
-      queryParameters: {'pageSize': 20, 'page': 1, 'sort': 'createdAt desc'},
+      // `-createdAt`, not `createdAt desc`. The backend's sort grammar is a leading minus for
+      // descending (WorkLogService.ResolveSort), and anything else is read as the whole column
+      // name, misses the allowlist and 400s — which is exactly what this call did on every
+      // dashboard load, so the cantiere clock never appeared.
+      queryParameters: {'pageSize': 20, 'page': 1, 'sort': '-createdAt'},
     );
 
     final data = response.data;

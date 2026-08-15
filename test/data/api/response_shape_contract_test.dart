@@ -110,6 +110,27 @@ void main() {
     );
   });
 
+  test('every sort parameter uses the backend grammar', () {
+    // The backend parses a leading '-' for descending and treats the rest as a column name
+    // (WorkLogService.ResolveSort and its siblings). `sort: 'createdAt desc'` therefore looks up a
+    // column literally named "createdAt desc", misses the allowlist and returns 400 — which is
+    // what the cantiere clock lookup did on every dashboard load until this was found from a
+    // device log.
+    final bad = <String>[];
+    final sortArg = RegExp(r"'sort':\s*'([^']+)'");
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      for (final m in sortArg.allMatches(entity.readAsStringSync())) {
+        final v = m.group(1)!;
+        if (v.contains(' ')) {
+          bad.add('${entity.path.replaceAll(r'\', '/')}: sort=\'$v\'');
+        }
+      }
+    }
+
+    expect(bad, isEmpty, reason: "Descending is '-column', never 'column desc'.");
+  });
+
   group('pagedItems', () {
     test('unwraps a paginated envelope', () {
       final rows = pagedItems({
