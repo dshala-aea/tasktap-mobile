@@ -12,12 +12,18 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// SectionTitle(title: 'Rapportini', action: TextButton(onPressed: ..., child: Text('Vedi tutti')));
 /// ```
 class SectionTitle extends StatelessWidget {
-  const SectionTitle({super.key, required this.title, this.action});
+  const SectionTitle({super.key, required this.title, this.action, this.trailing});
 
   final String title;
 
   /// Optional right-side widget (e.g. a "Vedi tutti" TextButton).
   final Widget? action;
+
+  /// Optional right-side text — a count or status that belongs to the section.
+  ///
+  /// Exists so a number does not need a card of its own to be readable. The dashboard's
+  /// "2 di 5 completati" was a quarter of a 2×2 stat grid before it was four words in a heading.
+  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +42,16 @@ class SectionTitle extends StatelessWidget {
               ),
             ),
           ),
+          if (trailing != null)
+            Text(
+              trailing!,
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.colors.inkMuted,
+              ),
+            ),
           ?action,
         ],
       ),

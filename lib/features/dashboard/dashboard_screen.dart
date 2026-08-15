@@ -16,7 +16,10 @@ import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// Dashboard screen — Hero + active job(s) + stats + quick actions + upcoming.
+/// The technician's day, in the order they need it.
+///
+/// Running clocks, today's interventi, the next seven days, then the two things worth starting
+/// from here. The stat grid that used to sit above all of it is gone — see the Oggi section.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -26,6 +29,7 @@ class DashboardScreen extends ConsumerWidget {
     final userName = user?.displayName ?? user?.email ?? 'Tecnico';
     final stats = ref.watch(dashboardStatsProvider);
     final trackers = ref.watch(visibleTrackersProvider);
+    final todayAsync = ref.watch(todaySchedulesProvider);
     final upcomingAsync = ref.watch(upcomingSchedulesProvider);
 
     return Scaffold(
@@ -65,35 +69,48 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
 
-            // ── Stats 2×2 ─────────────────────────────────────────────────────
+            // ── Oggi ──────────────────────────────────────────────────────────
+            //
+            // Today's interventi were a number in a 2×2 stat grid — `Interventi oggi  3` — while
+            // the only list on the screen started at tomorrow. The one question a technician opens
+            // this app to answer was the one thing rendered as a digit.
+            //
+            // The grid is gone with it. Four counts derivable from the two lists beneath them,
+            // taking the width of the screen above the fold, is the hero-metric template doing
+            // nothing: nobody acts on "Completati 2". What survives is the one count that is not
+            // visible in the list itself — how many of today's jobs are already done — folded into
+            // the section heading.
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 16, 19, 0),
-                child: AppCard(
-                  padding: EdgeInsets.zero,
-                  child: StatsGrid(
-                    items: [
-                      StatItem(label: 'Interventi\noggi', value: stats.todayCount.toString()),
-                      StatItem(label: 'In corso', value: stats.inProgressCount.toString()),
-                      StatItem(label: 'Completati', value: stats.completedCount.toString()),
-                      StatItem(label: 'Prossimi', value: stats.upcomingCount.toString()),
-                    ],
-                  ),
-                ),
+              child: SectionTitle(
+                title: 'Oggi',
+                trailing: stats.completedCount > 0
+                    ? '${stats.completedCount} di ${stats.todayCount} completati'
+                    : null,
               ),
             ),
+            _ScheduleSliver(
+              schedules: todayAsync,
+              emptyTitle: 'Nessun intervento oggi',
+              emptyBody: 'Buona giornata. I lavori assegnati appariranno qui.',
+              showDate: false,
+            ),
 
-            // ── Quick Actions ─────────────────────────────────────────────────
+            // ── Prossimi interventi ───────────────────────────────────────────
+            const SliverToBoxAdapter(child: SectionTitle(title: 'Prossimi')),
+            _ScheduleSliver(
+              schedules: upcomingAsync,
+              emptyTitle: 'Nessun intervento in programma',
+              emptyBody: 'I prossimi interventi appariranno qui dopo la sincronizzazione.',
+            ),
+
+            // ── Start something ───────────────────────────────────────────────
             //
-            // All four were decorative: `QuickAction` has an `onTap` and not one of them passed it,
-            // so the dashboard drew four yellow discs that answered nothing. "Nuova pianificazione"
-            // is also gone — mobile has no create-schedule route to send it to, and a control whose
-            // only honest destination is a placeholder should not be on the first screen. It is
-            // replaced by the cantiere clock-in, which is a thing a technician actually starts from
-            // here and which does have a route.
+            // Below the work, not above it. These are the two things a technician *starts* from
+            // here; "Rapportini" and "Magazzino" were also here and are places to *go*, which the
+            // Altro tab already is. A shortcut to a screen one tap away is not a shortcut.
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 10, 19, 0),
+                padding: const EdgeInsets.fromLTRB(19, 20, 19, 0),
                 child: Row(
                   children: [
                     Expanded(
@@ -110,55 +127,9 @@ class DashboardScreen extends ConsumerWidget {
                         onTap: () => context.push(AppRoutes.cantiereTimbra),
                       ),
                     ),
-                    Expanded(
-                      child: QuickAction(
-                        icon: LucideIcons.fileText,
-                        label: 'Rapportini',
-                        onTap: () => context.push(AppRoutes.altroRapportini),
-                      ),
-                    ),
-                    Expanded(
-                      child: QuickAction(
-                        icon: LucideIcons.package,
-                        label: 'Magazzino',
-                        onTap: () => context.push(AppRoutes.altroMagazzino),
-                      ),
-                    ),
                   ],
                 ),
               ),
-            ),
-
-            // ── Prossimi interventi ───────────────────────────────────────────
-            const SliverToBoxAdapter(child: SectionTitle(title: 'Prossimi interventi')),
-
-            upcomingAsync.when(
-              data: (schedules) => schedules.isEmpty
-                  ? const SliverToBoxAdapter(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 19),
-                        child: EmptyState(
-                          icon: LucideIcons.calendarOff,
-                          title: 'Nessun intervento in programma',
-                          body: 'I prossimi interventi appariranno qui dopo la sincronizzazione.',
-                        ),
-                      ),
-                    )
-                  : SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) => Padding(
-                          padding: EdgeInsets.fromLTRB(19, i == 0 ? 0 : 8, 19, 8),
-                          child: _UpcomingItem(schedule: schedules[i]),
-                        ),
-                        childCount: schedules.length,
-                      ),
-                    ),
-              loading: () => const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
-                ),
-              ),
-              error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
             ),
 
             // Bottom padding so the last card clears the floating bottom nav.
@@ -170,14 +141,60 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-// ── No active job empty state (inside hero) ────────────────────────────────────
+/// A list of interventi, or the reason there isn't one. Used for both Oggi and Prossimi.
+class _ScheduleSliver extends StatelessWidget {
+  const _ScheduleSliver({
+    required this.schedules,
+    required this.emptyTitle,
+    required this.emptyBody,
+    this.showDate = true,
+  });
 
-// ── Hero loading ───────────────────────────────────────────────────────────────
+  final AsyncValue<List<Schedule>> schedules;
+
+  /// False for today's list, where every row would carry the same date.
+  final bool showDate;
+  final String emptyTitle;
+  final String emptyBody;
+
+  @override
+  Widget build(BuildContext context) {
+    return schedules.when(
+      data: (list) => list.isEmpty
+          ? SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 19),
+                child: EmptyState(
+                  icon: LucideIcons.calendarOff,
+                  title: emptyTitle,
+                  body: emptyBody,
+                ),
+              ),
+            )
+          : SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => Padding(
+                  padding: EdgeInsets.fromLTRB(19, i == 0 ? 0 : 8, 19, 8),
+                  child: _UpcomingItem(schedule: list[i], showDate: showDate),
+                ),
+                childCount: list.length,
+              ),
+            ),
+      loading: () => const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
+    );
+  }
+}
 
 class _UpcomingItem extends ConsumerWidget {
-  const _UpcomingItem({required this.schedule});
+  const _UpcomingItem({required this.schedule, this.showDate = true});
 
   final Schedule schedule;
+  final bool showDate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -186,7 +203,11 @@ class _UpcomingItem extends ConsumerWidget {
         ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
         : null;
 
-    final dateLabel = DateFormat('EEE d MMM', 'it').format(schedule.activityDate.toLocal());
+    // Built only when it is going to be shown — today's rows never render a date, and formatting
+    // one there costs a locale lookup to throw the result away.
+    final dateLabel = showDate
+        ? DateFormat('EEE d MMM', 'it').format(schedule.activityDate.toLocal())
+        : '';
     final timeLabel = _minutesToTime(schedule.timeStartMinutes);
     final subtitle = [
       customerName,
@@ -239,21 +260,25 @@ class _UpcomingItem extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                dateLabel,
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.ink,
+              // On today's list the date is the same on every row, so it says nothing and the
+              // time — the thing that orders the day — gets the weight instead.
+              if (showDate)
+                Text(
+                  dateLabel,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.ink,
+                  ),
                 ),
-              ),
               Text(
                 timeLabel,
                 style: TextStyle(
                   fontFamily: 'Manrope',
-                  fontSize: 11,
-                  color: context.colors.inkMuted,
+                  fontSize: showDate ? 11 : 15,
+                  fontWeight: showDate ? FontWeight.w400 : FontWeight.w700,
+                  color: showDate ? context.colors.inkMuted : context.colors.ink,
                 ),
               ),
             ],

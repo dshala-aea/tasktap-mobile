@@ -81,16 +81,26 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatsGrid', (tester) async {
+    testWidgets('leads with today, not with a grid of counts', (tester) async {
+      // The 2x2 StatsGrid rendered "Interventi oggi 3 / In corso 1 / Completati 2 / Prossimi 5"
+      // across the width of the screen, above everything. Every one of those numbers is the
+      // length of a list that is right there, and none of them is something to act on. It is
+      // gone, and the day it was counting is the first thing under the hero.
       await pumpDashboard(tester);
-      expect(find.byType(StatsGrid), findsOneWidget);
+
+      expect(find.byType(StatsGrid), findsNothing);
+      expect(find.text('Oggi'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows 4 QuickAction widgets', (tester) async {
+    testWidgets('offers only the two things a technician starts from here', (tester) async {
+      // Was four. "Rapportini" and "Magazzino" are destinations the Altro tab already reaches;
+      // a shortcut to a screen one tap away is not a shortcut, it is a second door.
       await pumpDashboard(tester);
-      expect(find.byType(QuickAction, skipOffstage: false), findsNWidgets(4));
+
+      expect(find.byType(QuickAction, skipOffstage: false), findsNWidgets(2));
+      expect(find.text('Magazzino', skipOffstage: false), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -136,6 +146,10 @@ void main() {
       // paid against. The hero used to render it as a card with a 00:00:00 timer — a stopped clock
       // dressed as a running one, on the surface whose only job is live time.
       expect(find.byType(ActiveTrackerStrip), findsNothing);
+
+      // It does belong in the day's work, though, and that list used to start at tomorrow: the
+      // dashboard showed today's interventi only as a digit in the stat grid.
+      expect(find.text('Sostituzione caldaia'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
