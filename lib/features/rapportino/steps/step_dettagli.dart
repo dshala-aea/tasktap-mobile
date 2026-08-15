@@ -2,10 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/widgets.dart';
+import '../../../data/ai/ai_api_client.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/app_text_field.dart';
 // section_title omitted — using inline _SL below to avoid double padding
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -38,6 +39,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   late final TextEditingController _cantiereFreeTextCtrl;
   late final TextEditingController _locationFreeTextCtrl;
 
+  bool _aiBusy = false;
   bool _customerFreeTextMode = false;
   bool _locationFreeTextMode = false;
   bool _ticketFreeTextMode = false;
@@ -111,8 +113,14 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           ],
 
           // ── Titolo e descrizione ───────────────────────────────────────────
-          _SL(title:'Titolo e descrizione'),
+          _SL(title: 'Titolo e descrizione'),
           const SizedBox(height: 8),
+          _AiDraftButton(
+            scheduleId: state.scheduleId,
+            ticketId: state.ticketId,
+            busy: _aiBusy,
+            onDraft: _generateAiDraft,
+          ),
           AppTextField(
             controller: _titleCtrl,
             label: 'Titolo *',
@@ -130,7 +138,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Cliente ───────────────────────────────────────────────────────
-          _SL(title:'Cliente *'),
+          _SL(title: 'Cliente *'),
           const SizedBox(height: 8),
           customers.when(
             loading: () => const LinearProgressIndicator(),
@@ -147,8 +155,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
                   onChanged: (v) => notifier.setCustomerFreeText(v),
                   trailing: list.isNotEmpty
                       ? TextButton(
-                          onPressed: () =>
-                              setState(() => _customerFreeTextMode = false),
+                          onPressed: () => setState(() => _customerFreeTextMode = false),
                           child: const Text('Da lista'),
                         )
                       : null,
@@ -157,9 +164,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               final selected = state.customerId;
               return _CachePicker(
                 label: 'Seleziona cliente',
-                items: list
-                    .map((c) => _NamedItem(id: c.id, name: c.companyName))
-                    .toList(),
+                items: list.map((c) => _NamedItem(id: c.id, name: c.companyName)).toList(),
                 selectedId: selected,
                 onSelected: (id) => notifier.setCustomerFromCache(id),
                 onFreeText: () {
@@ -172,7 +177,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Indirizzo di lavoro ────────────────────────────────────────────
-          _SL(title:'Indirizzo di lavoro'),
+          _SL(title: 'Indirizzo di lavoro'),
           const SizedBox(height: 8),
           AppTextField(
             controller: _workAddressCtrl,
@@ -183,7 +188,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Ubicazione / Sede ──────────────────────────────────────────────
-          _SL(title:'Ubicazione / Sede'),
+          _SL(title: 'Ubicazione / Sede'),
           const SizedBox(height: 8),
           _LocationPicker(
             reportId: widget.reportId,
@@ -196,7 +201,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Ticket o Cantiere (opzionale) ──────────────────────────────────
-          _SL(title:'Ticket o Cantiere (opzionale)'),
+          _SL(title: 'Ticket o Cantiere (opzionale)'),
           const SizedBox(height: 8),
           _TicketCantierePicker(
             reportId: widget.reportId,
@@ -206,10 +211,8 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
             cantiereCtrl: _cantiereFreeTextCtrl,
             onTicketFreeText: (v) => notifier.setTicketFreeText(v),
             onCantiereFreeText: (v) => notifier.setCantiereFreeText(v),
-            onToggleTicketFreeText: (v) =>
-                setState(() => _ticketFreeTextMode = v),
-            onToggleCantiereFreeText: (v) =>
-                setState(() => _cantiereFreeTextMode = v),
+            onToggleTicketFreeText: (v) => setState(() => _ticketFreeTextMode = v),
+            onToggleCantiereFreeText: (v) => setState(() => _cantiereFreeTextMode = v),
             onTicketFromCache: (id) => notifier.setTicketFromCache(id),
             onCantiereFromCache: (id) => notifier.setCantiereFromCache(id),
           ),
@@ -220,6 +223,84 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
         ],
       ),
     );
+  }
+
+  /// Ask the server for a drafted title and description for this intervento.
+  ///
+  /// Applies to the two fields the editor can actually hold. `technicianNotes` comes back from the
+  /// model too, but `ReportEditorState` hardcodes it to null and exposes no setter, so applying it
+  /// would mean inventing storage for it here — a change to the draft model, not to this button.
+  ///
+  /// Never overwrites silently. Anything the technician has already typed is what they observed on
+  /// site; a model's guess must not replace it without being asked.
+  Future<void> _generateAiDraft(String scheduleId, String? ticketId) async {
+    if (_aiBusy) return;
+
+    final editor = ref.read(reportEditorProvider(widget.reportId));
+    final hasTyped = editor.title.trim().isNotEmpty || editor.details.trim().isNotEmpty;
+    if (hasTyped) {
+      final overwrite = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Sostituire il testo?'),
+          content: const Text(
+            'Titolo e descrizione contengono già del testo. '
+            'La bozza AI lo sostituirà.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Sostituisci'),
+            ),
+          ],
+        ),
+      );
+      if (overwrite != true) return;
+    }
+
+    setState(() => _aiBusy = true);
+    try {
+      final draft = await ref
+          .read(aiApiClientProvider)
+          .generateDraft(scheduleId: scheduleId, ticketId: ticketId);
+
+      final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
+      _titleCtrl.text = draft.title;
+      _detailsCtrl.text = draft.details;
+      await notifier.setTitle(draft.title);
+      await notifier.setDetails(draft.details);
+
+      // The allowance is the whole company's, so it can move without this technician doing
+      // anything. Re-read it rather than decrementing a local copy.
+      ref.invalidate(aiQuotaProvider);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bozza generata (${draft.modelUsed}). Rileggila prima di inviare.'),
+          backgroundColor: context.colors.green,
+        ),
+      );
+    } on AiQuotaExhaustedException catch (e) {
+      if (!mounted) return;
+      final when = e.resetsAt == null
+          ? 'il primo del mese'
+          : DateFormat('d MMMM', 'it').format(e.resetsAt!.toLocal());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Quota AI della tua azienda esaurita. Si azzera $when.'),
+          backgroundColor: context.colors.amber,
+        ),
+      );
+    } on AiFailure catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: context.colors.red));
+    } finally {
+      if (mounted) setState(() => _aiBusy = false);
+    }
   }
 }
 
@@ -234,8 +315,7 @@ class _GpsCapture extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(reportEditorProvider(reportId));
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final hasGps =
-        state.gpsLatitude != null && state.gpsLongitude != null;
+    final hasGps = state.gpsLatitude != null && state.gpsLongitude != null;
 
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -251,7 +331,7 @@ class _GpsCapture extends ConsumerWidget {
             child: Text(
               hasGps
                   ? 'GPS: ${state.gpsLatitude!.toStringAsFixed(5)}, '
-                      '${state.gpsLongitude!.toStringAsFixed(5)}'
+                        '${state.gpsLongitude!.toStringAsFixed(5)}'
                   : 'Posizione GPS non acquisita',
               style: TextStyle(
                 fontSize: 13,
@@ -264,19 +344,14 @@ class _GpsCapture extends ConsumerWidget {
             onPressed: () => _captureGps(context, notifier),
             icon: const Icon(LucideIcons.locateFixed, size: 16),
             label: Text(hasGps ? 'Aggiorna' : 'Acquisisci'),
-            style: TextButton.styleFrom(
-              minimumSize: const Size(44, 44),
-            ),
+            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _captureGps(
-    BuildContext context,
-    ReportEditorNotifier notifier,
-  ) async {
+  Future<void> _captureGps(BuildContext context, ReportEditorNotifier notifier) async {
     // Use a fixed mock position in test/offline environments.
     // In production the geolocator package would be called here.
     // Since step_dati doesn't actually call geolocator (no SDK in test env),
@@ -303,9 +378,7 @@ class _GpsCapture extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore GPS: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore GPS: $e')));
       }
     }
   }
@@ -371,8 +444,7 @@ class _CachePicker extends StatelessWidget {
           decoration: InputDecoration(
             labelText: label,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
           isExpanded: true,
           items: items
@@ -423,11 +495,8 @@ class _LocationPicker extends ConsumerWidget {
 
     return locAsync.when(
       loading: () => const LinearProgressIndicator(),
-      error: (e, _) => _FreeTextField(
-        ctrl: freeTextCtrl,
-        label: 'Ubicazione',
-        onChanged: onFreeTextChanged,
-      ),
+      error: (e, _) =>
+          _FreeTextField(ctrl: freeTextCtrl, label: 'Ubicazione', onChanged: onFreeTextChanged),
       data: (list) {
         if (list.isEmpty || freeTextMode) {
           return _FreeTextField(
@@ -494,11 +563,8 @@ class _TicketCantierePicker extends ConsumerWidget {
         // ── Ticket ────────────────────────────────────────────────────────
         tickets.when(
           loading: () => const LinearProgressIndicator(),
-          error: (e, _) => _FreeTextField(
-            ctrl: ticketCtrl,
-            label: 'Rif. Ticket',
-            onChanged: onTicketFreeText,
-          ),
+          error: (e, _) =>
+              _FreeTextField(ctrl: ticketCtrl, label: 'Rif. Ticket', onChanged: onTicketFreeText),
           data: (list) {
             if (list.isEmpty || ticketFreeTextMode) {
               return _FreeTextField(
@@ -515,9 +581,7 @@ class _TicketCantierePicker extends ConsumerWidget {
             }
             return _CachePicker(
               label: 'Seleziona ticket',
-              items: list
-                  .map((t) => _NamedItem(id: t.id, name: t.title))
-                  .toList(),
+              items: list.map((t) => _NamedItem(id: t.id, name: t.title)).toList(),
               selectedId: state.ticketId,
               onSelected: onTicketFromCache,
               onFreeText: () => onToggleTicketFreeText(true),
@@ -527,21 +591,15 @@ class _TicketCantierePicker extends ConsumerWidget {
         const SizedBox(height: 12),
 
         Center(
-          child: Text(
-            '— oppure —',
-            style: TextStyle(color: context.colors.inkMuted),
-          ),
+          child: Text('— oppure —', style: TextStyle(color: context.colors.inkMuted)),
         ),
         const SizedBox(height: 12),
 
         // ── Cantiere ─────────────────────────────────────────────────────
         cantieri.when(
           loading: () => const LinearProgressIndicator(),
-          error: (e, _) => _FreeTextField(
-            ctrl: cantiereCtrl,
-            label: 'Cantiere',
-            onChanged: onCantiereFreeText,
-          ),
+          error: (e, _) =>
+              _FreeTextField(ctrl: cantiereCtrl, label: 'Cantiere', onChanged: onCantiereFreeText),
           data: (list) {
             if (list.isEmpty || cantiereFreeTextMode) {
               return _FreeTextField(
@@ -558,9 +616,7 @@ class _TicketCantierePicker extends ConsumerWidget {
             }
             return _CachePicker(
               label: 'Seleziona cantiere',
-              items: list
-                  .map((c) => _NamedItem(id: c.id, name: c.name))
-                  .toList(),
+              items: list.map((c) => _NamedItem(id: c.id, name: c.name)).toList(),
               selectedId: state.cantiereId,
               onSelected: onCantiereFromCache,
               onFreeText: () => onToggleCantiereFreeText(true),
@@ -588,6 +644,90 @@ class _SL extends StatelessWidget {
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: Color(0xFF363636),
+      ),
+    );
+  }
+}
+
+/// Offers an AI draft, and says what it costs before it is pressed.
+///
+/// Hidden entirely when the report has no `scheduleId`: the endpoint requires one — the server
+/// draws the intervento's context from the schedule — so with no schedule there is nothing to
+/// draft from and a disabled button would only raise a question it cannot answer.
+class _AiDraftButton extends ConsumerWidget {
+  const _AiDraftButton({
+    required this.scheduleId,
+    required this.ticketId,
+    required this.busy,
+    required this.onDraft,
+  });
+
+  final String? scheduleId;
+  final String? ticketId;
+  final bool busy;
+  final Future<void> Function(String scheduleId, String? ticketId) onDraft;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = scheduleId;
+    if (id == null) return const SizedBox.shrink();
+
+    final c = context.colors;
+    final quota = ref.watch(aiQuotaProvider);
+    final exhausted = quota.valueOrNull?.exhausted ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AppCard(
+        child: Row(
+          children: [
+            Icon(LucideIcons.penTool, size: 18, color: exhausted ? c.inkDisabled : c.ink),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Bozza automatica',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: exhausted ? c.inkMuted : c.ink,
+                    ),
+                  ),
+                  Text(
+                    // The count is the company's, not this technician's, and it is spent whether
+                    // or not the result is kept. Both belong on the button, not in a help page.
+                    switch (quota) {
+                      AsyncData(:final value) when value.exhausted =>
+                        'Quota aziendale esaurita per questo mese',
+                      AsyncData(:final value) =>
+                        '${value.remaining} generazioni rimaste all\'azienda questo mese',
+                      AsyncError() => 'Quota non verificabile ora',
+                      _ => 'Verifica quota…',
+                    },
+                    style: TextStyle(fontSize: 11, color: c.inkMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (busy)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              AppButton(
+                label: 'Genera',
+                size: AppButtonSize.sm,
+                fullWidth: false,
+                onPressed: exhausted ? null : () => onDraft(id, ticketId),
+              ),
+          ],
+        ),
       ),
     );
   }
