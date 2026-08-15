@@ -70,7 +70,13 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: _NewRapportinoFab(),
+      // Lifted over the floating nav like every other FAB in the app. This one was missed in the
+      // clearance sweep because it is a custom widget rather than a bare AppFab, and HomeShell
+      // sets extendBody: true — so the app's primary create-rapportino action sat under the pill.
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: _NewRapportinoFab(),
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/sync/sync_service.dart';
@@ -71,7 +72,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: widget.navigationShell,
+      // The rail is drawn once here rather than per screen. It was reaching only four of the
+      // forty-two screens, so the world read as "ledged cards" everywhere else — and the rail is
+      // the mark that makes a column of cells a rack. It costs no layout: it paints inside the
+      // 19dp gutter every screen already indents by (see AppRack.railColumn).
+      body: Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell),
       // Extend body behind the floating pill so the hero/content scrolls under it.
       extendBody: true,
       bottomNavigationBar: AppBottomNav(

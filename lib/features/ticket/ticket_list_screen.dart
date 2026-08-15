@@ -56,15 +56,13 @@ class _TicketListScreenState extends State<TicketListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: Rack(
-        child: SafeArea(
-          child: _TicketListBody(
-            filter: _filter,
-            query: _query,
-            searchCtrl: _searchCtrl,
-            onFilterChanged: (f) => setState(() => _filter = f),
-            onQueryChanged: (q) => setState(() => _query = q),
-          ),
+      body: SafeArea(
+        child: _TicketListBody(
+          filter: _filter,
+          query: _query,
+          searchCtrl: _searchCtrl,
+          onFilterChanged: (f) => setState(() => _filter = f),
+          onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
       floatingActionButton: Padding(

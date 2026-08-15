@@ -29,42 +29,40 @@ class AltroHubScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: Rack(
-        child: SafeArea(
-          child: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: ScreenHeader(title: 'Altro')),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: ScreenHeader(title: 'Altro')),
 
-              // ── Dark user card ─────────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: _UserCard(displayName: displayName, email: user?.email),
-              ),
+            // ── Dark user card ─────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: _UserCard(displayName: displayName, email: user?.email),
+            ),
 
-              // ── Gestione section ───────────────────────────────────────────
-              const SliverToBoxAdapter(child: SectionTitle(title: 'Gestione')),
-              SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 19),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 1.4,
-                  ),
-                  delegate: SliverChildListDelegate(_buildGestioneTiles(context)),
+            // ── Gestione section ───────────────────────────────────────────
+            const SliverToBoxAdapter(child: SectionTitle(title: 'Gestione')),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 19),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.4,
                 ),
+                delegate: SliverChildListDelegate(_buildGestioneTiles(context)),
               ),
+            ),
 
-              // ── Sistema section ────────────────────────────────────────────
-              const SliverToBoxAdapter(child: SectionTitle(title: 'Sistema')),
-              SliverToBoxAdapter(child: _SistemaSection()),
+            // ── Sistema section ────────────────────────────────────────────
+            const SliverToBoxAdapter(child: SectionTitle(title: 'Sistema')),
+            SliverToBoxAdapter(child: _SistemaSection()),
 
-              // ── Danger: Logout ─────────────────────────────────────────────
-              SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
+            // ── Danger: Logout ─────────────────────────────────────────────
+            SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
 
-              SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-            ],
-          ),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+          ],
         ),
       ),
     );
@@ -140,13 +138,14 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 19),
-      child: Container(
+      // A RackCell, not a hand-rolled Container. This was the one card on the screen that bypassed
+      // the shared primitive, and it did so by reintroducing exactly what the world refuses: a
+      // rounded rectangle floating on a drop shadow. Depth here is the ledge, like everywhere else.
+      child: RackCell(
+        flush: false,
+        background: AppColors.CHARCOAL,
+        ledgeColor: AppColors.Y,
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: AppColors.CHARCOAL,
-          borderRadius: AppRack.freeShape,
-          boxShadow: context.colors.shadow,
-        ),
         child: Row(
           children: [
             AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 52),

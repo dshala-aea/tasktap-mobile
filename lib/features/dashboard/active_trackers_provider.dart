@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
+import '../timbra/timbra_providers.dart';
 
 /// What the signed-in user is currently tracking.
 ///
@@ -85,3 +86,41 @@ String formatElapsed(Duration elapsed) {
   final ss = s.toString().padLeft(2, '0');
   return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
 }
+
+/// What to show as running: the server's list, corrected by what this device knows for certain.
+///
+/// [activeTrackersProvider] polls once a minute, which is right for catching a stop performed on
+/// the office web or another handset — and wrong for the technician's own punch, which took up to
+/// sixty seconds to appear on the dashboard and another sixty to disappear. A clock the device
+/// itself started should not need a round trip to become visible.
+///
+/// So attendance is taken from the local timbratura state, which is instant and correct offline,
+/// and the server's own attendance row is dropped in its favour. Cantiere and ticket clocks have
+/// no local mirror and keep coming from the poll.
+///
+/// The local row reuses the server's id when there is one, so the two never render as two clocks
+/// during the window where both agree.
+final visibleTrackersProvider = Provider.autoDispose<List<ActiveTracker>>((ref) {
+  final remote = ref.watch(activeTrackersProvider).valueOrNull ?? const <ActiveTracker>[];
+  final timbra = ref.watch(timbraStateProvider);
+
+  final others = remote.where((t) => t.kind != ActiveTrackerKind.attendance).toList();
+
+  if (!timbra.isOnShift || timbra.shiftStartTime == null) {
+    // Punched out locally: drop the attendance row now rather than after the next poll.
+    return others;
+  }
+
+  final serverAttendance = remote.where((t) => t.kind == ActiveTrackerKind.attendance).firstOrNull;
+
+  return [
+    ActiveTracker(
+      kind: ActiveTrackerKind.attendance,
+      id: serverAttendance?.id ?? 'local-attendance',
+      startedAtUtc: timbra.shiftStartTime!.toUtc(),
+      label: serverAttendance?.label,
+      entityId: serverAttendance?.entityId,
+    ),
+    ...others,
+  ];
+});

@@ -53,21 +53,19 @@ class _MagazzinoScreenState extends State<MagazzinoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: Rack(
-        child: SafeArea(
-          child: _MagazzinoBody(
-            tab: _tab,
-            query: _query,
-            activeCategory: _activeCategory,
-            soloSottoScorta: _soloSottoScorta,
-            searchCtrl: _searchCtrl,
-            onTabChanged: (t) => setState(() => _tab = t),
-            onQueryChanged: (q) => setState(() => _query = q),
-            onSottoScortaChanged: (v) => setState(() => _soloSottoScorta = v),
-            onCategoryChanged: (cat) => setState(() {
-              _activeCategory = _activeCategory == cat ? null : cat;
-            }),
-          ),
+      body: SafeArea(
+        child: _MagazzinoBody(
+          tab: _tab,
+          query: _query,
+          activeCategory: _activeCategory,
+          soloSottoScorta: _soloSottoScorta,
+          searchCtrl: _searchCtrl,
+          onTabChanged: (t) => setState(() => _tab = t),
+          onQueryChanged: (q) => setState(() => _query = q),
+          onSottoScortaChanged: (v) => setState(() => _soloSottoScorta = v),
+          onCategoryChanged: (cat) => setState(() {
+            _activeCategory = _activeCategory == cat ? null : cat;
+          }),
         ),
       ),
     );

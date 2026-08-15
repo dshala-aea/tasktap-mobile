@@ -13,6 +13,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
+import 'package:tasktap_mobile/features/dashboard/active_tracker_strip.dart';
 import 'package:tasktap_mobile/features/dashboard/dashboard_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -94,13 +95,14 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('says nothing is running in one line, not an empty state', (tester) async {
+    testWidgets('shows nothing at all when no clock is running', (tester) async {
       await pumpDashboard(tester);
 
-      // The hero used to carry a full EmptyState here — a disc, a paragraph and a button — for
-      // the ordinary condition of being between jobs. Nothing running is the normal case at 7am
-      // and after the last job; it does not deserve the screen.
-      expect(find.text('Nessun timer attivo'), findsOneWidget);
+      // Nothing at all, not a placeholder. The hero drew a grey glass panel reading "Non hai
+      // interventi attivi al momento" for the ordinary condition of being between jobs — most of
+      // the morning — and the absence of rows already says it.
+      expect(find.byType(ActiveTrackerStrip), findsNothing);
+      expect(find.textContaining('attiv'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -131,9 +133,9 @@ void main() {
       await pumpDashboard(tester);
 
       // A schedule marked "In corso" is the calendar's intention, not a clock anybody is being
-      // paid against. The hero used to render it as a card with a 00:00:00 timer, which is a
-      // stopped clock dressed as a running one on the surface whose only job is live time.
-      expect(find.text('Nessun timer attivo'), findsOneWidget);
+      // paid against. The hero used to render it as a card with a 00:00:00 timer — a stopped clock
+      // dressed as a running one, on the surface whose only job is live time.
+      expect(find.byType(ActiveTrackerStrip), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
