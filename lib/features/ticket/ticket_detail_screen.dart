@@ -11,9 +11,9 @@ import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
-import '../../presentation/providers/report_editor_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
+import '../rapportino/create_draft.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_providers.dart';
 import 'ticket_workflow_api_client.dart';
@@ -296,25 +296,23 @@ class _TicketDetailBody extends ConsumerWidget {
   }
 
   Future<void> _createRapportino(BuildContext context, WidgetRef ref, Ticket ticket) async {
-    final repo = ref.read(draftReportRepositoryProvider);
-    final id = 'draft-${DateTime.now().millisecondsSinceEpoch}';
-    await repo.createDraft(
-      DraftReportsCompanion.insert(
-        id: id,
-        tenantId: 'local',
-        createdAt: DateTime.now().toUtc(),
-        title: 'Rapportino — ${ticket.title}',
-        insertedUserId: 'local-user',
-        locationId: ticket.locationId,
-        ticketId: Value(ticket.id),
-        customerId: Value(ticket.customerId),
-        isLocalOnly: const Value(true),
-        stato: const Value('Bozza'),
-      ),
+    final id = await createLocalDraft(
+      ref,
+      title: 'Rapportino — ${ticket.title}',
+      locationId: ticket.locationId,
+      ticketId: ticket.id,
+      customerId: ticket.customerId,
+      // The ticket's own tenant, rather than whatever row the mirror lookup finds first.
+      tenantId: ticket.tenantId,
     );
-    if (context.mounted) {
-      context.push(AppRoutes.rapportiniEditor(id));
+    if (!context.mounted) return;
+    if (id == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Accedi per creare un rapportino.')));
+      return;
     }
+    context.push(AppRoutes.rapportiniEditor(id));
   }
 
   void _showAssignSheet(BuildContext context, WidgetRef ref, Ticket ticket) {

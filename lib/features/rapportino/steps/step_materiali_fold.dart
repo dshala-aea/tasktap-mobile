@@ -69,7 +69,7 @@ class StepMaterialiFold extends ConsumerWidget {
 
         if (!state.materialiNotRequired) ...[
           // ── Materiali list ──────────────────────────────────────────────
-          _SL(title:'Materiali (${state.materialeRows.length})'),
+          _SL(title: 'Materiali (${state.materialeRows.length})'),
           const SizedBox(height: 8),
           if (state.materialeRows.isEmpty)
             Padding(
@@ -85,8 +85,7 @@ class StepMaterialiFold extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _MaterialeQtyStepper(
                   row: row,
-                  onQtyChanged: (qty) =>
-                      notifier.updateMateriale(row.copyWith(quantity: qty)),
+                  onQtyChanged: (qty) => notifier.updateMateriale(row.copyWith(quantity: qty)),
                   onRemove: () => notifier.removeMateriale(row.id),
                 ),
               ),
@@ -98,9 +97,7 @@ class StepMaterialiFold extends ConsumerWidget {
             label: const Text('Aggiungi materiale'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 24),
@@ -116,7 +113,7 @@ class StepMaterialiFold extends ConsumerWidget {
         const SizedBox(height: 24),
 
         // ── Foto / Allegati sub-section ────────────────────────────────────
-        _SL(title:'Foto / Allegati (${photos.length})'),
+        _SL(title: 'Foto / Allegati (${photos.length})'),
         const SizedBox(height: 8),
         if (photos.isNotEmpty) ...[
           GridView.builder(
@@ -128,10 +125,8 @@ class StepMaterialiFold extends ConsumerWidget {
               mainAxisSpacing: 8,
             ),
             itemCount: photos.length,
-            itemBuilder: (ctx, i) => _PhotoThumb(
-              row: photos[i],
-              onRemove: () => notifier.removeAllegato(photos[i].id),
-            ),
+            itemBuilder: (ctx, i) =>
+                _PhotoThumb(row: photos[i], onRemove: () => notifier.removeAllegato(photos[i].id)),
           ),
           const SizedBox(height: 12),
         ],
@@ -139,32 +134,26 @@ class StepMaterialiFold extends ConsumerWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () =>
-                    _pickImage(context, ref, ImageSource.gallery),
+                onPressed: () => _pickImage(context, ref, ImageSource.gallery),
                 icon: const Icon(LucideIcons.image),
                 label: const Text('Galleria'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () =>
-                    _pickImage(context, ref, ImageSource.camera),
+                onPressed: () => _pickImage(context, ref, ImageSource.camera),
                 icon: const Icon(LucideIcons.camera),
                 label: const Text('Fotocamera'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brand,
                   foregroundColor: context.colors.brandOn,
                   minimumSize: const Size(0, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -201,8 +190,7 @@ class StepMaterialiFold extends ConsumerWidget {
                   loading: () => const LinearProgressIndicator(),
                   error: (e, _) => TextField(
                     controller: nameCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Nome materiale'),
+                    decoration: const InputDecoration(labelText: 'Nome materiale'),
                   ),
                   data: (list) {
                     if (list.isEmpty || freeTextMode) {
@@ -216,8 +204,7 @@ class StepMaterialiFold extends ConsumerWidget {
                           ),
                           if (list.isNotEmpty)
                             TextButton(
-                              onPressed: () =>
-                                  setDialogState(() => freeTextMode = false),
+                              onPressed: () => setDialogState(() => freeTextMode = false),
                               child: const Text('Seleziona da catalogo'),
                             ),
                         ],
@@ -225,19 +212,12 @@ class StepMaterialiFold extends ConsumerWidget {
                     }
                     return DropdownButtonFormField<String>(
                       initialValue: selectedMaterialeId,
-                      decoration: const InputDecoration(
-                          labelText: 'Materiale da catalogo'),
+                      decoration: const InputDecoration(labelText: 'Materiale da catalogo'),
                       isExpanded: true,
                       items: list
-                          .map(
-                            (m) => DropdownMenuItem(
-                              value: m.id,
-                              child: Text(m.name),
-                            ),
-                          )
+                          .map((m) => DropdownMenuItem(value: m.id, child: Text(m.name)))
                           .toList(),
-                      onChanged: (v) =>
-                          setDialogState(() => selectedMaterialeId = v),
+                      onChanged: (v) => setDialogState(() => selectedMaterialeId = v),
                     );
                   },
                 ),
@@ -248,20 +228,15 @@ class StepMaterialiFold extends ConsumerWidget {
                       child: TextField(
                         controller: qtyCtrl,
                         decoration: const InputDecoration(labelText: 'Qtà'),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'[0-9.]')),
-                        ],
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: uomCtrl,
-                        decoration: const InputDecoration(
-                            labelText: 'Unità (es. pz)'),
+                        decoration: const InputDecoration(labelText: 'Unità (es. pz)'),
                       ),
                     ),
                   ],
@@ -270,10 +245,7 @@ class StepMaterialiFold extends ConsumerWidget {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annulla'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
             ElevatedButton(
               onPressed: () {
                 final qty = double.tryParse(qtyCtrl.text) ?? 1.0;
@@ -285,8 +257,7 @@ class StepMaterialiFold extends ConsumerWidget {
                     materialeId: freeTextMode ? null : selectedMaterialeId,
                     freeTextName: freeTextMode ? nameCtrl.text.trim() : null,
                     quantity: qty,
-                    unitOfMeasure:
-                        uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
+                    unitOfMeasure: uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
                   ),
                 );
                 Navigator.pop(ctx);
@@ -299,11 +270,7 @@ class StepMaterialiFold extends ConsumerWidget {
     );
   }
 
-  Future<void> _pickImage(
-    BuildContext context,
-    WidgetRef ref,
-    ImageSource source,
-  ) async {
+  Future<void> _pickImage(BuildContext context, WidgetRef ref, ImageSource source) async {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final picker = ImagePicker();
     try {
@@ -323,9 +290,9 @@ class StepMaterialiFold extends ConsumerWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Errore: ${e.toString()}')));
       }
     }
   }
@@ -350,8 +317,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Icon(LucideIcons.package,
-              size: 18, color: context.colors.inkMuted),
+          Icon(LucideIcons.package, size: 18, color: context.colors.inkMuted),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -368,8 +334,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
                 if (row.unitOfMeasure != null)
                   Text(
                     row.unitOfMeasure!,
-                    style: TextStyle(
-                        color: context.colors.inkMuted, fontSize: 11),
+                    style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
                   ),
               ],
             ),
@@ -381,15 +346,14 @@ class _MaterialeQtyStepper extends StatelessWidget {
               _QtyBtn(
                 icon: LucideIcons.minus,
                 label: 'Diminuisci quantità',
-                onTap: row.quantity > 1
-                    ? () => onQtyChanged(row.quantity - 1)
-                    : null,
+                onTap: row.quantity > 1 ? () => onQtyChanged(row.quantity - 1) : null,
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
                   row.quantity.toStringAsFixed(
-                      row.quantity == row.quantity.truncateToDouble() ? 0 : 1),
+                    row.quantity == row.quantity.truncateToDouble() ? 0 : 1,
+                  ),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -406,10 +370,8 @@ class _MaterialeQtyStepper extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: Icon(LucideIcons.trash2,
-                color: context.colors.red, size: 18),
-            constraints:
-                const BoxConstraints(minWidth: 44, minHeight: 44),
+            icon: Icon(LucideIcons.trash2, color: context.colors.red, size: 18),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: onRemove,
           ),
         ],
@@ -487,8 +449,7 @@ class _PhotoThumb extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (ctx, e, _) => Container(
               color: context.colors.bg3,
-              child: Icon(LucideIcons.imageOff,
-                  color: context.colors.inkMuted),
+              child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),
             ),
           ),
         ),
@@ -509,10 +470,7 @@ class _PhotoThumb extends StatelessWidget {
                 height: 44,
                 child: Center(
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: context.colors.red,
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: BoxDecoration(color: context.colors.red, shape: BoxShape.circle),
                     padding: const EdgeInsets.all(4),
                     child: const Icon(LucideIcons.x, color: Colors.white, size: 14),
                   ),
@@ -684,9 +642,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   @override
   Widget build(BuildContext context) {
     final c = widget.flat.control;
-    final rows = ref.watch(
-      reportEditorProvider(widget.reportId).select((s) => s.controlloRows),
-    );
+    final rows = ref.watch(reportEditorProvider(widget.reportId).select((s) => s.controlloRows));
     final existing = _findExisting(rows);
 
     return AppCard(

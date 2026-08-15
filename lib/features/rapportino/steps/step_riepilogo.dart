@@ -75,52 +75,34 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           ],
 
           // ── Summary ────────────────────────────────────────────────────────
-          _SL(title:'Riepilogo dati'),
+          _SL(title: 'Riepilogo dati'),
           const SizedBox(height: 8),
           AppCard(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                KeyVal(
-                  label: 'Titolo',
-                  value: state.title.isEmpty ? '—' : state.title,
-                ),
-                KeyVal(
-                  label: 'Cliente',
-                  value: state.customerId ??
-                      state.customerFreeText ??
-                      '—',
-                ),
-                KeyVal(
-                  label: 'Indirizzo',
-                  value: state.workAddress ?? '—',
-                ),
-                if (state.ticketId != null)
-                  KeyVal(label: 'Ticket', value: state.ticketId!),
+                KeyVal(label: 'Titolo', value: state.title.isEmpty ? '—' : state.title),
+                KeyVal(label: 'Cliente', value: state.customerId ?? state.customerFreeText ?? '—'),
+                KeyVal(label: 'Indirizzo', value: state.workAddress ?? '—'),
+                if (state.ticketId != null) KeyVal(label: 'Ticket', value: state.ticketId!),
                 if (state.ticketFreeText != null)
                   KeyVal(label: 'Ticket (lib.)', value: state.ticketFreeText!),
-                if (state.cantiereId != null)
-                  KeyVal(label: 'Cantiere', value: state.cantiereId!),
+                if (state.cantiereId != null) KeyVal(label: 'Cantiere', value: state.cantiereId!),
                 if (state.cantiereFreeText != null)
                   KeyVal(label: 'Cantiere (lib.)', value: state.cantiereFreeText!),
-                KeyVal(
-                  label: 'Tecnici',
-                  value: '${state.staffRows.length}',
-                ),
+                KeyVal(label: 'Tecnici', value: '${state.staffRows.length}'),
                 KeyVal(
                   label: 'Ore totali',
-                  value: '${state.staffRows.fold<double>(0, (s, r) => s + r.effectiveHours).toStringAsFixed(1)} h',
+                  value:
+                      '${state.staffRows.fold<double>(0, (s, r) => s + r.effectiveHours).toStringAsFixed(1)} h',
                 ),
                 KeyVal(
                   label: 'Materiali',
-                  value: state.materialiNotRequired
-                      ? 'Nessuno'
-                      : '${state.materialeRows.length}',
+                  value: state.materialiNotRequired ? 'Nessuno' : '${state.materialeRows.length}',
                 ),
                 KeyVal(
                   label: 'Foto',
-                  value:
-                      '${state.allegatoRows.where((a) => !a.isSignature).length}',
+                  value: '${state.allegatoRows.where((a) => !a.isSignature).length}',
                   showDivider: false,
                 ),
               ],
@@ -129,7 +111,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           const SizedBox(height: 20),
 
           // ── Firma cliente ──────────────────────────────────────────────────
-          _SL(title:'Firma cliente *'),
+          _SL(title: 'Firma cliente *'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'cliente',
@@ -141,7 +123,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           const SizedBox(height: 20),
 
           // ── Firma tecnico ──────────────────────────────────────────────────
-          _SL(title:'Firma tecnico *'),
+          _SL(title: 'Firma tecnico *'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'tecnico',
@@ -157,9 +139,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             stream: repo.watchDraft(widget.reportId),
             builder: (context, snap) {
               final draft = snap.data;
-              final subState = DraftSubmissionState.fromString(
-                draft?.submissionState ?? 'draft',
-              );
+              final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
 
               if (subState == DraftSubmissionState.submitted) {
                 return _StatusCard(
@@ -212,26 +192,17 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
-                      subtitle:
-                          'Il rapportino è completo e pronto per essere inviato.',
+                      subtitle: 'Il rapportino è completo e pronto per essere inviato.',
                     ),
                   if (_submitError != null) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      _submitError!,
-                      style: TextStyle(
-                          color: context.colors.red, fontSize: 12),
-                    ),
+                    Text(_submitError!, style: TextStyle(color: context.colors.red, fontSize: 12)),
                   ],
                   const SizedBox(height: 12),
                   AppButton(
                     label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
-                    icon: _submitting
-                        ? null
-                        : const Icon(LucideIcons.send),
-                    onPressed: validation.isValid && !_submitting
-                        ? _onInvia
-                        : null,
+                    icon: _submitting ? null : const Icon(LucideIcons.send),
+                    onPressed: validation.isValid && !_submitting ? _onInvia : null,
                     isLoading: _submitting,
                     size: AppButtonSize.lg,
                   ),
@@ -271,10 +242,7 @@ class _ValidationPanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Da completare prima dell\'invio:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: context.colors.ink,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.ink),
                 ),
               ),
             ],
@@ -286,15 +254,10 @@ class _ValidationPanel extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(LucideIcons.circle,
-                      size: 6, color: context.colors.amber),
+                  Icon(LucideIcons.circle, size: 6, color: context.colors.amber),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      msg,
-                      style: TextStyle(
-                          color: context.colors.ink, fontSize: 14),
-                    ),
+                    child: Text(msg, style: TextStyle(color: context.colors.ink, fontSize: 14)),
                   ),
                 ],
               ),
@@ -354,18 +317,11 @@ class _StatusCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 15),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle!,
-                    style: TextStyle(color: color, fontSize: 12),
-                  ),
+                  Text(subtitle!, style: TextStyle(color: color, fontSize: 12)),
                 ],
               ],
             ),
@@ -410,18 +366,14 @@ class _SignatureBlock extends ConsumerWidget {
                 File(localPath!),
                 height: 120,
                 fit: BoxFit.contain,
-                errorBuilder: (ctx, e, _) => Icon(
-                  LucideIcons.imageOff,
-                  color: context.colors.inkMuted,
-                  size: 40,
-                ),
+                errorBuilder: (ctx, e, _) =>
+                    Icon(LucideIcons.imageOff, color: context.colors.inkMuted, size: 40),
               ),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(LucideIcons.checkCircle2,
-                    color: context.colors.green, size: 16),
+                Icon(LucideIcons.checkCircle2, color: context.colors.green, size: 16),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -431,12 +383,8 @@ class _SignatureBlock extends ConsumerWidget {
                 ),
                 TextButton(
                   onPressed: () => _clearSig(ref),
-                  style: TextButton.styleFrom(
-                      minimumSize: const Size(44, 44)),
-                  child: Text(
-                    'Cancella',
-                    style: TextStyle(color: context.colors.red),
-                  ),
+                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                  child: Text('Cancella', style: TextStyle(color: context.colors.red)),
                 ),
               ],
             ),
@@ -446,17 +394,13 @@ class _SignatureBlock extends ConsumerWidget {
               height: 120,
               decoration: BoxDecoration(
                 color: context.colors.bg2,
-                border: Border.all(
-                  color: context.colors.borderStrong,
-                  style: BorderStyle.solid,
-                ),
+                border: Border.all(color: context.colors.borderStrong, style: BorderStyle.solid),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
                 child: Text(
                   'Firma $label non acquisita',
-                  style: TextStyle(
-                      color: context.colors.inkMuted, fontSize: 13),
+                  style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
                 ),
               ),
             ),
@@ -488,17 +432,9 @@ class _SignatureBlock extends ConsumerWidget {
 
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     if (isCustomer) {
-      await notifier.saveCustomerSignature(
-        allegatoId: id,
-        bytes: bytes,
-        localPath: file.path,
-      );
+      await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
     } else {
-      await notifier.saveTechnicianSignature(
-        allegatoId: id,
-        bytes: bytes,
-        localPath: file.path,
-      );
+      await notifier.saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
     }
   }
 
@@ -556,10 +492,7 @@ class _SigDialogState extends State<_SigDialog> {
             actions: [
               TextButton(
                 onPressed: () => _ctrl.clear(),
-                child: Text(
-                  'Cancella',
-                  style: TextStyle(color: context.colors.inkMuted),
-                ),
+                child: Text('Cancella', style: TextStyle(color: context.colors.inkMuted)),
               ),
               TextButton(
                 onPressed: () async {
@@ -574,10 +507,7 @@ class _SigDialogState extends State<_SigDialog> {
                 },
                 child: const Text(
                   'Conferma',
-                  style: TextStyle(
-                    color: AppColors.Y,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -590,10 +520,7 @@ class _SigDialogState extends State<_SigDialog> {
             ),
           ),
           Expanded(
-            child: Signature(
-              controller: _ctrl,
-              backgroundColor: context.colors.bg1,
-            ),
+            child: Signature(controller: _ctrl, backgroundColor: context.colors.bg1),
           ),
         ],
       ),

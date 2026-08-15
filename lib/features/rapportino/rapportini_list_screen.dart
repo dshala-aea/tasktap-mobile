@@ -1,5 +1,4 @@
 // dart format width=100
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,7 +9,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
-import '../../presentation/providers/report_editor_providers.dart';
+import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -27,12 +26,12 @@ enum _RapportinoFilter { tutti, bozza, inviata, pagata, annullato }
 
 extension _FilterLabel on _RapportinoFilter {
   String get label => switch (this) {
-        _RapportinoFilter.tutti => 'Tutti',
-        _RapportinoFilter.bozza => 'Bozza',
-        _RapportinoFilter.inviata => 'Inviata',
-        _RapportinoFilter.pagata => 'Pagata',
-        _RapportinoFilter.annullato => 'Annullato',
-      };
+    _RapportinoFilter.tutti => 'Tutti',
+    _RapportinoFilter.bozza => 'Bozza',
+    _RapportinoFilter.inviata => 'Inviata',
+    _RapportinoFilter.pagata => 'Pagata',
+    _RapportinoFilter.annullato => 'Annullato',
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -82,30 +81,20 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
 class _NewRapportinoFab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AppFab(
-      tooltip: 'Nuovo rapportino',
-      onPressed: () => _createNewDraft(context, ref),
-    );
+    return AppFab(tooltip: 'Nuovo rapportino', onPressed: () => _createNewDraft(context, ref));
   }
 
   Future<void> _createNewDraft(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(draftReportRepositoryProvider);
-    final id = 'draft-${DateTime.now().millisecondsSinceEpoch}';
-    await repo.createDraft(
-      DraftReportsCompanion.insert(
-        id: id,
-        tenantId: 'local',
-        createdAt: DateTime.now().toUtc(),
-        title: 'Nuovo rapportino',
-        insertedUserId: 'local-user',
-        locationId: '',
-        isLocalOnly: const Value(true),
-        stato: const Value('Bozza'),
-      ),
-    );
-    if (context.mounted) {
-      context.push(AppRoutes.rapportiniEditor(id));
+    final id = await createLocalDraft(ref, title: 'Nuovo rapportino');
+    if (!context.mounted) return;
+    if (id == null) {
+      // Refused rather than authored by a placeholder. See createLocalDraft.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Accedi per creare un rapportino.')));
+      return;
     }
+    context.push(AppRoutes.rapportiniEditor(id));
   }
 }
 
@@ -144,8 +133,7 @@ class _RapportiniListBody extends ConsumerWidget {
         _RapportinoFilter.pagata => false,
         _RapportinoFilter.annullato => false,
       };
-      final matchQuery = query.isEmpty ||
-          d.title.toLowerCase().contains(query.toLowerCase());
+      final matchQuery = query.isEmpty || d.title.toLowerCase().contains(query.toLowerCase());
       return matchFilter && matchQuery;
     }).toList();
 
@@ -156,11 +144,7 @@ class _RapportiniListBody extends ConsumerWidget {
             title: 'Rapportini',
             subtitle: '${allDrafts.length} totali',
             actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.filter,
-                label: 'Filtra rapportini',
-                onTap: () {},
-              ),
+              HeaderIconBtn(icon: LucideIcons.filter, label: 'Filtra rapportini', onTap: () {}),
             ],
           ),
         ),
@@ -194,10 +178,7 @@ class _RapportiniListBody extends ConsumerWidget {
         if (draftsAsync.isLoading)
           const SliverToBoxAdapter(
             child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
             ),
           )
         else if (filtered.isEmpty)
@@ -210,15 +191,9 @@ class _RapportiniListBody extends ConsumerWidget {
           )
         else
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                return _RapportinoRow(
-                  draft: filtered[i],
-                  isLast: i == filtered.length - 1,
-                );
-              },
-              childCount: filtered.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, i) {
+              return _RapportinoRow(draft: filtered[i], isLast: i == filtered.length - 1);
+            }, childCount: filtered.length),
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
@@ -231,10 +206,7 @@ class _RapportiniListBody extends ConsumerWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _RapportinoRow extends ConsumerWidget {
-  const _RapportinoRow({
-    required this.draft,
-    required this.isLast,
-  });
+  const _RapportinoRow({required this.draft, required this.isLast});
 
   final DraftReport draft;
   final bool isLast;
@@ -250,16 +222,16 @@ class _RapportinoRow extends ConsumerWidget {
 
     final statusLabel = rapportinoStatusLabel(draft);
     final isSubmitted = rapportinoIsSubmitted(draft);
-    final hasBothSigs = draft.customerSignatureAllegatoId != null &&
-        draft.technicianSignatureAllegatoId != null;
+    final hasBothSigs =
+        draft.customerSignatureAllegatoId != null && draft.technicianSignatureAllegatoId != null;
 
-    final dateLabel = DateFormat('dd/MM/yy', 'it').format(
-      (draft.updatedAt ?? draft.createdAt).toLocal(),
-    );
+    final dateLabel = DateFormat(
+      'dd/MM/yy',
+      'it',
+    ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
     // Short id for display
-    final shortId =
-        draft.id.length > 8 ? draft.id.substring(0, 8) : draft.id;
+    final shortId = draft.id.length > 8 ? draft.id.substring(0, 8) : draft.id;
 
     // Subtitle: tecnico count · ore · materiali count
     final subParts = <String>[
@@ -279,11 +251,7 @@ class _RapportinoRow extends ConsumerWidget {
               color: context.colors.bg3,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              LucideIcons.fileText,
-              size: 20,
-              color: context.colors.inkMuted,
-            ),
+            child: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
           ),
           if (hasBothSigs)
             Positioned(
@@ -297,11 +265,7 @@ class _RapportinoRow extends ConsumerWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: context.colors.surface, width: 1.5),
                 ),
-                child: Icon(
-                  LucideIcons.penTool,
-                  size: 8,
-                  color: AppColors.WHITE,
-                ),
+                child: Icon(LucideIcons.penTool, size: 8, color: AppColors.WHITE),
               ),
             ),
         ],
@@ -314,10 +278,7 @@ class _RapportinoRow extends ConsumerWidget {
         children: [
           StatusPill(stato: statusLabel, small: true),
           const SizedBox(height: 2),
-          Text(
-            dateLabel,
-            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
-          ),
+          Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
         ],
       ),
       showDivider: !isLast,

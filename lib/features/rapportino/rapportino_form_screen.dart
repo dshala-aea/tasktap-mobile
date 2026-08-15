@@ -34,16 +34,12 @@ const _kSteps = [
 ];
 
 class RapportinoFormScreen extends ConsumerStatefulWidget {
-  const RapportinoFormScreen({
-    super.key,
-    required this.reportId,
-  });
+  const RapportinoFormScreen({super.key, required this.reportId});
 
   final String reportId;
 
   @override
-  ConsumerState<RapportinoFormScreen> createState() =>
-      _RapportinoFormScreenState();
+  ConsumerState<RapportinoFormScreen> createState() => _RapportinoFormScreenState();
 }
 
 class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
@@ -77,8 +73,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     String? contextSubtitle;
     if (editorState.ticketId != null && editorState.ticketId!.isNotEmpty) {
       contextSubtitle = 'Ticket: ${editorState.ticketId}';
-    } else if (editorState.cantiereId != null &&
-        editorState.cantiereId!.isNotEmpty) {
+    } else if (editorState.cantiereId != null && editorState.cantiereId!.isNotEmpty) {
       contextSubtitle = 'Cantiere: ${editorState.cantiereId}';
     } else if (editorState.ticketFreeText?.isNotEmpty ?? false) {
       contextSubtitle = 'Ticket: ${editorState.ticketFreeText}';
@@ -117,13 +112,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.Y,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
                   )
-                : const Icon(LucideIcons.cloud,
-                    size: 20, color: AppColors.Y),
+                : const Icon(LucideIcons.cloud, size: 20, color: AppColors.Y),
           ),
         ],
       ),
@@ -133,10 +124,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           Container(
             color: AppColors.CHARCOAL,
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: AppStepper(
-              steps: _kSteps,
-              currentIndex: _stepIndex,
-            ),
+            child: AppStepper(steps: _kSteps, currentIndex: _stepIndex),
           ),
 
           // ── Step content ───────────────────────────────────────────────────
@@ -150,12 +138,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           ),
 
           // ── Sticky bottom navigation bar ───────────────────────────────────
-          _BottomNavBar(
-            isFirst: _isFirst,
-            isLast: _isLast,
-            onBack: _goBack,
-            onNext: _goNext,
-          ),
+          _BottomNavBar(isFirst: _isFirst, isLast: _isLast, onBack: _goBack, onNext: _goNext),
         ],
       ),
     );
@@ -165,8 +148,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     return switch (_step) {
       _FormStep.dettagli => StepDettagli(key: key, reportId: widget.reportId),
       _FormStep.ore => StepOre(key: key, reportId: widget.reportId),
-      _FormStep.materiali =>
-        StepMaterialiFold(key: key, reportId: widget.reportId),
+      _FormStep.materiali => StepMaterialiFold(key: key, reportId: widget.reportId),
       _FormStep.riepilogo => StepRiepilogo(key: key, reportId: widget.reportId),
     };
   }
@@ -210,11 +192,7 @@ class _BottomNavBar extends StatelessWidget {
             ],
             if (!isLast)
               Expanded(
-                child: AppButton(
-                  label: 'Avanti',
-                  onPressed: onNext,
-                  size: AppButtonSize.lg,
-                ),
+                child: AppButton(label: 'Avanti', onPressed: onNext, size: AppButtonSize.lg),
               ),
           ],
         ),
