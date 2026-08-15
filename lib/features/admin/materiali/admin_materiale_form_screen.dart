@@ -180,69 +180,57 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
         child: ListView(
           padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
+            AppTextField(
+              label: 'Codice *',
               controller: _codeCtrl,
-              decoration: const InputDecoration(labelText: 'Codice *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
+            AppTextField(
+              label: 'Nome *',
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(labelText: 'Descrizione'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
             const SizedBox(height: 16),
 
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Unità di misura',
+                    hint: 'pz, kg, mt…',
                     controller: _unitOfMeasureCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Unità di misura',
-                      hintText: 'pz, kg, mt…',
-                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextFormField(
-                    controller: _marcaCtrl,
-                    decoration: const InputDecoration(labelText: 'Marca'),
-                  ),
+                  child: AppTextField(label: 'Marca', controller: _marcaCtrl),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _categoryCtrl,
-              decoration: const InputDecoration(labelText: 'Categoria'),
-            ),
+            AppTextField(label: 'Categoria', controller: _categoryCtrl),
             const SizedBox(height: 16),
 
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Prezzo acquisto (€)',
                     controller: _purchasePriceCtrl,
-                    decoration: const InputDecoration(labelText: 'Prezzo acquisto (€)'),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Prezzo vendita (€)',
                     controller: _salePriceCtrl,
-                    decoration: const InputDecoration(labelText: 'Prezzo vendita (€)'),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),

@@ -195,10 +195,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         child: ListView(
           padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
-              controller: _titleCtrl,
-              decoration: const InputDecoration(labelText: 'Titolo'),
-            ),
+            AppTextField(label: 'Titolo', controller: _titleCtrl),
             const SizedBox(height: 16),
 
             // ── Date picker ──────────────────────────────────────────────
@@ -238,41 +235,41 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
             const SizedBox(height: 8),
 
             // ── Technician selector ──────────────────────────────────────
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — controlled field, needs value not initialValue
-              value: _selectedUserId,
-              decoration: const InputDecoration(labelText: 'Tecnico *'),
-              items: [
-                ...technicians.map(
-                  (t) => DropdownMenuItem(
-                    value: t['id'] as String,
-                    child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+            AppFieldShell(
+              label: 'Tecnico *',
+              child: DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _selectedUserId,
+                items: [
+                  ...technicians.map(
+                    (t) => DropdownMenuItem(
+                      value: t['id'] as String,
+                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                    ),
                   ),
-                ),
-              ],
-              onChanged: (v) => setState(() => _selectedUserId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+                ],
+                onChanged: (v) => setState(() => _selectedUserId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
             // ── Location selector ────────────────────────────────────────
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — controlled field, needs value not initialValue
-              value: _selectedLocationId,
-              decoration: const InputDecoration(labelText: 'Sede *'),
-              items: locations
-                  .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedLocationId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+            AppFieldShell(
+              label: 'Sede *',
+              child: DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _selectedLocationId,
+                items: locations
+                    .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedLocationId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(labelText: 'Note'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
           ],
         ),
       ),

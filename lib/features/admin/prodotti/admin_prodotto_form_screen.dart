@@ -174,46 +174,43 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
         child: ListView(
           padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
+            AppTextField(
+              label: 'Nome *',
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(labelText: 'Cliente *'),
-              items: customers
-                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedCustomerId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+            AppFieldShell(
+              label: 'Cliente *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedCustomerId,
+                items: customers
+                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedCustomerId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedLocationId,
-              decoration: const InputDecoration(labelText: 'Sede *'),
-              items: locations
-                  .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedLocationId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+            AppFieldShell(
+              label: 'Sede *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedLocationId,
+                items: locations
+                    .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedLocationId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(labelText: 'Descrizione'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _serialNumberCtrl,
-              decoration: const InputDecoration(labelText: 'Numero di serie'),
-            ),
+            AppTextField(label: 'Numero di serie', controller: _serialNumberCtrl),
             const SizedBox(height: 16),
 
             ListTile(
@@ -226,11 +223,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
             const Divider(),
             const SizedBox(height: 8),
 
-            TextFormField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Note'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
           ],
         ),
       ),

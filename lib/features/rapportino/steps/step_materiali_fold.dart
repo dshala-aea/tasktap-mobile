@@ -190,8 +190,7 @@ class StepMaterialiFold extends ConsumerWidget {
                   label: 'Materiale',
                   hint: 'Cerca a catalogo o scrivi il nome',
                   items: [
-                    for (final m in catalogo)
-                      LookupItem(id: m.id, name: m.name, subtitle: m.code),
+                    for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code),
                   ],
                   onSelected: (id) {
                     selectedMaterialeId = id;
@@ -215,18 +214,23 @@ class StepMaterialiFold extends ConsumerWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: qtyCtrl,
-                        decoration: const InputDecoration(labelText: 'Qtà'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      child: AppFieldShell(
+                        label: 'Qtà',
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: TextField(
-                        controller: uomCtrl,
-                        decoration: const InputDecoration(labelText: 'Unità (es. pz)'),
+                      child: AppFieldShell(
+                        label: 'Unità',
+                        child: TextField(
+                          controller: uomCtrl,
+                          decoration: const InputDecoration(hintText: 'pz'),
+                        ),
                       ),
                     ),
                   ],

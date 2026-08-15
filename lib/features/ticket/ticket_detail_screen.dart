@@ -193,7 +193,8 @@ class _TicketDetailBody extends ConsumerWidget {
                           KeyVal(
                             label: 'Chiusura',
                             value: closedLabel,
-                            showDivider: (ticket.description?.isNotEmpty ?? false) ||
+                            showDivider:
+                                (ticket.description?.isNotEmpty ?? false) ||
                                 (ticket.technicianNotes?.isNotEmpty ?? false),
                           ),
                           if (ticket.description?.isNotEmpty ?? false)
@@ -822,19 +823,21 @@ class _AssignSheetState extends State<_AssignSheet> {
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else
-            DropdownButtonFormField<String>(
-              initialValue: _selectedUserId,
-              decoration: const InputDecoration(labelText: 'Tecnico'),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Non assegnato')),
-                ..._technicians.map(
-                  (t) => DropdownMenuItem(
-                    value: t['id'] as String,
-                    child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+            AppFieldShell(
+              label: 'Tecnico',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedUserId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Non assegnato')),
+                  ..._technicians.map(
+                    (t) => DropdownMenuItem(
+                      value: t['id'] as String,
+                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                    ),
                   ),
-                ),
-              ],
-              onChanged: (v) => setState(() => _selectedUserId = v),
+                ],
+                onChanged: (v) => setState(() => _selectedUserId = v),
+              ),
             ),
           const SizedBox(height: 16),
           SizedBox(

@@ -156,53 +156,39 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
           padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
             // ── Customer selector ─────────────────────────────────────────
-            DropdownButtonFormField<String>(
-              initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(labelText: 'Cliente *'),
-              items: customers
-                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedCustomerId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+            AppFieldShell(
+              label: 'Cliente *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedCustomerId,
+                items: customers
+                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedCustomerId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
+            AppTextField(
+              label: 'Nome sede *',
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome sede *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _addressCtrl,
-              decoration: const InputDecoration(labelText: 'Indirizzo'),
-            ),
+            AppTextField(label: 'Indirizzo', controller: _addressCtrl),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _cityCtrl,
-              decoration: const InputDecoration(labelText: 'Città'),
-            ),
+            AppTextField(label: 'Città', controller: _cityCtrl),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _postalCodeCtrl,
-              decoration: const InputDecoration(labelText: 'CAP'),
-            ),
+            AppTextField(label: 'CAP', controller: _postalCodeCtrl),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _phoneCtrl,
-              decoration: const InputDecoration(labelText: 'Telefono'),
-            ),
+            AppTextField(label: 'Telefono', controller: _phoneCtrl),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Note'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
           ],
         ),
       ),

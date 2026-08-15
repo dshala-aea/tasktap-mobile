@@ -432,17 +432,17 @@ class _NumField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixText: suffix,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    // Label above and the theme's own decoration, like every other field. This one also
+    // hand-rolled its border radius and padding, so an ore box did not match the box beside it.
+    return AppFieldShell(
+      label: label,
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(suffixText: suffix),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        onChanged: onChanged,
       ),
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-      onChanged: onChanged,
     );
   }
 }

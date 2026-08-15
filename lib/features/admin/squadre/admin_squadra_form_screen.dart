@@ -131,40 +131,27 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
         child: ListView(
           padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
+            AppTextField(
+              label: 'Nome *',
               controller: _nomeCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descrizioneCtrl,
-              decoration: const InputDecoration(labelText: 'Descrizione'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Descrizione', controller: _descrizioneCtrl, maxLines: 3),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _specializzazioneCtrl,
-              decoration: const InputDecoration(labelText: 'Specializzazione'),
-            ),
+            AppTextField(label: 'Specializzazione', controller: _specializzazioneCtrl),
             const SizedBox(height: 16),
 
-            TextFormField(
+            AppTextField(
+              label: 'Colore calendario (hex)',
+              hint: '#FF5722',
               controller: _coloreCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Colore calendario (hex)',
-                hintText: '#FF5722',
-              ),
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _noteCtrl,
-              decoration: const InputDecoration(labelText: 'Note'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
           ],
         ),
       ),

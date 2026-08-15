@@ -108,7 +108,7 @@ class AppTextField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _FieldLabel(label: label, enabled: enabled),
+        AppFieldLabel(label: label, enabled: enabled),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
@@ -131,8 +131,6 @@ class AppTextField extends StatelessWidget {
             hintText: hint,
             prefixIcon: prefixIcon,
             suffixIcon: suffixIcon,
-            // The label is above; this is what a screen reader announces for the field itself.
-            labelText: null,
             isDense: true,
           ),
         ),
@@ -142,14 +140,46 @@ class AppTextField extends StatelessWidget {
 }
 
 
+/// Puts a static label above any input widget — a dropdown, a date picker, a segmented control.
+///
+/// Exists so the label treatment is one decision rather than one per widget type. Without it the
+/// dropdowns in the admin forms would keep floating a Material label into a border notch while
+/// the text fields beside them label from above, which reads worse than either choice made
+/// consistently.
+class AppFieldShell extends StatelessWidget {
+  const AppFieldShell({
+    super.key,
+    required this.label,
+    required this.child,
+    this.enabled = true,
+  });
+
+  final String label;
+  final Widget child;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppFieldLabel(label: label, enabled: enabled),
+        const SizedBox(height: 6),
+        child,
+      ],
+    );
+  }
+}
+
 /// The static label above a field.
 ///
 /// Small, heavy and slightly tracked — the same voice as the other micro-labels in the app
 /// ("SESSIONI DI OGGI", the timbra date) rather than a shrunken copy of body text. A trailing
 /// asterisk is coloured, so "required" is visible at a glance down a column of labels instead of
 /// being one more grey character.
-class _FieldLabel extends StatelessWidget {
-  const _FieldLabel({required this.label, required this.enabled});
+class AppFieldLabel extends StatelessWidget {
+  const AppFieldLabel({super.key, required this.label, required this.enabled});
 
   final String label;
   final bool enabled;

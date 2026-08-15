@@ -197,40 +197,40 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
         child: ListView(
           padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
+            AppTextField(
+              label: 'Nome *',
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(labelText: 'Cliente *'),
-              items: customers
-                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedCustomerId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+            AppFieldShell(
+              label: 'Cliente *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedCustomerId,
+                items: customers
+                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedCustomerId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedLocationId,
-              decoration: const InputDecoration(labelText: 'Sede'),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Nessuna sede')),
-                ...locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))),
-              ],
-              onChanged: (v) => setState(() => _selectedLocationId = v),
+            AppFieldShell(
+              label: 'Sede',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedLocationId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Nessuna sede')),
+                  ...locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))),
+                ],
+                onChanged: (v) => setState(() => _selectedLocationId = v),
+              ),
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(labelText: 'Descrizione'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
             const SizedBox(height: 16),
 
             // ── Dates ────────────────────────────────────────────────────
@@ -257,40 +257,40 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Frequenza',
                     initialValue: _frequencyValue.toString(),
-                    decoration: const InputDecoration(labelText: 'Frequenza'),
                     keyboardType: TextInputType.number,
                     onChanged: (v) => _frequencyValue = int.tryParse(v) ?? 1,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _frequencyUnit,
-                    decoration: const InputDecoration(labelText: 'Unità'),
-                    items: [0, 1, 2]
-                        .map((u) => DropdownMenuItem(value: u, child: Text(_frequencyUnitLabel(u))))
-                        .toList(),
-                    onChanged: (v) => setState(() => _frequencyUnit = v ?? 1),
+                  child: AppFieldShell(
+                    label: 'Unità',
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _frequencyUnit,
+                      items: [0, 1, 2]
+                          .map(
+                            (u) => DropdownMenuItem(value: u, child: Text(_frequencyUnitLabel(u))),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _frequencyUnit = v ?? 1),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
+            AppTextField(
+              label: 'Prezzo (€)',
               controller: _priceCtrl,
-              decoration: const InputDecoration(labelText: 'Prezzo (€)'),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Note'),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
           ],
         ),
       ),

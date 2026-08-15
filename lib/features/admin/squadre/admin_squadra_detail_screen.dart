@@ -283,30 +283,34 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — controlled field, needs value not initialValue
-              value: _selectedUserId,
-              decoration: const InputDecoration(labelText: 'Tecnico *'),
-              items: _technicians
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t['id'] as String,
-                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedUserId = v),
+            AppFieldShell(
+              label: 'Tecnico *',
+              child: DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _selectedUserId,
+                items: _technicians
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t['id'] as String,
+                        child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedUserId = v),
+              ),
             ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            // ignore: deprecated_member_use — controlled field, needs value not initialValue
-            value: _ruolo,
-            decoration: const InputDecoration(labelText: 'Ruolo'),
-            items: const [
-              DropdownMenuItem(value: 'Membro', child: Text('Membro')),
-              DropdownMenuItem(value: 'TeamLead', child: Text('Team Lead')),
-            ],
-            onChanged: (v) => setState(() => _ruolo = v ?? 'Membro'),
+          AppFieldShell(
+            label: 'Ruolo',
+            child: DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use — controlled field, needs value not initialValue
+              value: _ruolo,
+              items: const [
+                DropdownMenuItem(value: 'Membro', child: Text('Membro')),
+                DropdownMenuItem(value: 'TeamLead', child: Text('Team Lead')),
+              ],
+              onChanged: (v) => setState(() => _ruolo = v ?? 'Membro'),
+            ),
           ),
           const SizedBox(height: 16),
           SizedBox(

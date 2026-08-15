@@ -115,9 +115,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           AppLookupField(
             label: 'Cliente *',
             hint: 'Cerca o scrivi il nome',
-            items: [
-              for (final c in customers) LookupItem(id: c.id, name: c.companyName),
-            ],
+            items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
             selectedId: state.customerId,
             initialText: state.customerFreeText,
             emptyCacheHint: 'Nessun cliente sincronizzato — scrivi il nome, verrà collegato dopo.',
@@ -129,9 +127,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           AppLookupField(
             label: 'Sede',
             hint: 'Cerca o scrivi l\'ubicazione',
-            items: [
-              for (final l in locations) LookupItem(id: l.id, name: l.name),
-            ],
+            items: [for (final l in locations) LookupItem(id: l.id, name: l.name)],
             selectedId: state.locationId,
             initialText: state.locationFreeText,
             onSelected: notifier.setLocationFromCache,
@@ -173,9 +169,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               AppLookupField(
                 label: 'Ticket',
                 hint: 'Cerca o scrivi il riferimento',
-                items: [
-                  for (final t in tickets) LookupItem(id: t.id, name: t.title),
-                ],
+                items: [for (final t in tickets) LookupItem(id: t.id, name: t.title)],
                 initialText: state.ticketFreeText,
                 onSelected: notifier.setTicketFromCache,
                 onFreeText: notifier.setTicketFreeText,
@@ -184,9 +178,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               AppLookupField(
                 label: 'Cantiere',
                 hint: 'Cerca o scrivi il nome',
-                items: [
-                  for (final c in cantieri) LookupItem(id: c.id, name: c.name),
-                ],
+                items: [for (final c in cantieri) LookupItem(id: c.id, name: c.name)],
                 initialText: state.cantiereFreeText,
                 onSelected: notifier.setCantiereFromCache,
                 onFreeText: notifier.setCantiereFreeText,
@@ -398,20 +390,13 @@ class _LinkedChip extends StatelessWidget {
       children: [
         const Icon(LucideIcons.link, size: 14, color: AppColors.Y),
         const SizedBox(width: 6),
-        Text(
-          '$label · ',
-          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
-        ),
+        Text('$label · ', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
         Expanded(
           child: Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.colors.ink,
-            ),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.ink),
           ),
         ),
       ],
