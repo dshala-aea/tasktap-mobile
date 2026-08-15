@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/location/location_service.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/ai/ai_api_client.dart';
 import 'package:intl/intl.dart';
@@ -315,7 +316,6 @@ class _GpsCapture extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(reportEditorProvider(reportId));
-    final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final hasGps = state.gpsLatitude != null && state.gpsLongitude != null;
 
     return AppCard(
@@ -342,7 +342,7 @@ class _GpsCapture extends ConsumerWidget {
           ),
           const SizedBox(width: 8),
           TextButton.icon(
-            onPressed: () => _captureGps(context, notifier),
+            onPressed: () => _captureGps(context, ref),
             icon: const Icon(LucideIcons.locateFixed, size: 16),
             label: Text(hasGps ? 'Aggiorna' : 'Acquisisci'),
             style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
@@ -352,36 +352,45 @@ class _GpsCapture extends ConsumerWidget {
     );
   }
 
-  Future<void> _captureGps(BuildContext context, ReportEditorNotifier notifier) async {
-    // Use a fixed mock position in test/offline environments.
-    // In production the geolocator package would be called here.
-    // Since step_dati doesn't actually call geolocator (no SDK in test env),
-    // we replicate the same graceful degradation: capture button stores
-    // a fixed "last-known" fallback and shows an error snackbar on failure.
-    try {
-      // Attempt to get position via geolocator if available.
-      // Import is intentionally not at top-level to avoid compile failure
-      // on platforms where geolocator is not configured.
-      const double lat = 0.0;
-      const double lng = 0.0;
-      // NOTE: replace the two lines above with a real geolocator call when
-      // the plugin is fully wired for the platform:
-      //   final pos = await Geolocator.getCurrentPosition();
-      //   notifier.setGps(pos.latitude, pos.longitude);
-      notifier.setGps(lat, lng);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('GPS non disponibile — posizione mock salvata'),
-            duration: Duration(seconds: 2),
+  /// Capture the real position, or record none at all.
+  ///
+  /// This used to write `(0.0, 0.0)` — Null Island, in the Gulf of Guinea — set the "acquired"
+  /// state and render "GPS: 0.00000, 0.00000" as though it had been measured. A snackbar admitted
+  /// it was a mock, but the *record* did not: a rapportino could reach an invoice carrying a
+  /// coordinate that was never anywhere. The comment claiming geolocator was not wired had been
+  /// stale for some time; `cantiere_timbra_screen` has been using it through this same service.
+  ///
+  /// There is no fallback value, deliberately. An absent position is a fact the office can act on;
+  /// a fabricated one is not distinguishable from a real one.
+  Future<void> _captureGps(BuildContext context, WidgetRef ref) async {
+    final notifier = ref.read(reportEditorProvider(reportId).notifier);
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Off in Impostazioni resolves to the disabled service, which answers null like a denial —
+    // so say which of the two it is rather than reporting a generic failure.
+    if (!ref.read(gpsPreferenceProvider)) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Geolocalizzazione disattivata. Attivala in Impostazioni per registrare la posizione.',
           ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore GPS: $e')));
-      }
+        ),
+      );
+      return;
     }
+
+    final coords = await ref.read(locationServiceProvider).getCurrentPosition();
+
+    if (coords == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Posizione non disponibile. Controlla il GPS e i permessi, poi riprova.'),
+        ),
+      );
+      return;
+    }
+
+    notifier.setGps(coords.lat, coords.lng);
   }
 }
 

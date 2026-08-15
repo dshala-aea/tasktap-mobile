@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,6 +66,35 @@ void main() {
       addTearDown(container.dispose);
 
       expect(container.read(locationServiceProvider), isA<DisabledLocationService>());
+    });
+  });
+
+  group('an unavailable position is recorded as absent, never as a value', () {
+    test('the disabled service yields null rather than a placeholder coordinate', () async {
+      // The rapportino step used to write (0.0, 0.0) — Null Island — mark the position
+      // "acquired" and render it as measured, so a report could reach an invoice carrying a
+      // coordinate that was never anywhere. Null is the only honest answer, and every call site
+      // already treats it as one.
+      const service = DisabledLocationService();
+      final coords = await service.getCurrentPosition();
+
+      expect(coords, isNull);
+    });
+
+    test('no call site is handed a zero-island fallback', () {
+      // A regression here would not be a crash — it would be a plausible-looking coordinate in a
+      // signed document, which is why it is worth asserting on the source.
+      final offenders = <String>[];
+      for (final entity in Directory('lib').listSync(recursive: true)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        final src = entity.readAsStringSync();
+        if (src.contains('setGps(0') ||
+            src.contains('setGps(lat, lng)') && src.contains('const double lat = 0')) {
+          offenders.add(entity.path.replaceAll(r'\', '/'));
+        }
+      }
+
+      expect(offenders, isEmpty, reason: 'record no position rather than a fabricated one');
     });
   });
 
