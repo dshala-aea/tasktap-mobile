@@ -58,9 +58,9 @@ class EntitlementRepository {
   static const fieldSeatBaseline = {'rapportini', 'presenze', 'interventi'};
 
   Future<Entitlement?> read() async {
-    final row = await (_db.select(_db.entitlements)
-          ..where((e) => e.id.equals(_rowId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.entitlements,
+    )..where((e) => e.id.equals(_rowId))).getSingleOrNull();
 
     if (row == null) return null;
 
@@ -79,7 +79,9 @@ class EntitlementRepository {
     required String seatType,
     required DateTime fetchedAt,
   }) async {
-    await _db.into(_db.entitlements).insertOnConflictUpdate(
+    await _db
+        .into(_db.entitlements)
+        .insertOnConflictUpdate(
           EntitlementsCompanion.insert(
             id: _rowId,
             featuresJson: jsonEncode(features),

@@ -49,7 +49,9 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 /// Insert a draft header before the notifier autosaves.
 Future<void> _seedDraft(AppDatabase db, String reportId) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: reportId,
           tenantId: 'tenant-1',
@@ -167,13 +169,15 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(
-        id: 's-1',
-        userId: 'user-2',
-        displayName: 'Mario Rossi',
-        hoursWorked: 6.0,
-        kmTraveled: 80.0,
-      ));
+      await notifier.addStaff(
+        const StaffRow(
+          id: 's-1',
+          userId: 'user-2',
+          displayName: 'Mario Rossi',
+          hoursWorked: 6.0,
+          kmTraveled: 80.0,
+        ),
+      );
 
       expect(notifier.state.staffRows.length, 1);
       expect(notifier.state.staffRows.first.userId, 'user-2');
@@ -187,12 +191,7 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      const original = StaffRow(
-        id: 's-1',
-        userId: 'user-2',
-        hoursWorked: 4.0,
-        kmTraveled: 40.0,
-      );
+      const original = StaffRow(id: 's-1', userId: 'user-2', hoursWorked: 4.0, kmTraveled: 40.0);
       await notifier.addStaff(original);
       await notifier.updateStaff(original.copyWith(hoursWorked: 8.0));
 
@@ -207,8 +206,7 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
       await notifier.removeStaff('s-1');
 
       expect(notifier.state.staffRows, isEmpty);
@@ -219,12 +217,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
-      await notifier.addStaff(
-          const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0));
-      await notifier.addStaff(
-          const StaffRow(id: 's-3', userId: 'u-3', hoursWorked: 8.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0));
+      await notifier.addStaff(const StaffRow(id: 's-3', userId: 'u-3', hoursWorked: 8.0));
 
       expect(notifier.state.staffRows.length, 3);
       expect((await repo.getStaff('draft-1')).length, 3);
@@ -265,8 +260,7 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
       await notifier.startTimer('s-1');
 
       final row = notifier.state.staffRows.first;
@@ -279,8 +273,7 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
 
@@ -297,13 +290,15 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-1',
-        reportId: 'draft-1',
-        freeTextName: 'Cavo coassiale',
-        quantity: 5.0,
-        unitOfMeasure: 'm',
-      ));
+      await notifier.addMateriale(
+        const MaterialeRow(
+          id: 'm-1',
+          reportId: 'draft-1',
+          freeTextName: 'Cavo coassiale',
+          quantity: 5.0,
+          unitOfMeasure: 'm',
+        ),
+      );
 
       expect(notifier.state.materialeRows.length, 1);
       final dbRows = await repo.getMateriali('draft-1');
@@ -316,12 +311,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-2',
-        reportId: 'draft-1',
-        materialeId: 'mat-42',
-        quantity: 2.0,
-      ));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-2', reportId: 'draft-1', materialeId: 'mat-42', quantity: 2.0),
+      );
 
       final dbRows = await repo.getMateriali('draft-1');
       expect(dbRows.first.materialeId, 'mat-42');
@@ -332,12 +324,9 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-1',
-        reportId: 'draft-1',
-        freeTextName: 'Test',
-        quantity: 1.0,
-      ));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Test', quantity: 1.0),
+      );
       await notifier.removeMateriale('m-1');
 
       expect(notifier.state.materialeRows, isEmpty);
@@ -359,8 +348,7 @@ void main() {
   // ── Signatures ────────────────────────────────────────────────────────────
 
   group('signature attachment', () {
-    test('saveCustomerSignature sets customerSignatureAllegatoId in state',
-        () async {
+    test('saveCustomerSignature sets customerSignatureAllegatoId in state', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
       final bytes = Uint8List.fromList([0, 1, 2, 3]);
@@ -382,8 +370,7 @@ void main() {
       expect(allegati.any((a) => a.id == 'sig-cust-1'), isTrue);
     });
 
-    test('saveTechnicianSignature sets technicianSignatureAllegatoId in state',
-        () async {
+    test('saveTechnicianSignature sets technicianSignatureAllegatoId in state', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
       final bytes = Uint8List.fromList([10, 20, 30]);
@@ -422,13 +409,15 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addAllegato(const AllegatoRow(
-        id: 'photo-1',
-        localPath: '/sdcard/photo1.jpg',
-        fileName: 'photo1.jpg',
-        contentType: 'image/jpeg',
-        sizeBytes: 102400,
-      ));
+      await notifier.addAllegato(
+        const AllegatoRow(
+          id: 'photo-1',
+          localPath: '/sdcard/photo1.jpg',
+          fileName: 'photo1.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 102400,
+        ),
+      );
 
       expect(notifier.state.allegatoRows.length, 1);
       final dbRows = await repo.getAllegati('draft-1');
@@ -440,13 +429,15 @@ void main() {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);
 
-      await notifier.addAllegato(const AllegatoRow(
-        id: 'photo-del',
-        localPath: '/tmp/x.jpg',
-        fileName: 'x.jpg',
-        contentType: 'image/jpeg',
-        sizeBytes: 1024,
-      ));
+      await notifier.addAllegato(
+        const AllegatoRow(
+          id: 'photo-del',
+          localPath: '/tmp/x.jpg',
+          fileName: 'x.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 1024,
+        ),
+      );
       await notifier.removeAllegato('photo-del');
 
       expect(notifier.state.allegatoRows, isEmpty);
@@ -522,10 +513,7 @@ void main() {
 
       // Fresh draft: no title, no customer, no staff, no materiali, no firme
       expect(notifier.state.isReadyToSubmit, isFalse);
-      expect(
-        notifier.state.validation.issues,
-        contains(DraftValidationIssue.missingTitle),
-      );
+      expect(notifier.state.validation.issues, contains(DraftValidationIssue.missingTitle));
     });
 
     test('isReadyToSubmit=true when all requirements met', () async {
@@ -535,17 +523,10 @@ void main() {
       await notifier.setTitle('Test');
       await notifier.setCustomerFromCache('cust-1');
 
-      await notifier.addStaff(const StaffRow(
-        id: 's-1',
-        userId: 'u-1',
-        hoursWorked: 4.0,
-      ));
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-1',
-        reportId: 'draft-1',
-        freeTextName: 'Cavo',
-        quantity: 1.0,
-      ));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Cavo', quantity: 1.0),
+      );
       await notifier.saveCustomerSignature(
         allegatoId: 'sig-c',
         bytes: Uint8List.fromList([1]),
@@ -567,8 +548,7 @@ void main() {
 
       await notifier.setTitle('T');
       await notifier.setCustomerFromCache('c');
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 1.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 1.0));
       await notifier.setMaterialiNotRequired(true);
       await notifier.saveCustomerSignature(
         allegatoId: 'sc',
@@ -592,10 +572,11 @@ void main() {
     // then call notifier methods to populate the editor state.
     // We verify the notifier correctly stores the prefilled values.
 
-    test('can be prefilled with schedule title, customer, location, ticket',
-        () async {
+    test('can be prefilled with schedule title, customer, location, ticket', () async {
       // Simulate a cached schedule + linked entities in the DB
-      await db.into(db.customers).insert(
+      await db
+          .into(db.customers)
+          .insert(
             CustomersCompanion.insert(
               id: 'cust-sched',
               tenantId: 'tenant-1',
@@ -604,7 +585,9 @@ void main() {
             ),
           );
 
-      await db.into(db.tickets).insert(
+      await db
+          .into(db.tickets)
+          .insert(
             TicketsCompanion.insert(
               id: 'ticket-sched',
               tenantId: 'tenant-1',
@@ -617,7 +600,9 @@ void main() {
             ),
           );
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'sched-1',
               tenantId: 'tenant-1',
@@ -635,13 +620,12 @@ void main() {
           );
 
       await _seedDraft(db, 'draft-prefill');
-      final (notifier, _) =
-          _makeEditor(db, reportId: 'draft-prefill');
+      final (notifier, _) = _makeEditor(db, reportId: 'draft-prefill');
 
       // Simulate prefill: caller reads schedule and calls notifier methods
-      final sched = await (db.select(db.schedules)
-            ..where((s) => s.id.equals('sched-1')))
-          .getSingle();
+      final sched = await (db.select(
+        db.schedules,
+      )..where((s) => s.id.equals('sched-1'))).getSingle();
 
       await notifier.setTitle(sched.title);
       await notifier.setLocationFromCache(sched.locationId);
@@ -672,9 +656,7 @@ void main() {
 
   group('Riverpod provider integration', () {
     test('draftReportRepositoryProvider wires to appDatabaseProvider', () async {
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
       final repo = container.read(draftReportRepositoryProvider);
@@ -682,9 +664,7 @@ void main() {
     });
 
     test('reportEditorProvider.family returns unique notifier per id', () async {
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
       final state1 = container.read(reportEditorProvider('report-a'));

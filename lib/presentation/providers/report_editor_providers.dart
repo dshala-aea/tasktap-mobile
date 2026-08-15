@@ -150,11 +150,7 @@ class ControlloRow {
   final bool? boolValue;
   final DateTime? dateValue;
 
-  ControlloRow copyWith({
-    String? stringValue,
-    bool? boolValue,
-    DateTime? dateValue,
-  }) {
+  ControlloRow copyWith({String? stringValue, bool? boolValue, DateTime? dateValue}) {
     return ControlloRow(
       id: id,
       reportId: reportId,
@@ -266,47 +262,47 @@ class ReportEditorState {
   // ── Validation ────────────────────────────────────────────────────────────
 
   DraftValidationResult get validation => validateDraft(
-        draft: _syntheticDraft,
-        staffCount: staffRows.length,
-        materialiCount: materialeRows.length,
-        customerFreeText: customerFreeText,
-      );
+    draft: _syntheticDraft,
+    staffCount: staffRows.length,
+    materialiCount: materialeRows.length,
+    customerFreeText: customerFreeText,
+  );
 
   bool get isReadyToSubmit => validation.isValid;
 
   /// Build a synthetic DraftReport for validation without hitting Drift.
   DraftReport get _syntheticDraft => DraftReport(
-        id: reportId,
-        tenantId: tenantId,
-        createdAt: createdAt ?? DateTime.now().toUtc(),
-        updatedAt: null,
-        title: title,
-        scheduleId: scheduleId,
-        ticketId: ticketId,
-        customerId: customerId,
-        details: details.isEmpty ? null : details,
-        insertedUserId: insertedUserId,
-        locationId: locationId ?? '',
-        startedAt: null,
-        endedAt: null,
-        documentTemplateId: null,
-        customerSignatureAllegatoId: customerSignatureAllegatoId,
-        technicianSignatureAllegatoId: technicianSignatureAllegatoId,
-        technicianNotes: null,
-        closedAt: null,
-        stato: 'Bozza',
-        inviatoAt: null,
-        controllatoAt: null,
-        controllatoDa: null,
-        fatturatoAt: null,
-        materialiNotRequired: materialiNotRequired,
-        customerSignoffText: null,
-        customerSignoffAt: null,
-        isLocalOnly: true,
-        submissionState: 'draft',
-        idempotencyKey: null,
-        submissionError: null,
-      );
+    id: reportId,
+    tenantId: tenantId,
+    createdAt: createdAt ?? DateTime.now().toUtc(),
+    updatedAt: null,
+    title: title,
+    scheduleId: scheduleId,
+    ticketId: ticketId,
+    customerId: customerId,
+    details: details.isEmpty ? null : details,
+    insertedUserId: insertedUserId,
+    locationId: locationId ?? '',
+    startedAt: null,
+    endedAt: null,
+    documentTemplateId: null,
+    customerSignatureAllegatoId: customerSignatureAllegatoId,
+    technicianSignatureAllegatoId: technicianSignatureAllegatoId,
+    technicianNotes: null,
+    closedAt: null,
+    stato: 'Bozza',
+    inviatoAt: null,
+    controllatoAt: null,
+    controllatoDa: null,
+    fatturatoAt: null,
+    materialiNotRequired: materialiNotRequired,
+    customerSignoffText: null,
+    customerSignoffAt: null,
+    isLocalOnly: true,
+    submissionState: 'draft',
+    idempotencyKey: null,
+    submissionError: null,
+  );
 
   ReportEditorState copyWith({
     RapportinoStep? currentStep,
@@ -356,21 +352,14 @@ class ReportEditorState {
       title: title ?? this.title,
       details: details ?? this.details,
       customerId: clearCustomerId ? null : (customerId ?? this.customerId),
-      customerFreeText: clearCustomerFreeText
-          ? null
-          : (customerFreeText ?? this.customerFreeText),
+      customerFreeText: clearCustomerFreeText ? null : (customerFreeText ?? this.customerFreeText),
       workAddress: workAddress ?? this.workAddress,
       locationId: clearLocationId ? null : (locationId ?? this.locationId),
-      locationFreeText: clearLocationFreeText
-          ? null
-          : (locationFreeText ?? this.locationFreeText),
+      locationFreeText: clearLocationFreeText ? null : (locationFreeText ?? this.locationFreeText),
       ticketId: clearTicketId ? null : (ticketId ?? this.ticketId),
-      ticketFreeText:
-          clearTicketFreeText ? null : (ticketFreeText ?? this.ticketFreeText),
+      ticketFreeText: clearTicketFreeText ? null : (ticketFreeText ?? this.ticketFreeText),
       cantiereId: clearCantiereId ? null : (cantiereId ?? this.cantiereId),
-      cantiereFreeText: clearCantiereFreeText
-          ? null
-          : (cantiereFreeText ?? this.cantiereFreeText),
+      cantiereFreeText: clearCantiereFreeText ? null : (cantiereFreeText ?? this.cantiereFreeText),
       scheduleId: scheduleId ?? this.scheduleId,
       gpsLatitude: gpsLatitude ?? this.gpsLatitude,
       gpsLongitude: gpsLongitude ?? this.gpsLongitude,
@@ -390,8 +379,7 @@ class ReportEditorState {
           : (technicianSignatureLocalPath ?? this.technicianSignatureLocalPath),
       technicianSignatureAllegatoId: clearTechnicianSignature
           ? null
-          : (technicianSignatureAllegatoId ??
-              this.technicianSignatureAllegatoId),
+          : (technicianSignatureAllegatoId ?? this.technicianSignatureAllegatoId),
       allegatoRows: allegatoRows ?? this.allegatoRows,
       isSaving: isSaving ?? this.isSaving,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
@@ -409,8 +397,8 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   ReportEditorNotifier({
     required ReportEditorState initialState,
     required DraftReportRepository repo,
-  })  : _repo = repo,
-        super(initialState);
+  }) : _repo = repo,
+       super(initialState);
 
   final DraftReportRepository _repo;
 
@@ -450,18 +438,12 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> setCustomerFromCache(String customerId) async {
-    state = state.copyWith(
-      customerId: customerId,
-      clearCustomerFreeText: true,
-    );
+    state = state.copyWith(customerId: customerId, clearCustomerFreeText: true);
     await _autosave();
   }
 
   Future<void> setCustomerFreeText(String name) async {
-    state = state.copyWith(
-      customerFreeText: name,
-      clearCustomerId: true,
-    );
+    state = state.copyWith(customerFreeText: name, clearCustomerId: true);
     await _autosave();
   }
 
@@ -471,18 +453,12 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> setLocationFromCache(String locationId) async {
-    state = state.copyWith(
-      locationId: locationId,
-      clearLocationFreeText: true,
-    );
+    state = state.copyWith(locationId: locationId, clearLocationFreeText: true);
     await _autosave();
   }
 
   Future<void> setLocationFreeText(String name) async {
-    state = state.copyWith(
-      locationFreeText: name,
-      clearLocationId: true,
-    );
+    state = state.copyWith(locationFreeText: name, clearLocationId: true);
     await _autosave();
   }
 
@@ -542,9 +518,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> updateStaff(StaffRow row) async {
-    final updated = [
-      for (final r in state.staffRows) r.id == row.id ? row : r,
-    ];
+    final updated = [for (final r in state.staffRows) r.id == row.id ? row : r];
     state = state.copyWith(staffRows: updated);
     await _repo.upsertStaff(_staffToCompanion(row, state.reportId, state.tenantId));
   }
@@ -574,10 +548,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     final stopped = row.copyWith(
       timerRunning: false,
       endTime: now,
-      hoursWorked: row.effectiveHours +
-          (row.timerStartedAt != null
-              ? now.difference(row.timerStartedAt!).inMinutes / 60.0
-              : 0.0),
+      hoursWorked:
+          row.effectiveHours +
+          (row.timerStartedAt != null ? now.difference(row.timerStartedAt!).inMinutes / 60.0 : 0.0),
       clearTimer: true,
     );
     await updateStaff(stopped);
@@ -593,16 +566,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> updateMateriale(MaterialeRow row) async {
-    final updated = [
-      for (final r in state.materialeRows) r.id == row.id ? row : r,
-    ];
+    final updated = [for (final r in state.materialeRows) r.id == row.id ? row : r];
     state = state.copyWith(materialeRows: updated);
     await _repo.upsertMateriale(_materialeToCompanion(row, state.tenantId));
   }
 
   Future<void> removeMateriale(String materialeId) async {
-    final updated =
-        state.materialeRows.where((r) => r.id != materialeId).toList();
+    final updated = state.materialeRows.where((r) => r.id != materialeId).toList();
     state = state.copyWith(materialeRows: updated);
     await _repo.deleteMateriale(materialeId);
     await _autosaveHeader();
@@ -814,10 +784,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     );
   }
 
-  static ReportMaterialiCompanion _materialeToCompanion(
-    MaterialeRow row,
-    String tenantId,
-  ) {
+  static ReportMaterialiCompanion _materialeToCompanion(MaterialeRow row, String tenantId) {
     return ReportMaterialiCompanion(
       id: Value(row.id),
       tenantId: Value(tenantId),
@@ -832,10 +799,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     );
   }
 
-  static ReportControlliCompanion _controlloToCompanion(
-    ControlloRow row,
-    String tenantId,
-  ) {
+  static ReportControlliCompanion _controlloToCompanion(ControlloRow row, String tenantId) {
     return ReportControlliCompanion(
       id: Value(row.id),
       tenantId: Value(tenantId),
@@ -877,12 +841,10 @@ class ReportEditorArgs {
 
 /// StateNotifierProvider.family keyed by report id string.
 final reportEditorProvider = StateNotifierProvider.autoDispose
-    .family<ReportEditorNotifier, ReportEditorState, String>(
-  (ref, reportId) {
-    final repo = ref.watch(draftReportRepositoryProvider);
-    return ReportEditorNotifier(
-      initialState: ReportEditorState(reportId: reportId),
-      repo: repo,
-    );
-  },
-);
+    .family<ReportEditorNotifier, ReportEditorState, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return ReportEditorNotifier(
+        initialState: ReportEditorState(reportId: reportId),
+        repo: repo,
+      );
+    });

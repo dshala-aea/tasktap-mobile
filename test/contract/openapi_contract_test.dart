@@ -43,7 +43,8 @@ void main() {
     expect(
       schema,
       isNotNull,
-      reason: 'no schema "$schemaName" in the snapshot — renamed on the server, or the snapshot is stale',
+      reason:
+          'no schema "$schemaName" in the snapshot — renamed on the server, or the snapshot is stale',
     );
     return ((schema!['properties'] as Map<String, dynamic>?) ?? {}).keys.toSet();
   }
@@ -55,7 +56,8 @@ void main() {
     expect(
       unknown,
       isEmpty,
-      reason: 'sent to $schemaName but not in its schema. The server ignores these and binds its '
+      reason:
+          'sent to $schemaName but not in its schema. The server ignores these and binds its '
           'own fields to defaults — a non-nullable Guid becomes Guid.Empty, which belongs to '
           'nothing and fails ownership checks. Known: ${(known.toList()..sort()).join(', ')}',
     );

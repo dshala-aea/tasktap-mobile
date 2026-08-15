@@ -31,11 +31,9 @@ class AdminReportDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: title,
+        showBack: true,
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(LucideIcons.moreVertical, size: 20),

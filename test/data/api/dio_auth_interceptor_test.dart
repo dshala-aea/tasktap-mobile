@@ -12,11 +12,9 @@ import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 
 class MockAuthRepository extends Mock implements IAuthRepository {}
 
-class MockRequestInterceptorHandler extends Mock
-    implements RequestInterceptorHandler {}
+class MockRequestInterceptorHandler extends Mock implements RequestInterceptorHandler {}
 
-class MockErrorInterceptorHandler extends Mock
-    implements ErrorInterceptorHandler {}
+class MockErrorInterceptorHandler extends Mock implements ErrorInterceptorHandler {}
 
 // ── Fallback stubs ─────────────────────────────────────────────────────────
 
@@ -27,21 +25,18 @@ class FakeResponse extends Fake implements Response<dynamic> {}
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 AuthUser _fakeUser({String token = 'old-token'}) => AuthUser(
-      id: 'u1',
-      email: 'tech@tasktap.io',
-      accessToken: token,
-      refreshToken: 'refresh',
-      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
+  id: 'u1',
+  email: 'tech@tasktap.io',
+  accessToken: token,
+  refreshToken: 'refresh',
+  expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+);
 
 DioException _make401(RequestOptions options) => DioException(
-      requestOptions: options,
-      response: Response<dynamic>(
-        requestOptions: options,
-        statusCode: 401,
-      ),
-      type: DioExceptionType.badResponse,
-    );
+  requestOptions: options,
+  response: Response<dynamic>(requestOptions: options, statusCode: 401),
+  type: DioExceptionType.badResponse,
+);
 
 void main() {
   setUpAll(() {
@@ -112,9 +107,7 @@ void main() {
   group('onError — 401 + refresh success', () {
     test('calls refreshSession on 401', () async {
       final newUser = _fakeUser(token: 'new-token');
-      when(() => repo.refreshSession()).thenAnswer(
-        (_) async => (user: newUser, failure: null),
-      );
+      when(() => repo.refreshSession()).thenAnswer((_) async => (user: newUser, failure: null));
 
       // Track the options passed to dio.fetch by installing a no-op adapter.
       final List<RequestOptions> fetchedOptions = [];
@@ -125,10 +118,7 @@ void main() {
         },
       );
 
-      final options = RequestOptions(
-        path: '/api/data',
-        baseUrl: 'http://localhost',
-      );
+      final options = RequestOptions(path: '/api/data', baseUrl: 'http://localhost');
       final handler = MockErrorInterceptorHandler();
 
       await interceptor.onError(_make401(options), handler);
@@ -138,9 +128,7 @@ void main() {
 
     test('retry request has new token in Authorization header', () async {
       final newUser = _fakeUser(token: 'refreshed-token');
-      when(() => repo.refreshSession()).thenAnswer(
-        (_) async => (user: newUser, failure: null),
-      );
+      when(() => repo.refreshSession()).thenAnswer((_) async => (user: newUser, failure: null));
 
       final List<RequestOptions> fetchedOptions = [];
       dio.httpClientAdapter = _StubAdapter(
@@ -150,20 +138,14 @@ void main() {
         },
       );
 
-      final options = RequestOptions(
-        path: '/api/data',
-        baseUrl: 'http://localhost',
-      );
+      final options = RequestOptions(path: '/api/data', baseUrl: 'http://localhost');
       final handler = MockErrorInterceptorHandler();
 
       await interceptor.onError(_make401(options), handler);
 
       // The fetched request should have the new token.
       expect(fetchedOptions, isNotEmpty);
-      expect(
-        fetchedOptions.first.headers['Authorization'],
-        equals('Bearer refreshed-token'),
-      );
+      expect(fetchedOptions.first.headers['Authorization'], equals('Bearer refreshed-token'));
     });
   });
 
@@ -171,9 +153,9 @@ void main() {
 
   group('onError — 401 + refresh failure', () {
     setUp(() {
-      when(() => repo.refreshSession()).thenAnswer(
-        (_) async => (user: null, failure: const SessionExpired()),
-      );
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const SessionExpired()));
       when(() => repo.signOut()).thenAnswer((_) async {});
     });
 
@@ -216,10 +198,7 @@ void main() {
       final freshRepo = MockAuthRepository();
       final freshInterceptor = AuthInterceptor(dio: dio, authRepo: freshRepo);
 
-      final options = RequestOptions(
-        path: '/api/data',
-        extra: {'_retried': true},
-      );
+      final options = RequestOptions(path: '/api/data', extra: {'_retried': true});
       final handler = MockErrorInterceptorHandler();
 
       await freshInterceptor.onError(_make401(options), handler);

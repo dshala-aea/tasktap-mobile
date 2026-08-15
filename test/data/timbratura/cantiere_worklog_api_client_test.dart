@@ -12,10 +12,10 @@ class MockDio extends Mock implements Dio {}
 
 // Helper: build a Dio Response for a given status code + data.
 Response<T> _okResponse<T>(T data, String path) => Response<T>(
-      data: data,
-      statusCode: 200,
-      requestOptions: RequestOptions(path: path),
-    );
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 void main() {
   late MockDio mockDio;
@@ -32,10 +32,9 @@ void main() {
 
   group('startCantiere', () {
     test('POSTs to /api/cantiereworklog/start with correct body', () async {
-      when(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/start',
-            data: any(named: 'data'),
-          )).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/start'));
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/start'));
 
       await client.startCantiere(
         const StartCantiereRequest(
@@ -47,10 +46,9 @@ void main() {
         ),
       );
 
-      final captured = verify(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/start',
-            data: captureAny(named: 'data'),
-          )).captured;
+      final captured = verify(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: captureAny(named: 'data')),
+      ).captured;
 
       final body = captured.first as Map<String, dynamic>;
       expect(body['cantiereId'], 'cant-1');
@@ -61,22 +59,17 @@ void main() {
     });
 
     test('omits null optional fields from body', () async {
-      when(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/start',
-            data: any(named: 'data'),
-          )).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/start'));
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/start'));
 
       await client.startCantiere(
-        const StartCantiereRequest(
-          cantiereId: 'cant-1',
-          customerId: 'cust-1',
-        ),
+        const StartCantiereRequest(cantiereId: 'cant-1', customerId: 'cust-1'),
       );
 
-      final captured = verify(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/start',
-            data: captureAny(named: 'data'),
-          )).captured;
+      final captured = verify(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: captureAny(named: 'data')),
+      ).captured;
 
       final body = captured.first as Map<String, dynamic>;
       expect(body.containsKey('ticketId'), isFalse);
@@ -85,25 +78,22 @@ void main() {
     });
 
     test('propagates DioException on server error', () async {
-      when(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/start',
-            data: any(named: 'data'),
-          )).thenThrow(DioException(
-        requestOptions: RequestOptions(path: '/api/cantiereworklog/start'),
-        response: Response(
-          statusCode: 400,
-          data: 'already active',
-          requestOptions:
-              RequestOptions(path: '/api/cantiereworklog/start'),
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/start', data: any(named: 'data')),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/cantiereworklog/start'),
+          response: Response(
+            statusCode: 400,
+            data: 'already active',
+            requestOptions: RequestOptions(path: '/api/cantiereworklog/start'),
+          ),
+          type: DioExceptionType.badResponse,
         ),
-        type: DioExceptionType.badResponse,
-      ));
+      );
 
       expect(
-        () => client.startCantiere(
-          const StartCantiereRequest(
-              cantiereId: 'c', customerId: 'u'),
-        ),
+        () => client.startCantiere(const StartCantiereRequest(cantiereId: 'c', customerId: 'u')),
         throwsA(isA<DioException>()),
       );
     });
@@ -111,22 +101,17 @@ void main() {
 
   group('endCantiere', () {
     test('POSTs to /api/cantiereworklog/end with departure coords', () async {
-      when(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/end',
-            data: any(named: 'data'),
-          )).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/end'));
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/end', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/end'));
 
       await client.endCantiere(
-        const EndCantiereRequest(
-          departureLatitude: 45.47,
-          departureLongitude: 9.19,
-        ),
+        const EndCantiereRequest(departureLatitude: 45.47, departureLongitude: 9.19),
       );
 
-      final captured = verify(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/end',
-            data: captureAny(named: 'data'),
-          )).captured;
+      final captured = verify(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/end', data: captureAny(named: 'data')),
+      ).captured;
 
       final body = captured.first as Map<String, dynamic>;
       expect(body['departureLatitude'], 45.47);
@@ -134,17 +119,15 @@ void main() {
     });
 
     test('sends empty map when no request provided', () async {
-      when(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/end',
-            data: any(named: 'data'),
-          )).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/end'));
+      when(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/end', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantiereworklog/end'));
 
       await client.endCantiere();
 
-      final captured = verify(() => mockDio.post<dynamic>(
-            '/api/cantiereworklog/end',
-            data: captureAny(named: 'data'),
-          )).captured;
+      final captured = verify(
+        () => mockDio.post<dynamic>('/api/cantiereworklog/end', data: captureAny(named: 'data')),
+      ).captured;
 
       expect(captured.first, isEmpty);
     });
@@ -174,10 +157,12 @@ void main() {
         'total': 2,
       };
 
-      when(() => mockDio.get<Map<String, dynamic>>(
-            '/api/cantiereworklog',
-            queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer((_) async => _okResponse(paginatedResponse, '/api/cantiereworklog'));
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/cantiereworklog',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse(paginatedResponse, '/api/cantiereworklog'));
 
       final result = await client.getActive();
       expect(result.length, 1);
@@ -186,27 +171,30 @@ void main() {
     });
 
     test('returns empty list when backend returns empty items', () async {
-      when(() => mockDio.get<Map<String, dynamic>>(
-            '/api/cantiereworklog',
-            queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer(
-            (_) async => _okResponse({'items': [], 'total': 0}, '/api/cantiereworklog'),
-          );
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/cantiereworklog',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': [], 'total': 0}, '/api/cantiereworklog'));
 
       final result = await client.getActive();
       expect(result, isEmpty);
     });
 
     test('returns empty list on null response body', () async {
-      when(() => mockDio.get<Map<String, dynamic>>(
-            '/api/cantiereworklog',
-            queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer((_) async => Response<Map<String, dynamic>>(
-                data: null,
-                statusCode: 200,
-                requestOptions:
-                    RequestOptions(path: '/api/cantiereworklog'),
-              ));
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/cantiereworklog',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<Map<String, dynamic>>(
+          data: null,
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/api/cantiereworklog'),
+        ),
+      );
 
       final result = await client.getActive();
       expect(result, isEmpty);

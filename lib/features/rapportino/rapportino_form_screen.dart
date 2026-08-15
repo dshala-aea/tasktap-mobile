@@ -1,12 +1,10 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/widgets/app_button.dart';
-import '../../core/widgets/app_stepper.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -81,27 +79,13 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
+      // The last AppBar in the app. Its hand-rolled title Column also carried a fifth instance of
+      // the fixed-dark bug: the subtitle took `inkMuted`, which measures 1.9:1 on CHARCOAL in
+      // light mode. ScreenHeader's own dark variant renders both lines correctly.
+      appBar: ScreenHeaderBar(
+        title: 'Rapportino',
+        subtitle: contextSubtitle,
         backgroundColor: AppColors.CHARCOAL,
-        // Fixed-dark bar; `inkInverse` flips. See AppColors.onDark.
-        foregroundColor: AppColors.onDark,
-        elevation: 0,
-        titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Rapportino', style: AppTextStyles.titleMedium.copyWith(color: AppColors.onDark)),
-            if (contextSubtitle != null)
-              Text(
-                contextSubtitle,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: context.colors.inkMuted,
-                  fontSize: 11,
-                ),
-              ),
-          ],
-        ),
         actions: [
           // Autosave indicator
           Padding(

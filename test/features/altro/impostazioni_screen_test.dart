@@ -30,13 +30,13 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 AuthUser _fakeUser({String? displayName}) => AuthUser(
-      id: 'u1',
-      email: 'mario@tasktap.io',
-      displayName: displayName,
-      accessToken: 'tok',
-      refreshToken: 'ref',
-      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
+  id: 'u1',
+  email: 'mario@tasktap.io',
+  displayName: displayName,
+  accessToken: 'tok',
+  refreshToken: 'ref',
+  expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+);
 
 Widget _buildScreen(MockAuthRepository repo) {
   return ProviderScope(
@@ -159,8 +159,7 @@ void main() {
   // line — it never exercises this branch. This test stubs a real,
   // non-empty access token so the guard in `_syncPushRegistration` is
   // actually the thing preventing the crash.
-  testWidgets(
-      'tapping push toggle with a logged-in user does not crash '
+  testWidgets('tapping push toggle with a logged-in user does not crash '
       'when Firebase is unavailable', (tester) async {
     final user = _fakeUser(displayName: 'Mario');
     when(() => repo.currentUser).thenReturn(user);

@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -172,11 +173,9 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Modifica pianificazione' : 'Nuova pianificazione'),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica pianificazione' : 'Nuova pianificazione',
+        showBack: true,
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,

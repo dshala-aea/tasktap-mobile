@@ -484,11 +484,15 @@ class _SigDialogState extends State<_SigDialog> {
     return Dialog.fullscreen(
       child: Column(
         children: [
+          // Stays an AppBar, unlike the ten screen headers converted to ScreenHeaderBar. This is a
+          // full-screen modal dismissed with an X, not a screen navigated back from, and
+          // ScreenHeader draws a back chevron — the wrong affordance for a sheet you cancel.
+          //
+          // Its ink is fixed rather than themed for the usual reason: the bar is CHARCOAL under
+          // both themes, and `inkInverse` flipped to near-black, taking the title and the close
+          // button off the dialog that captures the customer's signature.
           AppBar(
             backgroundColor: AppColors.CHARCOAL,
-            // Fixed-dark bar: `inkInverse` flips to near-black, which took the title and the close
-            // button off the signature dialog in dark mode — on the screen that captures the
-            // customer's signature.
             foregroundColor: AppColors.onDark,
             title: const Text('Acquisisci firma'),
             leading: IconButton(

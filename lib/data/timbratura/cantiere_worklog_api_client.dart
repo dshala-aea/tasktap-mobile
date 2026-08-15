@@ -56,20 +56,20 @@ class StartCantiereRequest {
   final int workLogType;
 
   Map<String, dynamic> toJson() => {
-        'cantiereId': cantiereId,
-        'customerId': customerId,
-        if (ticketId != null) 'ticketId': ticketId,
-        if (description != null) 'description': description,
-        if (workOrderNumber != null) 'workOrderNumber': workOrderNumber,
-        if (equipmentUsed != null) 'equipmentUsed': equipmentUsed,
-        if (teamSize != null) 'teamSize': teamSize,
-        if (latitude != null) 'latitude': latitude,
-        if (longitude != null) 'longitude': longitude,
-        if (arrivalLatitude != null) 'arrivalLatitude': arrivalLatitude,
-        if (arrivalLongitude != null) 'arrivalLongitude': arrivalLongitude,
-        if (weatherConditions != null) 'weatherConditions': weatherConditions,
-        'workLogType': workLogType,
-      };
+    'cantiereId': cantiereId,
+    'customerId': customerId,
+    if (ticketId != null) 'ticketId': ticketId,
+    if (description != null) 'description': description,
+    if (workOrderNumber != null) 'workOrderNumber': workOrderNumber,
+    if (equipmentUsed != null) 'equipmentUsed': equipmentUsed,
+    if (teamSize != null) 'teamSize': teamSize,
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
+    if (arrivalLatitude != null) 'arrivalLatitude': arrivalLatitude,
+    if (arrivalLongitude != null) 'arrivalLongitude': arrivalLongitude,
+    if (weatherConditions != null) 'weatherConditions': weatherConditions,
+    'workLogType': workLogType,
+  };
 }
 
 /// Mirrors EndCantiereWorkLogRequest (backend — all fields optional).
@@ -87,12 +87,11 @@ class EndCantiereRequest {
   final String? safetyNotes;
 
   Map<String, dynamic> toJson() => {
-        if (description != null) 'description': description,
-        if (departureLatitude != null) 'departureLatitude': departureLatitude,
-        if (departureLongitude != null)
-          'departureLongitude': departureLongitude,
-        if (safetyNotes != null) 'safetyNotes': safetyNotes,
-      };
+    if (description != null) 'description': description,
+    if (departureLatitude != null) 'departureLatitude': departureLatitude,
+    if (departureLongitude != null) 'departureLongitude': departureLongitude,
+    if (safetyNotes != null) 'safetyNotes': safetyNotes,
+  };
 }
 
 /// Represents one CantiereWorkLog record returned by GET /api/cantiereworklog.
@@ -124,17 +123,16 @@ class CantiereWorkLogDto {
 
   bool get isActive => endTime == null;
 
-  factory CantiereWorkLogDto.fromJson(Map<String, dynamic> json) =>
-      CantiereWorkLogDto(
-        id: json['id'] as String,
-        cantiereId: json['cantiereId'] as String,
-        customerId: json['customerId'] as String,
-        ticketId: json['ticketId'] as String?,
-        workDate: DateTime.parse(json['workDate'] as String),
-        startTime: json['startTime'] as String,
-        endTime: json['endTime'] as String?,
-        description: json['description'] as String?,
-      );
+  factory CantiereWorkLogDto.fromJson(Map<String, dynamic> json) => CantiereWorkLogDto(
+    id: json['id'] as String,
+    cantiereId: json['cantiereId'] as String,
+    customerId: json['customerId'] as String,
+    ticketId: json['ticketId'] as String?,
+    workDate: DateTime.parse(json['workDate'] as String),
+    startTime: json['startTime'] as String,
+    endTime: json['endTime'] as String?,
+    description: json['description'] as String?,
+  );
 }
 
 // ── Client ────────────────────────────────────────────────────────────────────
@@ -149,10 +147,7 @@ class CantiereWorklogApiClient {
   /// Creates an open cantiere session. Throws [DioException] on error (including
   /// 400 when a session is already active — the caller should surface this).
   Future<void> startCantiere(StartCantiereRequest request) async {
-    await _dio.post<dynamic>(
-      '/api/cantiereworklog/start',
-      data: request.toJson(),
-    );
+    await _dio.post<dynamic>('/api/cantiereworklog/start', data: request.toJson());
   }
 
   /// POST /api/cantiereworklog/end
@@ -160,10 +155,7 @@ class CantiereWorklogApiClient {
   /// Closes the current user's open cantiere session.
   /// Throws [DioException] on error (404 = no active session).
   Future<void> endCantiere([EndCantiereRequest? request]) async {
-    await _dio.post<dynamic>(
-      '/api/cantiereworklog/end',
-      data: request?.toJson() ?? {},
-    );
+    await _dio.post<dynamic>('/api/cantiereworklog/end', data: request?.toJson() ?? {});
   }
 
   /// GET /api/cantiereworklog
@@ -176,11 +168,7 @@ class CantiereWorklogApiClient {
   Future<List<CantiereWorkLogDto>> getActive() async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/cantiereworklog',
-      queryParameters: {
-        'pageSize': 20,
-        'page': 1,
-        'sort': 'createdAt desc',
-      },
+      queryParameters: {'pageSize': 20, 'page': 1, 'sort': 'createdAt desc'},
     );
 
     final data = response.data;
@@ -199,7 +187,6 @@ class CantiereWorklogApiClient {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 /// Provides [CantiereWorklogApiClient]. Override in tests with a fake.
-final cantiereWorklogApiClientProvider =
-    Provider<CantiereWorklogApiClient>((ref) {
+final cantiereWorklogApiClientProvider = Provider<CantiereWorklogApiClient>((ref) {
   return CantiereWorklogApiClient(ref.watch(dioProvider));
 });

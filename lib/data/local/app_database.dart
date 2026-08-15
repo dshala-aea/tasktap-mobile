@@ -105,8 +105,10 @@ class Schedules extends Table {
 
   TextColumn get ticketId => text().nullable()();
   DateTimeColumn get activityDate => dateTime()();
+
   /// TimeStart stored as total minutes since midnight (TimeSpan has no Drift equivalent)
   IntColumn get timeStartMinutes => integer()();
+
   /// TimeEnd stored as total minutes since midnight
   IntColumn get timeEndMinutes => integer()();
   TextColumn get userId => text()();
@@ -158,6 +160,7 @@ class Cantieri extends Table {
   TextColumn get notes => text().nullable()();
   DateTimeColumn get startDate => dateTime().nullable()();
   DateTimeColumn get endDate => dateTime().nullable()();
+
   /// CantiereStatusEnum: Active=0, Completed=1, Cancelled=2
   IntColumn get status => integer().withDefault(const Constant(0))();
   TextColumn get customerId => text().nullable()();
@@ -272,23 +275,23 @@ class DraftReports extends Table {
   TextColumn get technicianSignatureAllegatoId => text().nullable()();
   TextColumn get technicianNotes => text().nullable()();
   DateTimeColumn get closedAt => dateTime().nullable()();
+
   /// ReportStatoEnum string: Bozza, Inviato, Controllato, Fatturato
   TextColumn get stato => text().withDefault(const Constant('Bozza'))();
   DateTimeColumn get inviatoAt => dateTime().nullable()();
   DateTimeColumn get controllatoAt => dateTime().nullable()();
   TextColumn get controllatoDa => text().nullable()();
   DateTimeColumn get fatturatoAt => dateTime().nullable()();
-  BoolColumn get materialiNotRequired =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get materialiNotRequired => boolean().withDefault(const Constant(false))();
   TextColumn get customerSignoffText => text().nullable()();
   DateTimeColumn get customerSignoffAt => dateTime().nullable()();
+
   /// True for drafts that only exist locally (not yet submitted).
   BoolColumn get isLocalOnly => boolean().withDefault(const Constant(false))();
 
   /// Submission state machine:
   /// draft | readyToSubmit | uploadingMedia | submitting | submitted | failed
-  TextColumn get submissionState =>
-      text().withDefault(const Constant('draft'))();
+  TextColumn get submissionState => text().withDefault(const Constant('draft'))();
 
   /// Stable idempotency key (UUID string) persisted on first submit attempt.
   /// Reused on retries so the server deduplicates duplicate submits.
@@ -378,13 +381,15 @@ class WorkSessions extends Table {
 
   TextColumn get id => text()();
   DateTimeColumn get eventTime => dateTime()();
+
   /// One of: ingresso | fine | pausa | ripresa
   TextColumn get eventType => text()();
+
   /// Optional notes (future use).
   TextColumn get notes => text().nullable()();
+
   /// True while not yet synced to the backend.
-  BoolColumn get isPendingSync =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -406,8 +411,10 @@ class WorkSessions extends Table {
 class CantierePunches extends Table {
   TextColumn get id => text()();
   DateTimeColumn get eventTime => dateTime()();
+
   /// One of: ingresso | uscita
   TextColumn get eventType => text()();
+
   /// Site context — set on 'ingresso', null on 'uscita' (inherited from the
   /// paired opener by the assembler).
   TextColumn get cantiereId => text().nullable()();
@@ -415,9 +422,10 @@ class CantierePunches extends Table {
   TextColumn get ticketId => text().nullable()();
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
+
   /// True while not yet synced to the backend.
-  BoolColumn get isPendingSync =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
+
   /// Human-readable error message from the last failed sync attempt (null when ok).
   TextColumn get syncError => text().nullable()();
 
@@ -441,8 +449,10 @@ class AppNotifications extends Table {
   TextColumn get userId => text()();
   TextColumn get title => text()();
   TextColumn get message => text()();
+
   /// Notification type string (e.g. TicketAssigned, ScheduleReminder)
   TextColumn get type => text()();
+
   /// Delivery type string (InApp, Push, Email)
   TextColumn get deliveryType => text()();
   BoolColumn get isRead => boolean().withDefault(const Constant(false))();
@@ -451,8 +461,7 @@ class AppNotifications extends Table {
   TextColumn get relatedEntityType => text().nullable()();
   DateTimeColumn get scheduledFor => dateTime().nullable()();
   DateTimeColumn get sentAt => dateTime().nullable()();
-  BoolColumn get isDelivered =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get isDelivered => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -471,14 +480,15 @@ class ReportAllegati extends Table {
   IntColumn get sizeBytes => integer()();
   TextColumn get storagePath => text()();
   TextColumn get url => text()();
+
   /// AllegatoEntityTypeEnum: Ticket=0, Report=1, Materiale=2
   IntColumn get entityType => integer()();
   TextColumn get entityId => text()();
   TextColumn get uploadedByUserId => text()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
   /// True when this file has not yet been uploaded to the server.
-  BoolColumn get isPendingUpload =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get isPendingUpload => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -514,10 +524,11 @@ class PendingTickets extends Table {
   IntColumn get typeId => integer()();
 
   /// pendingSync | submitting | submitted | failed
-  TextColumn get state =>
-      text().withDefault(const Constant('pendingSync'))();
+  TextColumn get state => text().withDefault(const Constant('pendingSync'))();
+
   /// Human-readable error from the last failed attempt (null when ok).
   TextColumn get error => text().nullable()();
+
   /// Set once the server confirms creation — the real Ticket.id.
   TextColumn get serverTicketId => text().nullable()();
 
@@ -569,8 +580,7 @@ class AppDatabase extends _$AppDatabase {
       onUpgrade: (m, from, to) async {
         if (from < 2) {
           // M5: add submission state fields to draft_reports
-          await m.addColumn(
-              draftReports, draftReports.submissionState);
+          await m.addColumn(draftReports, draftReports.submissionState);
           await m.addColumn(draftReports, draftReports.idempotencyKey);
           await m.addColumn(draftReports, draftReports.submissionError);
         }
@@ -625,9 +635,7 @@ class AppDatabase extends _$AppDatabase {
   // ── sync_meta helpers ────────────────────────────────────────────────────
 
   Future<DateTime?> getLastSync() async {
-    final row = await (select(syncMeta)
-          ..where((t) => t.id.equals('default')))
-        .getSingleOrNull();
+    final row = await (select(syncMeta)..where((t) => t.id.equals('default'))).getSingleOrNull();
     return row?.lastSync;
   }
 

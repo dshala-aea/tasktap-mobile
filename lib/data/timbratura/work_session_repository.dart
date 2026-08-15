@@ -43,13 +43,9 @@ class WorkSessionRepository implements IWorkSessionRepository {
     required DateTime eventTime,
     required String eventType,
   }) async {
-    await _db.into(_db.workSessions).insert(
-          WorkSessionsCompanion.insert(
-            id: id,
-            eventTime: eventTime,
-            eventType: eventType,
-          ),
-        );
+    await _db
+        .into(_db.workSessions)
+        .insert(WorkSessionsCompanion.insert(id: id, eventTime: eventTime, eventType: eventType));
   }
 
   @override
@@ -59,9 +55,7 @@ class WorkSessionRepository implements IWorkSessionRepository {
     final end = start.add(const Duration(days: 1));
     return (_db.select(_db.workSessions)
           ..where(
-            (s) =>
-                s.eventTime.isBiggerOrEqualValue(start) &
-                s.eventTime.isSmallerThanValue(end),
+            (s) => s.eventTime.isBiggerOrEqualValue(start) & s.eventTime.isSmallerThanValue(end),
           )
           ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
         .watch();
@@ -74,9 +68,7 @@ class WorkSessionRepository implements IWorkSessionRepository {
     final end = start.add(const Duration(days: 1));
     return (_db.select(_db.workSessions)
           ..where(
-            (s) =>
-                s.eventTime.isBiggerOrEqualValue(start) &
-                s.eventTime.isSmallerThanValue(end),
+            (s) => s.eventTime.isBiggerOrEqualValue(start) & s.eventTime.isSmallerThanValue(end),
           )
           ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
         .get();
@@ -85,9 +77,9 @@ class WorkSessionRepository implements IWorkSessionRepository {
   @override
   Future<void> markSynced(List<String> ids) async {
     if (ids.isEmpty) return;
-    await (_db.update(_db.workSessions)
-          ..where((s) => s.id.isIn(ids)))
-        .write(const WorkSessionsCompanion(isPendingSync: Value(false)));
+    await (_db.update(_db.workSessions)..where((s) => s.id.isIn(ids))).write(
+      const WorkSessionsCompanion(isPendingSync: Value(false)),
+    );
   }
 
   @override
@@ -95,12 +87,9 @@ class WorkSessionRepository implements IWorkSessionRepository {
     final now = DateTime.now();
     final start = DateTime(now.year, now.month, now.day).toUtc();
     final end = start.add(const Duration(days: 1));
-    await (_db.delete(_db.workSessions)
-          ..where(
-            (s) =>
-                s.eventTime.isBiggerOrEqualValue(start) &
-                s.eventTime.isSmallerThanValue(end),
-          ))
+    await (_db.delete(_db.workSessions)..where(
+          (s) => s.eventTime.isBiggerOrEqualValue(start) & s.eventTime.isSmallerThanValue(end),
+        ))
         .go();
   }
 }

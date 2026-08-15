@@ -90,12 +90,10 @@ abstract final class AppRoutes {
   static String clientiDetail(String id) => '/altro/clienti/$id';
 
   /// Build the editor path for a given draft report id (under Altro › Rapportini).
-  static String rapportiniEditor(String reportId) =>
-      '/altro/rapportini/editor/$reportId';
+  static String rapportiniEditor(String reportId) => '/altro/rapportini/editor/$reportId';
 
   /// Build the read-only view path for a submitted rapportino.
-  static String rapportiniView(String reportId) =>
-      '/altro/rapportini/view/$reportId';
+  static String rapportiniView(String reportId) => '/altro/rapportini/view/$reportId';
 }
 
 /// Global navigator key — use for imperative navigation outside widget tree.
@@ -133,10 +131,7 @@ GoRouter buildRouter(WidgetRef ref) {
     refreshListenable: _AuthStateListenable(ref),
     routes: [
       // ── Auth ────────────────────────────────────────────────────────────
-      GoRoute(
-        path: AppRoutes.login,
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginScreen()),
 
       // ── Cantiere timbra (pushed from ticket detail) ──────────────────────
       GoRoute(
@@ -144,18 +139,12 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) {
           final ticketId = state.uri.queryParameters['ticketId'];
           final customerId = state.uri.queryParameters['customerId'];
-          return CantiereTimbraScreen(
-            ticketId: ticketId,
-            customerId: customerId,
-          );
+          return CantiereTimbraScreen(ticketId: ticketId, customerId: customerId);
         },
       ),
 
       // ── New ticket form (pushed from ticket list FAB) ─────────────────────
-      GoRoute(
-        path: '/ticket/new',
-        builder: (context, state) => const NewTicketFormScreen(),
-      ),
+      GoRoute(path: '/ticket/new', builder: (context, state) => const NewTicketFormScreen()),
 
       // ── Main Shell (5-tab pill bottom nav) ───────────────────────────────
       StatefulShellRoute.indexedStack(
@@ -183,9 +172,8 @@ GoRouter buildRouter(WidgetRef ref) {
                 routes: [
                   GoRoute(
                     path: ':id',
-                    builder: (context, state) => TicketDetailScreen(
-                      ticketId: state.pathParameters['id']!,
-                    ),
+                    builder: (context, state) =>
+                        TicketDetailScreen(ticketId: state.pathParameters['id']!),
                   ),
                 ],
               ),
@@ -195,10 +183,7 @@ GoRouter buildRouter(WidgetRef ref) {
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'timbra'),
             routes: [
-              GoRoute(
-                path: AppRoutes.timbra,
-                builder: (context, state) => const TimbraScreen(),
-              ),
+              GoRoute(path: AppRoutes.timbra, builder: (context, state) => const TimbraScreen()),
             ],
           ),
           // 3 — Calendario
@@ -221,58 +206,43 @@ GoRouter buildRouter(WidgetRef ref) {
                 routes: [
                   GoRoute(
                     path: 'rapportini',
-                    builder: (context, state) =>
-                        const RapportiniListScreen(),
+                    builder: (context, state) => const RapportiniListScreen(),
                     routes: [
                       GoRoute(
                         path: 'editor/:reportId',
-                        builder: (context, state) => RapportinoFormScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
+                        builder: (context, state) =>
+                            RapportinoFormScreen(reportId: state.pathParameters['reportId']!),
                       ),
                       GoRoute(
                         path: 'view/:reportId',
-                        builder: (context, state) => RapportinoViewScreen(
-                          reportId: state.pathParameters['reportId']!,
-                        ),
+                        builder: (context, state) =>
+                            RapportinoViewScreen(reportId: state.pathParameters['reportId']!),
                       ),
                     ],
                   ),
-                  GoRoute(
-                    path: 'profilo',
-                    builder: (context, state) => const ProfiloScreen(),
-                  ),
+                  GoRoute(path: 'profilo', builder: (context, state) => const ProfiloScreen()),
                   GoRoute(
                     path: 'impostazioni',
-                    builder: (context, state) =>
-                        const ImpostazioniScreen(),
+                    builder: (context, state) => const ImpostazioniScreen(),
                   ),
-                  GoRoute(
-                    path: 'notifiche',
-                    builder: (context, state) =>
-                        const NotificheScreen(),
-                  ),
+                  GoRoute(path: 'notifiche', builder: (context, state) => const NotificheScreen()),
                   GoRoute(
                     path: 'clienti',
                     builder: (context, state) => const ClientiListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
-                        builder: (context, state) =>
-                            const AdminCustomerFormScreen(),
+                        builder: (context, state) => const AdminCustomerFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
-                        builder: (context, state) => AdminCustomerDetailScreen(
-                          customerId: state.pathParameters['id']!,
-                        ),
+                        builder: (context, state) =>
+                            AdminCustomerDetailScreen(customerId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) =>
-                                AdminCustomerFormScreen(
-                              customerId: state.pathParameters['id']!,
-                            ),
+                                AdminCustomerFormScreen(customerId: state.pathParameters['id']!),
                           ),
                         ],
                       ),
@@ -280,27 +250,21 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'cantieri',
-                    builder: (context, state) =>
-                        const AdminCantiereListScreen(),
+                    builder: (context, state) => const AdminCantiereListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
-                        builder: (context, state) =>
-                            const AdminCantiereFormScreen(),
+                        builder: (context, state) => const AdminCantiereFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) =>
-                            AdminCantiereDetailScreen(
-                          cantiereId: state.pathParameters['id']!,
-                        ),
+                            AdminCantiereDetailScreen(cantiereId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) =>
-                                AdminCantiereFormScreen(
-                              cantiereId: state.pathParameters['id'],
-                            ),
+                                AdminCantiereFormScreen(cantiereId: state.pathParameters['id']),
                           ),
                         ],
                       ),
@@ -308,27 +272,21 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'sedi',
-                    builder: (context, state) =>
-                        const AdminLocationListScreen(),
+                    builder: (context, state) => const AdminLocationListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuova',
-                        builder: (context, state) =>
-                            const AdminLocationFormScreen(),
+                        builder: (context, state) => const AdminLocationFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) =>
-                            AdminLocationDetailScreen(
-                          locationId: state.pathParameters['id']!,
-                        ),
+                            AdminLocationDetailScreen(locationId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) =>
-                                AdminLocationFormScreen(
-                              locationId: state.pathParameters['id'],
-                            ),
+                                AdminLocationFormScreen(locationId: state.pathParameters['id']),
                           ),
                         ],
                       ),
@@ -336,27 +294,21 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'pianificazioni',
-                    builder: (context, state) =>
-                        const AdminScheduleListScreen(),
+                    builder: (context, state) => const AdminScheduleListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuova',
-                        builder: (context, state) =>
-                            const AdminScheduleFormScreen(),
+                        builder: (context, state) => const AdminScheduleFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) =>
-                            AdminScheduleDetailScreen(
-                          scheduleId: state.pathParameters['id']!,
-                        ),
+                            AdminScheduleDetailScreen(scheduleId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) =>
-                                AdminScheduleFormScreen(
-                              scheduleId: state.pathParameters['id'],
-                            ),
+                                AdminScheduleFormScreen(scheduleId: state.pathParameters['id']),
                           ),
                         ],
                       ),
@@ -364,27 +316,21 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'magazzino',
-                    builder: (context, state) =>
-                        const AdminMaterialeListScreen(),
+                    builder: (context, state) => const AdminMaterialeListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
-                        builder: (context, state) =>
-                            const AdminMaterialeFormScreen(),
+                        builder: (context, state) => const AdminMaterialeFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) =>
-                            AdminMaterialeDetailScreen(
-                          materialeId: state.pathParameters['id']!,
-                        ),
+                            AdminMaterialeDetailScreen(materialeId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) =>
-                                AdminMaterialeFormScreen(
-                              materialeId: state.pathParameters['id'],
-                            ),
+                                AdminMaterialeFormScreen(materialeId: state.pathParameters['id']),
                           ),
                         ],
                       ),
@@ -392,32 +338,24 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'prodotti',
-                    builder: (context, state) =>
-                        const AdminProdottoListScreen(),
+                    builder: (context, state) => const AdminProdottoListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
-                        builder: (context, state) =>
-                            const AdminProdottoFormScreen(),
+                        builder: (context, state) => const AdminProdottoFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) {
-                          final prodotto =
-                              state.extra as Map<String, dynamic>?;
-                          return AdminProdottoDetailScreen(
-                            prodotto: prodotto ?? {},
-                          );
+                          final prodotto = state.extra as Map<String, dynamic>?;
+                          return AdminProdottoDetailScreen(prodotto: prodotto ?? {});
                         },
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) {
-                              final prodotto =
-                                  state.extra as Map<String, dynamic>?;
-                              return AdminProdottoFormScreen(
-                                prodotto: prodotto,
-                              );
+                              final prodotto = state.extra as Map<String, dynamic>?;
+                              return AdminProdottoFormScreen(prodotto: prodotto);
                             },
                           ),
                         ],
@@ -426,32 +364,24 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'contratti',
-                    builder: (context, state) =>
-                        const AdminContractListScreen(),
+                    builder: (context, state) => const AdminContractListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
-                        builder: (context, state) =>
-                            const AdminContractFormScreen(),
+                        builder: (context, state) => const AdminContractFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) {
-                          final contract =
-                              state.extra as Map<String, dynamic>?;
-                          return AdminContractDetailScreen(
-                            contract: contract ?? {},
-                          );
+                          final contract = state.extra as Map<String, dynamic>?;
+                          return AdminContractDetailScreen(contract: contract ?? {});
                         },
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) {
-                              final contract =
-                                  state.extra as Map<String, dynamic>?;
-                              return AdminContractFormScreen(
-                                contract: contract,
-                              );
+                              final contract = state.extra as Map<String, dynamic>?;
+                              return AdminContractFormScreen(contract: contract);
                             },
                           ),
                         ],
@@ -460,32 +390,24 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'squadre',
-                    builder: (context, state) =>
-                        const AdminSquadraListScreen(),
+                    builder: (context, state) => const AdminSquadraListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
-                        builder: (context, state) =>
-                            const AdminSquadraFormScreen(),
+                        builder: (context, state) => const AdminSquadraFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         builder: (context, state) {
-                          final squadra =
-                              state.extra as Map<String, dynamic>?;
-                          return AdminSquadraDetailScreen(
-                            squadra: squadra ?? {},
-                          );
+                          final squadra = state.extra as Map<String, dynamic>?;
+                          return AdminSquadraDetailScreen(squadra: squadra ?? {});
                         },
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             builder: (context, state) {
-                              final squadra =
-                                  state.extra as Map<String, dynamic>?;
-                              return AdminSquadraFormScreen(
-                                squadra: squadra,
-                              );
+                              final squadra = state.extra as Map<String, dynamic>?;
+                              return AdminSquadraFormScreen(squadra: squadra);
                             },
                           ),
                         ],
@@ -494,17 +416,13 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'rapportini-admin',
-                    builder: (context, state) =>
-                        const AdminReportListScreen(),
+                    builder: (context, state) => const AdminReportListScreen(),
                     routes: [
                       GoRoute(
                         path: ':id',
                         builder: (context, state) {
-                          final report =
-                              state.extra as Map<String, dynamic>?;
-                          return AdminReportDetailScreen(
-                            report: report ?? {},
-                          );
+                          final report = state.extra as Map<String, dynamic>?;
+                          return AdminReportDetailScreen(report: report ?? {});
                         },
                       ),
                     ],
@@ -512,8 +430,7 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'non-disponibile',
                     builder: (context, state) {
-                      final args =
-                          state.extra as ({String titolo, String motivo})?;
+                      final args = state.extra as ({String titolo, String motivo})?;
                       final titolo = args?.titolo ?? 'Sezione non disponibile';
                       return Scaffold(
                         backgroundColor: context.colors.bg2,
@@ -524,7 +441,8 @@ GoRouter buildRouter(WidgetRef ref) {
                               Expanded(
                                 child: UnavailableState(
                                   titolo: titolo,
-                                  motivo: args?.motivo ??
+                                  motivo:
+                                      args?.motivo ??
                                       'Questa funzione non è ancora stata implementata nel client mobile.',
                                 ),
                               ),

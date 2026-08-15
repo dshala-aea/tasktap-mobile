@@ -27,13 +27,13 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 AuthUser _fakeUser({String? displayName}) => AuthUser(
-      id: 'u1',
-      email: 'mario@tasktap.io',
-      displayName: displayName,
-      accessToken: 'token',
-      refreshToken: 'refresh',
-      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
+  id: 'u1',
+  email: 'mario@tasktap.io',
+  displayName: displayName,
+  accessToken: 'token',
+  refreshToken: 'refresh',
+  expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+);
 
 Widget _buildHub(MockAuthRepository repo) {
   return ProviderScope(
@@ -121,10 +121,7 @@ void main() {
     // it must resolve the Scrollable itself, not the CustomScrollView that
     // creates it — omit it and let the default `find.byType(Scrollable)`
     // locate the single Scrollable in this tree.)
-    await tester.scrollUntilVisible(
-      find.text('Impostazioni'),
-      300,
-    );
+    await tester.scrollUntilVisible(find.text('Impostazioni'), 300);
     await tester.pump();
 
     expect(find.text('Impostazioni'), findsOneWidget);
@@ -145,10 +142,7 @@ void main() {
     // can grow — scroll incrementally until the target is visible. (See the
     // "renders Sistema rows" test above for why `scrollable` is omitted.)
     final logoutFinder = find.text("Esci dall'account");
-    await tester.scrollUntilVisible(
-      logoutFinder,
-      400,
-    );
+    await tester.scrollUntilVisible(logoutFinder, 400);
     await tester.pump();
 
     expect(logoutFinder, findsOneWidget);

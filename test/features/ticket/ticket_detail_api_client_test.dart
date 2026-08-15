@@ -29,14 +29,14 @@ void main() {
 
     test('maps all five ControlTypeEnum ordinals', () {
       ControlType typeFor(int ordinal) => TicketControlDto.fromJson({
-            'id': 'tc-1',
-            'templateControlId': 'tpl-1',
-            'label': 'x',
-            'type': ordinal,
-            'isRequired': false,
-            'sortOrder': 0,
-            'status': 'Pending',
-          }).type;
+        'id': 'tc-1',
+        'templateControlId': 'tpl-1',
+        'label': 'x',
+        'type': ordinal,
+        'isRequired': false,
+        'sortOrder': 0,
+        'status': 'Pending',
+      }).type;
 
       expect(typeFor(0), ControlType.checkbox);
       expect(typeFor(1), ControlType.freeText);

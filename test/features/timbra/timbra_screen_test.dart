@@ -47,10 +47,7 @@ class _NoopApiClient extends WorklogApiClient {
   _NoopApiClient() : super(Dio());
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(
-    List<MobileSessionDto> sessions,
-  ) async =>
-      [];
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async => [];
 
   @override
   Future<List<TodayWorkLogDto>> getToday() async => [];
@@ -136,7 +133,9 @@ void main() {
 
   testWidgets('sync dot appears when isPendingSync events exist', (tester) async {
     // Pre-seed a pending session directly into the DB.
-    await db.into(db.workSessions).insert(
+    await db
+        .into(db.workSessions)
+        .insert(
           WorkSessionsCompanion.insert(
             id: 'test-pending',
             eventTime: DateTime.now().toUtc(),
@@ -181,8 +180,7 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI',
-        (tester) async {
+    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI', (tester) async {
       await tester.pumpWidget(_buildApp(db));
       await tester.pump(const Duration(milliseconds: 50));
 
@@ -200,8 +198,7 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('tapping RIPRENDI records a Ripresa entry and flips back to PAUSA',
-        (tester) async {
+    testWidgets('tapping RIPRENDI records a Ripresa entry and flips back to PAUSA', (tester) async {
       await tester.pumpWidget(_buildApp(db));
       await tester.pump(const Duration(milliseconds: 50));
 

@@ -63,10 +63,7 @@ Future<void> runTaskTapApp() async {
   // files (google-services.json / GoogleService-Info.plist) must be present.
   // Firebase is optional: when the dart-define FIREBASE_ENABLED is absent or
   // "false", push notifications are silently disabled.
-  const firebaseEnabled = String.fromEnvironment(
-    'FIREBASE_ENABLED',
-    defaultValue: 'true',
-  );
+  const firebaseEnabled = String.fromEnvironment('FIREBASE_ENABLED', defaultValue: 'true');
   if (firebaseEnabled == 'true') {
     try {
       await Firebase.initializeApp();
@@ -99,11 +96,7 @@ Future<void> runTaskTapApp() async {
   // FCM device-token registration is driven off the Riverpod auth state inside
   // TaskTapApp (a listener needs the ProviderScope, created below).
 
-  runApp(
-    const ProviderScope(
-      child: TaskTapApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: TaskTapApp()));
 }
 
 /// Root application widget.
@@ -139,8 +132,8 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // into the local mirror so the badge and the list update without waiting for the technician
     // to open the Notifiche screen. Nothing polled before this, despite a comment claiming it did.
     if (NotificationService.isAvailable) {
-      NotificationService.instance.onForegroundMessage =
-          () => ref.read(notificheProvider.notifier).refresh();
+      NotificationService.instance.onForegroundMessage = () =>
+          ref.read(notificheProvider.notifier).refresh();
     }
 
     // Check for pending deep-links from notification taps.

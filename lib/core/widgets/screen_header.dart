@@ -191,3 +191,65 @@ class ScreenHeader extends StatelessWidget {
     );
   }
 }
+
+/// [ScreenHeader] as a `Scaffold.appBar`.
+///
+/// Nine admin form screens and the rapportino wizard used a Material [AppBar] while every list
+/// screen beside them used [ScreenHeader] — so the app's chrome changed at exactly the moment a
+/// technician started entering data. Lifting each header into the body would have meant
+/// restructuring ten differently-shaped bodies; this keeps `appBar:` and swaps only what it
+/// renders, which is a one-line change per screen and moves no content.
+///
+/// Handles the status-bar inset itself, since a `PreferredSize` does not get the [AppBar]'s
+/// automatic [SafeArea].
+class ScreenHeaderBar extends StatelessWidget implements PreferredSizeWidget {
+  const ScreenHeaderBar({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.showBack = true,
+    this.onBack,
+    this.actions = const [],
+    this.backgroundColor,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool showBack;
+  final VoidCallback? onBack;
+  final List<Widget> actions;
+
+  /// Defaults to the screen background, so the header reads as part of the page rather than as a
+  /// bar sitting on top of it.
+  final Color? backgroundColor;
+
+  /// 8 + 12 padding around a 44dp target, plus the subtitle's line when there is one.
+  @override
+  Size get preferredSize => Size.fromHeight(subtitle == null ? 64 : 82);
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = backgroundColor ?? context.colors.bg2;
+
+    // Derived, not passed. `ScreenHeader.dark` decides whether the title and back button are
+    // painted for a dark ground, and leaving that to the caller is precisely how this app
+    // produced five separate "dark surface, light-theme ink" bugs. A header cannot be given a
+    // CHARCOAL background and near-black text here, because nobody is asked.
+    final isDark = ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
+
+    return ColoredBox(
+      color: bg,
+      child: SafeArea(
+        bottom: false,
+        child: ScreenHeader(
+          title: title,
+          subtitle: subtitle,
+          showBack: showBack,
+          onBack: onBack,
+          actions: actions,
+          dark: isDark,
+        ),
+      ),
+    );
+  }
+}

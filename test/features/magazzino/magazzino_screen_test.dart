@@ -22,10 +22,7 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildMagazzino({
-  required AppDatabase db,
-  required MockAuthRepository repo,
-}) {
+Widget _buildMagazzino({required AppDatabase db, required MockAuthRepository repo}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
@@ -76,28 +73,36 @@ void main() {
   }
 
   Future<void> seedMateriali(AppDatabase db) async {
-    await db.into(db.materiali).insert(MaterialiCompanion.insert(
-          id: 'mat-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          code: 'ART001',
-          name: 'Valvola idraulica',
-          category: const Value('Idraulica'),
-          marca: const Value('HydroFlow'),
-          unitOfMeasure: const Value('pz'),
-          salePrice: const Value(25.50),
-        ));
-    await db.into(db.materiali).insert(MaterialiCompanion.insert(
-          id: 'mat-2',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 2),
-          code: 'ART002',
-          name: 'Tubo flessibile',
-          category: const Value('Raccorderia'),
-          marca: const Value('FlexTube'),
-          unitOfMeasure: const Value('mt'),
-          salePrice: const Value(8.75),
-        ));
+    await db
+        .into(db.materiali)
+        .insert(
+          MaterialiCompanion.insert(
+            id: 'mat-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            code: 'ART001',
+            name: 'Valvola idraulica',
+            category: const Value('Idraulica'),
+            marca: const Value('HydroFlow'),
+            unitOfMeasure: const Value('pz'),
+            salePrice: const Value(25.50),
+          ),
+        );
+    await db
+        .into(db.materiali)
+        .insert(
+          MaterialiCompanion.insert(
+            id: 'mat-2',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 2),
+            code: 'ART002',
+            name: 'Tubo flessibile',
+            category: const Value('Raccorderia'),
+            marca: const Value('FlexTube'),
+            unitOfMeasure: const Value('mt'),
+            salePrice: const Value(8.75),
+          ),
+        );
   }
 
   group('MagazzinoScreen', () {

@@ -15,16 +15,12 @@ void main() {
 
   group('AuthUser', () {
     test('isExpired returns false when token is in the future', () {
-      final user = makeUser(
-        expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-      );
+      final user = makeUser(expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)));
       expect(user.isExpired, isFalse);
     });
 
     test('isExpired returns true when token is in the past', () {
-      final user = makeUser(
-        expiresAt: DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
-      );
+      final user = makeUser(expiresAt: DateTime.now().toUtc().subtract(const Duration(seconds: 1)));
       expect(user.isExpired, isTrue);
     });
 

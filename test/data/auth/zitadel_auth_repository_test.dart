@@ -60,11 +60,15 @@ void main() {
     appAuth = MockAppAuth();
     storage = MockSecureStorage();
 
-    when(() => storage.read(key: any(named: 'key'))).thenAnswer(
-      (inv) async => store[inv.namedArguments[#key] as String],
-    );
-    when(() => storage.write(key: any(named: 'key'), value: any(named: 'value')))
-        .thenAnswer((inv) async {
+    when(
+      () => storage.read(key: any(named: 'key')),
+    ).thenAnswer((inv) async => store[inv.namedArguments[#key] as String]);
+    when(
+      () => storage.write(
+        key: any(named: 'key'),
+        value: any(named: 'value'),
+      ),
+    ).thenAnswer((inv) async {
       store[inv.namedArguments[#key] as String] = inv.namedArguments[#value] as String;
     });
     when(() => storage.delete(key: any(named: 'key'))).thenAnswer((inv) async {
@@ -98,8 +102,7 @@ void main() {
         'email': 'tech@tasktap.io',
         'displayName': 'Tecnico',
       });
-      when(() => appAuth.token(any()))
-          .thenThrow(Exception('SocketException: Failed host lookup'));
+      when(() => appAuth.token(any())).thenThrow(Exception('SocketException: Failed host lookup'));
     });
 
     test('does NOT sign the user out — keeps them signed-in offline', () async {
@@ -165,8 +168,7 @@ void main() {
     test('falls through to sign-out (no identity to show as signed-in)', () async {
       store[_refreshTokenKey] = 'rt-cached';
       // No cached identity written.
-      when(() => appAuth.token(any()))
-          .thenThrow(Exception('SocketException: Failed host lookup'));
+      when(() => appAuth.token(any())).thenThrow(Exception('SocketException: Failed host lookup'));
 
       final repo = await restoredRepo();
 

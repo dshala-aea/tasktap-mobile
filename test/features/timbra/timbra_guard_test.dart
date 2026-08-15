@@ -19,32 +19,25 @@ GiornataDto _giornata({
   String status = 'ClockedOut',
   bool locked = false,
   List<GiornataActionDto> actions = const [],
-}) =>
-    GiornataDto(
-      status: status,
-      workedMinutes: 0,
-      breakMinutes: 0,
-      isPayrollLocked: locked,
-      actions: actions,
-    );
+}) => GiornataDto(
+  status: status,
+  workedMinutes: 0,
+  breakMinutes: 0,
+  isPayrollLocked: locked,
+  actions: actions,
+);
 
 void main() {
   group('resolveGuard', () {
     test('allows everything when the server could not be reached', () {
-      final guard = resolveGuard(
-        giornata: null,
-        hasPendingSync: false,
-        action: 'ClockIn',
-      );
+      final guard = resolveGuard(giornata: null, hasPendingSync: false, action: 'ClockIn');
 
       expect(guard.blocked, isFalse);
     });
 
     test('allows an action the server offers', () {
       final guard = resolveGuard(
-        giornata: _giornata(actions: [
-          const GiornataActionDto(action: 'ClockIn', enabled: true),
-        ]),
+        giornata: _giornata(actions: [const GiornataActionDto(action: 'ClockIn', enabled: true)]),
         hasPendingSync: false,
         action: 'ClockIn',
       );
@@ -54,14 +47,16 @@ void main() {
 
     test('blocks an action the server refuses, and carries the reason', () {
       final guard = resolveGuard(
-        giornata: _giornata(actions: [
-          const GiornataActionDto(
-            action: 'ClockIn',
-            enabled: false,
-            reasonCode: 'already_clocked_in',
-            reason: 'Sei già in servizio.',
-          ),
-        ]),
+        giornata: _giornata(
+          actions: [
+            const GiornataActionDto(
+              action: 'ClockIn',
+              enabled: false,
+              reasonCode: 'already_clocked_in',
+              reason: 'Sei già in servizio.',
+            ),
+          ],
+        ),
         hasPendingSync: false,
         action: 'ClockIn',
       );
@@ -75,14 +70,16 @@ void main() {
     // has every reason to accept.
     test('ignores a stale refusal while events are waiting to sync', () {
       final guard = resolveGuard(
-        giornata: _giornata(actions: [
-          const GiornataActionDto(
-            action: 'ClockOut',
-            enabled: false,
-            reasonCode: 'not_clocked_in',
-            reason: 'Non sei in servizio.',
-          ),
-        ]),
+        giornata: _giornata(
+          actions: [
+            const GiornataActionDto(
+              action: 'ClockOut',
+              enabled: false,
+              reasonCode: 'not_clocked_in',
+              reason: 'Non sei in servizio.',
+            ),
+          ],
+        ),
         hasPendingSync: true,
         action: 'ClockOut',
       );
@@ -94,14 +91,17 @@ void main() {
     // has pending, so it survives the exception above.
     test('still blocks a payroll lock while events are waiting to sync', () {
       final guard = resolveGuard(
-        giornata: _giornata(locked: true, actions: [
-          const GiornataActionDto(
-            action: 'ClockIn',
-            enabled: false,
-            reasonCode: 'payroll_locked',
-            reason: 'Il periodo è chiuso per le buste paga.',
-          ),
-        ]),
+        giornata: _giornata(
+          locked: true,
+          actions: [
+            const GiornataActionDto(
+              action: 'ClockIn',
+              enabled: false,
+              reasonCode: 'payroll_locked',
+              reason: 'Il periodo è chiuso per le buste paga.',
+            ),
+          ],
+        ),
         hasPendingSync: true,
         action: 'ClockIn',
       );
@@ -112,9 +112,7 @@ void main() {
 
     test('allows an action the server did not mention at all', () {
       final guard = resolveGuard(
-        giornata: _giornata(actions: [
-          const GiornataActionDto(action: 'ClockIn', enabled: true),
-        ]),
+        giornata: _giornata(actions: [const GiornataActionDto(action: 'ClockIn', enabled: true)]),
         hasPendingSync: false,
         action: 'Submit',
       );
@@ -127,14 +125,16 @@ void main() {
     // that has not been updated.
     test('falls back to the server text for an unknown reason code', () {
       final guard = resolveGuard(
-        giornata: _giornata(actions: [
-          const GiornataActionDto(
-            action: 'ClockIn',
-            enabled: false,
-            reasonCode: 'shift_not_started',
-            reason: 'Il turno inizia alle 14:00.',
-          ),
-        ]),
+        giornata: _giornata(
+          actions: [
+            const GiornataActionDto(
+              action: 'ClockIn',
+              enabled: false,
+              reasonCode: 'shift_not_started',
+              reason: 'Il turno inizia alle 14:00.',
+            ),
+          ],
+        ),
         hasPendingSync: false,
         action: 'ClockIn',
       );
@@ -155,7 +155,12 @@ void main() {
         'breakMinutes': 30,
         'isPayrollLocked': false,
         'availableActions': [
-          {'action': 'ClockIn', 'enabled': false, 'reasonCode': 'already_clocked_in', 'reason': 'Sei già in servizio.'},
+          {
+            'action': 'ClockIn',
+            'enabled': false,
+            'reasonCode': 'already_clocked_in',
+            'reason': 'Sei già in servizio.',
+          },
           {'action': 'ClockOut', 'enabled': true, 'reasonCode': null, 'reason': null},
         ],
       });

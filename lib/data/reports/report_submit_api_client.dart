@@ -47,9 +47,7 @@ class ReportSubmitApiClient {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/reports/$reportId/attachments',
       data: formData,
-      options: Options(
-        headers: {'Content-Type': 'multipart/form-data'},
-      ),
+      options: Options(headers: {'Content-Type': 'multipart/form-data'}),
     );
 
     final data = response.data;
@@ -73,10 +71,7 @@ class ReportSubmitApiClient {
       '/api/reports/submit',
       data: request.toJson(),
       options: Options(
-        headers: {
-          'Idempotency-Key': idempotencyKey,
-          'Content-Type': 'application/json',
-        },
+        headers: {'Idempotency-Key': idempotencyKey, 'Content-Type': 'application/json'},
       ),
     );
 

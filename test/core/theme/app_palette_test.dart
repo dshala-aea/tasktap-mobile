@@ -230,6 +230,30 @@ void main() {
     );
   });
 
+  test('screens use the design system header, not a Material AppBar', () {
+    // Ten screens — nine admin forms and the rapportino wizard — used a Material AppBar while
+    // every list screen beside them used ScreenHeader, so the app's chrome changed at exactly the
+    // moment a technician started entering data.
+    //
+    // The signature dialog keeps its AppBar on purpose: it is a full-screen modal dismissed with
+    // an X, and ScreenHeader draws a back chevron.
+    const allowed = {'lib/features/rapportino/steps/step_riepilogo.dart'};
+
+    final offenders = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final path = entity.path.replaceAll(r'\', '/');
+      if (allowed.contains(path)) continue;
+      if (entity.readAsStringSync().contains('AppBar(')) offenders.add(path);
+    }
+
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'Use ScreenHeaderBar for a Scaffold header, or ScreenHeader inside a body.',
+    );
+  });
+
   /// Colour that reaches a widget as a constant cannot respond to the theme. The exceptions are
   /// the brand yellow, which does not flip, and the surfaces that are fixed-dark under both
   /// themes — a hero, a coloured status dot — where a flipping token would be the bug.

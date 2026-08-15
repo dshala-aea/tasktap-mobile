@@ -22,14 +22,13 @@ import 'package:tasktap_mobile/features/altro/notifiche_screen.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) =>
-    AppNotifica(
-      id: id,
-      titolo: 'Nuovo intervento',
-      corpo: 'Ti è stato assegnato un intervento.',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-      letta: letta,
-    );
+AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) => AppNotifica(
+  id: id,
+  titolo: 'Nuovo intervento',
+  corpo: 'Ti è stato assegnato un intervento.',
+  timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+  letta: letta,
+);
 
 /// Builds a [NotificheScreen] backed by a real [NotificheNotifier] over an
 /// in-memory Drift DB seeded with [notifiche].
@@ -46,7 +45,9 @@ AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) =>
 Future<Widget> _buildScreen({List<AppNotifica> notifiche = const []}) async {
   final db = AppDatabase(NativeDatabase.memory());
   for (final n in notifiche) {
-    await db.into(db.appNotifications).insertOnConflictUpdate(
+    await db
+        .into(db.appNotifications)
+        .insertOnConflictUpdate(
           AppNotificationsCompanion.insert(
             id: n.id,
             tenantId: 'test-tenant',
@@ -62,9 +63,7 @@ Future<Widget> _buildScreen({List<AppNotifica> notifiche = const []}) async {
   }
 
   return ProviderScope(
-    overrides: [
-      notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio())),
-    ],
+    overrides: [notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio()))],
     child: const MaterialApp(home: NotificheScreen()),
   );
 }
@@ -100,10 +99,7 @@ void main() {
 
   // ── 3. Notification rows ───────────────────────────────────────────────────
   testWidgets('renders notification rows when provider has items', (tester) async {
-    final notifiche = [
-      _fakeNotifica(id: 'n1'),
-      _fakeNotifica(id: 'n2', letta: true),
-    ];
+    final notifiche = [_fakeNotifica(id: 'n1'), _fakeNotifica(id: 'n2', letta: true)];
 
     await tester.pumpWidget(await _buildScreen(notifiche: notifiche));
     await tester.pumpAndSettle();
@@ -141,10 +137,7 @@ void main() {
 
   // ── 6. Non lette filter shows only unread ─────────────────────────────────
   testWidgets('Non lette chip filters to unread only', (tester) async {
-    final notifiche = [
-      _fakeNotifica(id: 'n1', letta: false),
-      _fakeNotifica(id: 'n2', letta: true),
-    ];
+    final notifiche = [_fakeNotifica(id: 'n1', letta: false), _fakeNotifica(id: 'n2', letta: true)];
 
     await tester.pumpWidget(await _buildScreen(notifiche: notifiche));
     await tester.pumpAndSettle();

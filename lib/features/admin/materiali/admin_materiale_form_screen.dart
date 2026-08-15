@@ -145,12 +145,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
     if (_isEditing && _prefillFailed) {
       return Scaffold(
         backgroundColor: context.colors.bg2,
-        appBar: AppBar(
-          title: const Text('Modifica materiale'),
-          backgroundColor: context.colors.bg2,
-          foregroundColor: context.colors.ink,
-          elevation: 0,
-        ),
+        appBar: ScreenHeaderBar(title: 'Modifica materiale', showBack: true),
         body: const UnavailableState(
           titolo: 'Materiale non disponibile',
           motivo:
@@ -163,11 +158,9 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Modifica materiale' : 'Nuovo materiale'),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica materiale' : 'Nuovo materiale',
+        showBack: true,
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,

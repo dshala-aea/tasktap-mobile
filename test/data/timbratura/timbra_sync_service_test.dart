@@ -57,9 +57,7 @@ class _FakeApiClient extends WorklogApiClient {
   bool shouldThrow = false;
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(
-    List<MobileSessionDto> sessions,
-  ) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
     if (shouldThrow) throw Exception('Network error');
     calls.add(List.of(sessions));
     return sessions
@@ -81,12 +79,8 @@ class _FakeApiClient extends WorklogApiClient {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-WorkSession _ws(String id, String type, DateTime time) => WorkSession(
-      id: id,
-      eventType: type,
-      eventTime: time,
-      isPendingSync: true,
-    );
+WorkSession _ws(String id, String type, DateTime time) =>
+    WorkSession(id: id, eventType: type, eventTime: time, isPendingSync: true);
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -106,10 +100,7 @@ void main() {
     test('ingresso → fine: calls upsertSessions with one interval', () async {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 17);
-      final sessions = [
-        _ws('id-1', 'ingresso', t1),
-        _ws('id-2', 'fine', t2),
-      ];
+      final sessions = [_ws('id-1', 'ingresso', t1), _ws('id-2', 'fine', t2)];
       final repo = _FakeRepo(sessions);
       final api = _FakeApiClient();
       final svc = TimbraSyncService(repo: repo, apiClient: api);

@@ -3,11 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 /// Holds app version info from PackageInfo.
 class AppInfo {
-  const AppInfo({
-    required this.appName,
-    required this.version,
-    required this.buildNumber,
-  });
+  const AppInfo({required this.appName, required this.version, required this.buildNumber});
 
   final String appName;
   final String version;
@@ -20,9 +16,5 @@ class AppInfo {
 /// Cached for the app lifetime — no need to refresh.
 final appInfoProvider = FutureProvider<AppInfo>((ref) async {
   final info = await PackageInfo.fromPlatform();
-  return AppInfo(
-    appName: info.appName,
-    version: info.version,
-    buildNumber: info.buildNumber,
-  );
+  return AppInfo(appName: info.appName, version: info.version, buildNumber: info.buildNumber);
 });

@@ -30,7 +30,9 @@ Future<DraftReport> _insertDraft(
   String? technicianSignatureAllegatoId = 'sig-tech-1',
   bool materialiNotRequired = false,
 }) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: id,
           tenantId: 'tenant-1',
@@ -45,8 +47,7 @@ Future<DraftReport> _insertDraft(
           isLocalOnly: const Value(true),
         ),
       );
-  return (db.select(db.draftReports)..where((r) => r.id.equals(id)))
-      .getSingle();
+  return (db.select(db.draftReports)..where((r) => r.id.equals(id))).getSingle();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -65,11 +66,7 @@ void main() {
     test('isValid when all requirements are met', () async {
       final draft = await _insertDraft(db, materialiNotRequired: false);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
       expect(result.isValid, isTrue);
       expect(result.issues, isEmpty);
@@ -79,11 +76,7 @@ void main() {
     test('isValid when materialiNotRequired=true and no materiali', () async {
       final draft = await _insertDraft(db, materialiNotRequired: true);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 0,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 0);
 
       expect(result.isValid, isTrue);
     });
@@ -95,11 +88,7 @@ void main() {
     test('flags missingTitle when title is empty', () async {
       final draft = await _insertDraft(db, title: '   ');
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
       expect(result.issues, contains(DraftValidationIssue.missingTitle));
     });
@@ -107,11 +96,7 @@ void main() {
     test('flags missingTitle when title is blank', () async {
       final draft = await _insertDraft(db, title: '');
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
       expect(result.issues, contains(DraftValidationIssue.missingTitle));
     });
@@ -129,8 +114,7 @@ void main() {
       expect(result.issues, contains(DraftValidationIssue.missingCustomer));
     });
 
-    test('does NOT flag missingCustomer when customerFreeText is provided',
-        () async {
+    test('does NOT flag missingCustomer when customerFreeText is provided', () async {
       final draft = await _insertDraft(db, customerId: null);
 
       final result = validateDraft(
@@ -140,35 +124,21 @@ void main() {
         customerFreeText: 'ACME srl',
       );
 
-      expect(
-        result.issues,
-        isNot(contains(DraftValidationIssue.missingCustomer)),
-      );
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomer)));
     });
 
     test('does NOT flag missingCustomer when customerId is set', () async {
       final draft = await _insertDraft(db, customerId: 'cust-1');
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
-      expect(
-        result.issues,
-        isNot(contains(DraftValidationIssue.missingCustomer)),
-      );
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomer)));
     });
 
     test('flags noStaff when staffCount == 0', () async {
       final draft = await _insertDraft(db);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 0,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 0, materialiCount: 1);
 
       expect(result.issues, contains(DraftValidationIssue.noStaff));
     });
@@ -176,76 +146,41 @@ void main() {
     test('does NOT flag noStaff when staffCount > 0', () async {
       final draft = await _insertDraft(db);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 2,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 2, materialiCount: 1);
 
       expect(result.issues, isNot(contains(DraftValidationIssue.noStaff)));
     });
 
-    test(
-        'flags noMateriali when materialiCount == 0 and materialiNotRequired = false',
-        () async {
+    test('flags noMateriali when materialiCount == 0 and materialiNotRequired = false', () async {
       final draft = await _insertDraft(db, materialiNotRequired: false);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 0,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 0);
 
       expect(result.issues, contains(DraftValidationIssue.noMateriali));
     });
 
-    test(
-        'does NOT flag noMateriali when materialiNotRequired = true and count = 0',
-        () async {
+    test('does NOT flag noMateriali when materialiNotRequired = true and count = 0', () async {
       final draft = await _insertDraft(db, materialiNotRequired: true);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 0,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 0);
 
       expect(result.issues, isNot(contains(DraftValidationIssue.noMateriali)));
     });
 
-    test('flags missingCustomerSignature when customerSignatureAllegatoId null',
-        () async {
-      final draft =
-          await _insertDraft(db, customerSignatureAllegatoId: null);
+    test('flags missingCustomerSignature when customerSignatureAllegatoId null', () async {
+      final draft = await _insertDraft(db, customerSignatureAllegatoId: null);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
-      expect(
-        result.issues,
-        contains(DraftValidationIssue.missingCustomerSignature),
-      );
+      expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
     });
 
-    test(
-        'flags missingTechnicianSignature when technicianSignatureAllegatoId null',
-        () async {
-      final draft =
-          await _insertDraft(db, technicianSignatureAllegatoId: null);
+    test('flags missingTechnicianSignature when technicianSignatureAllegatoId null', () async {
+      final draft = await _insertDraft(db, technicianSignatureAllegatoId: null);
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
-      expect(
-        result.issues,
-        contains(DraftValidationIssue.missingTechnicianSignature),
-      );
+      expect(result.issues, contains(DraftValidationIssue.missingTechnicianSignature));
     });
   });
 
@@ -270,14 +205,17 @@ void main() {
       );
 
       expect(result.issues, hasLength(greaterThanOrEqualTo(5)));
-      expect(result.issues, containsAll([
-        DraftValidationIssue.missingTitle,
-        DraftValidationIssue.missingCustomer,
-        DraftValidationIssue.noStaff,
-        DraftValidationIssue.noMateriali,
-        DraftValidationIssue.missingCustomerSignature,
-        DraftValidationIssue.missingTechnicianSignature,
-      ]));
+      expect(
+        result.issues,
+        containsAll([
+          DraftValidationIssue.missingTitle,
+          DraftValidationIssue.missingCustomer,
+          DraftValidationIssue.noStaff,
+          DraftValidationIssue.noMateriali,
+          DraftValidationIssue.missingCustomerSignature,
+          DraftValidationIssue.missingTechnicianSignature,
+        ]),
+      );
       expect(result.isValid, isFalse);
     });
   });
@@ -294,11 +232,7 @@ void main() {
         technicianSignatureAllegatoId: null,
       );
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 0,
-        materialiCount: 0,
-      );
+      final result = validateDraft(draft: draft, staffCount: 0, materialiCount: 0);
 
       expect(result.italianMessages.length, result.issues.length);
       expect(result.italianMessages, everyElement(isA<String>()));
@@ -307,11 +241,7 @@ void main() {
     test('italianMessages are non-empty strings', () async {
       final draft = await _insertDraft(db, title: '');
 
-      final result = validateDraft(
-        draft: draft,
-        staffCount: 1,
-        materialiCount: 1,
-      );
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
       for (final msg in result.italianMessages) {
         expect(msg.isNotEmpty, isTrue);

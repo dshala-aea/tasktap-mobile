@@ -22,8 +22,7 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildList(
-    {required AppDatabase db, required MockAuthRepository repo}) {
+Widget _buildList({required AppDatabase db, required MockAuthRepository repo}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
@@ -82,26 +81,34 @@ void main() {
     });
 
     testWidgets('renders a ListRow per ticket', (tester) async {
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Perdita idrica',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't2',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 2),
-            title: 'Manutenzione caldaia',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 2,
-            typeId: 1,
-          ));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Perdita idrica',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 2),
+              title: 'Manutenzione caldaia',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 2,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 
@@ -114,31 +121,53 @@ void main() {
 
     testWidgets('filter chip narrows list to matching status', (tester) async {
       // Seed a status map
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-          id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'));
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-          id: const Value(2), tenantId: 'tenant-1', name: 'In corso'));
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(2),
+              tenantId: 'tenant-1',
+              name: 'In corso',
+            ),
+          );
 
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Ticket aperto',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't2',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 2),
-            title: 'Ticket in corso',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 2,
-            typeId: 1,
-          ));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket aperto',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 2),
+              title: 'Ticket in corso',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 2,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 
@@ -153,18 +182,29 @@ void main() {
     });
 
     testWidgets('shows StatusPill with resolved status name', (tester) async {
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-          id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Un ticket',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Un ticket',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 

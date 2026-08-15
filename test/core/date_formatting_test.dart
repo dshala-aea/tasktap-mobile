@@ -29,7 +29,8 @@ void main() {
       expect(
         main.contains("Intl.defaultLocale = 'it'"),
         isTrue,
-        reason: 'the DateFormat calls that pass no locale should format like the ones that do, '
+        reason:
+            'the DateFormat calls that pass no locale should format like the ones that do, '
             'rather than falling back to en_US',
       );
     });

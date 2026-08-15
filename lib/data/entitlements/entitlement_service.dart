@@ -10,8 +10,8 @@ import 'entitlement_repository.dart';
 /// downgrading to "nothing granted" because a request timed out on a building site.
 class EntitlementService {
   EntitlementService({required Dio dio, required EntitlementRepository repository})
-      : _dio = dio,
-        _repository = repository;
+    : _dio = dio,
+      _repository = repository;
 
   final Dio _dio;
   final EntitlementRepository _repository;

@@ -82,26 +82,26 @@ class SubmitReportRequest {
   final List<SubmitReportControlloDto> controlli;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        if (scheduleId != null) 'scheduleId': scheduleId,
-        if (ticketId != null) 'ticketId': ticketId,
-        'locationId': locationId,
-        'title': title,
-        if (details != null) 'details': details,
-        if (technicianNotes != null) 'technicianNotes': technicianNotes,
-        if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
-        if (endedAt != null) 'endedAt': endedAt!.toUtc().toIso8601String(),
-        if (customerSignatureAllegatoId != null)
-          'customerSignatureAllegatoId': customerSignatureAllegatoId,
-        if (technicianSignatureAllegatoId != null)
-          'technicianSignatureAllegatoId': technicianSignatureAllegatoId,
-        if (customerSignoffText != null) 'customerSignoffText': customerSignoffText,
-        'materialiNotRequired': materialiNotRequired,
-        'photoAllegatoIds': photoAllegatoIds,
-        'staff': staff.map((s) => s.toJson()).toList(),
-        'materiali': materiali.map((m) => m.toJson()).toList(),
-        'controlli': controlli.map((c) => c.toJson()).toList(),
-      };
+    'id': id,
+    if (scheduleId != null) 'scheduleId': scheduleId,
+    if (ticketId != null) 'ticketId': ticketId,
+    'locationId': locationId,
+    'title': title,
+    if (details != null) 'details': details,
+    if (technicianNotes != null) 'technicianNotes': technicianNotes,
+    if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
+    if (endedAt != null) 'endedAt': endedAt!.toUtc().toIso8601String(),
+    if (customerSignatureAllegatoId != null)
+      'customerSignatureAllegatoId': customerSignatureAllegatoId,
+    if (technicianSignatureAllegatoId != null)
+      'technicianSignatureAllegatoId': technicianSignatureAllegatoId,
+    if (customerSignoffText != null) 'customerSignoffText': customerSignoffText,
+    'materialiNotRequired': materialiNotRequired,
+    'photoAllegatoIds': photoAllegatoIds,
+    'staff': staff.map((s) => s.toJson()).toList(),
+    'materiali': materiali.map((m) => m.toJson()).toList(),
+    'controlli': controlli.map((c) => c.toJson()).toList(),
+  };
 }
 
 /// One technician's time + travel contribution. Mirror of SubmitReportStaffDto.cs.
@@ -129,16 +129,16 @@ class SubmitReportStaffDto {
   final int pauseMinutes;
 
   Map<String, dynamic> toJson() => {
-        'userId': userId,
-        if (hoursWorked != null) 'hoursWorked': hoursWorked,
-        'kmTraveled': kmTraveled,
-        if (vehicle != null) 'vehicle': vehicle,
-        if (costPerKm != null) 'costPerKm': costPerKm,
-        if (notes != null) 'notes': notes,
-        if (startTime != null) 'startTime': startTime!.toUtc().toIso8601String(),
-        if (endTime != null) 'endTime': endTime!.toUtc().toIso8601String(),
-        'pauseMinutes': pauseMinutes,
-      };
+    'userId': userId,
+    if (hoursWorked != null) 'hoursWorked': hoursWorked,
+    'kmTraveled': kmTraveled,
+    if (vehicle != null) 'vehicle': vehicle,
+    if (costPerKm != null) 'costPerKm': costPerKm,
+    if (notes != null) 'notes': notes,
+    if (startTime != null) 'startTime': startTime!.toUtc().toIso8601String(),
+    if (endTime != null) 'endTime': endTime!.toUtc().toIso8601String(),
+    'pauseMinutes': pauseMinutes,
+  };
 }
 
 /// One material line. Mirror of SubmitReportMaterialeDto.cs.
@@ -162,14 +162,14 @@ class SubmitReportMaterialeDto {
   final String? magazzinoId;
 
   Map<String, dynamic> toJson() => {
-        if (materialeId != null) 'materialeId': materialeId,
-        if (freeTextName != null) 'freeTextName': freeTextName,
-        'quantity': quantity,
-        if (unitOfMeasure != null) 'unitOfMeasure': unitOfMeasure,
-        if (unitPrice != null) 'unitPrice': unitPrice,
-        if (notes != null) 'notes': notes,
-        if (magazzinoId != null) 'magazzinoId': magazzinoId,
-      };
+    if (materialeId != null) 'materialeId': materialeId,
+    if (freeTextName != null) 'freeTextName': freeTextName,
+    'quantity': quantity,
+    if (unitOfMeasure != null) 'unitOfMeasure': unitOfMeasure,
+    if (unitPrice != null) 'unitPrice': unitPrice,
+    if (notes != null) 'notes': notes,
+    if (magazzinoId != null) 'magazzinoId': magazzinoId,
+  };
 }
 
 /// One inspection control answer. Mirror of SubmitReportControlloDto.cs.
@@ -192,15 +192,15 @@ class SubmitReportControlloDto {
   final DateTime? dateValue;
 
   Map<String, dynamic> toJson() => {
-        // 'ticketControlId', not 'controlId'. The server's field is a non-nullable Guid, so the
-        // old name deserialized to Guid.Empty, which belongs to no ticket — and the ownership
-        // guard rejected the entire submission. A technician who filled in the checklist could
-        // not send their rapportino at all. Renamed by ADR-0012; mobile was never updated.
-        'ticketControlId': ticketControlId,
-        if (stringValue != null) 'stringValue': stringValue,
-        if (boolValue != null) 'boolValue': boolValue,
-        if (dateValue != null) 'dateValue': dateValue!.toUtc().toIso8601String(),
-      };
+    // 'ticketControlId', not 'controlId'. The server's field is a non-nullable Guid, so the
+    // old name deserialized to Guid.Empty, which belongs to no ticket — and the ownership
+    // guard rejected the entire submission. A technician who filled in the checklist could
+    // not send their rapportino at all. Renamed by ADR-0012; mobile was never updated.
+    'ticketControlId': ticketControlId,
+    if (stringValue != null) 'stringValue': stringValue,
+    if (boolValue != null) 'boolValue': boolValue,
+    if (dateValue != null) 'dateValue': dateValue!.toUtc().toIso8601String(),
+  };
 }
 
 /// Response from POST /api/reports/submit.
@@ -224,9 +224,7 @@ class SubmitReportResponse {
       id: json['id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       stato: json['stato']?.toString() ?? '',
-      inviatoAt: json['inviatoAt'] != null
-          ? DateTime.tryParse(json['inviatoAt'] as String)
-          : null,
+      inviatoAt: json['inviatoAt'] != null ? DateTime.tryParse(json['inviatoAt'] as String) : null,
       replayed: json['replayed'] as bool? ?? false,
     );
   }
@@ -234,10 +232,7 @@ class SubmitReportResponse {
 
 /// Response from POST /api/reports/{id}/attachments.
 class ReportAttachmentUploadResponse {
-  const ReportAttachmentUploadResponse({
-    required this.allegatoId,
-    this.url,
-  });
+  const ReportAttachmentUploadResponse({required this.allegatoId, this.url});
 
   final String allegatoId;
   final String? url;

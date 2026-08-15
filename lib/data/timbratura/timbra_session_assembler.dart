@@ -21,11 +21,7 @@ import '../local/app_database.dart';
 
 /// One work interval ready to be sent to the server.
 class WorkInterval {
-  const WorkInterval({
-    required this.clientId,
-    required this.startTime,
-    this.endTime,
-  });
+  const WorkInterval({required this.clientId, required this.startTime, this.endTime});
 
   /// Stable identifier derived from the opening event's id.
   final String clientId;
@@ -37,8 +33,7 @@ class WorkInterval {
   final DateTime? endTime;
 
   @override
-  String toString() =>
-      'WorkInterval(clientId: $clientId, start: $startTime, end: $endTime)';
+  String toString() => 'WorkInterval(clientId: $clientId, start: $startTime, end: $endTime)';
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -66,11 +61,7 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
       case 'ripresa':
         // Close any accidentally-open interval (defensive: shouldn't happen in normal flow)
         if (openClientId != null && openStart != null) {
-          intervals.add(WorkInterval(
-            clientId: openClientId,
-            startTime: openStart,
-            endTime: t,
-          ));
+          intervals.add(WorkInterval(clientId: openClientId, startTime: openStart, endTime: t));
         }
         openClientId = s.id;
         openStart = t;
@@ -78,15 +69,11 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
       case 'fine':
       case 'pausa':
         if (openClientId != null && openStart != null) {
-          intervals.add(WorkInterval(
-            clientId: openClientId,
-            startTime: openStart,
-            endTime: t,
-          ));
+          intervals.add(WorkInterval(clientId: openClientId, startTime: openStart, endTime: t));
           openClientId = null;
           openStart = null;
         }
-        // else: close event with no open interval — ignore
+      // else: close event with no open interval — ignore
 
       default:
         // Unknown event type — ignore
@@ -96,11 +83,7 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
 
   // If still open, emit active interval (endTime null).
   if (openClientId != null && openStart != null) {
-    intervals.add(WorkInterval(
-      clientId: openClientId,
-      startTime: openStart,
-      endTime: null,
-    ));
+    intervals.add(WorkInterval(clientId: openClientId, startTime: openStart, endTime: null));
   }
 
   return intervals;

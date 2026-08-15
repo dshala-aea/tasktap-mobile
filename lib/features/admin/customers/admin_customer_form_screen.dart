@@ -2,13 +2,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/offline_guard.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_text_field.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -158,15 +156,10 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
+      appBar: ScreenHeaderBar(
+        title: widget.isEditMode ? 'Modifica cliente' : 'Nuovo cliente',
+        showBack: true,
         backgroundColor: AppColors.CHARCOAL,
-        // Fixed-dark bar; `inkInverse` flips. See AppColors.onDark.
-        foregroundColor: AppColors.onDark,
-        elevation: 0,
-        title: Text(
-          widget.isEditMode ? 'Modifica cliente' : 'Nuovo cliente',
-          style: AppTextStyles.titleMedium.copyWith(color: AppColors.onDark),
-        ),
       ),
       body: Form(
         key: _formKey,

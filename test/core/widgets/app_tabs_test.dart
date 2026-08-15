@@ -4,10 +4,8 @@ import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/widgets/app_tabs.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
-      home: Scaffold(
-        body: SizedBox(width: 400, child: child),
-      ),
-    );
+  home: Scaffold(body: SizedBox(width: 400, child: child)),
+);
 
 void main() {
   group('AppTabs', () {
@@ -18,27 +16,21 @@ void main() {
     ];
 
     testWidgets('renders all tab labels', (tester) async {
-      await tester.pumpWidget(_wrap(
-        AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {}),
-      ));
+      await tester.pumpWidget(_wrap(AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {})));
       expect(find.text('Tutti'), findsOneWidget);
       expect(find.text('Aperti'), findsOneWidget);
       expect(find.text('Chiusi'), findsOneWidget);
     });
 
     testWidgets('active tab (index 0) has DARK color text', (tester) async {
-      await tester.pumpWidget(_wrap(
-        AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {}),
-      ));
+      await tester.pumpWidget(_wrap(AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {})));
       final textWidgets = tester.widgetList<Text>(find.text('Tutti'));
       final activeText = textWidgets.first;
       expect(activeText.style?.color, equals(AppColors.DARK));
     });
 
     testWidgets('inactive tab has MUTED color text', (tester) async {
-      await tester.pumpWidget(_wrap(
-        AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {}),
-      ));
+      await tester.pumpWidget(_wrap(AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {})));
       final textWidgets = tester.widgetList<Text>(find.text('Aperti'));
       final inactiveText = textWidgets.first;
       expect(inactiveText.style?.color, equals(AppColors.MUTED));
@@ -46,17 +38,15 @@ void main() {
 
     testWidgets('tapping a tab reports its index', (tester) async {
       int? selected;
-      await tester.pumpWidget(_wrap(
-        AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (i) => selected = i),
-      ));
+      await tester.pumpWidget(
+        _wrap(AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (i) => selected = i)),
+      );
       await tester.tap(find.text('Chiusi'));
       expect(selected, equals(2));
     });
 
     testWidgets('changing selectedIndex changes active tab', (tester) async {
-      await tester.pumpWidget(_wrap(
-        AppTabs(tabs: tabs, selectedIndex: 1, onSelected: (_) {}),
-      ));
+      await tester.pumpWidget(_wrap(AppTabs(tabs: tabs, selectedIndex: 1, onSelected: (_) {})));
       final apertiText = tester.widget<Text>(find.text('Aperti'));
       expect(apertiText.style?.color, equals(AppColors.DARK));
       final tuttiText = tester.widget<Text>(find.text('Tutti'));
@@ -64,9 +54,7 @@ void main() {
     });
 
     testWidgets('count pill renders for tabs with a count', (tester) async {
-      await tester.pumpWidget(_wrap(
-        AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {}),
-      ));
+      await tester.pumpWidget(_wrap(AppTabs(tabs: tabs, selectedIndex: 0, onSelected: (_) {})));
       // count 12 and 3 should appear; Aperti has no count
       expect(find.text('12'), findsOneWidget);
       expect(find.text('3'), findsOneWidget);

@@ -13,8 +13,7 @@ class _FakeLocationServiceReturnsCoords implements ILocationService {
   const _FakeLocationServiceReturnsCoords();
 
   @override
-  Future<GpsCoords?> getCurrentPosition() async =>
-      (lat: 45.4654219, lng: 9.1859243);
+  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654219, lng: 9.1859243);
 }
 
 class _FakeLocationServiceReturnsNull implements ILocationService {

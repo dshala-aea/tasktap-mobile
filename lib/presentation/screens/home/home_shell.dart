@@ -25,8 +25,7 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell>
-    with WidgetsBindingObserver {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();

@@ -20,18 +20,13 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 Widget _buildLoginScreen(IAuthRepository repo) {
   return ProviderScope(
     overrides: [authRepositoryProvider.overrideWithValue(repo)],
-    child: const MaterialApp(
-      home: LoginScreen(),
-    ),
+    child: const MaterialApp(home: LoginScreen()),
   );
 }
 
 /// The primary login CTA — the AppButton labelled 'Accedi' (distinct from the
 /// screen heading, which is also 'Accedi').
-Finder get _loginCta => find.descendant(
-      of: find.byType(AppButton),
-      matching: find.text('Accedi'),
-    );
+Finder get _loginCta => find.descendant(of: find.byType(AppButton), matching: find.text('Accedi'));
 
 void main() {
   late MockAuthRepository repo;
@@ -66,8 +61,7 @@ void main() {
       expect(_loginCta, findsOneWidget);
     });
 
-    testWidgets('does not render email/password fields (OIDC redirect)',
-        (tester) async {
+    testWidgets('does not render email/password fields (OIDC redirect)', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
@@ -79,8 +73,7 @@ void main() {
 
   group('LoginScreen sign-in', () {
     testWidgets('tapping Accedi starts the interactive sign-in', (tester) async {
-      when(() => repo.signIn())
-          .thenAnswer((_) async => (user: null, failure: null));
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
@@ -95,10 +88,10 @@ void main() {
   // ── Error display ──────────────────────────────────────────────────────
 
   group('LoginScreen error display', () {
-    testWidgets('shows the network error banner on NetworkError',
-        (tester) async {
-      when(() => repo.signIn())
-          .thenAnswer((_) async => (user: null, failure: const NetworkError()));
+    testWidgets('shows the network error banner on NetworkError', (tester) async {
+      when(
+        () => repo.signIn(),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();

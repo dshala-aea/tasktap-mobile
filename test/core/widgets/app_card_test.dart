@@ -14,19 +14,17 @@ void main() {
       expect(find.text('contenuto'), findsOneWidget);
     });
 
-    testWidgets('is a cell: bone label card, flush leading edge, no drop shadow',
-        (tester) async {
+    testWidgets('is a cell: bone label card, flush leading edge, no drop shadow', (tester) async {
       await tester.pumpWidget(_wrap(const AppCard(child: Text('x'))));
-      final box = tester
-          .widget<DecoratedBox>(
-            find
-                .descendant(
-                  of: find.byType(AppCard),
-                  matching: find.byType(DecoratedBox),
-                )
-                .first,
-          )
-          .decoration as BoxDecoration;
+      final box =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(of: find.byType(AppCard), matching: find.byType(DecoratedBox))
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
 
       // A card was BG1 with a soft shadow and a 14px radius — the moulded rounded-card idiom.
       // A cell is the bone label card, square where it butts the rail, machined on the other
@@ -38,27 +36,26 @@ void main() {
     });
 
     testWidgets('honours a custom background color', (tester) async {
-      await tester.pumpWidget(_wrap(
-        const AppCard(backgroundColor: AppColors.WHITE, child: Text('x')),
-      ));
-      final box = tester
-          .widget<DecoratedBox>(
-            find
-                .descendant(
-                  of: find.byType(AppCard),
-                  matching: find.byType(DecoratedBox),
-                )
-                .first,
-          )
-          .decoration as BoxDecoration;
+      await tester.pumpWidget(
+        _wrap(const AppCard(backgroundColor: AppColors.WHITE, child: Text('x'))),
+      );
+      final box =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(of: find.byType(AppCard), matching: find.byType(DecoratedBox))
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
       expect(box.color, equals(AppColors.WHITE));
     });
 
     testWidgets('pressable variant fires onTap', (tester) async {
       var tapped = false;
-      await tester.pumpWidget(_wrap(
-        AppCard.pressable(onTap: () => tapped = true, child: const Text('tap')),
-      ));
+      await tester.pumpWidget(
+        _wrap(AppCard.pressable(onTap: () => tapped = true, child: const Text('tap'))),
+      );
       await tester.tap(find.text('tap'));
       expect(tapped, isTrue);
     });
@@ -66,33 +63,35 @@ void main() {
 
   group('GlassCard', () {
     testWidgets('renders its child', (tester) async {
-      await tester.pumpWidget(_wrap(
-        const ColoredBox(
-          color: Colors.black,
-          child: GlassCard(child: Text('glass')),
+      await tester.pumpWidget(
+        _wrap(
+          const ColoredBox(
+            color: Colors.black,
+            child: GlassCard(child: Text('glass')),
+          ),
         ),
-      ));
+      );
       expect(find.text('glass'), findsOneWidget);
     });
 
-    testWidgets('uses a translucent white gradient + the rack corner language',
-        (tester) async {
-      await tester.pumpWidget(_wrap(
-        const ColoredBox(
-          color: Colors.black,
-          child: GlassCard(child: Text('g')),
+    testWidgets('uses a translucent white gradient + the rack corner language', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          const ColoredBox(
+            color: Colors.black,
+            child: GlassCard(child: Text('g')),
+          ),
         ),
-      ));
-      final box = tester
-          .widget<DecoratedBox>(
-            find
-                .descendant(
-                  of: find.byType(GlassCard),
-                  matching: find.byType(DecoratedBox),
-                )
-                .first,
-          )
-          .decoration as BoxDecoration;
+      );
+      final box =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(of: find.byType(GlassCard), matching: find.byType(DecoratedBox))
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
       expect(box.gradient, isA<LinearGradient>());
       // Glass keeps its translucency but takes the rack's corner language, so it does not read as
       // a survivor from the previous design system sitting on the dashboard hero.
@@ -101,15 +100,14 @@ void main() {
 
     testWidgets('pressable variant fires onTap', (tester) async {
       var tapped = false;
-      await tester.pumpWidget(_wrap(
-        ColoredBox(
-          color: Colors.black,
-          child: GlassCard.pressable(
-            onTap: () => tapped = true,
-            child: const Text('tap'),
+      await tester.pumpWidget(
+        _wrap(
+          ColoredBox(
+            color: Colors.black,
+            child: GlassCard.pressable(onTap: () => tapped = true, child: const Text('tap')),
           ),
         ),
-      ));
+      );
       await tester.tap(find.text('tap'));
       expect(tapped, isTrue);
     });

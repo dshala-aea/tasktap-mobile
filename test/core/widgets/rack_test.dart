@@ -14,9 +14,7 @@ Widget _wrap(Widget child, {Brightness brightness = Brightness.light}) => Materi
 /// A cell inside a Column inside a scroll view — the shape almost every real call site has, and
 /// the one that used to throw. Kept as the default harness rather than a special case so a
 /// regression to `CrossAxisAlignment.stretch` fails these tests rather than the whole suite.
-Widget _inScrollableColumn(Widget child) => SingleChildScrollView(
-  child: Column(children: [child]),
-);
+Widget _inScrollableColumn(Widget child) => SingleChildScrollView(child: Column(children: [child]));
 
 void main() {
   group('RackCell', () {
@@ -33,10 +31,9 @@ void main() {
       final decoration =
           tester
                   .widget<DecoratedBox>(
-                    find.descendant(
-                      of: find.byType(RackCell),
-                      matching: find.byType(DecoratedBox),
-                    ).first,
+                    find
+                        .descendant(of: find.byType(RackCell), matching: find.byType(DecoratedBox))
+                        .first,
                   )
                   .decoration
               as BoxDecoration;
@@ -103,17 +100,14 @@ void main() {
     });
 
     testWidgets('takes its materials from the dark palette under dark', (tester) async {
-      await tester.pumpWidget(
-        _wrap(const RackCell(child: Text('x')), brightness: Brightness.dark),
-      );
+      await tester.pumpWidget(_wrap(const RackCell(child: Text('x')), brightness: Brightness.dark));
 
       final decoration =
           tester
                   .widget<DecoratedBox>(
-                    find.descendant(
-                      of: find.byType(RackCell),
-                      matching: find.byType(DecoratedBox),
-                    ).first,
+                    find
+                        .descendant(of: find.byType(RackCell), matching: find.byType(DecoratedBox))
+                        .first,
                   )
                   .decoration
               as BoxDecoration;
@@ -142,7 +136,10 @@ void main() {
     testWidgets('draws nothing when the surface holds no rack', (tester) async {
       await tester.pumpWidget(_wrap(const Rack(visible: false, child: Text('x'))));
 
-      expect(find.descendant(of: find.byType(Rack), matching: find.byType(DecoratedBox)), findsNothing);
+      expect(
+        find.descendant(of: find.byType(Rack), matching: find.byType(DecoratedBox)),
+        findsNothing,
+      );
       expect(find.text('x'), findsOneWidget);
     });
   });

@@ -14,12 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_session_assembler.dart';
 
-WorkSession _ws(String id, String type, DateTime time) => WorkSession(
-      id: id,
-      eventType: type,
-      eventTime: time,
-      isPendingSync: true,
-    );
+WorkSession _ws(String id, String type, DateTime time) =>
+    WorkSession(id: id, eventType: type, eventTime: time, isPendingSync: true);
 
 void main() {
   group('assembleIntervals', () {
@@ -39,10 +35,7 @@ void main() {
     test('ingresso → fine → one closed interval', () {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 17);
-      final intervals = assembleIntervals([
-        _ws('id-1', 'ingresso', t1),
-        _ws('id-2', 'fine', t2),
-      ]);
+      final intervals = assembleIntervals([_ws('id-1', 'ingresso', t1), _ws('id-2', 'fine', t2)]);
       expect(intervals.length, 1);
       expect(intervals[0].clientId, 'id-1');
       expect(intervals[0].startTime, t1);
@@ -52,10 +45,7 @@ void main() {
     test('ingresso → pausa → one closed interval', () {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 12);
-      final intervals = assembleIntervals([
-        _ws('id-1', 'ingresso', t1),
-        _ws('id-2', 'pausa', t2),
-      ]);
+      final intervals = assembleIntervals([_ws('id-1', 'ingresso', t1), _ws('id-2', 'pausa', t2)]);
       expect(intervals.length, 1);
       expect(intervals[0].clientId, 'id-1');
       expect(intervals[0].startTime, t1);

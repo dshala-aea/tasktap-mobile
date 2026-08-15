@@ -20,10 +20,7 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildDashboard({
-  required AppDatabase db,
-  required MockAuthRepository repo,
-}) {
+Widget _buildDashboard({required AppDatabase db, required MockAuthRepository repo}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
@@ -75,8 +72,7 @@ void main() {
   });
 
   group('DashboardScreen', () {
-    testWidgets('renders hero with user email when no displayName',
-        (tester) async {
+    testWidgets('renders hero with user email when no displayName', (tester) async {
       await pumpDashboard(tester);
       expect(find.text('mario@tasktap.io'), findsOneWidget);
       expect(find.text('Bentornato'), findsOneWidget);
@@ -105,23 +101,26 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows ActiveJobCard when in-progress schedule present',
-        (tester) async {
+    testWidgets('shows ActiveJobCard when in-progress schedule present', (tester) async {
       final today = DateTime.now().toUtc();
       final dayStart = DateTime.utc(today.year, today.month, today.day);
-      await db.into(db.schedules).insert(SchedulesCompanion.insert(
-            id: 'sched-1',
-            tenantId: 'tenant-1',
-            createdAt: dayStart,
-            activityDate: dayStart,
-            timeStartMinutes: 480,
-            timeEndMinutes: 1020,
-            userId: 'u1',
-            statusId: 2, // In corso
-            locationId: 'loc-1',
-            title: 'Sostituzione caldaia',
-            description: '',
-          ));
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-1',
+              tenantId: 'tenant-1',
+              createdAt: dayStart,
+              activityDate: dayStart,
+              timeStartMinutes: 480,
+              timeEndMinutes: 1020,
+              userId: 'u1',
+              statusId: 2, // In corso
+              locationId: 'loc-1',
+              title: 'Sostituzione caldaia',
+              description: '',
+            ),
+          );
 
       await pumpDashboard(tester);
       expect(find.byType(ActiveJobCard), findsOneWidget);

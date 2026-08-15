@@ -161,12 +161,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
     if (_isEditing && _prefillFailed) {
       return Scaffold(
         backgroundColor: context.colors.bg2,
-        appBar: AppBar(
-          title: const Text('Modifica cantiere'),
-          backgroundColor: context.colors.bg2,
-          foregroundColor: context.colors.ink,
-          elevation: 0,
-        ),
+        appBar: ScreenHeaderBar(title: 'Modifica cantiere', showBack: true),
         body: const UnavailableState(
           titolo: 'Cantiere non disponibile',
           motivo:
@@ -189,11 +184,9 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Modifica cantiere' : 'Nuovo cantiere'),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica cantiere' : 'Nuovo cantiere',
+        showBack: true,
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,

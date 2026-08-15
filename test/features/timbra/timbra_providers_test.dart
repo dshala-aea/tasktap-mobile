@@ -31,7 +31,11 @@ AppDatabase _makeDb() {
 // No-op stub repo and API client so timbraSyncServiceProvider never hits Dio.
 class _StubRepo implements IWorkSessionRepository {
   @override
-  Future<void> addEvent({required String id, required DateTime eventTime, required String eventType}) async {}
+  Future<void> addEvent({
+    required String id,
+    required DateTime eventTime,
+    required String eventType,
+  }) async {}
   @override
   Stream<List<WorkSession>> watchTodaySessions() => const Stream.empty();
   @override
@@ -246,11 +250,7 @@ void main() {
     test('addEvent then todaySessionsProvider returns the event', () async {
       final repo = container.read(workSessionRepositoryProvider);
       final now = DateTime.now().toUtc();
-      await repo.addEvent(
-        id: 'test-1',
-        eventTime: now,
-        eventType: 'ingresso',
-      );
+      await repo.addEvent(id: 'test-1', eventTime: now, eventType: 'ingresso');
 
       final result = await container.read(todaySessionsProvider.future);
       expect(result.length, equals(1));
@@ -283,8 +283,7 @@ void main() {
       expect(sessions[1].eventType, equals('fine'));
     });
 
-    test('timbraStateProvider: sessions after punch derive correct state',
-        () async {
+    test('timbraStateProvider: sessions after punch derive correct state', () async {
       final notifier = container.read(punchNotifierProvider.notifier);
       await notifier.punch(const TimbraState());
 
@@ -327,32 +326,34 @@ void main() {
     });
 
     GiornataDto giornataWith(List<GiornataActionDto> actions) => GiornataDto(
-          status: 'Working',
-          workedMinutes: 0,
-          breakMinutes: 0,
-          isPayrollLocked: false,
-          actions: actions,
-        );
+      status: 'Working',
+      workedMinutes: 0,
+      breakMinutes: 0,
+      isPayrollLocked: false,
+      actions: actions,
+    );
 
     test('requests StartBreak when not currently on a break', () async {
       container = ProviderContainer(
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
-          giornataProvider.overrideWith((ref) async => giornataWith([
-                const GiornataActionDto(
-                  action: 'StartBreak',
-                  enabled: false,
-                  reasonCode: 'not_clocked_in',
-                  reason: 'Non risulti in servizio.',
-                ),
-              ])),
+          giornataProvider.overrideWith(
+            (ref) async => giornataWith([
+              const GiornataActionDto(
+                action: 'StartBreak',
+                enabled: false,
+                reasonCode: 'not_clocked_in',
+                reason: 'Non risulti in servizio.',
+              ),
+            ]),
+          ),
         ],
       );
 
-      final guard = await container.read(giornataProvider.future).then(
-            (_) => container.read(pauseGuardProvider),
-          );
+      final guard = await container
+          .read(giornataProvider.future)
+          .then((_) => container.read(pauseGuardProvider));
 
       expect(guard.blocked, isTrue);
       expect(guard.reason, contains('servizio'));
@@ -363,14 +364,16 @@ void main() {
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
-          giornataProvider.overrideWith((ref) async => giornataWith([
-                const GiornataActionDto(
-                  action: 'EndBreak',
-                  enabled: false,
-                  reasonCode: 'not_on_break',
-                  reason: 'Non risulti in pausa.',
-                ),
-              ])),
+          giornataProvider.overrideWith(
+            (ref) async => giornataWith([
+              const GiornataActionDto(
+                action: 'EndBreak',
+                enabled: false,
+                reasonCode: 'not_on_break',
+                reason: 'Non risulti in pausa.',
+              ),
+            ]),
+          ),
         ],
       );
 

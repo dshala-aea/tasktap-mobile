@@ -14,10 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   /// Every place a bare `GestureDetector(` may still be constructed, and why.
   const allowed = <String, String>{
-    'lib/core/widgets/app_toggle.dart':
-        'the thumb animates on tap — the movement is the feedback',
-    'lib/core/widgets/signature_pad.dart':
-        'a drag, not a press; there is nothing to splash',
+    'lib/core/widgets/app_toggle.dart': 'the thumb animates on tap — the movement is the feedback',
+    'lib/core/widgets/signature_pad.dart': 'a drag, not a press; there is nothing to splash',
     'lib/core/widgets/bottom_nav.dart':
         'the pill animates colour, padding and label on every selection',
     'lib/features/calendario/calendario_screen.dart':
@@ -44,7 +42,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: 'Use AppTappable so the control answers a press. If this one genuinely should not '
+      reason:
+          'Use AppTappable so the control answers a press. If this one genuinely should not '
           '(it animates on tap, or the gesture is a drag), add it to `allowed` above with the '
           'reason, and write that reason at the call site too.',
     );

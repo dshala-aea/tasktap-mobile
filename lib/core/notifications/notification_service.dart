@@ -191,10 +191,7 @@ class NotificationService {
     // Navigate based on entity type.
     // This uses a global navigator key or a routing callback.
     // For now, store the deep-link intent; the router will consume it.
-    _pendingDeepLink = DeepLinkIntent(
-      entityType: entityType,
-      entityId: entityId,
-    );
+    _pendingDeepLink = DeepLinkIntent(entityType: entityType, entityId: entityId);
 
     debugPrint('FCM deep-link: $entityType/$entityId');
   }
@@ -220,25 +217,24 @@ class NotificationService {
   }
 
   Dio _createDio(String accessToken) {
-    return Dio(BaseOptions(
-      baseUrl: Env.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-      },
-    ));
+    return Dio(
+      BaseOptions(
+        baseUrl: Env.apiBaseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+      ),
+    );
   }
 }
 
 /// Deep-link intent parsed from a notification tap.
 class DeepLinkIntent {
-  const DeepLinkIntent({
-    required this.entityType,
-    required this.entityId,
-  });
+  const DeepLinkIntent({required this.entityType, required this.entityId});
 
   final String entityType;
   final String entityId;
