@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, fifteen commits, **691/691 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, seventeen commits, **698/698 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
@@ -184,7 +184,17 @@ technician `/api/app/*` endpoints, real settings, and AI.
 4. **Real settings** — `GET/PUT /api/NotificationSettings`, `PUT /api/Users/me/preferences`,
    `PUT /api/Auth/profile`. The Impostazioni toggles currently write local prefs the server never
    sees.
-5. **AI** — `POST /api/ai/reports/draft`, `POST /api/ai/transcribe`, `GET /api/ai/quota`.
+5. ~~**AI**~~ — **partly done**. `reports/draft` + `quota` are wired into the rapportino wizard's
+   Dettagli step, gated on the report having a `scheduleId` (the endpoint requires one).
+
+   **The quota is per tenant, and spent before the work.** `TryConsumeAsync` takes a tenant id, so
+   one technician exhausts the company's month; and the controller consumes it before calling the
+   model, so a failed generation still costs one. Any future AI surface must say both.
+
+   **`POST /api/ai/transcribe` is NOT wired, and needs a decision first.** It takes multipart
+   audio, but the app has no audio-recording package and no microphone permission on either
+   platform. Wiring it means adding a dependency, an Android manifest entry and an iOS usage
+   description — a platform change to weigh against the pilot date, not a wiring task.
 
 ### Phase 4 (untouched)
 
