@@ -197,7 +197,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
           children: [
             TextFormField(
               controller: _titleCtrl,
-              decoration: const InputDecoration(labelText: 'Titolo', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Titolo'),
             ),
             const SizedBox(height: 16),
 
@@ -241,10 +241,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
             DropdownButtonFormField<String>(
               // ignore: deprecated_member_use — controlled field, needs value not initialValue
               value: _selectedUserId,
-              decoration: const InputDecoration(
-                labelText: 'Tecnico *',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Tecnico *'),
               items: [
                 ...technicians.map(
                   (t) => DropdownMenuItem(
@@ -262,7 +259,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
             DropdownButtonFormField<String>(
               // ignore: deprecated_member_use — controlled field, needs value not initialValue
               value: _selectedLocationId,
-              decoration: const InputDecoration(labelText: 'Sede *', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Sede *'),
               items: locations
                   .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
                   .toList(),
@@ -273,7 +270,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
 
             TextFormField(
               controller: _descriptionCtrl,
-              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Note'),
               maxLines: 3,
             ),
           ],

@@ -133,27 +133,21 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
           children: [
             TextFormField(
               controller: _nomeCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _descrizioneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Descrizione',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Descrizione'),
               maxLines: 3,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _specializzazioneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Specializzazione',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Specializzazione'),
             ),
             const SizedBox(height: 16),
 
@@ -161,7 +155,6 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
               controller: _coloreCtrl,
               decoration: const InputDecoration(
                 labelText: 'Colore calendario (hex)',
-                border: OutlineInputBorder(),
                 hintText: '#FF5722',
               ),
             ),
@@ -169,7 +162,7 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
 
             TextFormField(
               controller: _noteCtrl,
-              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Note'),
               maxLines: 3,
             ),
           ],

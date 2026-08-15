@@ -214,14 +214,14 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
           children: [
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
               initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(labelText: 'Cliente', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Cliente'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Nessun cliente')),
                 ...customers.map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName))),
@@ -232,10 +232,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
 
             TextFormField(
               controller: _addressCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Indirizzo',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Indirizzo'),
             ),
             const SizedBox(height: 16),
 
@@ -244,20 +241,14 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                 Expanded(
                   child: TextFormField(
                     controller: _cityCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Città',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Città'),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: TextFormField(
                     controller: _postalCodeCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'CAP',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'CAP'),
                   ),
                 ),
               ],
@@ -285,7 +276,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
 
             TextFormField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Note'),
               maxLines: 3,
             ),
           ],

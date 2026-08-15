@@ -188,27 +188,21 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
           children: [
             TextFormField(
               controller: _codeCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Codice *',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Codice *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Nome *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _descriptionCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Descrizione',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Descrizione'),
               maxLines: 3,
             ),
             const SizedBox(height: 16),
@@ -220,7 +214,6 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                     controller: _unitOfMeasureCtrl,
                     decoration: const InputDecoration(
                       labelText: 'Unità di misura',
-                      border: OutlineInputBorder(),
                       hintText: 'pz, kg, mt…',
                     ),
                   ),
@@ -229,10 +222,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                 Expanded(
                   child: TextFormField(
                     controller: _marcaCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Marca',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Marca'),
                   ),
                 ),
               ],
@@ -241,10 +231,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
 
             TextFormField(
               controller: _categoryCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Categoria',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Categoria'),
             ),
             const SizedBox(height: 16),
 
@@ -253,10 +240,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                 Expanded(
                   child: TextFormField(
                     controller: _purchasePriceCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Prezzo acquisto (€)',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Prezzo acquisto (€)'),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
@@ -264,10 +248,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                 Expanded(
                   child: TextFormField(
                     controller: _salePriceCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Prezzo vendita (€)',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Prezzo vendita (€)'),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),

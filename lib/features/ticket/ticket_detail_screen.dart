@@ -823,7 +823,7 @@ class _AssignSheetState extends State<_AssignSheet> {
           else
             DropdownButtonFormField<String>(
               initialValue: _selectedUserId,
-              decoration: const InputDecoration(labelText: 'Tecnico', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Tecnico'),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Non assegnato')),
                 ..._technicians.map(

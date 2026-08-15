@@ -63,12 +63,9 @@ final nowProvider = StreamProvider.autoDispose<DateTime>((ref) {
   final controller = StreamController<DateTime>();
 
   controller.add(DateTime.now().toUtc());
-  final timer = Timer.periodic(
-    const Duration(seconds: 1),
-    (_) {
-      if (!controller.isClosed) controller.add(DateTime.now().toUtc());
-    },
-  );
+  final timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    if (!controller.isClosed) controller.add(DateTime.now().toUtc());
+  });
 
   ref.onDispose(() {
     timer.cancel();

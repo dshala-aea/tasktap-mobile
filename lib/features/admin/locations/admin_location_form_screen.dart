@@ -158,10 +158,7 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
             // ── Customer selector ─────────────────────────────────────────
             DropdownButtonFormField<String>(
               initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(
-                labelText: 'Cliente *',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Cliente *'),
               items: customers
                   .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
                   .toList(),
@@ -172,47 +169,38 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
 
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome sede *',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Nome sede *'),
               validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _addressCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Indirizzo',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Indirizzo'),
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _cityCtrl,
-              decoration: const InputDecoration(labelText: 'Città', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Città'),
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _postalCodeCtrl,
-              decoration: const InputDecoration(labelText: 'CAP', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'CAP'),
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _phoneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Telefono',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Telefono'),
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Note'),
               maxLines: 3,
             ),
           ],

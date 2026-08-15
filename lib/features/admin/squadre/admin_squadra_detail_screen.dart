@@ -282,10 +282,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
             DropdownButtonFormField<String>(
               // ignore: deprecated_member_use — controlled field, needs value not initialValue
               value: _selectedUserId,
-              decoration: const InputDecoration(
-                labelText: 'Tecnico *',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Tecnico *'),
               items: _technicians
                   .map(
                     (t) => DropdownMenuItem(
@@ -300,7 +297,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
           DropdownButtonFormField<String>(
             // ignore: deprecated_member_use — controlled field, needs value not initialValue
             value: _ruolo,
-            decoration: const InputDecoration(labelText: 'Ruolo', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'Ruolo'),
             items: const [
               DropdownMenuItem(value: 'Membro', child: Text('Membro')),
               DropdownMenuItem(value: 'TeamLead', child: Text('Team Lead')),

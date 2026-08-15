@@ -721,7 +721,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
         final currentValue = existing?.stringValue ?? c.stringValue;
         return DropdownButtonFormField<String>(
           initialValue: options.contains(currentValue) ? currentValue : null,
-          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+          decoration: const InputDecoration(isDense: true),
           isExpanded: true,
           items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
           onChanged: (v) {
@@ -737,11 +737,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   Widget _freeTextField() {
     return TextField(
       controller: _textCtrl,
-      decoration: const InputDecoration(
-        hintText: 'Valore',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
+      decoration: const InputDecoration(hintText: 'Valore', isDense: true),
       onChanged: (v) => _save(stringValue: v.trim().isEmpty ? null : v.trim()),
     );
   }

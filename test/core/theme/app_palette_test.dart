@@ -208,6 +208,28 @@ void main() {
     });
   });
 
+  test('no screen opts out of the themed input decoration', () {
+    // Forty-nine fields across ten files passed `border: OutlineInputBorder()` explicitly, which
+    // overrides `inputDecorationTheme` — so the admin forms rendered Material's stock border with
+    // Material's stock radius and colours, inside an app that had already themed all three. The
+    // theme was correct the whole time; the fields were opting out of it.
+    final offenders = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (entity.readAsStringSync().contains('OutlineInputBorder()')) {
+        offenders.add(entity.path.replaceAll(r'\', '/'));
+      }
+    }
+
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'Let the field inherit inputDecorationTheme instead of passing a bare '
+          'OutlineInputBorder(). Override only to say something the theme does not.',
+    );
+  });
+
   /// Colour that reaches a widget as a constant cannot respond to the theme. The exceptions are
   /// the brand yellow, which does not flip, and the surfaces that are fixed-dark under both
   /// themes — a hero, a coloured status dot — where a flipping token would be the bug.
