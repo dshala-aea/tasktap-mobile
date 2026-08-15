@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -46,9 +47,12 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuova pianificazione',
-        onPressed: () => context.push('/altro/pianificazioni/nuova'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuova pianificazione',
+          onPressed: () => context.push('/altro/pianificazioni/nuova'),
+        ),
       ),
     );
   }
@@ -122,7 +126,7 @@ class _AdminScheduleListBody extends ConsumerWidget {
                 );
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

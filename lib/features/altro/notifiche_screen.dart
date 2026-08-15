@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -159,7 +160,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                 }, childCount: filtered.length),
               ),
 
-            const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),

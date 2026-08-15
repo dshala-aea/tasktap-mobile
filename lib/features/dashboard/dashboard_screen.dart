@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -182,7 +183,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
 
               // Bottom padding so the last card clears the floating bottom nav.
-              const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+              SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
             ],
           ),
         ),

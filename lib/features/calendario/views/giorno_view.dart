@@ -40,7 +40,7 @@ class GiornoView extends ConsumerWidget {
     final totalHeight = (_kEndHour - _kStartHour) * _kHourHeight;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+      padding: EdgeInsets.fromLTRB(0, 8, 0, context.navClearance),
       child: SizedBox(
         height: totalHeight + 8,
         child: Row(

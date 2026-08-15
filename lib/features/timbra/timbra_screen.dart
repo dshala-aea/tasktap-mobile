@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -89,7 +90,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
       backgroundColor: AppColors.punchGround,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: EdgeInsets.fromLTRB(24, 32, 24, context.navClearance),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [

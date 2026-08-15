@@ -161,7 +161,7 @@ class _AdminReportListBody extends ConsumerWidget {
               );
             },
           ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

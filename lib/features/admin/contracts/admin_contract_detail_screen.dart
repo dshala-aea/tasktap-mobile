@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -35,12 +36,18 @@ class AdminContractDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.pencil,
-        tooltip: 'Modifica',
-        onPressed: () async {
-          await context.push<bool>('/altro/contratti/${contract['id']}/modifica', extra: contract);
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          icon: LucideIcons.pencil,
+          tooltip: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>(
+              '/altro/contratti/${contract['id']}/modifica',
+              extra: contract,
+            );
+          },
+        ),
       ),
       body: CustomScrollView(
         slivers: [
@@ -66,6 +73,8 @@ class AdminContractDetailScreen extends StatelessWidget {
               ),
             ),
           ),
+
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

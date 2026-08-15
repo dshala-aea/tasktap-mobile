@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -164,7 +165,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(19, 16, 19, 100),
+          padding: EdgeInsets.fromLTRB(19, 16, 19, context.navClearance),
           children: [
             // ── Required ───────────────────────────────────────────────────
             AppTextField(

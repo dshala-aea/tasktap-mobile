@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -143,7 +144,7 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
-            const SliverPadding(padding: EdgeInsets.only(bottom: 60)),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),

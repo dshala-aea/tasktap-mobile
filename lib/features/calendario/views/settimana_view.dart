@@ -46,7 +46,7 @@ class SettimanaView extends ConsumerWidget {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.fromLTRB(8, 0, 8, context.navClearance),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: days.map((day) {

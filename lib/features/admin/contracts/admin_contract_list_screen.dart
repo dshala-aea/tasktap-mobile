@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -32,9 +33,12 @@ class AdminContractListScreen extends ConsumerWidget {
           data: (contracts) => _ContractListBody(contracts: contracts),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo contratto',
-        onPressed: () => context.push('/altro/contratti/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo contratto',
+          onPressed: () => context.push('/altro/contratti/nuovo'),
+        ),
       ),
     );
   }
@@ -114,7 +118,7 @@ class _ContractListBodyState extends ConsumerState<_ContractListBody> {
                 );
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

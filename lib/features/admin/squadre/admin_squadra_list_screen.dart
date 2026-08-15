@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -31,9 +32,12 @@ class AdminSquadraListScreen extends ConsumerWidget {
           data: (squadre) => _SquadraListBody(squadre: squadre),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuova squadra',
-        onPressed: () => context.push('/altro/squadre/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuova squadra',
+          onPressed: () => context.push('/altro/squadre/nuovo'),
+        ),
       ),
     );
   }
@@ -108,7 +112,7 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
                 );
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

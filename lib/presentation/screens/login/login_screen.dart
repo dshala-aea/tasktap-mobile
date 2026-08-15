@@ -40,7 +40,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: context.colors.bg1,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            // No nav clearance here: login is the one screen outside the shell.
+            AppSpacing.pagePadding,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

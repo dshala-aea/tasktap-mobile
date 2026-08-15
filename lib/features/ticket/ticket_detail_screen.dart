@@ -234,7 +234,7 @@ class _TicketDetailBody extends ConsumerWidget {
                   child: _TabContent(tabIndex: tabIndex, ticketId: ticket.id),
                 ),
 
-                const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
+                SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
               ],
             ),
           ),

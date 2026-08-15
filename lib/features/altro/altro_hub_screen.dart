@@ -62,7 +62,7 @@ class AltroHubScreen extends ConsumerWidget {
               // ── Danger: Logout ─────────────────────────────────────────────
               SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
 
-              const SliverPadding(padding: EdgeInsets.only(bottom: 120)),
+              SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
             ],
           ),
         ),

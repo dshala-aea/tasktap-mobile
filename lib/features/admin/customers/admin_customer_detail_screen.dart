@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -21,12 +22,15 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.pencil,
-        tooltip: 'Modifica',
-        onPressed: () async {
-          await context.push<bool>('/altro/clienti/$customerId/modifica');
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          icon: LucideIcons.pencil,
+          tooltip: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>('/altro/clienti/$customerId/modifica');
+          },
+        ),
       ),
       body: customerAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -138,7 +142,7 @@ class _CustomerDetailBody extends StatelessWidget {
             ),
           ),
         ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }

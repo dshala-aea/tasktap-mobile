@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -152,7 +153,7 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(19),
+          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
             // ── Customer selector ─────────────────────────────────────────
             DropdownButtonFormField<String>(

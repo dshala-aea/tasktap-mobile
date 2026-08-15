@@ -118,6 +118,24 @@ abstract final class AppRack {
   /// distinction this app exists to preserve.
   static const List<double> silhouetteDash = [6, 4];
 
+  // ── The load strap: clearance for the floating nav ────────────────────────
+
+  /// How much room the floating nav pill occupies above the safe area.
+  ///
+  /// 18 bottom margin + 6 pill padding + 44 tab + 6 pill padding = 74. Every one of those numbers
+  /// lives in `AppBottomNav`, and none of them lived anywhere a screen could read.
+  ///
+  /// The nav belongs to the *shell's* Scaffold, not to the screen inside it, so a screen's own
+  /// FloatingActionButton has no idea the pill is there and is placed underneath it. Screens were
+  /// compensating with hand-picked bottom padding — 100, 120, 60, 40, 32, and on nine detail
+  /// screens just 16, which is not enough to clear anything. Hence buttons hidden under the nav.
+  ///
+  /// Use `context.navClearance`, which adds the device's own bottom inset to this.
+  static const double navBarHeight = 74;
+
+  /// Breathing room between the last cell and the nav, so content does not end flush against it.
+  static const double navGap = 12;
+
   // ── Motion ────────────────────────────────────────────────────────────────
   //
   // A drawer runs out on its slides and stops against a detent. It does not bounce, and it does
@@ -138,4 +156,14 @@ abstract final class AppRack {
 
   /// The curve for anything closing or leaving.
   static const Curve slideIn = Curves.easeInCubic;
+}
+
+/// Room to leave at the bottom of a screen that sits under the floating nav.
+///
+/// `MediaQuery.viewPadding.bottom` rather than `padding.bottom`: the latter is zeroed out while a
+/// keyboard is open, which would collapse the clearance at exactly the moment a form is being
+/// filled in.
+extension NavClearance on BuildContext {
+  double get navClearance =>
+      MediaQuery.viewPaddingOf(this).bottom + AppRack.navBarHeight + AppRack.navGap;
 }

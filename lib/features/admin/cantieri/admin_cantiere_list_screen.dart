@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -47,9 +48,12 @@ class _AdminCantiereListScreenState extends State<AdminCantiereListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo cantiere',
-        onPressed: () => context.push('/altro/cantieri/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo cantiere',
+          onPressed: () => context.push('/altro/cantieri/nuovo'),
+        ),
       ),
     );
   }
@@ -125,7 +129,7 @@ class _AdminCantiereListBody extends ConsumerWidget {
                 );
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

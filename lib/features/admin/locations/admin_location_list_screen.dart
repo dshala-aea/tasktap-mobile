@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -49,9 +50,9 @@ class _AdminLocationListScreenState extends State<AdminLocationListScreen> {
           onCustomerChanged: (id) => setState(() => _selectedCustomerId = id),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuova sede',
-        onPressed: () => context.push('/altro/sedi/nuova'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(tooltip: 'Nuova sede', onPressed: () => context.push('/altro/sedi/nuova')),
       ),
     );
   }
@@ -161,7 +162,7 @@ class _AdminLocationListBody extends ConsumerWidget {
                 );
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

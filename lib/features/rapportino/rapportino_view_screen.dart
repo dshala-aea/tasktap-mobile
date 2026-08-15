@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -273,7 +274,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                   ),
                 ),
 
-                const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+                SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
               ],
             ),
           ),

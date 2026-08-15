@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+import '../../data/api/json_parse.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AdminApiClient
@@ -282,11 +283,11 @@ class AdminApiClient {
   }
 
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
-    final res = await _dio.get<List<dynamic>>(
+    final res = await _dio.get<Map<String, dynamic>>(
       '/api/users',
-      queryParameters: {'role': 'Technician', 'isActive': 'true'},
+      queryParameters: {'role': 'Technician', 'isActive': 'true', 'pageSize': 200},
     );
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(res.data);
   }
 
   // ── Materiali ────────────────────────────────────────────────────────────
@@ -348,8 +349,8 @@ class AdminApiClient {
   // ── ProdottoAssistenza ──────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchProdottiAssistenza() async {
-    final res = await _dio.get<List<dynamic>>('/api/prodottoassistenza');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza');
+    return pagedItems(res.data);
   }
 
   Future<String> createProdottoAssistenza({
@@ -405,8 +406,8 @@ class AdminApiClient {
   // ── Contracts ────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchContracts() async {
-    final res = await _dio.get<List<dynamic>>('/api/contracts');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/contracts');
+    return pagedItems(res.data);
   }
 
   Future<String> createContract({
@@ -478,8 +479,8 @@ class AdminApiClient {
   // ── Squadre ─────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchSquadre() async {
-    final res = await _dio.get<List<dynamic>>('/api/squadre');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/squadre');
+    return pagedItems(res.data);
   }
 
   Future<Map<String, dynamic>?> fetchSquadraDetail(String id) async {
@@ -550,11 +551,13 @@ class AdminApiClient {
     int page = 1,
     int pageSize = 50,
   }) async {
-    final res = await _dio.get<List<dynamic>>(
+    // Read as an envelope here and as a bare list in ticket_detail_api_client until now — the
+    // same endpoint, two shapes, one app. This was the broken one.
+    final res = await _dio.get<Map<String, dynamic>>(
       '/api/reports',
       queryParameters: {'stato': ?stato, 'page': page, 'pageSize': pageSize},
     );
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(res.data);
   }
 
   Future<void> controllaReport(String reportId) async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -101,7 +102,7 @@ class _ClientiListBody extends ConsumerWidget {
               return _ClienteRow(customer: customer, isLast: i == filtered.length - 1);
             }, childCount: filtered.length),
           ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }

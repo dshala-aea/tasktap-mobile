@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -53,9 +54,12 @@ class _AdminMaterialeListScreenState extends State<AdminMaterialeListScreen> {
           onShowInactiveChanged: (v) => setState(() => _showInactive = v),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo materiale',
-        onPressed: () => context.push('/altro/magazzino/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo materiale',
+          onPressed: () => context.push('/altro/magazzino/nuovo'),
+        ),
       ),
     );
   }
@@ -183,7 +187,7 @@ class _AdminMaterialeListBody extends ConsumerWidget {
                 return _AdminMaterialeRow(materiale: materiale, isLast: i == filtered.length - 1);
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

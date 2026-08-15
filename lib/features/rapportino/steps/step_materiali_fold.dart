@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/services.dart';
@@ -43,7 +44,7 @@ class StepMaterialiFold extends ConsumerWidget {
       children: [
         // ── "Nessun materiale" toggle ──────────────────────────────────────
         AppCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: EdgeInsets.fromLTRB(16, 4, 16, context.navClearance),
           child: Row(
             children: [
               Expanded(

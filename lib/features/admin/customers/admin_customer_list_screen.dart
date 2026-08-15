@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -43,9 +44,12 @@ class _AdminCustomerListScreenState extends State<AdminCustomerListScreen> {
           onToggleInactive: (v) => setState(() => _showInactive = v),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo cliente',
-        onPressed: () => context.push('/altro/clienti/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo cliente',
+          onPressed: () => context.push('/altro/clienti/nuovo'),
+        ),
       ),
     );
   }
@@ -140,7 +144,7 @@ class _AdminCustomerListBody extends ConsumerWidget {
                 return _AdminCustomerRow(customer: customer, isLast: i == filtered.length - 1);
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );

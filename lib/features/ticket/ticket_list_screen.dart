@@ -67,14 +67,17 @@ class _TicketListScreenState extends State<TicketListScreen> {
           ),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo ticket',
-        onPressed: () async {
-          final created = await context.push<bool>('/ticket/new');
-          if (created == true && mounted) {
-            // List auto-refreshes via StreamProvider, no manual refresh needed.
-          }
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo ticket',
+          onPressed: () async {
+            final created = await context.push<bool>('/ticket/new');
+            if (created == true && mounted) {
+              // List auto-refreshes via StreamProvider, no manual refresh needed.
+            }
+          },
+        ),
       ),
     );
   }
@@ -189,7 +192,7 @@ class _TicketListBody extends ConsumerWidget {
                 );
               }, childCount: filtered.length),
             ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );
