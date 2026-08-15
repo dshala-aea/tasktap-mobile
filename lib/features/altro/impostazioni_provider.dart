@@ -40,7 +40,11 @@ class ImpostazioniState {
     this.notificheRapportini = true,
     // App
     this.syncOffline = true,
-    this.geoLocazione = false,
+    // True, not false. GPS was captured on every cantiere clock-in regardless of this flag, so
+    // honouring a false default would have silently switched off the position evidence that makes
+    // a timbratura defensible. The behaviour is unchanged; the difference is that turning it off
+    // now actually turns it off.
+    this.geoLocazione = true,
     this.temaScuro = false,
     // Account
     this.autenticazioneBiometrica = false,
@@ -105,7 +109,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       notificheInterventi: prefs.getBool(_kNotificheInterventi) ?? true,
       notificheRapportini: prefs.getBool(_kNotificheRapportini) ?? true,
       syncOffline: prefs.getBool(_kSyncOffline) ?? true,
-      geoLocazione: prefs.getBool(_kGeoLocazione) ?? false,
+      geoLocazione: prefs.getBool(_kGeoLocazione) ?? true,
       temaScuro: prefs.getBool(_kTemaScuro) ?? false,
       autenticazioneBiometrica: prefs.getBool(_kAutenticazioneBiometrica) ?? false,
     );

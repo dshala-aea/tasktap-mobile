@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
+import '../../core/security/biometric_service.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
@@ -87,7 +88,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                   _ToggleRow(
                     icon: LucideIcons.mapPin,
                     title: 'Geolocalizzazione',
-                    subtitle: 'Posizione GPS per i rapportini',
+                    subtitle: 'Registra la posizione a inizio e fine cantiere',
                     value: settings.geoLocazione,
                     onChanged: (_) => notifier.toggle(key: 'geoLocazione'),
                   ),
@@ -111,9 +112,9 @@ class ImpostazioniScreen extends ConsumerWidget {
                   _ToggleRow(
                     icon: LucideIcons.fingerprint,
                     title: 'Autenticazione biometrica',
-                    subtitle: 'Accesso con impronta o Face ID',
+                    subtitle: 'Richiedi impronta o Face ID all\'apertura',
                     value: settings.autenticazioneBiometrica,
-                    onChanged: (_) => notifier.toggle(key: 'autenticazioneBiometrica'),
+                    onChanged: (_) => _toggleBiometrics(context, ref, settings),
                     showDivider: false,
                   ),
                 ],
@@ -153,6 +154,56 @@ class ImpostazioniScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Turn the biometric lock on only if this device can actually honour it.
+///
+/// The toggle used to flip a bool unconditionally, with no biometrics package in the project at
+/// all — a technician could switch it on and believe the data on their phone was protected. Two
+/// things have to be true before it may go on: the hardware exists with something enrolled, and
+/// the technician can pass the prompt right now. Enabling a lock nobody can open is its own
+/// failure mode.
+Future<void> _toggleBiometrics(
+  BuildContext context,
+  WidgetRef ref,
+  ImpostazioniState settings,
+) async {
+  final notifier = ref.read(impostazioniProvider.notifier);
+  final messenger = ScaffoldMessenger.of(context);
+
+  // Turning it off needs no ceremony: the user is already past the lock.
+  if (settings.autenticazioneBiometrica) {
+    notifier.toggle(key: 'autenticazioneBiometrica');
+    return;
+  }
+
+  final service = ref.read(biometricServiceProvider);
+
+  if (!await service.isAvailable()) {
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Nessuna impronta o Face ID configurati su questo dispositivo. '
+          'Aggiungili nelle impostazioni del telefono, poi riprova.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  // Prove it works before relying on it.
+  final ok = await service.authenticate(
+    reason: 'Conferma la tua identità per attivare il blocco biometrico',
+  );
+
+  if (!ok) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Verifica non riuscita. Blocco biometrico non attivato.')),
+    );
+    return;
+  }
+
+  notifier.toggle(key: 'autenticazioneBiometrica');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

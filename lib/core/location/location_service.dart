@@ -60,9 +60,40 @@ class LocationService implements ILocationService {
   }
 }
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// ── Disabled implementation ───────────────────────────────────────────────────
+
+/// What the app uses when the technician has turned "Geolocalizzazione" off.
+///
+/// Returns null exactly as the real service does on a denial, so every call site already handles
+/// it — the position is simply absent, and no record claims one was taken.
+class DisabledLocationService implements ILocationService {
+  const DisabledLocationService();
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => null;
+}
+
+// ── Providers ─────────────────────────────────────────────────────────────────
+
+/// Whether the technician has allowed the app to record position.
+///
+/// Declared here, in core, and overridden in `main.dart` from the Impostazioni setting. Core must
+/// not import a feature, and the alternative — having every call site remember to check a setting
+/// — is how the setting came to control nothing in the first place.
+///
+/// Defaults to true so a test, or any scope that does not override it, behaves like the app did
+/// before the setting was honoured.
+final gpsPreferenceProvider = Provider<bool>((ref) => true);
 
 /// Provides the [ILocationService]. Override in tests with a fake.
+///
+/// The gate lives here rather than at the call sites. "Geolocalizzazione — Posizione GPS per i
+/// rapportini" was a switch wired to nothing: it wrote a bool that no code ever read, while
+/// `cantiere_timbra_screen` captured a position on every clock-in regardless. A settings toggle
+/// that reports a choice it does not enforce is worse than no toggle, and under a consent audit it
+/// is worse still.
 final locationServiceProvider = Provider<ILocationService>((ref) {
-  return const LocationService();
+  return ref.watch(gpsPreferenceProvider)
+      ? const LocationService()
+      : const DisabledLocationService();
 });

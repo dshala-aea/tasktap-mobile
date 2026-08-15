@@ -1,5 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'core/location/location_service.dart';
+import 'core/security/biometric_lock.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -96,7 +98,19 @@ Future<void> runTaskTapApp() async {
   // FCM device-token registration is driven off the Riverpod auth state inside
   // TaskTapApp (a listener needs the ProviderScope, created below).
 
-  runApp(const ProviderScope(child: TaskTapApp()));
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Bind the core GPS gate to the Impostazioni setting. Declared in core so
+        // core/location does not import a feature; bound here, once, so no call site has to
+        // remember the setting exists — which is exactly how it ended up controlling nothing.
+        gpsPreferenceProvider.overrideWith(
+          (ref) => ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
+        ),
+      ],
+      child: const TaskTapApp(),
+    ),
+  );
 }
 
 /// Root application widget.
@@ -155,6 +169,8 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // technician made, and silently overriding it with the phone's would be the same defect again.
     final darkTheme = ref.watch(impostazioniProvider.select((s) => s.temaScuro));
 
+    final biometricLock = ref.watch(impostazioniProvider.select((s) => s.autenticazioneBiometrica));
+
     return MaterialApp.router(
       title: 'TaskTap',
       debugShowCheckedModeBanner: false,
@@ -162,6 +178,10 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       darkTheme: buildAppTheme(brightness: Brightness.dark),
       themeMode: darkTheme ? ThemeMode.dark : ThemeMode.light,
       routerConfig: _router,
+      // Inside MaterialApp via `builder`, not around it: the lock needs the theme and the
+      // Directionality, and wrapping outside would also cover the navigator the router owns.
+      builder: (context, child) =>
+          BiometricLock(enabled: biometricLock, child: child ?? const SizedBox.shrink()),
     );
   }
 }
