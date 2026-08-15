@@ -31,6 +31,24 @@ The mirror's customers appear instantly and work offline; a search action querie
 there is signal. Same pattern for the Clienti list and the ticket wizard, so it is one piece of
 work rather than two.
 
+### 3a. Compliance driver: pilot hardening, not a conformance claim
+
+Fix what is provably broken before the September pilot; defer anything needing legal input. This
+is deliberately **not** a claim of conformance — a privacy policy, a DPA with the AI provider, a
+record of processing and an accessibility statement are documents, not code, and no amount of
+engineering closes them.
+
+### 3b. Client-book control: permission-gated list, narrow search, rate limited
+
+- `GET /api/Customers` browse/paging requires an office-level permission.
+- A separate **narrow search** stays open to Technicians: minimum query length, capped results, no
+  paging — enough to find the customer you are standing at, not enough to harvest the book.
+- Search is **rate-limited per user**, with alerting on unusual volume.
+- Both paths audit-logged.
+
+Note the honest limit: rate limiting raises the cost of slow harvesting, it does not prevent it,
+and the alert threshold will be wrong at first.
+
 ### 3. EU compliance: audit first, then plan
 
 Across backend, frontend and mobile, against GDPR + AI Act + EAA, reporting gaps per surface with
