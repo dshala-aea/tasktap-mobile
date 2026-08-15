@@ -205,27 +205,24 @@ class _ClienteDetailBody extends ConsumerWidget {
                 final dateLabel = DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 19),
-                  child: AppCard(
-                    padding: EdgeInsets.zero,
-                    child: ListRow(
-                      leading: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: context.colors.bg3,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
+                  child: ListRow(
+                    leading: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: context.colors.bg3,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      title: ticket.title,
-                      subtitle: '#$shortId',
-                      meta: Text(
-                        dateLabel,
-                        style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
-                      ),
-                      showDivider: false,
-                      onTap: () => context.push('/ticket/${ticket.id}'),
+                      child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
                     ),
+                    title: ticket.title,
+                    subtitle: '#$shortId',
+                    meta: Text(
+                      dateLabel,
+                      style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
+                    ),
+                    showDivider: false,
+                    onTap: () => context.push('/ticket/${ticket.id}'),
                   ),
                 );
               }, childCount: tickets.length),

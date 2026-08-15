@@ -250,64 +250,61 @@ class _SistemaSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 19),
-      child: AppCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            // Notifiche — unread badge
-            ListRow(
-              leading: _sistemaTileIcon(LucideIcons.bell, context.colors.blue),
-              title: 'Notifiche',
-              subtitle: 'Avvisi e aggiornamenti',
-              meta: ref.watch(notificheUnreadCountProvider) > 0
-                  ? AppBadge(
-                      label: '${ref.watch(notificheUnreadCountProvider)}',
-                      bgColor: context.colors.red,
-                    )
-                  : null,
-              showDivider: true,
-              onTap: () => context.push(AppRoutes.altroNotifiche),
-            ),
-            // Audit log
-            ListRow(
-              leading: _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
-              title: 'Audit log',
-              subtitle: 'Cronologia attività',
-              showDivider: true,
-              onTap: () => context.push(
-                AppRoutes.altroNonDisponibile,
-                extra: (
-                  titolo: 'Audit log',
-                  motivo:
-                      "Il backend registra un log di controllo (/api/admin/audit-log) ma il client mobile non lo scarica ancora.",
-                ),
+      child: Column(
+        children: [
+          // Notifiche — unread badge
+          ListRow(
+            leading: _sistemaTileIcon(LucideIcons.bell, context.colors.blue),
+            title: 'Notifiche',
+            subtitle: 'Avvisi e aggiornamenti',
+            meta: ref.watch(notificheUnreadCountProvider) > 0
+                ? AppBadge(
+                    label: '${ref.watch(notificheUnreadCountProvider)}',
+                    bgColor: context.colors.red,
+                  )
+                : null,
+            showDivider: true,
+            onTap: () => context.push(AppRoutes.altroNotifiche),
+          ),
+          // Audit log
+          ListRow(
+            leading: _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
+            title: 'Audit log',
+            subtitle: 'Cronologia attività',
+            showDivider: true,
+            onTap: () => context.push(
+              AppRoutes.altroNonDisponibile,
+              extra: (
+                titolo: 'Audit log',
+                motivo:
+                    "Il backend registra un log di controllo (/api/admin/audit-log) ma il client mobile non lo scarica ancora.",
               ),
             ),
-            // Impostazioni
-            ListRow(
-              leading: _sistemaTileIcon(LucideIcons.settings, AppColors.CHARCOAL),
-              title: 'Impostazioni',
-              subtitle: 'App, notifiche, account',
-              showDivider: true,
-              onTap: () => context.push(AppRoutes.altroImpostazioni),
-            ),
-            // Ruoli e permessi
-            ListRow(
-              leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.amber),
-              title: 'Ruoli e permessi',
-              subtitle: 'Gestione accessi',
-              showDivider: false,
-              onTap: () => context.push(
-                AppRoutes.altroNonDisponibile,
-                extra: (
-                  titolo: 'Ruoli e permessi',
-                  motivo:
-                      "La matrice ruoli/permessi esiste lato server (/api/admin/role-permissions) ma la sua gestione non è ancora stata costruita nel client mobile.",
-                ),
+          ),
+          // Impostazioni
+          ListRow(
+            leading: _sistemaTileIcon(LucideIcons.settings, AppColors.CHARCOAL),
+            title: 'Impostazioni',
+            subtitle: 'App, notifiche, account',
+            showDivider: true,
+            onTap: () => context.push(AppRoutes.altroImpostazioni),
+          ),
+          // Ruoli e permessi
+          ListRow(
+            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.amber),
+            title: 'Ruoli e permessi',
+            subtitle: 'Gestione accessi',
+            showDivider: false,
+            onTap: () => context.push(
+              AppRoutes.altroNonDisponibile,
+              extra: (
+                titolo: 'Ruoli e permessi',
+                motivo:
+                    "La matrice ruoli/permessi esiste lato server (/api/admin/role-permissions) ma la sua gestione non è ancora stata costruita nel client mobile.",
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -335,23 +332,20 @@ class _LogoutRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(19, 24, 19, 0),
-      child: AppCard(
-        padding: EdgeInsets.zero,
-        child: ListRow(
-          leading: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: context.colors.redSoft,
-              borderRadius: AppRack.insetShape,
-            ),
-            child: Icon(LucideIcons.logOut, size: 18, color: context.colors.red),
+      child: ListRow(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: context.colors.redSoft,
+            borderRadius: AppRack.insetShape,
           ),
-          title: 'Esci dall\'account',
-          subtitle: 'Disconnetti questo dispositivo',
-          showDivider: false,
-          onTap: () => _confirmLogout(context),
+          child: Icon(LucideIcons.logOut, size: 18, color: context.colors.red),
         ),
+        title: 'Esci dall\'account',
+        subtitle: 'Disconnetti questo dispositivo',
+        showDivider: false,
+        onTap: () => _confirmLogout(context),
       ),
     );
   }

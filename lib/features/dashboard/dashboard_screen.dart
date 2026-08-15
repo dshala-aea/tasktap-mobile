@@ -11,9 +11,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
-import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -26,8 +26,6 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final userName = user?.displayName ?? user?.email ?? 'Tecnico';
-
-    final inProgressAsync = ref.watch(inProgressSchedulesProvider);
     final stats = ref.watch(dashboardStatsProvider);
     final upcomingAsync = ref.watch(upcomingSchedulesProvider);
 
@@ -56,32 +54,18 @@ class DashboardScreen extends ConsumerWidget {
                       onTap: () => context.push(AppRoutes.altroProfilo),
                     ),
                   ],
-                  // What is running right now, from GET /api/worklog/active, in preference to what
-                  // the calendar says should be. A schedule marked in-progress is an intention; a
-                  // running tracker is the clock somebody is being paid against, and the two disagree
-                  // whenever a technician starts late, stays on, or is somewhere else entirely.
+                  // Only what is actually running. This used to fall back to a schedule-derived
+                  // card for jobs that were *not* running, which put a stopped clock on the one
+                  // surface whose entire job is to show live ones.
                   child: ref
                       .watch(activeTrackersProvider)
                       .when(
                         data: (trackers) => trackers.isEmpty
-                            ? inProgressAsync.when(
-                                data: (jobs) => jobs.isEmpty
-                                    ? const _NoActiveJobGlass()
-                                    : _ActiveJobSection(jobs: jobs),
-                                loading: () => const _HeroLoadingIndicator(),
-                                error: (err, stack) => const _NoActiveJobGlass(),
-                              )
-                            : _ActiveTrackersSection(trackers: trackers),
+                            ? const _NoActiveTracker()
+                            : ActiveTrackerStrip(trackers: trackers),
                         loading: () => const _HeroLoadingIndicator(),
-                        // The endpoint being unreachable is not evidence that nothing is running, so
-                        // fall back to the calendar rather than claiming the day is idle.
-                        error: (err, stack) => inProgressAsync.when(
-                          data: (jobs) => jobs.isEmpty
-                              ? const _NoActiveJobGlass()
-                              : _ActiveJobSection(jobs: jobs),
-                          loading: () => const _HeroLoadingIndicator(),
-                          error: (e, st) => const _NoActiveJobGlass(),
-                        ),
+                        // Unreachable is not evidence that nothing is running.
+                        error: (err, stack) => const _TrackerUnknown(),
                       ),
                 ),
               ),
@@ -89,7 +73,7 @@ class DashboardScreen extends ConsumerWidget {
               // ── Stats 2×2 ─────────────────────────────────────────────────────
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(19, 20, 19, 0),
+                  padding: const EdgeInsets.fromLTRB(19, 16, 19, 0),
                   child: AppCard(
                     padding: EdgeInsets.zero,
                     child: StatsGrid(
@@ -114,7 +98,7 @@ class DashboardScreen extends ConsumerWidget {
               // here and which does have a route.
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(19, 20, 19, 0),
+                  padding: const EdgeInsets.fromLTRB(19, 10, 19, 0),
                   child: Row(
                     children: [
                       Expanded(
@@ -194,25 +178,51 @@ class DashboardScreen extends ConsumerWidget {
 
 // ── No active job empty state (inside hero) ────────────────────────────────────
 
-class _NoActiveJobGlass extends StatelessWidget {
-  const _NoActiveJobGlass();
+class _NoActiveTracker extends StatelessWidget {
+  const _NoActiveTracker();
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
-      child: EmptyState(
-        icon: LucideIcons.briefcase,
-        title: 'Nessuna attività in corso',
-        body: 'Non hai interventi attivi al momento.',
-        action: AppButton(
-          label: 'Cerca ticket aperti',
-          size: AppButtonSize.sm,
-          variant: AppButtonVariant.dark,
-          // Was `onPressed: null`, which renders a disabled button inside an empty state whose
-          // whole job is to offer the way out of it.
-          onPressed: () => context.push(AppRoutes.ticket),
+    // One line, not an EmptyState with a disc, a paragraph and a button. Nothing is running is
+    // the ordinary case at 7am and after the last job; it does not deserve the screen.
+    return Row(
+      children: [
+        Icon(LucideIcons.clock, size: 15, color: AppColors.onDarkMuted),
+        const SizedBox(width: 8),
+        Text(
+          'Nessun timer attivo',
+          style: GoogleFonts.manrope(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.onDarkMuted,
+          ),
         ),
-      ),
+      ],
+    );
+  }
+}
+
+/// The clocks could not be read — which is not the same claim as "nothing is running".
+class _TrackerUnknown extends StatelessWidget {
+  const _TrackerUnknown();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(LucideIcons.cloudOff, size: 15, color: AppColors.onDarkMuted),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            'Timer non verificabili offline',
+            style: GoogleFonts.manrope(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onDarkMuted,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -232,87 +242,6 @@ class _HeroLoadingIndicator extends StatelessWidget {
     );
   }
 }
-
-// ── Active job section (shows the first in-progress job) ──────────────────────
-
-class _ActiveJobSection extends ConsumerWidget {
-  const _ActiveJobSection({required this.jobs});
-
-  final List<Schedule> jobs;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Show the first in-progress job; timer is static for now (live timer in P3).
-    final job = jobs.first;
-    final location = ref.watch(locationByIdProvider(job.locationId)).valueOrNull;
-    final customerName = location != null
-        ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
-        : null;
-
-    return ActiveJobCard(
-      stato: 'In corso',
-      title: job.title.isNotEmpty ? job.title : 'Intervento',
-      client: customerName,
-      // Null, not '00:00:00'. This branch is the *calendar's* opinion that a job is in progress;
-      // no clock is running behind it, and drawing a zeroed timer told the technician one was.
-      elapsed: null,
-      onOpen: job.ticketId != null
-          ? () => context.push(AppRoutes.ticketDetailPath(job.ticketId!))
-          : null,
-    );
-  }
-}
-
-// ── Running timers ─────────────────────────────────────────────────────────────
-
-/// Every tracker that is running, one card each.
-///
-/// A list, not a value: attendance, cantiere and ticket time are three independent clocks and all
-/// three can run at once — clocked in, on a site, with a ticket open. Showing one would hide the
-/// other two, and the hidden one is the one that gets left running overnight.
-class _ActiveTrackersSection extends ConsumerWidget {
-  const _ActiveTrackersSection({required this.trackers});
-
-  final List<ActiveTracker> trackers;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // One clock for the whole section, ticking each second. Until it produces its first value the
-    // cards still show a correct elapsed time — computed from the device clock, not from nothing.
-    final now = ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc();
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < trackers.length; i++) ...[
-          if (i > 0) const SizedBox(height: 10),
-          ActiveJobCard(
-            stato: _statoFor(trackers[i].kind),
-            title: trackers[i].label ?? _titleFor(trackers[i].kind),
-            client: null,
-            elapsed: formatElapsed(trackers[i].elapsedAt(now)),
-            onOpen: null,
-          ),
-        ],
-      ],
-    );
-  }
-
-  static String _statoFor(ActiveTrackerKind kind) => switch (kind) {
-    ActiveTrackerKind.attendance => 'Timbrato',
-    ActiveTrackerKind.cantiere => 'In cantiere',
-    ActiveTrackerKind.ticket => 'In corso',
-  };
-
-  /// Attendance is against the day rather than a thing, so the kind is the only honest title.
-  static String _titleFor(ActiveTrackerKind kind) => switch (kind) {
-    ActiveTrackerKind.attendance => 'Giornata di lavoro',
-    ActiveTrackerKind.cantiere => 'Cantiere',
-    ActiveTrackerKind.ticket => 'Intervento',
-  };
-}
-
-// ── Upcoming intervento card ───────────────────────────────────────────────────
 
 class _UpcomingItem extends ConsumerWidget {
   const _UpcomingItem({required this.schedule});

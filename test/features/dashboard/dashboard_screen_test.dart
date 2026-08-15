@@ -94,14 +94,20 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows empty state when no active jobs', (tester) async {
+    testWidgets('says nothing is running in one line, not an empty state', (tester) async {
       await pumpDashboard(tester);
-      expect(find.byType(EmptyState), findsWidgets);
+
+      // The hero used to carry a full EmptyState here — a disc, a paragraph and a button — for
+      // the ordinary condition of being between jobs. Nothing running is the normal case at 7am
+      // and after the last job; it does not deserve the screen.
+      expect(find.text('Nessun timer attivo'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows ActiveJobCard when in-progress schedule present', (tester) async {
+    testWidgets('an in-progress schedule is not a running clock, and does not appear', (
+      tester,
+    ) async {
       final today = DateTime.now().toUtc();
       final dayStart = DateTime.utc(today.year, today.month, today.day);
       await db
@@ -123,8 +129,11 @@ void main() {
           );
 
       await pumpDashboard(tester);
-      expect(find.byType(ActiveJobCard), findsOneWidget);
-      expect(find.text('Sostituzione caldaia'), findsOneWidget);
+
+      // A schedule marked "In corso" is the calendar's intention, not a clock anybody is being
+      // paid against. The hero used to render it as a card with a 00:00:00 timer, which is a
+      // stopped clock dressed as a running one on the surface whose only job is live time.
+      expect(find.text('Nessun timer attivo'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
