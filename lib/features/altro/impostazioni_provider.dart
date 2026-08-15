@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
+import '../../data/settings/notification_settings_api_client.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 
@@ -18,6 +19,14 @@ const _kSyncOffline = 'settings.sync_offline';
 const _kGeoLocazione = 'settings.geo_locazione';
 const _kTemaScuro = 'settings.tema_scuro';
 const _kAutenticazioneBiometrica = 'settings.auth_biometrica';
+
+/// Set when a notification toggle was changed but the server never confirmed it.
+///
+/// Without it, the next successful fetch would pull the server's older value straight back over a
+/// change the technician made in a basement — the setting would appear to undo itself minutes
+/// later, which is worse than never having synced at all. While this is set the reconcile pushes
+/// instead of pulling.
+const _kNotifichePending = 'settings.notifiche_pending';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Settings state
@@ -76,13 +85,19 @@ class ImpostazioniState {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
-  ImpostazioniNotifier(this._authRepo) : super(const ImpostazioniState()) {
-    _loadFromPrefs();
+  ImpostazioniNotifier(this._authRepo, this._api) : super(const ImpostazioniState()) {
+    _loadFromPrefs().then((_) => unawaited(reconcileWithServer()));
   }
 
   final IAuthRepository _authRepo;
+  final NotificationSettingsApiClient _api;
 
   /// Load persisted settings from SharedPreferences.
+  ///
+  /// Local prefs stay the source of truth for what the screen shows. They are on the device, they
+  /// read instantly, and they work with the radio off — which the four device-only settings
+  /// (offline sync, GPS, dark theme, biometrics) require, since no server field corresponds to
+  /// them at all.
   Future<void> _loadFromPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     state = ImpostazioniState(
@@ -118,10 +133,78 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     // open throws a LateInitializationError).
     unawaited(_persist(key, _valueForKey(key)));
 
-    // Side-effect: push toggle controls device registration.
+    // Side-effect: push toggle controls device registration. This is the one notification setting
+    // that takes effect today, and it takes effect here on the device rather than on the server.
     if (key == 'pushAbilitate') {
       _syncPushRegistration(state.pushAbilitate);
     }
+
+    if (_isServerBacked(key)) {
+      unawaited(_pushToServer());
+    }
+  }
+
+  /// The three toggles that have a server field. The other four are device settings with no
+  /// server counterpart, and sending them anywhere would be inventing a contract.
+  static bool _isServerBacked(String key) =>
+      key == 'pushAbilitate' || key == 'notificheInterventi' || key == 'notificheRapportini';
+
+  /// Send the three server-backed toggles, marking them pending until the server confirms.
+  ///
+  /// The pending flag is written *before* the request, not after a failure: a process killed
+  /// mid-flight would otherwise leave the change local-only with nothing recording that it had
+  /// never been sent.
+  Future<void> _pushToServer() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kNotifichePending, true);
+    try {
+      await _api.update(
+        enablePush: state.pushAbilitate,
+        ticketNotifications: state.notificheInterventi,
+        documentNotifications: state.notificheRapportini,
+      );
+      await prefs.setBool(_kNotifichePending, false);
+    } catch (_) {
+      // Deliberately swallowed, and deliberately not reverted. The technician's choice is already
+      // saved on the device and already in effect for push; a settings screen that snaps a toggle
+      // back because a request timed out is worse than one that syncs late.
+    }
+  }
+
+  /// Reconcile local notification settings with the server.
+  ///
+  /// Direction depends on whether a local change is still unsent. Pending → push, so a change made
+  /// offline survives. Otherwise → pull, so a change made on another device arrives here. Any
+  /// failure leaves local state exactly as it was.
+  Future<void> reconcileWithServer() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (prefs.getBool(_kNotifichePending) ?? false) {
+      await _pushToServer();
+      return;
+    }
+
+    final NotificationSettingsDto remote;
+    try {
+      remote = await _api.fetch();
+    } catch (_) {
+      return;
+    }
+
+    final pushChanged = remote.enablePush != state.pushAbilitate;
+
+    state = state.copyWith(
+      pushAbilitate: remote.enablePush,
+      notificheInterventi: remote.ticketNotifications,
+      notificheRapportini: remote.documentNotifications,
+    );
+
+    await prefs.setBool(_kPushAbilitate, remote.enablePush);
+    await prefs.setBool(_kNotificheInterventi, remote.ticketNotifications);
+    await prefs.setBool(_kNotificheRapportini, remote.documentNotifications);
+
+    // Push arriving from another device still has to register or unregister *this* one.
+    if (pushChanged) _syncPushRegistration(remote.enablePush);
   }
 
   bool _valueForKey(String key) => switch (key) {
@@ -177,5 +260,8 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 final impostazioniProvider = StateNotifierProvider<ImpostazioniNotifier, ImpostazioniState>(
-  (ref) => ImpostazioniNotifier(ref.watch(authRepositoryProvider)),
+  (ref) => ImpostazioniNotifier(
+    ref.watch(authRepositoryProvider),
+    ref.watch(notificationSettingsApiClientProvider),
+  ),
 );
