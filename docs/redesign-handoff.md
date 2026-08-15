@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, thirteen commits, **683/683 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, fifteen commits, **691/691 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
