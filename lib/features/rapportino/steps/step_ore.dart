@@ -1,17 +1,17 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_card.dart';
-// section_title omitted — using inline _SL below
+// Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Ore
@@ -38,7 +38,7 @@ class StepOre extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(19, 16, 19, 8),
             children: [
-              _SL(title: 'Tecnici / Ore lavorate'),
+              StepLabel(title: 'Tecnici / Ore lavorate'),
               const SizedBox(height: 12),
               if (state.staffRows.isEmpty)
                 Padding(
@@ -461,7 +461,7 @@ class _TotalOreCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.CHARCOAL,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRack.freeShape,
         boxShadow: context.colors.shadow,
       ),
       child: Row(
@@ -471,8 +471,10 @@ class _TotalOreCard extends StatelessWidget {
             children: [
               Text(
                 'Totale ore',
-                style: TextStyle(
-                  color: context.colors.inkMuted,
+                style: const TextStyle(
+                  // On CHARCOAL, which is dark in both themes. `inkMuted` measured 1.9:1 here in
+                  // light mode — the label above the headline figure of the hours step.
+                  color: AppColors.onDarkMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -494,8 +496,8 @@ class _TotalOreCard extends StatelessWidget {
             children: [
               Text(
                 'Tecnici',
-                style: TextStyle(
-                  color: context.colors.inkMuted,
+                style: const TextStyle(
+                  color: AppColors.onDarkMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -503,8 +505,9 @@ class _TotalOreCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$staffCount',
-                style: TextStyle(
-                  color: context.colors.inkInverse,
+                style: const TextStyle(
+                  // `inkInverse` went near-black here the moment dark mode was on.
+                  color: AppColors.onDark,
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
@@ -512,25 +515,6 @@ class _TotalOreCard extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
       ),
     );
   }

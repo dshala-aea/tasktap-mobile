@@ -24,11 +24,7 @@ class StepperStep {
 /// );
 /// ```
 class AppStepper extends StatelessWidget {
-  const AppStepper({
-    super.key,
-    required this.steps,
-    required this.currentIndex,
-  });
+  const AppStepper({super.key, required this.steps, required this.currentIndex});
 
   final List<StepperStep> steps;
   final int currentIndex;

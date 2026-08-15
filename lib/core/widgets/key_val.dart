@@ -30,11 +30,11 @@ class KeyVal extends StatelessWidget {
   final bool showDivider;
 
   static TextStyle _labelStyle(BuildContext context) => GoogleFonts.manrope(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        color: context.colors.inkMuted,
-        letterSpacing: 0.3,
-      );
+    fontSize: 10,
+    fontWeight: FontWeight.w700,
+    color: context.colors.inkMuted,
+    letterSpacing: 0.3,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +44,7 @@ class KeyVal extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (showDivider)
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: context.colors.borderLight,
-          ),
+        if (showDivider) Divider(height: 1, thickness: 1, color: context.colors.borderLight),
       ],
     );
   }
@@ -59,10 +54,7 @@ class KeyVal extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Text(
-            label.toUpperCase(),
-            style: _labelStyle(context),
-          ),
+          Text(label.toUpperCase(), style: _labelStyle(context)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

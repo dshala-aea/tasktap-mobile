@@ -51,50 +51,43 @@ class AppTabs extends StatelessWidget {
             label: tab.label,
             child: AppTappable(
               onTap: () => onSelected(i),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: Border(
-                bottom: BorderSide(
-                  color: active ? AppColors.Y : Colors.transparent,
-                  width: 2,
-                ),
+                bottom: BorderSide(color: active ? AppColors.Y : Colors.transparent, width: 2),
               ),
               child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      tab.label,
-                      style: GoogleFonts.manrope(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: active ? context.colors.ink : context.colors.inkMuted,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    tab.label,
+                    style: GoogleFonts.manrope(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: active ? context.colors.ink : context.colors.inkMuted,
+                    ),
+                  ),
+                  if (tab.count != null) ...[
+                    const SizedBox(width: 6),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: active ? context.colors.surfaceInverse : context.colors.bg3,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        child: Text(
+                          '${tab.count}',
+                          style: GoogleFonts.manrope(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: active ? context.colors.inkInverse : context.colors.inkMuted,
+                          ),
+                        ),
                       ),
                     ),
-                    if (tab.count != null) ...[
-                      const SizedBox(width: 6),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: active ? context.colors.surfaceInverse : context.colors.bg3,
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          child: Text(
-                            '${tab.count}',
-                            style: GoogleFonts.manrope(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: active ? context.colors.inkInverse : context.colors.inkMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
+              ),
             ),
           );
         },

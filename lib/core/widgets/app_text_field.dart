@@ -66,10 +66,10 @@ class AppTextField extends StatelessWidget {
     this.suffixIcon,
     this.focusNode,
     this.initialValue,
-  })  : keyboardType = TextInputType.multiline,
-        textInputAction = TextInputAction.newline,
-        obscureText = false,
-        autofillHints = null;
+  }) : keyboardType = TextInputType.multiline,
+       textInputAction = TextInputAction.newline,
+       obscureText = false,
+       autofillHints = null;
 
   final String label;
   final String? hint;

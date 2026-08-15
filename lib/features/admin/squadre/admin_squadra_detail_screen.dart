@@ -9,11 +9,12 @@ import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches squadra detail with membri from backend API.
-final adminSquadraDetailProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>?, String>((ref, id) async {
-  final api = ref.watch(adminApiClientProvider);
-  return api.fetchSquadraDetail(id);
-});
+final adminSquadraDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>?, String>(
+  (ref, id) async {
+    final api = ref.watch(adminApiClientProvider);
+    return api.fetchSquadraDetail(id);
+  },
+);
 
 /// Admin squadra detail — shows membri, allows add/remove.
 class AdminSquadraDetailScreen extends ConsumerWidget {
@@ -23,8 +24,7 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync =
-        ref.watch(adminSquadraDetailProvider(squadra['id'] as String));
+    final detailAsync = ref.watch(adminSquadraDetailProvider(squadra['id'] as String));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -39,10 +39,7 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
         data: (detail) {
           final data = detail ?? squadra;
           final membri = (data['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          return _SquadraDetailBody(
-            squadra: data,
-            membri: membri,
-          );
+          return _SquadraDetailBody(squadra: data, membri: membri);
         },
       ),
     );
@@ -64,10 +61,7 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
 }
 
 class _SquadraDetailBody extends StatelessWidget {
-  const _SquadraDetailBody({
-    required this.squadra,
-    required this.membri,
-  });
+  const _SquadraDetailBody({required this.squadra, required this.membri});
 
   final Map<String, dynamic> squadra;
   final List<Map<String, dynamic>> membri;
@@ -89,18 +83,10 @@ class _SquadraDetailBody extends StatelessWidget {
             actions: [
               PopupMenuButton<String>(
                 icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Modifica'),
-                  ),
-                ],
+                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
                 onSelected: (v) {
                   if (v == 'edit') {
-                    context.push(
-                      '/altro/squadre/${squadra['id']}/modifica',
-                      extra: squadra,
-                    );
+                    context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra);
                   }
                 },
               ),
@@ -113,13 +99,9 @@ class _SquadraDetailBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (descrizione.isNotEmpty)
-                  _InfoRow(label: 'Descrizione', value: descrizione),
-                _InfoRow(
-                    label: 'Specializzazione',
-                    value: spec.isNotEmpty ? spec : '—'),
-                if (note.isNotEmpty)
-                  _InfoRow(label: 'Note', value: note),
+                if (descrizione.isNotEmpty) _InfoRow(label: 'Descrizione', value: descrizione),
+                _InfoRow(label: 'Specializzazione', value: spec.isNotEmpty ? spec : '—'),
+                if (note.isNotEmpty) _InfoRow(label: 'Note', value: note),
               ],
             ),
           ),
@@ -130,10 +112,9 @@ class _SquadraDetailBody extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(19, 0, 19, 8),
             child: Text(
               'MEMBRI (${membri.length})',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: context.colors.inkMuted,
-                    letterSpacing: 1.2,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
             ),
           ),
         ),
@@ -146,27 +127,21 @@ class _SquadraDetailBody extends StatelessWidget {
           )
         else
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final membro = membri[i];
-                final userId = membro['userId'] as String? ?? '';
-                final ruolo = membro['ruolo'] as String? ?? 'Membro';
-                return ListRow(
-                  leading: const CircleAvatar(
-                    radius: 18,
-                    child: Icon(LucideIcons.user, size: 18),
-                  ),
-                  title: userId.substring(0, 8),
-                  subtitle: ruolo,
-                  meta: IconButton(
-                    icon: const Icon(LucideIcons.userMinus, size: 18),
-                    onPressed: () => _removeMember(context, userId),
-                  ),
-                  showDivider: i < membri.length - 1,
-                );
-              },
-              childCount: membri.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, i) {
+              final membro = membri[i];
+              final userId = membro['userId'] as String? ?? '';
+              final ruolo = membro['ruolo'] as String? ?? 'Membro';
+              return ListRow(
+                leading: const CircleAvatar(radius: 18, child: Icon(LucideIcons.user, size: 18)),
+                title: userId.substring(0, 8),
+                subtitle: ruolo,
+                meta: IconButton(
+                  icon: const Icon(LucideIcons.userMinus, size: 18),
+                  onPressed: () => _removeMember(context, userId),
+                ),
+                showDivider: i < membri.length - 1,
+              );
+            }, childCount: membri.length),
           ),
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
@@ -180,35 +155,23 @@ class _SquadraDetailBody extends StatelessWidget {
         title: const Text('Rimuovi membro'),
         content: const Text('Vuoi rimuovere questo membro dalla squadra?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Rimuovi'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
         ],
       ),
     );
     if (confirmed == true && context.mounted) {
       try {
-        final api = ProviderScope.containerOf(context)
-            .read(adminApiClientProvider);
-        await api.removeSquadraMember(
-          squadra['id'] as String,
-          userId,
-        );
+        final api = ProviderScope.containerOf(context).read(adminApiClientProvider);
+        await api.removeSquadraMember(squadra['id'] as String, userId);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Membro rimosso')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Membro rimosso')));
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Errore: $e')),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
         }
       }
     }
@@ -230,17 +193,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),
@@ -290,22 +250,16 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
     if (_selectedUserId == null) return;
     setState(() => _isSaving = true);
     try {
-      await widget.api.addSquadraMember(
-        widget.squadraId,
-        userId: _selectedUserId!,
-        ruolo: _ruolo,
-      );
+      await widget.api.addSquadraMember(widget.squadraId, userId: _selectedUserId!, ruolo: _ruolo);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Membro aggiunto')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Membro aggiunto')));
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -315,20 +269,12 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        19,
-        19,
-        19,
-        MediaQuery.of(context).viewInsets.bottom + 19,
-      ),
+      padding: EdgeInsets.fromLTRB(19, 19, 19, MediaQuery.of(context).viewInsets.bottom + 19),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Aggiungi membro',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('Aggiungi membro', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
@@ -341,14 +287,12 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                 border: OutlineInputBorder(),
               ),
               items: _technicians
-                  .map((t) => DropdownMenuItem(
-                        value: t['id'] as String,
-                        child: Text(
-                          t['displayName'] as String? ??
-                              t['email'] as String? ??
-                              '',
-                        ),
-                      ))
+                  .map(
+                    (t) => DropdownMenuItem(
+                      value: t['id'] as String,
+                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) => setState(() => _selectedUserId = v),
             ),
@@ -356,14 +300,10 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
           DropdownButtonFormField<String>(
             // ignore: deprecated_member_use — controlled field, needs value not initialValue
             value: _ruolo,
-            decoration: const InputDecoration(
-              labelText: 'Ruolo',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(labelText: 'Ruolo', border: OutlineInputBorder()),
             items: const [
               DropdownMenuItem(value: 'Membro', child: Text('Membro')),
-              DropdownMenuItem(
-                  value: 'TeamLead', child: Text('Team Lead')),
+              DropdownMenuItem(value: 'TeamLead', child: Text('Team Lead')),
             ],
             onChanged: (v) => setState(() => _ruolo = v ?? 'Membro'),
           ),

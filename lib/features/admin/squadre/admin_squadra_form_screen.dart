@@ -17,12 +17,10 @@ class AdminSquadraFormScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? squadra;
 
   @override
-  ConsumerState<AdminSquadraFormScreen> createState() =>
-      _AdminSquadraFormScreenState();
+  ConsumerState<AdminSquadraFormScreen> createState() => _AdminSquadraFormScreenState();
 }
 
-class _AdminSquadraFormScreenState
-    extends ConsumerState<AdminSquadraFormScreen> {
+class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeCtrl = TextEditingController();
   final _descrizioneCtrl = TextEditingController();
@@ -70,34 +68,22 @@ class _AdminSquadraFormScreenState
         await api.updateSquadra(
           widget.squadra!['id'] as String,
           nome: _nomeCtrl.text.trim(),
-          descrizione: _descrizioneCtrl.text.trim().isEmpty
-              ? null
-              : _descrizioneCtrl.text.trim(),
+          descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
           specializzazione: _specializzazioneCtrl.text.trim().isEmpty
               ? null
               : _specializzazioneCtrl.text.trim(),
-          coloreCalendario: _coloreCtrl.text.trim().isEmpty
-              ? null
-              : _coloreCtrl.text.trim(),
-          note: _noteCtrl.text.trim().isEmpty
-              ? null
-              : _noteCtrl.text.trim(),
+          coloreCalendario: _coloreCtrl.text.trim().isEmpty ? null : _coloreCtrl.text.trim(),
+          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         );
       } else {
         await api.createSquadra(
           nome: _nomeCtrl.text.trim(),
-          descrizione: _descrizioneCtrl.text.trim().isEmpty
-              ? null
-              : _descrizioneCtrl.text.trim(),
+          descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
           specializzazione: _specializzazioneCtrl.text.trim().isEmpty
               ? null
               : _specializzazioneCtrl.text.trim(),
-          coloreCalendario: _coloreCtrl.text.trim().isEmpty
-              ? null
-              : _coloreCtrl.text.trim(),
-          note: _noteCtrl.text.trim().isEmpty
-              ? null
-              : _noteCtrl.text.trim(),
+          coloreCalendario: _coloreCtrl.text.trim().isEmpty ? null : _coloreCtrl.text.trim(),
+          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         );
       }
 
@@ -105,19 +91,13 @@ class _AdminSquadraFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Squadra aggiornata' : 'Squadra creata',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Squadra aggiornata' : 'Squadra creata')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -153,12 +133,8 @@ class _AdminSquadraFormScreenState
           children: [
             TextFormField(
               controller: _nomeCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
@@ -193,10 +169,7 @@ class _AdminSquadraFormScreenState
 
             TextFormField(
               controller: _noteCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
               maxLines: 3,
             ),
           ],

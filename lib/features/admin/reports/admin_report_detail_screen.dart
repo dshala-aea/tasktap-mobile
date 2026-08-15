@@ -26,8 +26,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
     final fatturatoAt = report['fatturatoAt'] as String?;
 
     final dateLabel = createdAt != null
-        ? DateFormat('dd/MM/yyyy HH:mm', 'it')
-            .format(DateTime.parse(createdAt).toLocal())
+        ? DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(createdAt).toLocal())
         : '—';
 
     return Scaffold(
@@ -42,15 +41,9 @@ class AdminReportDetailScreen extends ConsumerWidget {
             icon: const Icon(LucideIcons.moreVertical, size: 20),
             itemBuilder: (_) => [
               if (stato == 'Inviato')
-                const PopupMenuItem(
-                  value: 'controlla',
-                  child: Text('Segna come controllato'),
-                ),
+                const PopupMenuItem(value: 'controlla', child: Text('Segna come controllato')),
               if (stato == 'Controllato')
-                const PopupMenuItem(
-                  value: 'fattura',
-                  child: Text('Segna come fatturato'),
-                ),
+                const PopupMenuItem(value: 'fattura', child: Text('Segna come fatturato')),
             ],
             onSelected: (v) => _handleAction(context, ref, v),
           ),
@@ -68,9 +61,9 @@ class AdminReportDetailScreen extends ConsumerWidget {
                   const Spacer(),
                   Text(
                     dateLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.colors.inkMuted,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: context.colors.inkMuted),
                   ),
                 ],
               ),
@@ -89,20 +82,26 @@ class AdminReportDetailScreen extends ConsumerWidget {
                     if (inviatoAt != null)
                       KeyVal(
                         label: 'Inviato il',
-                        value: DateFormat('dd/MM/yyyy HH:mm', 'it')
-                            .format(DateTime.parse(inviatoAt).toLocal()),
+                        value: DateFormat(
+                          'dd/MM/yyyy HH:mm',
+                          'it',
+                        ).format(DateTime.parse(inviatoAt).toLocal()),
                       ),
                     if (controllatoAt != null)
                       KeyVal(
                         label: 'Controllato il',
-                        value: DateFormat('dd/MM/yyyy HH:mm', 'it')
-                            .format(DateTime.parse(controllatoAt).toLocal()),
+                        value: DateFormat(
+                          'dd/MM/yyyy HH:mm',
+                          'it',
+                        ).format(DateTime.parse(controllatoAt).toLocal()),
                       ),
                     if (fatturatoAt != null)
                       KeyVal(
                         label: 'Fatturato il',
-                        value: DateFormat('dd/MM/yyyy HH:mm', 'it')
-                            .format(DateTime.parse(fatturatoAt).toLocal()),
+                        value: DateFormat(
+                          'dd/MM/yyyy HH:mm',
+                          'it',
+                        ).format(DateTime.parse(fatturatoAt).toLocal()),
                         showDivider: false,
                       ),
                   ],
@@ -121,10 +120,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
                     children: [
                       const SectionTitle(title: 'Dettagli'),
                       const SizedBox(height: 4),
-                      Text(
-                        details,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      Text(details, style: Theme.of(context).textTheme.bodyMedium),
                     ],
                   ),
                 ),
@@ -141,10 +137,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
                     children: [
                       const SectionTitle(title: 'Note tecnico'),
                       const SizedBox(height: 4),
-                      Text(
-                        technicianNotes,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
+                      Text(technicianNotes, style: Theme.of(context).textTheme.bodyMedium),
                     ],
                   ),
                 ),
@@ -156,8 +149,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(19),
               child: _StateTransitionButtons(
                 stato: stato,
-                onTransition: (action) =>
-                    _handleAction(context, ref, action),
+                onTransition: (action) => _handleAction(context, ref, action),
               ),
             ),
           ),
@@ -167,11 +159,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleAction(
-    BuildContext context,
-    WidgetRef ref,
-    String action,
-  ) async {
+  Future<void> _handleAction(BuildContext context, WidgetRef ref, String action) async {
     final api = ref.read(adminApiClientProvider);
     final reportId = report['id'] as String;
 
@@ -185,27 +173,22 @@ class AdminReportDetailScreen extends ConsumerWidget {
           break;
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Stato aggiornato')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Stato aggiornato')));
         // Pop to refresh list
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     }
   }
 }
 
 class _StateTransitionButtons extends StatelessWidget {
-  const _StateTransitionButtons({
-    required this.stato,
-    required this.onTransition,
-  });
+  const _StateTransitionButtons({required this.stato, required this.onTransition});
 
   final String stato;
   final ValueChanged<String> onTransition;

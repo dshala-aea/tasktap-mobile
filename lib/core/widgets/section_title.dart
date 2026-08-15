@@ -13,11 +13,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// SectionTitle(title: 'Rapportini', action: TextButton(onPressed: ..., child: Text('Vedi tutti')));
 /// ```
 class SectionTitle extends StatelessWidget {
-  const SectionTitle({
-    super.key,
-    required this.title,
-    this.action,
-  });
+  const SectionTitle({super.key, required this.title, this.action});
 
   final String title;
 
@@ -43,6 +39,30 @@ class SectionTitle extends StatelessWidget {
           ?action,
         ],
       ),
+    );
+  }
+}
+
+/// A section label with no padding of its own, for use inside a card that already has some.
+///
+/// The rapportino wizard needed exactly this and, rather than having it, defined a private `_SL`
+/// four times — byte-identical in `step_dettagli`, `step_ore`, `step_materiali_fold` and
+/// `step_riepilogo`. Each one hardcoded `Color(0xFF363636)` as its ink, so in dark mode every
+/// section heading in the app's primary daily flow was near-black text on a near-black ground.
+/// Four copies also meant four places to fix it and no reason to expect anyone to find all four.
+///
+/// [SectionTitle] is the padded page-level heading; this is its in-card sibling. Both take ink
+/// from the theme.
+class StepLabel extends StatelessWidget {
+  const StepLabel({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      title,
+      style: GoogleFonts.sora(fontSize: 15, fontWeight: FontWeight.w700, color: context.colors.ink),
     );
   }
 }

@@ -18,12 +18,10 @@ class AdminMaterialeFormScreen extends ConsumerStatefulWidget {
   final String? materialeId;
 
   @override
-  ConsumerState<AdminMaterialeFormScreen> createState() =>
-      _AdminMaterialeFormScreenState();
+  ConsumerState<AdminMaterialeFormScreen> createState() => _AdminMaterialeFormScreenState();
 }
 
-class _AdminMaterialeFormScreenState
-    extends ConsumerState<AdminMaterialeFormScreen> {
+class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -53,9 +51,9 @@ class _AdminMaterialeFormScreenState
 
   Future<void> _loadMateriale() async {
     final db = ref.read(appDatabaseProvider);
-    final mat = await (db.select(db.materiali)
-          ..where((m) => m.id.equals(widget.materialeId!)))
-        .getSingleOrNull();
+    final mat = await (db.select(
+      db.materiali,
+    )..where((m) => m.id.equals(widget.materialeId!))).getSingleOrNull();
     if (!mounted) return;
     if (mat != null) {
       setState(() {
@@ -65,8 +63,7 @@ class _AdminMaterialeFormScreenState
         _unitOfMeasureCtrl.text = mat.unitOfMeasure ?? '';
         _categoryCtrl.text = mat.category ?? '';
         _marcaCtrl.text = mat.marca ?? '';
-        _purchasePriceCtrl.text =
-            mat.purchasePrice?.toStringAsFixed(2) ?? '';
+        _purchasePriceCtrl.text = mat.purchasePrice?.toStringAsFixed(2) ?? '';
         _salePriceCtrl.text = mat.salePrice?.toStringAsFixed(2) ?? '';
       });
     } else {
@@ -102,18 +99,12 @@ class _AdminMaterialeFormScreenState
           widget.materialeId!,
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           unitOfMeasure: _unitOfMeasureCtrl.text.trim().isEmpty
               ? null
               : _unitOfMeasureCtrl.text.trim(),
-          category: _categoryCtrl.text.trim().isEmpty
-              ? null
-              : _categoryCtrl.text.trim(),
-          marca: _marcaCtrl.text.trim().isEmpty
-              ? null
-              : _marcaCtrl.text.trim(),
+          category: _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim(),
+          marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
           purchasePrice: purchasePrice,
           salePrice: salePrice,
         );
@@ -121,18 +112,12 @@ class _AdminMaterialeFormScreenState
         await api.createMateriale(
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           unitOfMeasure: _unitOfMeasureCtrl.text.trim().isEmpty
               ? null
               : _unitOfMeasureCtrl.text.trim(),
-          category: _categoryCtrl.text.trim().isEmpty
-              ? null
-              : _categoryCtrl.text.trim(),
-          marca: _marcaCtrl.text.trim().isEmpty
-              ? null
-              : _marcaCtrl.text.trim(),
+          category: _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim(),
+          marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
           purchasePrice: purchasePrice,
           salePrice: salePrice,
         );
@@ -142,19 +127,13 @@ class _AdminMaterialeFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Materiale aggiornato' : 'Materiale creato',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Materiale aggiornato' : 'Materiale creato')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -174,7 +153,8 @@ class _AdminMaterialeFormScreenState
         ),
         body: const UnavailableState(
           titolo: 'Materiale non disponibile',
-          motivo: 'Il catalogo materiali non è ancora sincronizzato sul '
+          motivo:
+              'Il catalogo materiali non è ancora sincronizzato sul '
               'dispositivo, quindi non è possibile precompilare o '
               'modificare questo materiale da qui.',
         ),
@@ -212,19 +192,14 @@ class _AdminMaterialeFormScreenState
                 labelText: 'Codice *',
                 border: OutlineInputBorder(),
               ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
@@ -282,8 +257,7 @@ class _AdminMaterialeFormScreenState
                       labelText: 'Prezzo acquisto (€)',
                       border: OutlineInputBorder(),
                     ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -294,8 +268,7 @@ class _AdminMaterialeFormScreenState
                       labelText: 'Prezzo vendita (€)',
                       border: OutlineInputBorder(),
                     ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
               ],

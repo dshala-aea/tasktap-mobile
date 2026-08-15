@@ -15,13 +15,7 @@ import 'package:tasktap_mobile/core/theme/app_rack.dart';
 /// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: context.colors.ink);
 /// ```
 class AppBadge extends StatelessWidget {
-  const AppBadge({
-    super.key,
-    required this.label,
-    this.small = false,
-    this.bgColor,
-    this.fgColor,
-  });
+  const AppBadge({super.key, required this.label, this.small = false, this.bgColor, this.fgColor});
 
   final String label;
   final bool small;
@@ -69,12 +63,7 @@ class AppBadge extends StatelessWidget {
 /// AppChip(label: 'Settimana', onTap: () {});
 /// ```
 class AppChip extends StatelessWidget {
-  const AppChip({
-    super.key,
-    required this.label,
-    this.active = false,
-    this.onTap,
-  });
+  const AppChip({super.key, required this.label, this.active = false, this.onTap});
 
   final String label;
   final bool active;

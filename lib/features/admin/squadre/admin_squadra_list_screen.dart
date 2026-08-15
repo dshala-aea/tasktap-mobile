@@ -9,8 +9,7 @@ import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches squadre from backend API.
-final adminSquadreProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+final adminSquadreProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(adminApiClientProvider);
   return api.fetchSquadre();
 });
@@ -70,33 +69,32 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminSquadreProvider.future),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Squadre',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: _searchCtrl,
-            hint: 'Cerca per nome…',
-            onChanged: (q) => setState(() => _query = q),
-          ),
-        ),
-        if (filtered.isEmpty)
+        slivers: [
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.users,
-              title: 'Nessuna squadra',
-              body: 'Crea una nuova squadra con il pulsante +.',
+            child: ScreenHeader(
+              title: 'Squadre',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: _searchCtrl,
+              hint: 'Cerca per nome…',
+              onChanged: (q) => setState(() => _query = q),
+            ),
+          ),
+          if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.users,
+                title: 'Nessuna squadra',
+                body: 'Crea una nuova squadra con il pulsante +.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final squadra = filtered[i];
                 final nome = squadra['nome'] as String? ?? '';
                 final spec = squadra['specializzazione'] as String? ?? '';
@@ -106,17 +104,12 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
                   specializzazione: spec,
                   colore: colore,
                   isLast: i == filtered.length - 1,
-                  onTap: () => context.push(
-                    '/altro/squadre/${squadra['id']}',
-                    extra: squadra,
-                  ),
+                  onTap: () => context.push('/altro/squadre/${squadra['id']}', extra: squadra),
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        ],
       ),
     );
   }
@@ -154,19 +147,11 @@ class _SquadraRow extends StatelessWidget {
           color: _parseColor(context, colore).withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          LucideIcons.users,
-          size: 20,
-          color: _parseColor(context, colore),
-        ),
+        child: Icon(LucideIcons.users, size: 20, color: _parseColor(context, colore)),
       ),
       title: nome,
       subtitle: specializzazione.isNotEmpty ? specializzazione : '—',
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: onTap,
     );

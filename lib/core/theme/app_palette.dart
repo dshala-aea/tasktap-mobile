@@ -163,7 +163,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     borderStrong: Color(0xFFD9D9D9),
     divider: Color(0xFFD4D4D4),
     shadow: [BoxShadow(color: Color(0x1A000000), offset: Offset(0, 3), blurRadius: 5.5)],
-    shadowInset: [BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2)],
+    shadowInset: [
+      BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2),
+    ],
     amber: Color(0xFFFFB200),
     green: Color(0xFF4CAF50),
     blue: Color(0xFF2563EB),
@@ -211,7 +213,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     divider: Color(0xFF3A3A3A),
     // Heavier and blacker: the light theme's 10% black over a near-black ground does nothing.
     shadow: [BoxShadow(color: Color(0x66000000), offset: Offset(0, 3), blurRadius: 8)],
-    shadowInset: [BoxShadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 6, spreadRadius: -2)],
+    shadowInset: [
+      BoxShadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 6, spreadRadius: -2),
+    ],
     amber: Color(0xFFFFC44D),
     green: Color(0xFF6FCF74),
     blue: Color(0xFF7AA7F5),
@@ -342,6 +346,5 @@ extension AppPaletteContext on BuildContext {
   ///
   /// A widget test that pumps a bare `MaterialApp` registers no extension, and a screen that
   /// renders in the wrong colours is a better failure there than one that cannot render at all.
-  AppPalette get colors =>
-      Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
+  AppPalette get colors => Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
 }

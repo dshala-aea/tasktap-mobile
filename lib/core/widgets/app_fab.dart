@@ -13,12 +13,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// AppFab(icon: LucideIcons.camera, onPressed: () {});
 /// ```
 class AppFab extends StatelessWidget {
-  const AppFab({
-    super.key,
-    required this.onPressed,
-    this.icon = LucideIcons.plus,
-    this.tooltip,
-  });
+  const AppFab({super.key, required this.onPressed, this.icon = LucideIcons.plus, this.tooltip});
 
   final VoidCallback onPressed;
   final IconData icon;
@@ -46,9 +41,7 @@ class AppFab extends StatelessWidget {
               borderRadius: AppRack.freeShape,
               // A graphite bottom edge gives it the ledge every other object in the rack has, so
               // the primary action is made of the same material as everything it sits above.
-              border: Border(
-                bottom: BorderSide(color: context.colors.ledge, width: 3),
-              ),
+              border: Border(bottom: BorderSide(color: context.colors.ledge, width: 3)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withAlpha(56),

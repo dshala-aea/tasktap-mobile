@@ -53,8 +53,8 @@ class AppButton extends StatelessWidget {
     this.size = AppButtonSize.md,
     bool? expand,
     this.fullWidth,
-  })  : variant = AppButtonVariant.secondary,
-        _expandLegacy = expand;
+  }) : variant = AppButtonVariant.secondary,
+       _expandLegacy = expand;
 
   const AppButton.dark({
     super.key,
@@ -64,8 +64,8 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.size = AppButtonSize.md,
     this.fullWidth,
-  })  : variant = AppButtonVariant.dark,
-        _expandLegacy = null;
+  }) : variant = AppButtonVariant.dark,
+       _expandLegacy = null;
 
   const AppButton.ghost({
     super.key,
@@ -75,8 +75,8 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.size = AppButtonSize.md,
     this.fullWidth,
-  })  : variant = AppButtonVariant.ghost,
-        _expandLegacy = null;
+  }) : variant = AppButtonVariant.ghost,
+       _expandLegacy = null;
 
   const AppButton.danger({
     super.key,
@@ -87,8 +87,8 @@ class AppButton extends StatelessWidget {
     this.size = AppButtonSize.md,
     bool? expand,
     this.fullWidth,
-  })  : variant = AppButtonVariant.danger,
-        _expandLegacy = expand;
+  }) : variant = AppButtonVariant.danger,
+       _expandLegacy = expand;
 
   final String label;
   final VoidCallback? onPressed;
@@ -107,65 +107,65 @@ class AppButton extends StatelessWidget {
   bool get _isFullWidth => fullWidth ?? (_expandLegacy ?? _defaultFullWidth);
 
   bool get _defaultFullWidth => switch (variant) {
-        AppButtonVariant.ghost => false,
-        _ => true,
-      };
+    AppButtonVariant.ghost => false,
+    _ => true,
+  };
 
   // ── Size tokens ──────────────────────────────────────────────────────────
 
   double get _vPad => switch (size) {
-        AppButtonSize.lg => 14,
-        AppButtonSize.md => 11,
-        AppButtonSize.sm => 6,
-      };
+    AppButtonSize.lg => 14,
+    AppButtonSize.md => 11,
+    AppButtonSize.sm => 6,
+  };
 
   double get _hPad => switch (size) {
-        AppButtonSize.lg => 24,
-        AppButtonSize.md => 20,
-        AppButtonSize.sm => 14,
-      };
+    AppButtonSize.lg => 24,
+    AppButtonSize.md => 20,
+    AppButtonSize.sm => 14,
+  };
 
   double get _fontSize => switch (size) {
-        AppButtonSize.lg => 16,
-        AppButtonSize.md => 14,
-        AppButtonSize.sm => 10,
-      };
+    AppButtonSize.lg => 16,
+    AppButtonSize.md => 14,
+    AppButtonSize.sm => 10,
+  };
 
   double get _radius => switch (size) {
-        AppButtonSize.lg => 20,
-        AppButtonSize.md => 18,
-        AppButtonSize.sm => 10,
-      };
+    AppButtonSize.lg => 20,
+    AppButtonSize.md => 18,
+    AppButtonSize.sm => 10,
+  };
 
   double get _iconSize => switch (size) {
-        AppButtonSize.lg => 18,
-        AppButtonSize.md => 16,
-        AppButtonSize.sm => 12,
-      };
+    AppButtonSize.lg => 18,
+    AppButtonSize.md => 16,
+    AppButtonSize.sm => 12,
+  };
 
   // ── Colour tokens ────────────────────────────────────────────────────────
 
   Color _bg(BuildContext context) => switch (variant) {
-        AppButtonVariant.primary   => AppColors.Y,
-        AppButtonVariant.secondary => context.colors.bg3,
-        AppButtonVariant.dark      => context.colors.surfaceInverse,
-        AppButtonVariant.ghost     => Colors.transparent,
-        AppButtonVariant.danger    => context.colors.redSoft,
-      };
+    AppButtonVariant.primary => AppColors.Y,
+    AppButtonVariant.secondary => context.colors.bg3,
+    AppButtonVariant.dark => context.colors.surfaceInverse,
+    AppButtonVariant.ghost => Colors.transparent,
+    AppButtonVariant.danger => context.colors.redSoft,
+  };
 
   Color _fg(BuildContext context) => switch (variant) {
-        AppButtonVariant.primary   => context.colors.brandOn,
-        AppButtonVariant.secondary => context.colors.inkMuted,
-        AppButtonVariant.dark      => context.colors.inkInverse,
-        AppButtonVariant.ghost     => context.colors.ink,
-        AppButtonVariant.danger    => const Color(0xFFB80000),
-      };
+    AppButtonVariant.primary => context.colors.brandOn,
+    AppButtonVariant.secondary => context.colors.inkMuted,
+    AppButtonVariant.dark => context.colors.inkInverse,
+    AppButtonVariant.ghost => context.colors.ink,
+    AppButtonVariant.danger => const Color(0xFFB80000),
+  };
 
   List<BoxShadow> _shadows(BuildContext context) => switch (variant) {
-        AppButtonVariant.primary => context.colors.shadow,
-        AppButtonVariant.dark    => context.colors.shadow,
-        _                        => const [],
-      };
+    AppButtonVariant.primary => context.colors.shadow,
+    AppButtonVariant.dark => context.colors.shadow,
+    _ => const [],
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -222,10 +222,7 @@ class AppButton extends StatelessWidget {
           splashColor: _fg(context).withAlpha(30),
           highlightColor: _fg(context).withAlpha(15),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: _hPad,
-              vertical: _vPad,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: _hPad, vertical: _vPad),
             child: DefaultTextStyle(
               style: textStyle.copyWith(
                 color: onPressed == null && !isLoading ? fgDisabled : _fg(context),

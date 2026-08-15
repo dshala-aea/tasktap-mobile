@@ -21,12 +21,10 @@ class AdminCantiereFormScreen extends ConsumerStatefulWidget {
   final String? cantiereId;
 
   @override
-  ConsumerState<AdminCantiereFormScreen> createState() =>
-      _AdminCantiereFormScreenState();
+  ConsumerState<AdminCantiereFormScreen> createState() => _AdminCantiereFormScreenState();
 }
 
-class _AdminCantiereFormScreenState
-    extends ConsumerState<AdminCantiereFormScreen> {
+class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
@@ -56,9 +54,9 @@ class _AdminCantiereFormScreenState
 
   Future<void> _loadCantiere() async {
     final db = ref.read(appDatabaseProvider);
-    final cantiere = await (db.select(db.cantieri)
-          ..where((c) => c.id.equals(widget.cantiereId!)))
-        .getSingleOrNull();
+    final cantiere = await (db.select(
+      db.cantieri,
+    )..where((c) => c.id.equals(widget.cantiereId!))).getSingleOrNull();
     if (!mounted) return;
     if (cantiere != null) {
       setState(() {
@@ -118,18 +116,10 @@ class _AdminCantiereFormScreenState
         await api.updateCantiere(
           widget.cantiereId!,
           name: _nameCtrl.text.trim(),
-          address: _addressCtrl.text.trim().isEmpty
-              ? null
-              : _addressCtrl.text.trim(),
-          city: _cityCtrl.text.trim().isEmpty
-              ? null
-              : _cityCtrl.text.trim(),
-          postalCode: _postalCodeCtrl.text.trim().isEmpty
-              ? null
-              : _postalCodeCtrl.text.trim(),
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+          city: _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
+          postalCode: _postalCodeCtrl.text.trim().isEmpty ? null : _postalCodeCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           startDate: _startDate,
           endDate: _endDate,
           customerId: _selectedCustomerId,
@@ -137,18 +127,10 @@ class _AdminCantiereFormScreenState
       } else {
         await api.createCantiere(
           name: _nameCtrl.text.trim(),
-          address: _addressCtrl.text.trim().isEmpty
-              ? null
-              : _addressCtrl.text.trim(),
-          city: _cityCtrl.text.trim().isEmpty
-              ? null
-              : _cityCtrl.text.trim(),
-          postalCode: _postalCodeCtrl.text.trim().isEmpty
-              ? null
-              : _postalCodeCtrl.text.trim(),
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+          city: _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
+          postalCode: _postalCodeCtrl.text.trim().isEmpty ? null : _postalCodeCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           startDate: _startDate,
           endDate: _endDate,
           customerId: _selectedCustomerId,
@@ -161,19 +143,13 @@ class _AdminCantiereFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Cantiere aggiornato' : 'Cantiere creato',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Cantiere aggiornato' : 'Cantiere creato')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -193,7 +169,8 @@ class _AdminCantiereFormScreenState
         ),
         body: const UnavailableState(
           titolo: 'Cantiere non disponibile',
-          motivo: "L'elenco cantieri non è ancora sincronizzato sul "
+          motivo:
+              "L'elenco cantieri non è ancora sincronizzato sul "
               'dispositivo, quindi non è possibile precompilare o '
               'modificare questo cantiere da qui.',
         ),
@@ -237,30 +214,17 @@ class _AdminCantiereFormScreenState
           children: [
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
               initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(
-                labelText: 'Cliente',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Cliente', border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Nessun cliente'),
-                ),
-                ...customers.map((c) => DropdownMenuItem(
-                      value: c.id,
-                      child: Text(c.companyName),
-                    )),
+                const DropdownMenuItem(value: null, child: Text('Nessun cliente')),
+                ...customers.map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName))),
               ],
               onChanged: (v) => setState(() => _selectedCustomerId = v),
             ),
@@ -321,10 +285,7 @@ class _AdminCantiereFormScreenState
 
             TextFormField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
               maxLines: 3,
             ),
           ],

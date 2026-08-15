@@ -10,8 +10,7 @@ import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches contracts from backend API.
-final adminContractsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+final adminContractsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(adminApiClientProvider);
   return api.fetchContracts();
 });
@@ -75,33 +74,32 @@ class _ContractListBodyState extends ConsumerState<_ContractListBody> {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminContractsProvider.future),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Contratti',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: _searchCtrl,
-            hint: 'Cerca per nome…',
-            onChanged: (q) => setState(() => _query = q),
-          ),
-        ),
-        if (filtered.isEmpty)
+        slivers: [
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.fileSignature,
-              title: 'Nessun contratto',
-              body: 'Crea un nuovo contratto con il pulsante +.',
+            child: ScreenHeader(
+              title: 'Contratti',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: _searchCtrl,
+              hint: 'Cerca per nome…',
+              onChanged: (q) => setState(() => _query = q),
+            ),
+          ),
+          if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.fileSignature,
+                title: 'Nessun contratto',
+                body: 'Crea un nuovo contratto con il pulsante +.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final contract = filtered[i];
                 final name = contract['name'] as String? ?? '';
                 final customerId = contract['customerId'] as String? ?? '';
@@ -112,17 +110,12 @@ class _ContractListBodyState extends ConsumerState<_ContractListBody> {
                   customerName: customerName,
                   isActive: isActive,
                   isLast: i == filtered.length - 1,
-                  onTap: () => context.push(
-                    '/altro/contratti/${contract['id']}',
-                    extra: contract,
-                  ),
+                  onTap: () => context.push('/altro/contratti/${contract['id']}', extra: contract),
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        ],
       ),
     );
   }
@@ -153,19 +146,11 @@ class _ContractRow extends StatelessWidget {
           color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          LucideIcons.fileSignature,
-          size: 20,
-          color: context.colors.inkMuted,
-        ),
+        child: Icon(LucideIcons.fileSignature, size: 20, color: context.colors.inkMuted),
       ),
       title: name,
       subtitle: customerName,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: onTap,
     );

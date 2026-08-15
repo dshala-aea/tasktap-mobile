@@ -7,7 +7,8 @@ import '../../../data/ai/ai_api_client.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
-// section_title omitted — using inline _SL below to avoid double padding
+// Uses StepLabel (the padding-free sibling of SectionTitle) — these headings sit inside cards
+// that already carry their own padding.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -113,7 +114,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           ],
 
           // ── Titolo e descrizione ───────────────────────────────────────────
-          _SL(title: 'Titolo e descrizione'),
+          StepLabel(title: 'Titolo e descrizione'),
           const SizedBox(height: 8),
           _AiDraftButton(
             scheduleId: state.scheduleId,
@@ -138,7 +139,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Cliente ───────────────────────────────────────────────────────
-          _SL(title: 'Cliente *'),
+          StepLabel(title: 'Cliente *'),
           const SizedBox(height: 8),
           customers.when(
             loading: () => const LinearProgressIndicator(),
@@ -177,7 +178,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Indirizzo di lavoro ────────────────────────────────────────────
-          _SL(title: 'Indirizzo di lavoro'),
+          StepLabel(title: 'Indirizzo di lavoro'),
           const SizedBox(height: 8),
           AppTextField(
             controller: _workAddressCtrl,
@@ -188,7 +189,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Ubicazione / Sede ──────────────────────────────────────────────
-          _SL(title: 'Ubicazione / Sede'),
+          StepLabel(title: 'Ubicazione / Sede'),
           const SizedBox(height: 8),
           _LocationPicker(
             reportId: widget.reportId,
@@ -201,7 +202,7 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           const SizedBox(height: 20),
 
           // ── Ticket o Cantiere (opzionale) ──────────────────────────────────
-          _SL(title: 'Ticket o Cantiere (opzionale)'),
+          StepLabel(title: 'Ticket o Cantiere (opzionale)'),
           const SizedBox(height: 8),
           _TicketCantierePicker(
             reportId: widget.reportId,
@@ -629,25 +630,6 @@ class _TicketCantierePicker extends ConsumerWidget {
 }
 
 // ── Inline section label (no built-in padding — avoids double-pad) ─────────────
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
-      ),
-    );
-  }
-}
 
 /// Offers an AI draft, and says what it costs before it is pressed.
 ///

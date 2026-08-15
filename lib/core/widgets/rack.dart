@@ -21,13 +21,7 @@ import 'package:tasktap_mobile/core/theme/app_rack.dart';
 /// Fixed, not scrolling: in a van the rail is bolted to the body and the drawers move past it.
 /// Wrap the scrollable, not the individual list.
 class Rack extends StatelessWidget {
-  const Rack({
-    super.key,
-    required this.child,
-    this.top = 0,
-    this.bottom = 0,
-    this.visible = true,
-  });
+  const Rack({super.key, required this.child, this.top = 0, this.bottom = 0, this.visible = true});
 
   final Widget child;
 
@@ -149,10 +143,7 @@ class RackCell extends StatelessWidget {
       children: [
         const SizedBox(width: AppRack.ledgeWidth),
         Expanded(
-          child: Padding(
-            padding: padding ?? AppRack.cellPadding,
-            child: child,
-          ),
+          child: Padding(padding: padding ?? AppRack.cellPadding, child: child),
         ),
       ],
     );
@@ -160,30 +151,30 @@ class RackCell extends StatelessWidget {
     // The ledge is a Positioned layer rather than a Row child so it sits inside the border and
     // squares off against the rail edge without fighting the corner radius.
     Widget inner(Widget bodyChild) => ConstrainedBox(
-          constraints: BoxConstraints(minHeight: minHeight),
-          child: Stack(
-            children: [
-              bodyChild,
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: AppRack.ledgeWidth,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: ledge,
-                    borderRadius: flush
-                        ? BorderRadius.zero
-                        : const BorderRadius.only(
-                            topLeft: Radius.circular(AppRack.cellRadius),
-                            bottomLeft: Radius.circular(AppRack.cellRadius),
-                          ),
-                  ),
-                ),
+      constraints: BoxConstraints(minHeight: minHeight),
+      child: Stack(
+        children: [
+          bodyChild,
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: AppRack.ledgeWidth,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: ledge,
+                borderRadius: flush
+                    ? BorderRadius.zero
+                    : const BorderRadius.only(
+                        topLeft: Radius.circular(AppRack.cellRadius),
+                        bottomLeft: Radius.circular(AppRack.cellRadius),
+                      ),
               ),
-            ],
+            ),
           ),
-        );
+        ],
+      ),
+    );
 
     final decoration = BoxDecoration(
       color: background ?? c.labelCard,
@@ -228,12 +219,7 @@ class RackCell extends StatelessWidget {
 /// is the cell you want; Manrope for everything inside the cell, which you read once you have
 /// decided. That is the whole reason this app keeps two faces.
 class RackLabel extends StatelessWidget {
-  const RackLabel({
-    super.key,
-    required this.label,
-    this.meta,
-    this.leading,
-  });
+  const RackLabel({super.key, required this.label, this.meta, this.leading});
 
   final String label;
 

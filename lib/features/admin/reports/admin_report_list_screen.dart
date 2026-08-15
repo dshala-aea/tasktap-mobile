@@ -8,26 +8,28 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/status_colors.dart';
 
 /// Filter options for the admin report list.
 enum _ReportFilter { tutti, bozza, inviato, controllato, fatturato }
 
 extension _ReportFilterLabel on _ReportFilter {
   String get label => switch (this) {
-        _ReportFilter.tutti => 'Tutti',
-        _ReportFilter.bozza => 'Bozza',
-        _ReportFilter.inviato => 'Inviato',
-        _ReportFilter.controllato => 'Controllato',
-        _ReportFilter.fatturato => 'Fatturato',
-      };
+    _ReportFilter.tutti => 'Tutti',
+    _ReportFilter.bozza => 'Bozza',
+    _ReportFilter.inviato => 'Inviato',
+    _ReportFilter.controllato => 'Controllato',
+    _ReportFilter.fatturato => 'Fatturato',
+  };
 
   String? get statusMatch => switch (this) {
-        _ReportFilter.tutti => null,
-        _ReportFilter.bozza => 'Bozza',
-        _ReportFilter.inviato => 'Inviato',
-        _ReportFilter.controllato => 'Controllato',
-        _ReportFilter.fatturato => 'Fatturato',
-      };
+    _ReportFilter.tutti => null,
+    _ReportFilter.bozza => 'Bozza',
+    _ReportFilter.inviato => 'Inviato',
+    _ReportFilter.controllato => 'Controllato',
+    _ReportFilter.fatturato => 'Fatturato',
+  };
 }
 
 /// Admin report list — shows all tenant reports from backend API.
@@ -89,89 +91,78 @@ class _AdminReportListBody extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminReportsProvider(statoFilter).future),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Rapportini',
-            subtitle: 'Vista amministratore',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca per titolo…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        // ── Filter chips ─────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _ReportFilter.values.map((f) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: AppChip(
-                      label: f.label,
-                      active: filter == f,
-                      onTap: () => onFilterChanged(f),
-                    ),
-                  );
-                }).toList(),
-              ),
+        slivers: [
+          SliverToBoxAdapter(
+            child: ScreenHeader(
+              title: 'Rapportini',
+              subtitle: 'Vista amministratore',
+              showBack: true,
             ),
           ),
-        ),
-        // ── Report list ──────────────────────────────────────────────────
-        reportsAsync.when(
-          loading: () => const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: searchCtrl,
+              hint: 'Cerca per titolo…',
+              onChanged: onQueryChanged,
             ),
           ),
-          error: (e, _) => SliverToBoxAdapter(
-            child: Center(child: Text('Errore: $e')),
-          ),
-          data: (reports) {
-            // Client-side query filter
-            final filtered = reports.where((r) {
-              if (query.isEmpty) return true;
-              final title = (r['title'] as String? ?? '').toLowerCase();
-              return title.contains(query.toLowerCase());
-            }).toList();
-
-            if (filtered.isEmpty) {
-              return SliverToBoxAdapter(
-                child: EmptyState(
-                  icon: LucideIcons.fileText,
-                  title: 'Nessun rapportino',
-                  body: 'Non ci sono rapportini per questo filtro.',
+          // ── Filter chips ─────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _ReportFilter.values.map((f) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: AppChip(
+                        label: f.label,
+                        active: filter == f,
+                        onTap: () => onFilterChanged(f),
+                      ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }
-
-            return SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final report = filtered[i];
-                  return _AdminReportRow(
-                    report: report,
-                    isLast: i == filtered.length - 1,
-                  );
-                },
-                childCount: filtered.length,
               ),
-            );
-          },
-        ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+            ),
+          ),
+          // ── Report list ──────────────────────────────────────────────────
+          reportsAsync.when(
+            loading: () => const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              ),
+            ),
+            error: (e, _) => SliverToBoxAdapter(child: Center(child: Text('Errore: $e'))),
+            data: (reports) {
+              // Client-side query filter
+              final filtered = reports.where((r) {
+                if (query.isEmpty) return true;
+                final title = (r['title'] as String? ?? '').toLowerCase();
+                return title.contains(query.toLowerCase());
+              }).toList();
+
+              if (filtered.isEmpty) {
+                return SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: LucideIcons.fileText,
+                    title: 'Nessun rapportino',
+                    body: 'Non ci sono rapportini per questo filtro.',
+                  ),
+                );
+              }
+
+              return SliverList(
+                delegate: SliverChildBuilderDelegate((context, i) {
+                  final report = filtered[i];
+                  return _AdminReportRow(report: report, isLast: i == filtered.length - 1);
+                }, childCount: filtered.length),
+              );
+            },
+          ),
+          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        ],
       ),
     );
   }
@@ -180,9 +171,9 @@ class _AdminReportListBody extends ConsumerWidget {
 /// Provider that fetches reports from backend API.
 final adminReportsProvider = FutureProvider.autoDispose
     .family<List<Map<String, dynamic>>, StatoFilter>((ref, filter) async {
-  final api = ref.watch(adminApiClientProvider);
-  return api.fetchReports(stato: filter.value);
-});
+      final api = ref.watch(adminApiClientProvider);
+      return api.fetchReports(stato: filter.value);
+    });
 
 /// Simple wrapper for the stato filter value.
 class StatoFilter {
@@ -202,8 +193,7 @@ class _AdminReportRow extends StatelessWidget {
     final stato = report['stato'] as String? ?? 'Bozza';
     final createdAt = report['createdAt'] as String?;
     final dateLabel = createdAt != null
-        ? DateFormat('dd/MM/yyyy HH:mm', 'it')
-            .format(DateTime.parse(createdAt).toLocal())
+        ? DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(createdAt).toLocal())
         : '—';
 
     return ListRow(
@@ -212,10 +202,7 @@ class _AdminReportRow extends StatelessWidget {
       subtitle: dateLabel,
       meta: StatusPill(stato: stato),
       showDivider: !isLast,
-      onTap: () => context.push(
-        '/altro/rapportini-admin/${report['id']}',
-        extra: report,
-      ),
+      onTap: () => context.push('/altro/rapportini-admin/${report['id']}', extra: report),
     );
   }
 }
@@ -227,20 +214,24 @@ class _StatoIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (color, icon) = switch (stato) {
-      'Bozza' => (context.colors.inkMuted, LucideIcons.fileEdit),
-      'Inviato' => (const Color(0xFF2563EB), LucideIcons.send),
-      'Controllato' => (const Color(0xFF4CAF50), LucideIcons.checkCircle),
-      'Fatturato' => (const Color(0xFF7C3AED), LucideIcons.receipt),
-      _ => (context.colors.inkMuted, LucideIcons.fileText),
+    // Only the glyph is decided here. The colour comes from `status_colors.dart`, the same source
+    // the StatusPill on this very row reads — this switch used to carry its own blue, green and
+    // violet, so the icon and the pill next to it disagreed about what "Inviato" looks like.
+    final icon = switch (stato) {
+      'Bozza' => LucideIcons.fileEdit,
+      'Inviato' => LucideIcons.send,
+      'Controllato' => LucideIcons.checkCircle,
+      'Fatturato' => LucideIcons.receipt,
+      _ => LucideIcons.fileText,
     };
+    final color = statusColor(stato).foreground;
 
     return Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRack.insetShape,
       ),
       child: Icon(icon, size: 20, color: color),
     );

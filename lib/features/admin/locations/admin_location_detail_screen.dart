@@ -10,11 +10,9 @@ import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single location by id from Drift cache.
-final adminLocationDetailProvider =
-    StreamProvider.autoDispose.family<Location?, String>((ref, id) {
+final adminLocationDetailProvider = StreamProvider.autoDispose.family<Location?, String>((ref, id) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.locations)..where((l) => l.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.locations)..where((l) => l.id.equals(id))).watchSingleOrNull();
 });
 
 /// Admin location detail — read-only with edit FAB.
@@ -43,10 +41,7 @@ class AdminLocationDetailScreen extends ConsumerWidget {
           if (location == null) {
             return const Center(child: Text('Sede non trovata'));
           }
-          return _LocationDetailBody(
-            location: location,
-            locationId: locationId,
-          );
+          return _LocationDetailBody(location: location, locationId: locationId);
         },
       ),
     );
@@ -54,10 +49,7 @@ class AdminLocationDetailScreen extends ConsumerWidget {
 }
 
 class _LocationDetailBody extends StatelessWidget {
-  const _LocationDetailBody({
-    required this.location,
-    required this.locationId,
-  });
+  const _LocationDetailBody({required this.location, required this.locationId});
 
   final Location location;
   final String locationId;
@@ -74,12 +66,7 @@ class _LocationDetailBody extends StatelessWidget {
             actions: [
               PopupMenuButton<String>(
                 icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Modifica'),
-                  ),
-                ],
+                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
                 onSelected: (v) {
                   if (v == 'edit') {
                     context.push('/altro/sedi/$locationId/modifica');
@@ -98,14 +85,12 @@ class _LocationDetailBody extends StatelessWidget {
                 _InfoRow(label: 'Nome', value: location.name),
                 _InfoRow(label: 'Città', value: location.city ?? '—'),
                 _InfoRow(label: 'Indirizzo', value: location.address ?? '—'),
-                _InfoRow(
-                    label: 'CAP', value: location.postalCode ?? '—'),
+                _InfoRow(label: 'CAP', value: location.postalCode ?? '—'),
                 _InfoRow(label: 'Telefono', value: location.phone ?? '—'),
                 _InfoRow(
-                    label: 'Note',
-                    value: location.notes?.isNotEmpty == true
-                        ? location.notes!
-                        : '—'),
+                  label: 'Note',
+                  value: location.notes?.isNotEmpty == true ? location.notes! : '—',
+                ),
               ],
             ),
           ),
@@ -130,17 +115,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

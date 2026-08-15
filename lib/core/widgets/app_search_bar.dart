@@ -49,20 +49,14 @@ class AppSearchBar extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   onChanged: onChanged,
-                  style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    color: context.colors.ink,
-                  ),
+                  style: GoogleFonts.manrope(fontSize: 14, color: context.colors.ink),
                   cursorColor: context.colors.ink,
                   decoration: InputDecoration(
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                     border: InputBorder.none,
                     hintText: hint,
-                    hintStyle: GoogleFonts.manrope(
-                      fontSize: 14,
-                      color: context.colors.inkDisabled,
-                    ),
+                    hintStyle: GoogleFonts.manrope(fontSize: 14, color: context.colors.inkDisabled),
                   ),
                 ),
               ),

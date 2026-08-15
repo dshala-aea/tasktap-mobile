@@ -2,6 +2,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,14 +10,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/app_toggle.dart';
-// section_title omitted — using inline _SL below
+// Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -69,7 +67,7 @@ class StepMaterialiFold extends ConsumerWidget {
 
         if (!state.materialiNotRequired) ...[
           // ── Materiali list ──────────────────────────────────────────────
-          _SL(title: 'Materiali (${state.materialeRows.length})'),
+          StepLabel(title: 'Materiali (${state.materialeRows.length})'),
           const SizedBox(height: 8),
           if (state.materialeRows.isEmpty)
             Padding(
@@ -107,13 +105,13 @@ class StepMaterialiFold extends ConsumerWidget {
         // The checklist for this intervention, resolved server-side from the
         // ticket's maintenance-template version (ADR-0012) — not a free-text
         // "type an ID" box. See _ControlliChecklist.
-        _SL(title: 'Controlli'),
+        StepLabel(title: 'Controlli'),
         const SizedBox(height: 8),
         _ControlliChecklist(reportId: reportId, ticketId: state.ticketId),
         const SizedBox(height: 24),
 
         // ── Foto / Allegati sub-section ────────────────────────────────────
-        _SL(title: 'Foto / Allegati (${photos.length})'),
+        StepLabel(title: 'Foto / Allegati (${photos.length})'),
         const SizedBox(height: 8),
         if (photos.isNotEmpty) ...[
           GridView.builder(
@@ -480,25 +478,6 @@ class _PhotoThumb extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
-      ),
     );
   }
 }

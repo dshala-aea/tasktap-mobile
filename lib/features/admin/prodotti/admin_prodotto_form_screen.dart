@@ -20,12 +20,10 @@ class AdminProdottoFormScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? prodotto;
 
   @override
-  ConsumerState<AdminProdottoFormScreen> createState() =>
-      _AdminProdottoFormScreenState();
+  ConsumerState<AdminProdottoFormScreen> createState() => _AdminProdottoFormScreenState();
 }
 
-class _AdminProdottoFormScreenState
-    extends ConsumerState<AdminProdottoFormScreen> {
+class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
@@ -79,15 +77,15 @@ class _AdminProdottoFormScreenState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCustomerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona un cliente')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona un cliente')));
       return;
     }
     if (_selectedLocationId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona una sede')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona una sede')));
       return;
     }
     if (!ensureOnlineOrWarn(context, ref)) return;
@@ -102,32 +100,24 @@ class _AdminProdottoFormScreenState
           name: _nameCtrl.text.trim(),
           customerId: _selectedCustomerId,
           locationId: _selectedLocationId,
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           serialNumber: _serialNumberCtrl.text.trim().isEmpty
               ? null
               : _serialNumberCtrl.text.trim(),
           warrantyExpiryDate: _warrantyExpiryDate,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
       } else {
         await api.createProdottoAssistenza(
           name: _nameCtrl.text.trim(),
           customerId: _selectedCustomerId!,
           locationId: _selectedLocationId!,
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           serialNumber: _serialNumberCtrl.text.trim().isEmpty
               ? null
               : _serialNumberCtrl.text.trim(),
           warrantyExpiryDate: _warrantyExpiryDate,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
       }
 
@@ -135,19 +125,13 @@ class _AdminProdottoFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Prodotto aggiornato' : 'Prodotto creato',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Prodotto aggiornato' : 'Prodotto creato')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -192,12 +176,8 @@ class _AdminProdottoFormScreenState
           children: [
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
@@ -208,10 +188,7 @@ class _AdminProdottoFormScreenState
                 border: OutlineInputBorder(),
               ),
               items: customers
-                  .map((c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.companyName),
-                      ))
+                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
                   .toList(),
               onChanged: (v) => setState(() => _selectedCustomerId = v),
               validator: (v) => v == null ? 'Campo obbligatorio' : null,
@@ -220,15 +197,9 @@ class _AdminProdottoFormScreenState
 
             DropdownButtonFormField<String>(
               initialValue: _selectedLocationId,
-              decoration: const InputDecoration(
-                labelText: 'Sede *',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Sede *', border: OutlineInputBorder()),
               items: locations
-                  .map((l) => DropdownMenuItem(
-                        value: l.id,
-                        child: Text(l.name),
-                      ))
+                  .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
                   .toList(),
               onChanged: (v) => setState(() => _selectedLocationId = v),
               validator: (v) => v == null ? 'Campo obbligatorio' : null,
@@ -266,10 +237,7 @@ class _AdminProdottoFormScreenState
 
             TextFormField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
               maxLines: 3,
             ),
           ],

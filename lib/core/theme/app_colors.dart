@@ -127,6 +127,28 @@ abstract final class AppColors {
   /// The end-shift disc gradient, dark stop. See [stopLight].
   static const Color stopDark = Color(0xFFA32222);
 
+  // ── Ink for surfaces that are dark under BOTH themes ─────────────────────
+  //
+  // The app keeps producing the same bug: a CHARCOAL bar, hero or panel — dark whatever the theme
+  // — painted with `context.colors.inkInverse` or `inkMuted`, both of which flip. Four separate
+  // sites had it (the dashboard hero's client line, the ticket form's AppBar, the rapportino
+  // wizard's AppBar and signature dialog, the Totale ore card), and the totals card managed to be
+  // wrong in *both* directions at once: `inkMuted` measures 1.9:1 on CHARCOAL in light mode, and
+  // `inkInverse` goes near-black in dark mode.
+  //
+  // The fix is to stop reaching for a flipping token on a surface that does not flip. These two
+  // do not flip either, and their names say what they are for.
+
+  /// Primary text on a permanently dark surface. 15.9:1 on [CHARCOAL].
+  static const Color onDark = WHITE;
+
+  /// Secondary text on a permanently dark surface.
+  ///
+  /// White at 75%, which lands at 9.4:1 on [CHARCOAL] — clearly subordinate to [onDark] and still
+  /// far above the floor. The muted greys are the trap here: they are tuned against the light
+  /// theme's own backgrounds, not against a dark panel sitting inside it.
+  static const Color onDarkMuted = Color(0xBFFFFFFF);
+
   // ── Shadows (documented; used via BoxShadow helpers) ─────────────────────
 
   /// SH — standard card shadow: 0 3px 5.5px rgba(0,0,0,0.10).
@@ -141,12 +163,7 @@ abstract final class AppColors {
   /// SH_INSET — inset shadow: inset 0 2px 4px rgba(0,0,0,0.10).
   /// Flutter doesn't support CSS inset; approximate with inner shadow.
   static const List<BoxShadow> SH_INSET = [
-    BoxShadow(
-      color: Color(0x1A000000),
-      offset: Offset(0, 2),
-      blurRadius: 4,
-      spreadRadius: -2,
-    ),
+    BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2),
   ];
 
   // ── Legacy aliases (keep screens compiling) ───────────────────────────────

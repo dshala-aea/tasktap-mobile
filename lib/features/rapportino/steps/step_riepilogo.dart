@@ -3,16 +3,15 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/key_val.dart';
-// section_title omitted — using inline _SL below
+// Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
@@ -75,7 +74,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           ],
 
           // ── Summary ────────────────────────────────────────────────────────
-          _SL(title: 'Riepilogo dati'),
+          StepLabel(title: 'Riepilogo dati'),
           const SizedBox(height: 8),
           AppCard(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -111,7 +110,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           const SizedBox(height: 20),
 
           // ── Firma cliente ──────────────────────────────────────────────────
-          _SL(title: 'Firma cliente *'),
+          StepLabel(title: 'Firma cliente *'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'cliente',
@@ -123,7 +122,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           const SizedBox(height: 20),
 
           // ── Firma tecnico ──────────────────────────────────────────────────
-          _SL(title: 'Firma tecnico *'),
+          StepLabel(title: 'Firma tecnico *'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'tecnico',
@@ -228,9 +227,13 @@ class _ValidationPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        // A tint of the theme's own amber, not a fixed cream. The panel was #FFF8E1 while every
+        // line of text inside it takes `context.colors.ink` — which is near-white in dark mode.
+        // The result was white text on cream, on the one panel that lists what is blocking the
+        // technician from submitting.
+        color: context.colors.amber.withValues(alpha: 0.12),
         border: Border.all(color: context.colors.amber),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRack.freeShape,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -483,7 +486,10 @@ class _SigDialogState extends State<_SigDialog> {
         children: [
           AppBar(
             backgroundColor: AppColors.CHARCOAL,
-            foregroundColor: context.colors.inkInverse,
+            // Fixed-dark bar: `inkInverse` flips to near-black, which took the title and the close
+            // button off the signature dialog in dark mode — on the screen that captures the
+            // customer's signature.
+            foregroundColor: AppColors.onDark,
             title: const Text('Acquisisci firma'),
             leading: IconButton(
               icon: const Icon(LucideIcons.x),
@@ -523,25 +529,6 @@ class _SigDialogState extends State<_SigDialog> {
             child: Signature(controller: _ctrl, backgroundColor: context.colors.bg1),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
       ),
     );
   }

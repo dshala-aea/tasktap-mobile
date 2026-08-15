@@ -20,12 +20,10 @@ class AdminContractFormScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? contract;
 
   @override
-  ConsumerState<AdminContractFormScreen> createState() =>
-      _AdminContractFormScreenState();
+  ConsumerState<AdminContractFormScreen> createState() => _AdminContractFormScreenState();
 }
 
-class _AdminContractFormScreenState
-    extends ConsumerState<AdminContractFormScreen> {
+class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
@@ -51,9 +49,7 @@ class _AdminContractFormScreenState
     final c = widget.contract!;
     _nameCtrl.text = c['name'] as String? ?? '';
     _descriptionCtrl.text = c['description'] as String? ?? '';
-    _priceCtrl.text = c['price'] != null
-        ? (c['price'] as num).toStringAsFixed(2)
-        : '';
+    _priceCtrl.text = c['price'] != null ? (c['price'] as num).toStringAsFixed(2) : '';
     _notesCtrl.text = c['notes'] as String? ?? '';
     _selectedCustomerId = c['customerId'] as String?;
     _selectedLocationId = c['locationId'] as String?;
@@ -99,9 +95,9 @@ class _AdminContractFormScreenState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCustomerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona un cliente')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona un cliente')));
       return;
     }
     if (!ensureOnlineOrWarn(context, ref)) return;
@@ -117,34 +113,26 @@ class _AdminContractFormScreenState
           name: _nameCtrl.text.trim(),
           customerId: _selectedCustomerId,
           startDate: _startDate,
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           locationId: _selectedLocationId,
           endDate: _endDate,
           price: price,
           frequencyValue: _frequencyValue,
           frequencyUnit: _frequencyUnit,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
       } else {
         await api.createContract(
           name: _nameCtrl.text.trim(),
           customerId: _selectedCustomerId!,
           startDate: _startDate,
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           locationId: _selectedLocationId,
           endDate: _endDate,
           price: price,
           frequencyValue: _frequencyValue,
           frequencyUnit: _frequencyUnit,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
       }
 
@@ -152,19 +140,13 @@ class _AdminContractFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Contratto aggiornato' : 'Contratto creato',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Contratto aggiornato' : 'Contratto creato')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -172,11 +154,11 @@ class _AdminContractFormScreenState
   }
 
   String _frequencyUnitLabel(int unit) => switch (unit) {
-        0 => 'Giorni',
-        1 => 'Mesi',
-        2 => 'Anni',
-        _ => 'Mesi',
-      };
+    0 => 'Giorni',
+    1 => 'Mesi',
+    2 => 'Anni',
+    _ => 'Mesi',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -217,12 +199,8 @@ class _AdminContractFormScreenState
           children: [
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              decoration: const InputDecoration(labelText: 'Nome *', border: OutlineInputBorder()),
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
@@ -233,10 +211,7 @@ class _AdminContractFormScreenState
                 border: OutlineInputBorder(),
               ),
               items: customers
-                  .map((c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.companyName),
-                      ))
+                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
                   .toList(),
               onChanged: (v) => setState(() => _selectedCustomerId = v),
               validator: (v) => v == null ? 'Campo obbligatorio' : null,
@@ -245,19 +220,10 @@ class _AdminContractFormScreenState
 
             DropdownButtonFormField<String>(
               initialValue: _selectedLocationId,
-              decoration: const InputDecoration(
-                labelText: 'Sede',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Sede', border: OutlineInputBorder()),
               items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Nessuna sede'),
-                ),
-                ...locations.map((l) => DropdownMenuItem(
-                      value: l.id,
-                      child: Text(l.name),
-                    )),
+                const DropdownMenuItem(value: null, child: Text('Nessuna sede')),
+                ...locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))),
               ],
               onChanged: (v) => setState(() => _selectedLocationId = v),
             ),
@@ -304,8 +270,7 @@ class _AdminContractFormScreenState
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
-                    onChanged: (v) =>
-                        _frequencyValue = int.tryParse(v) ?? 1,
+                    onChanged: (v) => _frequencyValue = int.tryParse(v) ?? 1,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -317,13 +282,9 @@ class _AdminContractFormScreenState
                       border: OutlineInputBorder(),
                     ),
                     items: [0, 1, 2]
-                        .map((u) => DropdownMenuItem(
-                              value: u,
-                              child: Text(_frequencyUnitLabel(u)),
-                            ))
+                        .map((u) => DropdownMenuItem(value: u, child: Text(_frequencyUnitLabel(u))))
                         .toList(),
-                    onChanged: (v) =>
-                        setState(() => _frequencyUnit = v ?? 1),
+                    onChanged: (v) => setState(() => _frequencyUnit = v ?? 1),
                   ),
                 ),
               ],
@@ -336,17 +297,13 @@ class _AdminContractFormScreenState
                 labelText: 'Prezzo (€)',
                 border: OutlineInputBorder(),
               ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Note', border: OutlineInputBorder()),
               maxLines: 3,
             ),
           ],

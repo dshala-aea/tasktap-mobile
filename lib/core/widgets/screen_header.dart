@@ -65,17 +65,11 @@ class HeaderIconBtn extends StatelessWidget {
                     // twenty-nine screens, because they all come through here.
                     borderRadius: AppRack.insetShape,
                     border: Border.all(
-                      color: glass
-                          ? Colors.white.withAlpha(128)
-                          : context.colors.borderMedium,
+                      color: glass ? Colors.white.withAlpha(128) : context.colors.borderMedium,
                       width: glass ? 0.5 : 1,
                     ),
                   ),
-                  child: Icon(
-                    icon,
-                    size: 17,
-                    color: glass ? AppColors.WHITE : context.colors.ink,
-                  ),
+                  child: Icon(icon, size: 17, color: glass ? AppColors.WHITE : context.colors.ink),
                 ),
                 if (showDot)
                   Positioned(
@@ -185,18 +179,13 @@ class ScreenHeader extends StatelessWidget {
                     style: GoogleFonts.manrope(
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
-                      color: dark
-                          ? AppColors.WHITE.withAlpha(179)
-                          : context.colors.inkMuted,
+                      color: dark ? AppColors.WHITE.withAlpha(179) : context.colors.inkMuted,
                     ),
                   ),
               ],
             ),
           ),
-          for (final action in actions) ...[
-            const SizedBox(width: 4),
-            action,
-          ],
+          for (final action in actions) ...[const SizedBox(width: 4), action],
         ],
       ),
     );

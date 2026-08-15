@@ -11,11 +11,9 @@ import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single schedule by id from Drift cache.
-final adminScheduleDetailProvider =
-    StreamProvider.autoDispose.family<Schedule?, String>((ref, id) {
+final adminScheduleDetailProvider = StreamProvider.autoDispose.family<Schedule?, String>((ref, id) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.schedules)..where((s) => s.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.schedules)..where((s) => s.id.equals(id))).watchSingleOrNull();
 });
 
 /// Admin schedule detail — read-only with edit FAB.
@@ -34,9 +32,7 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
         onPressed: () async {
-          await context.push<bool>(
-            '/altro/pianificazioni/$scheduleId/modifica',
-          );
+          await context.push<bool>('/altro/pianificazioni/$scheduleId/modifica');
         },
       ),
       body: scheduleAsync.when(
@@ -46,10 +42,7 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
           if (schedule == null) {
             return const Center(child: Text('Pianificazione non trovata'));
           }
-          return _ScheduleDetailBody(
-            schedule: schedule,
-            scheduleId: scheduleId,
-          );
+          return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
         },
       ),
     );
@@ -57,18 +50,14 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
 }
 
 class _ScheduleDetailBody extends StatelessWidget {
-  const _ScheduleDetailBody({
-    required this.schedule,
-    required this.scheduleId,
-  });
+  const _ScheduleDetailBody({required this.schedule, required this.scheduleId});
 
   final Schedule schedule;
   final String scheduleId;
 
   @override
   Widget build(BuildContext context) {
-    final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it')
-        .format(schedule.activityDate.toLocal());
+    final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it').format(schedule.activityDate.toLocal());
     final timeLabel =
         '${_fmtTime(schedule.timeStartMinutes)} — ${_fmtTime(schedule.timeEndMinutes)}';
 
@@ -82,12 +71,7 @@ class _ScheduleDetailBody extends StatelessWidget {
             actions: [
               PopupMenuButton<String>(
                 icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Modifica'),
-                  ),
-                ],
+                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
                 onSelected: (v) {
                   if (v == 'edit') {
                     context.push('/altro/pianificazioni/$scheduleId/modifica');
@@ -107,10 +91,9 @@ class _ScheduleDetailBody extends StatelessWidget {
                 _InfoRow(label: 'Data', value: dateLabel),
                 _InfoRow(label: 'Orario', value: timeLabel),
                 _InfoRow(
-                    label: 'Note',
-                    value: schedule.description.isNotEmpty
-                        ? schedule.description
-                        : '—'),
+                  label: 'Note',
+                  value: schedule.description.isNotEmpty ? schedule.description : '—',
+                ),
               ],
             ),
           ),
@@ -141,17 +124,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

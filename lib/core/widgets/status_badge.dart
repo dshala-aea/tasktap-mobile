@@ -13,11 +13,7 @@ import '../theme/status_colors.dart';
 enum StatusBadgeSize { small, medium, large }
 
 class StatusBadge extends StatelessWidget {
-  const StatusBadge({
-    super.key,
-    required this.stato,
-    this.size = StatusBadgeSize.medium,
-  });
+  const StatusBadge({super.key, required this.stato, this.size = StatusBadgeSize.medium});
 
   final ReportStato stato;
   final StatusBadgeSize size;
@@ -29,17 +25,17 @@ class StatusBadge extends StatelessWidget {
 
     final textStyle = switch (size) {
       StatusBadgeSize.small => AppTextStyles.labelSmall.copyWith(
-          color: pair.foreground,
-          fontWeight: FontWeight.w700,
-        ),
+        color: pair.foreground,
+        fontWeight: FontWeight.w700,
+      ),
       StatusBadgeSize.medium => AppTextStyles.labelMedium.copyWith(
-          color: pair.foreground,
-          fontWeight: FontWeight.w700,
-        ),
+        color: pair.foreground,
+        fontWeight: FontWeight.w700,
+      ),
       StatusBadgeSize.large => AppTextStyles.labelLarge.copyWith(
-          color: pair.foreground,
-          fontWeight: FontWeight.w700,
-        ),
+        color: pair.foreground,
+        fontWeight: FontWeight.w700,
+      ),
     };
 
     final hPad = switch (size) {
@@ -60,8 +56,7 @@ class StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
       ),
       child: Padding(
-        padding:
-            EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
+        padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         child: Text(label, style: textStyle),
       ),
     );

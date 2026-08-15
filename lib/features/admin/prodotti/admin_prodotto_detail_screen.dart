@@ -30,10 +30,7 @@ class AdminProdottoDetailScreen extends StatelessWidget {
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
         onPressed: () async {
-          await context.push<bool>(
-            '/altro/prodotti/${prodotto['id']}/modifica',
-            extra: prodotto,
-          );
+          await context.push<bool>('/altro/prodotti/${prodotto['id']}/modifica', extra: prodotto);
         },
       ),
       body: CustomScrollView(
@@ -52,19 +49,17 @@ class AdminProdottoDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _InfoRow(label: 'Nome', value: name),
+                  _InfoRow(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
                   _InfoRow(
-                      label: 'Descrizione',
-                      value: description.isNotEmpty ? description : '—'),
+                    label: 'Numero di serie',
+                    value: serialNumber.isNotEmpty ? serialNumber : '—',
+                  ),
+                  _InfoRow(label: 'Scadenza garanzia', value: warrantyLabel),
                   _InfoRow(
-                      label: 'Numero di serie',
-                      value: serialNumber.isNotEmpty ? serialNumber : '—'),
-                  _InfoRow(
-                      label: 'Scadenza garanzia',
-                      value: warrantyLabel),
-                  _InfoRow(
-                      label: 'Note',
-                      value: notes.isNotEmpty ? notes : '—',
-                      showDivider: false),
+                    label: 'Note',
+                    value: notes.isNotEmpty ? notes : '—',
+                    showDivider: false,
+                  ),
                 ],
               ),
             ),
@@ -76,11 +71,7 @@ class AdminProdottoDetailScreen extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.showDivider = true,
-  });
+  const _InfoRow({required this.label, required this.value, this.showDivider = true});
 
   final String label;
   final String value;
@@ -95,17 +86,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

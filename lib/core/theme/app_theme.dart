@@ -129,13 +129,8 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         backgroundColor: AppColors.Y,
         foregroundColor: p.ink,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.md,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
         textStyle: AppTextStyles.labelLarge,
         minimumSize: const Size(double.infinity, 48),
       ),
@@ -146,13 +141,8 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: OutlinedButton.styleFrom(
         foregroundColor: p.ink,
         side: BorderSide(color: p.borderMedium),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.md,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
         textStyle: AppTextStyles.labelLarge,
         minimumSize: const Size(double.infinity, 48),
       ),
@@ -163,10 +153,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: TextButton.styleFrom(
         foregroundColor: p.ink,
         textStyle: AppTextStyles.labelLarge,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.base,
-          vertical: AppSpacing.sm,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.sm),
       ),
     ),
 
@@ -198,24 +185,14 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
         borderSide: BorderSide(color: p.red, width: 2),
       ),
-      labelStyle: AppTextStyles.bodyMedium.copyWith(
-        color: p.inkFaint,
-      ),
-      hintStyle: AppTextStyles.bodyMedium.copyWith(
-        color: p.inkDisabled,
-      ),
+      labelStyle: AppTextStyles.bodyMedium.copyWith(color: p.inkFaint),
+      hintStyle: AppTextStyles.bodyMedium.copyWith(color: p.inkDisabled),
       errorStyle: AppTextStyles.bodySmall.copyWith(color: p.red),
-      floatingLabelStyle: AppTextStyles.labelMedium.copyWith(
-        color: p.ink,
-      ),
+      floatingLabelStyle: AppTextStyles.labelMedium.copyWith(color: p.ink),
     ),
 
     // ── Divider ────────────────────────────────────────────────────────────
-    dividerTheme: DividerThemeData(
-      color: p.divider,
-      space: 1,
-      thickness: 1,
-    ),
+    dividerTheme: DividerThemeData(color: p.divider, space: 1, thickness: 1),
 
     // ── Chip ───────────────────────────────────────────────────────────────
     chipTheme: ChipThemeData(
@@ -226,10 +203,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         borderRadius: BorderRadius.circular(AppSpacing.sm),
         side: BorderSide(color: p.borderMedium),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.xs,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
     ),
 
     // ── FAB ────────────────────────────────────────────────────────────────
@@ -241,10 +215,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
     // ── List Tile ──────────────────────────────────────────────────────────
     listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: AppSpacing.base,
-        vertical: AppSpacing.xs,
-      ),
+      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
     ),
   );
 }

@@ -7,6 +7,7 @@ import '../theme/app_rack.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
   static const IconData ticket = LucideIcons.ticket;
@@ -34,12 +35,7 @@ class AppBottomNavItem {
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
 /// ```
 class AppBottomNav extends StatelessWidget {
-  const AppBottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    this.items,
-  });
+  const AppBottomNav({super.key, required this.currentIndex, required this.onTap, this.items});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -82,11 +78,7 @@ class AppBottomNav extends StatelessWidget {
                 // two. Loose fit: a tab still takes only what it needs when there is room.
                 for (var i = 0; i < tabs.length; i++)
                   Flexible(
-                    child: _NavTab(
-                      item: tabs[i],
-                      active: i == currentIndex,
-                      onTap: () => onTap(i),
-                    ),
+                    child: _NavTab(item: tabs[i], active: i == currentIndex, onTap: () => onTap(i)),
                   ),
               ],
             ),
@@ -98,11 +90,7 @@ class AppBottomNav extends StatelessWidget {
 }
 
 class _NavTab extends StatelessWidget {
-  const _NavTab({
-    required this.item,
-    required this.active,
-    required this.onTap,
-  });
+  const _NavTab({required this.item, required this.active, required this.onTap});
 
   final AppBottomNavItem item;
   final bool active;
@@ -127,15 +115,10 @@ class _NavTab extends StatelessWidget {
           // require this: "Remove animations" on Android and Reduce Motion on iOS both surface as
           // MediaQuery.disableAnimations, and a nav bar that keeps sliding through it is the
           // single most noticeable place to ignore the setting.
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : AppRack.drawerOut,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
           curve: AppRack.slideOut,
           constraints: const BoxConstraints(minHeight: 44),
-          padding: EdgeInsets.symmetric(
-            horizontal: active ? 16 : 14,
-            vertical: 10,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: active ? 16 : 14, vertical: 10),
           decoration: BoxDecoration(
             color: active ? AppColors.Y : Colors.transparent,
             borderRadius: BorderRadius.circular(19),

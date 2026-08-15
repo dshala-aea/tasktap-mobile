@@ -83,17 +83,15 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
       backgroundColor: context.colors.bg2,
       appBar: AppBar(
         backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: context.colors.inkInverse,
+        // Fixed-dark bar; `inkInverse` flips. See AppColors.onDark.
+        foregroundColor: AppColors.onDark,
         elevation: 0,
         titleSpacing: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Rapportino',
-              style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
-            ),
+            Text('Rapportino', style: AppTextStyles.titleMedium.copyWith(color: AppColors.onDark)),
             if (contextSubtitle != null)
               Text(
                 contextSubtitle,

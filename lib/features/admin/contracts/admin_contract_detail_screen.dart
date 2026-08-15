@@ -30,9 +30,7 @@ class AdminContractDetailScreen extends StatelessWidget {
     final endLabel = endDate != null
         ? DateFormat('dd/MM/yyyy').format(DateTime.parse(endDate))
         : 'Nessuna data fine';
-    final priceLabel = price != null
-        ? '€${price.toStringAsFixed(2)}'
-        : '—';
+    final priceLabel = price != null ? '€${price.toStringAsFixed(2)}' : '—';
     final freqLabel = '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
 
     return Scaffold(
@@ -41,20 +39,12 @@ class AdminContractDetailScreen extends StatelessWidget {
         icon: LucideIcons.pencil,
         tooltip: 'Modifica',
         onPressed: () async {
-          await context.push<bool>(
-            '/altro/contratti/${contract['id']}/modifica',
-            extra: contract,
-          );
+          await context.push<bool>('/altro/contratti/${contract['id']}/modifica', extra: contract);
         },
       ),
       body: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: name,
-              showBack: true,
-            ),
-          ),
+          SliverToBoxAdapter(child: ScreenHeader(title: name, showBack: true)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(19),
@@ -62,17 +52,16 @@ class AdminContractDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _InfoRow(label: 'Nome', value: name),
-                  _InfoRow(
-                      label: 'Descrizione',
-                      value: description.isNotEmpty ? description : '—'),
+                  _InfoRow(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
                   _InfoRow(label: 'Data inizio', value: startLabel),
                   _InfoRow(label: 'Data fine', value: endLabel),
                   _InfoRow(label: 'Frequenza', value: freqLabel),
                   _InfoRow(label: 'Prezzo', value: priceLabel),
                   _InfoRow(
-                      label: 'Note',
-                      value: notes.isNotEmpty ? notes : '—',
-                      showDivider: false),
+                    label: 'Note',
+                    value: notes.isNotEmpty ? notes : '—',
+                    showDivider: false,
+                  ),
                 ],
               ),
             ),
@@ -83,19 +72,15 @@ class AdminContractDetailScreen extends StatelessWidget {
   }
 
   String _frequencyUnitLabel(int unit) => switch (unit) {
-        0 => 'giorni',
-        1 => 'mesi',
-        2 => 'anni',
-        _ => 'mesi',
-      };
+    0 => 'giorni',
+    1 => 'mesi',
+    2 => 'anni',
+    _ => 'mesi',
+  };
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.showDivider = true,
-  });
+  const _InfoRow({required this.label, required this.value, this.showDivider = true});
 
   final String label;
   final String value;
@@ -110,17 +95,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

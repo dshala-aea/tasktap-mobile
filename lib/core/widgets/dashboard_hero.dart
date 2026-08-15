@@ -90,16 +90,10 @@ class DashboardHero extends StatelessWidget {
                             ],
                           ),
                         ),
-                        for (final action in actions) ...[
-                          const SizedBox(width: 6),
-                          action,
-                        ],
+                        for (final action in actions) ...[const SizedBox(width: 6), action],
                       ],
                     ),
-                    if (child != null) ...[
-                      const SizedBox(height: 20),
-                      child!,
-                    ],
+                    if (child != null) ...[const SizedBox(height: 20), child!],
                   ],
                 ),
               ),
