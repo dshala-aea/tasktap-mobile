@@ -1,6 +1,6 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, nineteen commits, **705/705 tests green, `flutter analyze` clean**
+Branch `feat/mobile-rack-redesign`, twenty-three commits, **711/711 tests green, `flutter analyze` clean**
 at every one. Baseline before this work was 637 tests.
 
 Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
@@ -56,12 +56,17 @@ Prefer changing these over touching screens.
 
 ### 1. A fixed-dark surface with a theme-flipping foreground
 
-`inkInverse` is white in the light palette and near-black in the dark one. On a surface that is
-dark under *both* themes — a hero, a CHARCOAL bar — it disappears the moment dark mode is on.
+`inkInverse` is white in the light palette and near-black in the dark one; `inkMuted` is tuned
+against light backgrounds and measures 1.9:1 on CHARCOAL. On a surface that is dark under *both*
+themes — a hero, a CHARCOAL bar, the Totale ore card — either one fails in one theme or the other.
 
-Found twice and fixed: `ActiveJobCard`'s client line, and `new_ticket_form_screen`'s AppBar. Both
-times the adjacent text used a fixed `AppColors.WHITE`, which is exactly why review never caught
-it. **Fixed-dark surfaces take fixed inks.**
+**Found five times.** `ActiveJobCard`'s client line, `new_ticket_form_screen`'s AppBar, the
+rapportino wizard's AppBar and its signature dialog, the admin customer form, and the Totale ore
+card — which managed to be wrong in both directions at once. Each time the adjacent text used a
+fixed white, which is why review never caught it.
+
+**Use `AppColors.onDark` / `onDarkMuted`.** `ScreenHeaderBar` now derives the flag from its own
+background so the header case cannot recur at all.
 
 `test/core/theme/app_palette_test.dart` guards this ("screens read colour from the theme, not from
 constants") with an `allowedTokens` escape hatch. It caught a real mistake during this work. Extend
@@ -196,19 +201,32 @@ technician `/api/app/*` endpoints, real settings, and AI.
    platform. Wiring it means adding a dependency, an Android manifest entry and an iOS usage
    description — a platform change to weigh against the pilot date, not a wiring task.
 
-### Phase 4 (untouched)
+### Phase 4 — done, except one bounded piece
 
-The rapportino wizard and 27 admin CRUD screens. Known defects in there:
+Shipped: the wizard's dark-mode defects (`474f014`), admin forms inheriting the input theme
+(`52e8fe0`), and one header across the app (`abad1e6`).
+
+**Still open, and scoped deliberately:** the 27 admin CRUD screens keep raw `TextFormField` /
+`ListView` bodies rather than `AppTextField` and rack cells. They now inherit the correct theme, so
+they are coherent rather than bespoke — but they are not *composed* in the world. That is a
+separate, well-bounded rebuild worth scoping on its own rather than smuggling in.
+
+Three guard tests now hold the line, all in `app_palette_test.dart`: no bare
+`OutlineInputBorder()`, no Material `AppBar` outside the signature modal, and on-dark ink contrast
+against CHARCOAL.
+
+Historical, all fixed:
 
 - `rapportini_list_screen.dart:91` — `_createNewDraft` writes `tenantId: 'local'` and
   `insertedUserId: 'local-user'` as literals into a draft that is later submitted through the
   queue. **Fabricated identifiers in a payroll/invoice record**, the same class as the
   `user-<timestamp>` bug fixed in `ae766a1`. Read the submit path before changing it.
-- `Color(0xFF363636)` hardcoded in four rapportino step files — ink that never flips, so it is a
-  dark-mode defect.
-- `admin_report_list_screen.dart:230` hand-rolls a status→colour switch that disagrees with
-  `status_colors.dart`.
-- 14 screens still on Material `AppBar` rather than `ScreenHeader` (all form screens).
+- ~~`Color(0xFF363636)` in four rapportino step files~~ — four byte-identical `_SL` widgets, now
+  one `StepLabel`.
+- ~~`admin_report_list_screen` hand-rolled status colours~~ — `status_colors` now carries the
+  masculine report-state spellings (`Inviato`/`Fatturato`) as aliases; they were falling through to
+  the neutral default, which is why a second table existed.
+- ~~Screens on Material `AppBar`~~ — all converted to `ScreenHeaderBar`.
 
 ### Phase 5 (untouched)
 
