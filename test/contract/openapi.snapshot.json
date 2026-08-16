@@ -19506,7 +19506,7 @@
           },
           "isAiAssisted": {
             "type": "boolean",
-            "description": "Whether a language model produced any of this rapportino\u0027s text.\n\nRecorded on the record itself, not only in the AI call log, because the question a reader\nasks is \u0022was this written by a person?\u0022 and the reader is looking at the rapportino \u2014 the\noffice reviewing it, the customer receiving it, or an auditor a year later. An answer that\nlives in a separate telemetry table is not available at the moment the question is asked,\nand cannot survive the report being exported or printed.\n\nSet when the technician keeps text that came from a draft. Generating a draft and\ndiscarding it is not AI assistance; only what reaches the record counts."
+            "description": "Whether a model drafted any of the text the technician then adopted.\n\nInternal provenance, not a disclosure. The model suggests; the technician reviews, edits\nand signs; the rapportino is their statement and the PDF is a template render of it. So\nthis does not travel to the customer and the printed document carries no marker \u2014 there is\nno synthetic content being handed to a recipient, and labelling a signed human statement\nas machine-written would be the inaccurate claim.\n\nWhat it is for is answering, later and internally, how much of the field\u0027s written record\nstarted from a suggestion: whether the drafts are worth what they cost, whether reports\nthat began as drafts read differently under review, and which ones to sample. The AI call\nlog cannot answer that \u2014 it records calls, not which suggestions survived.\n\nSet when the technician keeps text that came from a draft. Generating a draft and\ndiscarding it is not AI assistance; only what reaches the record counts."
           },
           "soluzione": {
             "type": [
@@ -20791,7 +20791,7 @@
           },
           "aiAssisted": {
             "type": "boolean",
-            "description": "Whether text from an AI draft survived into this rapportino.\n\nSelf-reported by the device, and currently unverifiable server-side: AI calls are\npublished to the outbox rather than stored, so there is no table to check this claim\nagainst \u2014 which is also why \u0060AiCallAuditEvent.Accepted\u0060 exists and is never written.\nThe client is the only component that knows whether the generated text was kept or\ndiscarded, so it is the right source; it is not yet a trustworthy one against a modified\nclient. A queryable AI call log would close both gaps at once."
+            "description": "Whether text from an AI draft survived into this rapportino.\n\nSelf-reported by the device, and unverifiable server-side: AI calls are published to the\noutbox rather than stored, so there is no table to check the claim against \u2014 which is also\nwhy \u0060AiCallAuditEvent.Accepted\u0060 exists and is never written. The client is the only\ncomponent that knows whether a suggestion was kept or discarded, so it is the right source.\n\nGood enough for what this field is: internal provenance for judging the drafts, not a\ndisclosure anyone relies on. A modified client could misreport it and nothing downstream\nwould be misled about who authored the rapportino \u2014 the signature answers that."
           },
           "soluzione": {
             "type": [
