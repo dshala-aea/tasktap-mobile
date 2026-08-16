@@ -315,6 +315,16 @@ class _SistemaSection extends ConsumerWidget {
               ),
             ),
           ),
+          // I miei dati — the subject-access surface. Above Impostazioni rather than buried in it:
+          // it is not a preference, it is the answer to "what do you know about me", and the
+          // backend has served it since before this app shipped with nothing on the client asking.
+          ListRow(
+            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.blue),
+            title: 'I miei dati',
+            subtitle: 'Cosa registra l\'azienda su di te',
+            showDivider: true,
+            onTap: () => context.push(AppRoutes.altroIMieiDati),
+          ),
           // Impostazioni
           ListRow(
             leading: _sistemaTileIcon(LucideIcons.settings, AppColors.CHARCOAL),

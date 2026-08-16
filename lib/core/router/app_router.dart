@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../widgets/widgets.dart';
 import '../../features/altro/altro_hub_screen.dart';
+import '../../features/altro/i_miei_dati_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
@@ -65,6 +66,9 @@ abstract final class AppRoutes {
   static const String altroRapportini = '/altro/rapportini';
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';
+
+  /// The subject-access surface: what the company has on record about this person.
+  static const String altroIMieiDati = '/altro/i-miei-dati';
 
   /// Path for the shared "unavailable" placeholder; pass an
   /// `({String titolo, String motivo})` record as GoRouter extra so the
@@ -226,6 +230,10 @@ GoRouter buildRouter(WidgetRef ref) {
                     builder: (context, state) => const ImpostazioniScreen(),
                   ),
                   GoRoute(path: 'notifiche', builder: (context, state) => const NotificheScreen()),
+                  GoRoute(
+                    path: 'i-miei-dati',
+                    builder: (context, state) => const IMieiDatiScreen(),
+                  ),
                   GoRoute(
                     path: 'clienti',
                     builder: (context, state) => const ClientiListScreen(),
