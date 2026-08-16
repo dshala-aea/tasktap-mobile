@@ -90,7 +90,9 @@ class ImpostazioniState {
 
 class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   ImpostazioniNotifier(this._authRepo, this._api) : super(const ImpostazioniState()) {
-    _loadFromPrefs().then((_) => unawaited(reconcileWithServer()));
+    _loadFromPrefs()
+        .then((_) => _reconcilePushWithOs())
+        .then((_) => unawaited(reconcileWithServer()));
   }
 
   final IAuthRepository _authRepo;
@@ -113,6 +115,30 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       temaScuro: prefs.getBool(_kTemaScuro) ?? false,
       autenticazioneBiometrica: prefs.getBool(_kAutenticazioneBiometrica) ?? false,
     );
+  }
+
+  /// Force "Notifiche push" off when the OS will not deliver any.
+  ///
+  /// `pushAbilitate` defaults to **true**, and the permission request no longer happens at startup
+  /// — it happens when this switch is turned on. Without this reconcile, a fresh install would show
+  /// the switch already on while the OS had never been asked, which is the exact defect the move
+  /// was meant to fix: a control reporting a state the system will not honour.
+  ///
+  /// It also catches the case that has always been possible and was never handled — permission
+  /// revoked from the phone's own settings between sessions.
+  ///
+  /// Never forces the switch *on*. Holding the OS permission is not the same as wanting push, and
+  /// a setting that turned itself back on would be worse than one that lags.
+  Future<void> _reconcilePushWithOs() async {
+    if (!state.pushAbilitate) return;
+    // Firebase absent (init failed, no Play Services, every widget test) — nothing to reconcile
+    // against, and touching `instance` here would throw `[core/no-app]`.
+    if (!NotificationService.isAvailable) return;
+
+    if (await NotificationService.instance.hasPermission()) return;
+
+    state = state.copyWith(pushAbilitate: false);
+    await _persist('pushAbilitate', false);
   }
 
   /// Toggle a setting by key and persist to SharedPreferences.
