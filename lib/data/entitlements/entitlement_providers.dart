@@ -40,9 +40,14 @@ final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
 });
 
 /// Call once on app start, alongside initAuthReconnectWatcher.
+///
+/// Fetches immediately as well as on every reconnect. Reconnect alone was not enough and the
+/// omission was invisible: a device that is online at launch and never drops signal never
+/// reconnects, so it never fetched, so the cache stayed null and every screen reading it fell back
+/// to the field-seat baseline forever. An office user on good wifi would have been the *worst*
+/// served by a watcher that only listens for the network coming back.
 void initEntitlementRefreshWatcher(WidgetRef ref) {
-  final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() async {
+  Future<void> refresh() async {
     final updated = await ref.read(entitlementServiceProvider).refresh();
     // Only invalidate on a real change — a failed refresh must not churn the UI into
     // re-reading a cache that did not move.
@@ -50,5 +55,8 @@ void initEntitlementRefreshWatcher(WidgetRef ref) {
       ref.invalidate(cachedEntitlementProvider);
       ref.invalidate(hasFeatureProvider);
     }
-  });
+  }
+
+  refresh();
+  ref.read(connectivityProvider.notifier).onReconnect(refresh);
 }

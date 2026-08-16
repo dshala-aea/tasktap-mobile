@@ -7,6 +7,8 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart';
+import '../../data/entitlements/entitlement_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'notifiche_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -49,7 +51,9 @@ class AltroHubScreen extends ConsumerWidget {
                   crossAxisSpacing: 12,
                   childAspectRatio: 1.4,
                 ),
-                delegate: SliverChildListDelegate(_buildGestioneTiles(context)),
+                delegate: SliverChildListDelegate(
+                  _buildGestioneTiles(context, ref.watch(cachedEntitlementProvider).valueOrNull),
+                ),
               ),
             ),
 
@@ -67,58 +71,87 @@ class AltroHubScreen extends ConsumerWidget {
     );
   }
 
-  List<Widget> _buildGestioneTiles(BuildContext context) {
-    return [
-      _GestioneTile(
+  /// The hub's tiles, minus the modules this tenant does not hold.
+  ///
+  /// Every one of these used to be drawn for everybody. Cantieri, Contratti, Prodotti and
+  /// Magazzino are sold separately, so on a tenant without them the tile led to a screen the
+  /// server answers with a refusal — a technician found out three taps in, and could not tell
+  /// "not for you" from "broken". PRODUCT.md's rule is that the client renders what the server
+  /// allows; it was not being applied to modules at all.
+  ///
+  /// Keys are `ModuleKeys` from the backend (`src/TaskTapAPI.Core/Billing/ModuleKeys.cs`).
+  /// Never gate on a key that is not in that file — a typo reads as "not entitled" and silently
+  /// removes a screen.
+  List<Widget> _buildGestioneTiles(BuildContext context, Entitlement? entitlement) {
+    final tiles = <({IconData icon, String label, String module, VoidCallback onTap})>[
+      (
         icon: LucideIcons.clipboardList,
         label: 'Interventi',
+        module: 'interventi',
         onTap: () => context.go(AppRoutes.ticket),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.fileText,
         label: 'Rapportini',
+        module: 'rapportini',
         onTap: () => context.go(AppRoutes.altroRapportini),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.users,
         label: 'Clienti',
+        module: 'clienti',
         onTap: () => context.push(AppRoutes.altroClienti),
       ),
-      _GestioneTile(
+      // Sedi are customer sites: the same always-on module, not one of its own.
+      (
         icon: LucideIcons.mapPin,
         label: 'Sedi',
+        module: 'clienti',
         onTap: () => context.push('/altro/sedi'),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.hardHat,
         label: 'Cantieri',
+        module: 'cantieri',
         onTap: () => context.push('/altro/cantieri'),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.package,
         label: 'Prodotti',
+        module: 'prodotti',
         onTap: () => context.push('/altro/prodotti'),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.warehouse,
         label: 'Magazzino',
+        module: 'magazzino',
         onTap: () => context.push(AppRoutes.altroMagazzino),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.fileSignature,
         label: 'Contratti',
+        module: 'contratti',
         onTap: () => context.push('/altro/contratti'),
       ),
-      _GestioneTile(
+      // Squadre is crew management — the always-on `team` module.
+      (
         icon: LucideIcons.users2,
         label: 'Squadre',
+        module: 'team',
         onTap: () => context.push('/altro/squadre'),
       ),
-      _GestioneTile(
+      (
         icon: LucideIcons.calendarDays,
         label: 'Pianificazioni',
+        module: 'pianificazione',
         onTap: () => context.push('/altro/pianificazioni'),
       ),
+    ];
+
+    return [
+      for (final t in tiles)
+        if (moduleIsOffered(t.module, entitlement))
+          _GestioneTile(icon: t.icon, label: t.label, onTap: t.onTap),
     ];
   }
 }

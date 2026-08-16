@@ -17,6 +17,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/altro/altro_hub_screen.dart';
@@ -35,9 +37,37 @@ AuthUser _fakeUser({String? displayName}) => AuthUser(
   expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
 );
 
-Widget _buildHub(MockAuthRepository repo) {
+/// Every module granted — the tenant that buys everything.
+Entitlement _fullyEntitled() => Entitlement(
+  features: const {
+    'clienti',
+    'team',
+    'sistema',
+    'interventi',
+    'rapportini',
+    'presenze',
+    'pianificazione',
+    'magazzino',
+    'prodotti',
+    'commesse',
+    'fatturazione',
+    'cantieri',
+    'contratti',
+    'ai',
+  },
+  capabilities: const {},
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 8, 16),
+);
+
+/// [entitlement] null means the server has never answered on this device, which is the state a
+/// fresh install is in and the one that decides what an unconfirmed technician is offered.
+Widget _buildHub(MockAuthRepository repo, {Entitlement? entitlement}) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo),
+      cachedEntitlementProvider.overrideWith((ref) => entitlement),
+    ],
     child: const MaterialApp(home: AltroHubScreen()),
   );
 }
@@ -60,8 +90,10 @@ void main() {
     authStream.close();
   });
 
-  Future<void> pump(WidgetTester tester, {AuthUser? user}) async {
-    await tester.pumpWidget(_buildHub(repo));
+  /// Defaults to the unconfirmed state — a device the server has not answered on yet — because
+  /// that is what a fresh install is, and it is the case the gating rule is riskiest in.
+  Future<void> pump(WidgetTester tester, {AuthUser? user, Entitlement? entitlement}) async {
+    await tester.pumpWidget(_buildHub(repo, entitlement: entitlement));
     await tester.pump();
     authStream.add(user);
     await tester.pump();
@@ -92,9 +124,9 @@ void main() {
   });
 
   // ── 3. Gestione grid tiles ─────────────────────────────────────────────────
-  testWidgets('renders all Gestione grid tiles', (tester) async {
+  testWidgets('renders all Gestione grid tiles when the tenant holds every module', (tester) async {
     final user = _fakeUser(displayName: 'Mario');
-    await pump(tester, user: user);
+    await pump(tester, user: user, entitlement: _fullyEntitled());
 
     // Tiles in the first row are visible without scrolling.
     expect(find.text('Interventi'), findsOneWidget);
@@ -106,6 +138,59 @@ void main() {
 
     expect(find.text('Clienti'), findsOneWidget);
     expect(find.text('Prodotti'), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 3b. Gating ─────────────────────────────────────────────────────────────
+  //
+  // The hub drew all ten tiles for everybody. Cantieri, Contratti, Prodotti and Magazzino are
+  // sold separately, so on a tenant without them the tile led to a screen the server refuses —
+  // and a technician could not tell "not for you" from "broken".
+  testWidgets('a module the tenant does not hold is not offered at all', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(
+      tester,
+      user: user,
+      entitlement: Entitlement(
+        features: const {'clienti', 'team', 'sistema', 'interventi', 'rapportini', 'presenze'},
+        capabilities: const {},
+        seatType: 'field',
+        fetchedAt: DateTime.utc(2026, 8, 16),
+      ),
+    );
+
+    // What the technician's own work needs is still there.
+    expect(find.text('Interventi'), findsOneWidget);
+    expect(find.text('Rapportini'), findsOneWidget);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pump();
+
+    // Always-on survives a features list that omits it, matching the server.
+    expect(find.text('Clienti'), findsOneWidget);
+    expect(find.text('Squadre'), findsOneWidget);
+
+    // The paid modules are gone — not disabled, not a dead tile.
+    for (final label in const ['Cantieri', 'Contratti', 'Prodotti', 'Magazzino']) {
+      expect(find.text(label), findsNothing, reason: '$label is not granted to this tenant');
+    }
+    await drain(tester);
+  });
+
+  testWidgets('before the server has answered, only the field baseline is offered', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    // entitlement defaults to null here: a fresh install that has never reached the server.
+    await pump(tester, user: user);
+
+    expect(find.text('Interventi'), findsOneWidget);
+    expect(find.text('Rapportini'), findsOneWidget);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pump();
+
+    // Withheld on a guess rather than offered and then refused by the server.
+    expect(find.text('Magazzino'), findsNothing);
+    expect(find.text('Cantieri'), findsNothing);
     await drain(tester);
   });
 

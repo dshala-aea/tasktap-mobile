@@ -27,6 +27,29 @@ class Entitlement {
   bool get isFieldSeat => seatType == 'field';
 }
 
+/// The always-on modules. Enforced true in code on the server too (`ModuleKeys.AlwaysOn`), so a
+/// client that gated them off would hide screens the backend would happily serve.
+const alwaysOnModules = {'clienti', 'team', 'sistema'};
+
+/// What a field seat can always do, used before the first sync ever completes.
+///
+/// A fresh install that cannot reach the network must not be a brick. These are the three things
+/// a field seat exists for; offering them unverified is right, because a technician standing in
+/// front of a customer needs to record the work either way and the server will reject anything
+/// the tenant genuinely lacks.
+const fieldSeatBaselineModules = {'rapportini', 'presenze', 'interventi'};
+
+/// Whether a module should be offered, given what has been confirmed so far.
+///
+/// The rule itself, with no database attached, so a widget deciding whether to draw a tile and
+/// [EntitlementRepository.hasFeature] cannot drift apart. [cached] is null when the server has
+/// never answered on this device.
+bool moduleIsOffered(String moduleKey, Entitlement? cached) {
+  if (alwaysOnModules.contains(moduleKey)) return true;
+  if (cached == null) return fieldSeatBaselineModules.contains(moduleKey);
+  return cached.features.contains(moduleKey);
+}
+
 /// Reads and writes the cached entitlement.
 ///
 /// **The asymmetry is the design.** Writes happen only on a successful `/api/Auth/me`; nothing
@@ -45,17 +68,11 @@ class EntitlementRepository {
 
   static const _rowId = 'current';
 
-  /// The always-on modules. Enforced true in code on the server too (`ModuleKeys.AlwaysOn`), so a
-  /// client that gated them off would hide screens the backend would happily serve.
-  static const alwaysOn = {'clienti', 'team', 'sistema'};
+  /// See [alwaysOnModules].
+  static const alwaysOn = alwaysOnModules;
 
-  /// What a field seat can always do, used before the first sync ever completes.
-  ///
-  /// A fresh install that cannot reach the network must not be a brick. These are the three things
-  /// a field seat exists for; offering them unverified is right, because a technician standing in
-  /// front of a customer needs to record the work either way and the server will reject anything
-  /// the tenant genuinely lacks.
-  static const fieldSeatBaseline = {'rapportini', 'presenze', 'interventi'};
+  /// See [fieldSeatBaselineModules].
+  static const fieldSeatBaseline = fieldSeatBaselineModules;
 
   Future<Entitlement?> read() async {
     final row = await (_db.select(
@@ -92,18 +109,9 @@ class EntitlementRepository {
         );
   }
 
-  /// Whether a module should be offered.
-  ///
-  /// Returns true when nothing has been cached yet and the module is in the field-seat baseline —
-  /// see [fieldSeatBaseline]. Always true for [alwaysOn], matching the server.
-  Future<bool> hasFeature(String moduleKey) async {
-    if (alwaysOn.contains(moduleKey)) return true;
-
-    final cached = await read();
-    if (cached == null) return fieldSeatBaseline.contains(moduleKey);
-
-    return cached.features.contains(moduleKey);
-  }
+  /// Whether a module should be offered. The rule lives in [moduleIsOffered]; this only supplies
+  /// it with the cache.
+  Future<bool> hasFeature(String moduleKey) async => moduleIsOffered(moduleKey, await read());
 
   /// Whether a specific `module.resource.action` capability is held.
   ///

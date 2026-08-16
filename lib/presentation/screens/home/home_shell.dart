@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
@@ -44,6 +45,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // falls back to a cached, signed-in-but-offline identity (see
       // ZitadelAuthRepository._restore).
       initAuthReconnectWatcher(ref);
+      // Which modules this tenant actually bought. The whole entitlement layer — repository,
+      // service, Drift table, tests — existed and was never started from anywhere, so the cache was
+      // permanently empty and the Altro hub offered every office module to every technician
+      // regardless. The server refused them on arrival, which is the wrong place to find out.
+      initEntitlementRefreshWatcher(ref);
     });
   }
 
