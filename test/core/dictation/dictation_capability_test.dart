@@ -227,4 +227,57 @@ void main() {
       );
     });
   });
+
+  group('the readout answers the hardware question without a special build', () {
+    // The remaining uncertainty in ADR-0017 is empirical: is offline Italian actually present on
+    // the phones technicians carry? This is how that gets answered in ten seconds per handset,
+    // and afterwards it is how a technician who cannot find the microphone gets told why.
+    Future<void> pumpDiagnostics(WidgetTester tester, DictationCapability capability) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [dictationServiceProvider.overrideWithValue(_FakeDictation(capability))],
+          child: MaterialApp(home: Scaffold(body: Consumer(builder: (context, ref, _) {
+            final c = ref.watch(dictationCapabilityProvider);
+            return c.when(
+              loading: () => const Text('…'),
+              error: (_, _) => const Text('errore'),
+              data: (c) => Column(
+                children: [
+                  Text(c.canDictate ? 'Dettatura disponibile' : 'Dettatura non disponibile'),
+                  Text('offline: ${c.onDeviceRecognitionAvailable}'),
+                  if (!c.canDictate) Text(c.unavailableMessage!),
+                ],
+              ),
+            );
+          }))),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a capable handset reads as available', (tester) async {
+      await pumpDiagnostics(tester, _ready);
+
+      expect(find.text('Dettatura disponibile'), findsOneWidget);
+      expect(find.text('offline: true'), findsOneWidget);
+    });
+
+    testWidgets('a network-only handset names offline as the missing piece', (tester) async {
+      // The distinction that matters when reading a fleet: everything else can be green and the
+      // answer still no.
+      await pumpDiagnostics(
+        tester,
+        const DictationCapability(
+          recognizerAvailable: true,
+          italianLocaleId: 'it_IT',
+          onDeviceRecognitionAvailable: false,
+          microphoneGranted: true,
+        ),
+      );
+
+      expect(find.text('Dettatura non disponibile'), findsOneWidget);
+      expect(find.text('offline: false'), findsOneWidget);
+      expect(find.textContaining('pacchetto vocale italiano'), findsOneWidget);
+    });
+  });
 }

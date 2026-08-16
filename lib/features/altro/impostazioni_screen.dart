@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
+import '../../core/dictation/dictation_service.dart';
 import '../../core/security/biometric_service.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -119,6 +120,18 @@ class ImpostazioniScreen extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+
+            // ── Dettatura ─────────────────────────────────────────────────
+            //
+            // A readout, not a switch. Whether dictation works is decided by the handset — an
+            // on-device recogniser, the Italian language pack, microphone permission — and none
+            // of that is something the app can turn on. What it can do is say which part is
+            // missing, so a technician who cannot find the microphone gets an answer instead of
+            // filing a bug, and so a fleet can be checked without instrumenting a build.
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Dettatura')),
+            const SliverToBoxAdapter(
+              child: _SettingsGroup(children: [_DictationDiagnosticsRow()]),
             ),
 
             // ── Sistema ───────────────────────────────────────────────────
@@ -427,5 +440,113 @@ class _LogoutSettingRow extends StatelessWidget {
     if (confirmed == true) {
       await ref.read(loginProvider.notifier).signOut();
     }
+  }
+}
+
+
+/// What this handset can and cannot do about dictation, item by item.
+///
+/// Exists because "voice-assisted entry works" is not a property of the app — it is a property of
+/// the phone in someone's hand, and it varies across a fleet. ADR-0017 accepts that and requires
+/// the app to degrade honestly rather than reach for the network; this is where the honesty is
+/// legible. It is also the fastest way to answer the question the ADR could not: whether offline
+/// Italian is actually present on the hardware technicians carry.
+class _DictationDiagnosticsRow extends ConsumerWidget {
+  const _DictationDiagnosticsRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final capability = ref.watch(dictationCapabilityProvider);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: capability.when(
+        loading: () => const _DictationLine(label: 'Verifica in corso…', state: null),
+        error: (_, _) => const _DictationLine(label: 'Verifica non riuscita', state: false),
+        data: (c) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              c.canDictate ? 'Dettatura disponibile' : 'Dettatura non disponibile',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: context.colors.ink,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _DictationLine(label: 'Riconoscimento vocale', state: c.recognizerAvailable),
+            _DictationLine(
+              label: c.italianLocaleId == null ? 'Italiano' : 'Italiano (${c.italianLocaleId})',
+              state: c.italianAvailable,
+            ),
+            // The one that decides it. Everything else can be true and dictation still refused,
+            // because recognition that needs a server is no use in a plant room and would send
+            // site audio off the device.
+            _DictationLine(
+              label: 'Funziona offline (sul dispositivo)',
+              state: c.onDeviceRecognitionAvailable,
+            ),
+            _DictationLine(label: 'Microfono consentito', state: c.microphoneGranted),
+            if (!c.canDictate) ...[
+              const SizedBox(height: 10),
+              Text(
+                c.unavailableMessage!,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  height: 1.4,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Puoi comunque compilare il rapportino scrivendo normalmente.',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  height: 1.4,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DictationLine extends StatelessWidget {
+  const _DictationLine({required this.label, required this.state});
+
+  /// Null while the answer is still being fetched.
+  final bool? state;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, colour) = switch (state) {
+      true => (LucideIcons.checkCircle2, context.colors.green),
+      false => (LucideIcons.alertCircle, context.colors.inkMuted),
+      null => (LucideIcons.circle, context.colors.inkDisabled),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: colour),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
