@@ -19504,6 +19504,10 @@
             ],
             "description": "Structured cause/diagnosis of the intervention, alongside the existing free-text\nstring? Report.Details/string? Report.TechnicianNotes. Plain nullable string per the\nW6b plan (\u00A70) \u2014 a lookup table was considered and explicitly deferred."
           },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Whether a language model produced any of this rapportino\u0027s text.\n\nRecorded on the record itself, not only in the AI call log, because the question a reader\nasks is \u0022was this written by a person?\u0022 and the reader is looking at the rapportino \u2014 the\noffice reviewing it, the customer receiving it, or an auditor a year later. An answer that\nlives in a separate telemetry table is not available at the moment the question is asked,\nand cannot survive the report being exported or printed.\n\nSet when the technician keeps text that came from a draft. Generating a draft and\ndiscarding it is not AI assistance; only what reaches the record counts."
+          },
           "soluzione": {
             "type": [
               "null",
@@ -20785,6 +20789,10 @@
             ],
             "description": "Structured cause/diagnosis, alongside the free-text string? SubmitReportRequest.Details. Carried on\nthe mobile submit path (W6b Task 5) \u2014 a technician filling in the diagnosis while\nstill on-site is the obvious use case."
           },
+          "aiAssisted": {
+            "type": "boolean",
+            "description": "Whether text from an AI draft survived into this rapportino.\n\nSelf-reported by the device, and currently unverifiable server-side: AI calls are\npublished to the outbox rather than stored, so there is no table to check this claim\nagainst \u2014 which is also why \u0060AiCallAuditEvent.Accepted\u0060 exists and is never written.\nThe client is the only component that knows whether the generated text was kept or\ndiscarded, so it is the right source; it is not yet a trustworthy one against a modified\nclient. A queryable AI call log would close both gaps at once."
+          },
           "soluzione": {
             "type": [
               "null",
@@ -20970,6 +20978,10 @@
               "string"
             ],
             "description": "Structured cause/diagnosis (W6b Task 5)."
+          },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Whether a model produced any of this rapportino\u0027s text."
           },
           "soluzione": {
             "type": [

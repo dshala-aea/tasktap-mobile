@@ -276,6 +276,14 @@ class DraftReports extends Table {
   TextColumn get technicianNotes => text().nullable()();
   DateTimeColumn get closedAt => dateTime().nullable()();
 
+  /// Whether a model produced any of this rapportino's text.
+  ///
+  /// Persisted on the draft rather than held in memory: a technician generates a draft, closes
+  /// the app, comes back an hour later and submits. If the flag lived only in the editor state
+  /// the provenance would quietly disappear across that restart, and a report that was in fact
+  /// AI-assisted would be filed as hand-written.
+  BoolColumn get isAiAssisted => boolean().withDefault(const Constant(false))();
+
   /// ReportStatoEnum string: Bozza, Inviato, Controllato, Fatturato
   TextColumn get stato => text().withDefault(const Constant('Bozza'))();
   DateTimeColumn get inviatoAt => dateTime().nullable()();
@@ -569,7 +577,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration {
@@ -627,6 +635,11 @@ class AppDatabase extends _$AppDatabase {
         if (from < 10) {
           // B-05: cache entitlements so feature gating survives loss of signal.
           await m.createTable(entitlements);
+        }
+        if (from < 11) {
+          // AI provenance: whether a model wrote any of a draft's text. Defaults to false, which
+          // is the honest answer for every rapportino that predates the column.
+          await m.addColumn(draftReports, draftReports.isAiAssisted);
         }
       },
     );

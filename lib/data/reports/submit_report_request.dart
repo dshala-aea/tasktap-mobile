@@ -24,6 +24,7 @@ class SubmitReportRequest {
     this.technicianSignatureAllegatoId,
     this.customerSignoffText,
     this.materialiNotRequired = false,
+    this.aiAssisted = false,
     this.photoAllegatoIds = const [],
     this.staff = const [],
     this.materiali = const [],
@@ -69,6 +70,9 @@ class SubmitReportRequest {
   /// When true, the operator confirmed no materials were used.
   final bool materialiNotRequired;
 
+  /// Whether text produced by an AI draft is still in this rapportino.
+  final bool aiAssisted;
+
   /// Allegato ids of additional photos attached to the report.
   final List<String> photoAllegatoIds;
 
@@ -97,6 +101,7 @@ class SubmitReportRequest {
       'technicianSignatureAllegatoId': technicianSignatureAllegatoId,
     if (customerSignoffText != null) 'customerSignoffText': customerSignoffText,
     'materialiNotRequired': materialiNotRequired,
+    'aiAssisted': aiAssisted,
     'photoAllegatoIds': photoAllegatoIds,
     'staff': staff.map((s) => s.toJson()).toList(),
     'materiali': materiali.map((m) => m.toJson()).toList(),

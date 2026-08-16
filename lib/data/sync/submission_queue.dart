@@ -203,6 +203,7 @@ class SubmissionQueue {
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       customerSignoffText: draft.customerSignoffText,
       materialiNotRequired: draft.materialiNotRequired,
+      aiAssisted: draft.isAiAssisted,
       photoAllegatoIds: photoIds,
       staff: staff
           .map(

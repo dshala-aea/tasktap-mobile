@@ -205,6 +205,7 @@ class ReportEditorState {
     this.materialeRows = const [],
     this.controlloRows = const [],
     this.materialiNotRequired = false,
+    this.isAiAssisted = false,
     this.customerSignatureLocalPath,
     this.customerSignatureAllegatoId,
     this.technicianSignatureLocalPath,
@@ -244,6 +245,16 @@ class ReportEditorState {
   final List<ControlloRow> controlloRows;
   final bool materialiNotRequired;
 
+  /// Whether text produced by the AI draft is still in this rapportino.
+  ///
+  /// One-way: set when a draft is applied, and never cleared. Clearing it when the technician
+  /// edits the text afterwards would be wrong — editing a generated paragraph is still working
+  /// from a generated paragraph, and it would make the marker trivially removable by typing a
+  /// character. The honest claim is "a model was involved in producing this", not "this is
+  /// verbatim model output".
+  final bool isAiAssisted;
+
+
   // Step 5 — Firme
   final String? customerSignatureLocalPath;
   final String? customerSignatureAllegatoId;
@@ -276,6 +287,7 @@ class ReportEditorState {
     tenantId: tenantId,
     createdAt: createdAt ?? DateTime.now().toUtc(),
     updatedAt: null,
+    isAiAssisted: isAiAssisted,
     title: title,
     scheduleId: scheduleId,
     ticketId: ticketId,
@@ -325,6 +337,7 @@ class ReportEditorState {
     List<MaterialeRow>? materialeRows,
     List<ControlloRow>? controlloRows,
     bool? materialiNotRequired,
+    bool? isAiAssisted,
     String? customerSignatureLocalPath,
     String? customerSignatureAllegatoId,
     String? technicianSignatureLocalPath,
@@ -368,6 +381,7 @@ class ReportEditorState {
       materialeRows: materialeRows ?? this.materialeRows,
       controlloRows: controlloRows ?? this.controlloRows,
       materialiNotRequired: materialiNotRequired ?? this.materialiNotRequired,
+      isAiAssisted: isAiAssisted ?? this.isAiAssisted,
       customerSignatureLocalPath: clearCustomerSignature
           ? null
           : (customerSignatureLocalPath ?? this.customerSignatureLocalPath),
@@ -583,6 +597,15 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _autosave();
   }
 
+  /// Records that an AI draft was applied to this rapportino.
+  ///
+  /// No matching "unset": provenance is not a preference. See [ReportEditorState.isAiAssisted].
+  Future<void> markAiAssisted() async {
+    if (state.isAiAssisted) return;
+    state = state.copyWith(isAiAssisted: true);
+    await _autosave();
+  }
+
   // ── Step 4: Controlli ──────────────────────────────────────────────────────
 
   Future<void> upsertControllo(ControlloRow row) async {
@@ -724,6 +747,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       insertedUserId: Value(state.insertedUserId),
       locationId: Value(state.locationId ?? ''),
       materialiNotRequired: Value(state.materialiNotRequired),
+      isAiAssisted: Value(state.isAiAssisted),
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
       stato: const Value('Bozza'),

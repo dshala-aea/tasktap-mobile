@@ -249,6 +249,10 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
       _detailsCtrl.text = draft.details;
       await notifier.setTitle(draft.title);
       await notifier.setDetails(draft.details);
+      // The rapportino now carries text a model wrote. Recorded here, at the one place the
+      // generated text actually enters the record, rather than at the point the button is
+      // pressed — a draft that is generated and then discarded is not AI assistance.
+      await notifier.markAiAssisted();
 
       // The allowance is the whole company's, so it can move without this technician doing
       // anything. Re-read it rather than decrementing a local copy.

@@ -120,6 +120,11 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             child: Column(
               children: [
                 KeyVal(label: 'Titolo', value: state.title.isEmpty ? '—' : state.title),
+                // Stated on the page the technician signs off, not only in a database column.
+                // They are attesting to this record; they should be able to see that part of it
+                // was drafted for them.
+                if (state.isAiAssisted)
+                  const KeyVal(label: 'Redazione', value: 'Bozza generata con AI, poi rivista'),
                 KeyVal(label: 'Cliente', value: _customerLabel(ref, state)),
                 KeyVal(label: 'Indirizzo', value: state.workAddress ?? '—'),
                 if (_riferimento(ref, state) case final riferimento?)
