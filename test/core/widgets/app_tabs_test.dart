@@ -60,4 +60,59 @@ void main() {
       expect(find.text('3'), findsOneWidget);
     });
   });
+
+  _overflowingStripTests();
+}
+
+/// A tab strip that runs past the frame has to behave like one.
+///
+/// The ticket screen has seven tabs and a phone fits about four. The strip gave no sign the other
+/// three existed, and opening it on one of them — which happens on any return to a screen that
+/// remembers where you were — left it scrolled to the start with the selected tab off-frame.
+const _many = [
+  AppTab(label: 'Report'),
+  AppTab(label: 'Controllo'),
+  AppTab(label: 'Allegati'),
+  AppTab(label: 'Ore'),
+  AppTab(label: 'Pianificazioni'),
+  AppTab(label: 'Fabbisogno'),
+  AppTab(label: 'Storico'),
+];
+
+void _overflowingStripTests() {
+  group('AppTabs — a strip wider than the phone', () {
+    Widget wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
+
+    testWidgets('opens scrolled to the selected tab, not to the start', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(wrap(AppTabs(tabs: _many, selectedIndex: 6, onSelected: (_) {})));
+      await tester.pumpAndSettle();
+
+      final storico = tester.getRect(find.text('Storico'));
+      expect(storico.left, greaterThanOrEqualTo(0));
+      expect(storico.right, lessThanOrEqualTo(390));
+    });
+
+    testWidgets('a strip that already fits is not shoved around', (tester) async {
+      // Two tabs have nowhere to go; the reveal must be a no-op rather than a jolt.
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        wrap(
+          AppTabs(
+            tabs: const [AppTab(label: 'Tutti'), AppTab(label: 'Aperti')],
+            selectedIndex: 1,
+            onSelected: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.getRect(find.text('Tutti')).left, greaterThanOrEqualTo(0));
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

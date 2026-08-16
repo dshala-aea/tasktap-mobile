@@ -30,13 +30,20 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   int _tabIndex = 0;
 
+  /// Ordered by who is holding the phone.
+  ///
+  /// Four tabs fit a phone; there are seven. The old order put Pianificazioni third and
+  /// Fabbisogno fifth — both office concerns — so the technician's Allegati and Ore were pushed
+  /// past the edge of the strip while two tabs they rarely open sat in the visible window. None
+  /// of them is removed: Pianificazioni, Fabbisogno and Storico are still there, one drag away,
+  /// and the strip now fades at its ends so it is visibly a strip.
   static const _tabs = [
     AppTab(label: 'Report'),
     AppTab(label: 'Controllo'),
-    AppTab(label: 'Pianificazioni'),
     AppTab(label: 'Allegati'),
-    AppTab(label: 'Fabbisogno'),
     AppTab(label: 'Ore'),
+    AppTab(label: 'Pianificazioni'),
+    AppTab(label: 'Fabbisogno'),
     AppTab(label: 'Storico'),
   ];
 
@@ -341,10 +348,10 @@ class _TabContent extends ConsumerWidget {
     return switch (tabIndex) {
       0 => _ReportTab(ticketId: ticketId),
       1 => _ControlloTab(ticketId: ticketId),
-      2 => _PianificazioniTab(ticketId: ticketId),
-      3 => _AllegatiTab(ticketId: ticketId),
-      4 => _FabbisognoTab(ticketId: ticketId),
-      5 => _OreTab(ticketId: ticketId),
+      2 => _AllegatiTab(ticketId: ticketId),
+      3 => _OreTab(ticketId: ticketId),
+      4 => _PianificazioniTab(ticketId: ticketId),
+      5 => _FabbisognoTab(ticketId: ticketId),
       6 => _StoricoTab(ticketId: ticketId),
       _ => const SizedBox.shrink(),
     };
