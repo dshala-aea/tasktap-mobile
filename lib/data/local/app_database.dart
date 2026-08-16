@@ -634,15 +634,41 @@ class AppDatabase extends _$AppDatabase {
 
   // ── sync_meta helpers ────────────────────────────────────────────────────
 
+  /// Which generation of the sync cursor this build understands.
+  ///
+  /// Bumping it makes every existing device do one full sync instead of a delta, and it exists
+  /// because a delta cursor can outlive its own correctness. It did: the server's delta filter
+  /// compared `UpdatedAt > since` against rows whose `UpdatedAt` is null until someone edits
+  /// them, so anything created after a device's last sync was invisible to that device forever.
+  /// Fixing the server does not help a phone whose cursor is already past those rows — it will
+  /// never ask for them again. Only a full sync recovers, and the technician cannot be asked to
+  /// reinstall the app.
+  ///
+  /// Implemented as part of the row id rather than a new column so it needs no schema migration:
+  /// a device on an older generation simply finds no row and syncs from scratch.
+  ///
+  /// v2 — 2026-08-16, the COALESCE(UpdatedAt, CreatedAt) delta fix.
+  static const String syncCursorGeneration = 'v2';
+
+  static const String _cursorId = 'default:$syncCursorGeneration';
+
   Future<DateTime?> getLastSync() async {
-    final row = await (select(syncMeta)..where((t) => t.id.equals('default'))).getSingleOrNull();
+    final row = await (select(syncMeta)
+          ..where((t) => t.id.equals(_cursorId)))
+        .getSingleOrNull();
     return row?.lastSync;
   }
 
   Future<void> setLastSync(DateTime dt) async {
-    await into(syncMeta).insertOnConflictUpdate(
-      SyncMetaCompanion.insert(id: const Value('default'), lastSync: Value(dt)),
-    );
+    await transaction(() async {
+      // Drop cursors from older generations on the way past. They are never read again, and
+      // leaving one row per shipped generation to accumulate is the kind of thing nobody notices
+      // until there are twelve of them.
+      await (delete(syncMeta)..where((t) => t.id.equals(_cursorId).not())).go();
+      await into(syncMeta).insertOnConflictUpdate(
+        SyncMetaCompanion.insert(id: const Value(_cursorId), lastSync: Value(dt)),
+      );
+    });
   }
 }
 
