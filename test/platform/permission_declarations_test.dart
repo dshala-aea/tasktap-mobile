@@ -42,6 +42,8 @@ void main() {
       'camera': ('ImageSource.camera', 'NSCameraUsageDescription'),
       'photo library': ('ImageSource.gallery', 'NSPhotoLibraryUsageDescription'),
       'location': ('Geolocator', 'NSLocationWhenInUseUsageDescription'),
+      'microphone': ('SpeechToText', 'NSMicrophoneUsageDescription'),
+      'speech recognition': ('SpeechToText', 'NSSpeechRecognitionUsageDescription'),
     };
 
     for (final entry in required.entries) {
@@ -90,7 +92,11 @@ void main() {
         'NSCameraUsageDescription': 'ImageSource.camera',
         'NSPhotoLibraryUsageDescription': 'ImageSource.gallery',
         'NSLocationWhenInUseUsageDescription': 'Geolocator',
-        'NSMicrophoneUsageDescription': 'record',
+        // The trigger is the recogniser, not the string "record" — which any comment mentioning
+        // recording satisfies by accident, and which would keep this passing after the feature
+        // was removed.
+        'NSMicrophoneUsageDescription': 'SpeechToText',
+        'NSSpeechRecognitionUsageDescription': 'SpeechToText',
       };
 
       for (final entry in declaredToTrigger.entries) {
@@ -118,7 +124,7 @@ void main() {
       final xml = manifest.readAsStringSync();
       const declaredToTrigger = {
         'android.permission.ACCESS_FINE_LOCATION': 'Geolocator',
-        'android.permission.RECORD_AUDIO': 'record',
+        'android.permission.RECORD_AUDIO': 'SpeechToText',
       };
 
       for (final entry in declaredToTrigger.entries) {

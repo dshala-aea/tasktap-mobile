@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/dictation/dictate_button.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/ai/ai_api_client.dart';
@@ -143,12 +144,19 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           ),
           const SizedBox(height: 12),
 
+          // The one field worth dictating: several sentences of prose, typed with gloves on, in a
+          // plant room. The other fields on this step are a name or an address, where the
+          // keyboard and the lookup list are already faster than speaking.
           AppTextField(
             controller: _detailsCtrl,
             label: 'Descrizione',
             hint: 'Cosa hai trovato, cosa hai fatto...',
             maxLines: 3,
             onChanged: (v) => notifier.setDetails(v),
+            suffixIcon: DictateButton(
+              controller: _detailsCtrl,
+              onChanged: (v) => notifier.setDetails(v),
+            ),
           ),
 
           // ── Collegamento, only when there isn't one already ─────────────────

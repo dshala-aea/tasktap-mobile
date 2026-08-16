@@ -226,6 +226,18 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData mic = IconData(
+    0xf3d2,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  static const IconData micOff = IconData(
+    0xf3d4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
   static const IconData package = IconData(
     0xf414,
     fontFamily: 'Lucide',
