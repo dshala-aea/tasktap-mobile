@@ -368,7 +368,28 @@ class _GpsCapture extends ConsumerWidget {
       return;
     }
 
-    final coords = await ref.read(locationServiceProvider).getCurrentPosition();
+    // Say what the coordinate is for before the OS asks for it. The system dialog carries none of
+    // this, and on iOS it is shown once ever — so an unexplained prompt inside a button labelled
+    // "Acquisisci" was the app spending its only chance to be understood.
+    final service = ref.read(locationServiceProvider);
+    if (await service.willPromptForPermission()) {
+      if (!context.mounted) return;
+      final consents = await askPermissionPurpose(
+        context,
+        icon: LucideIcons.mapPin,
+        titolo: 'Dove è stato fatto il lavoro',
+        motivo:
+            'La posizione viene registrata una sola volta, adesso, e allegata a questo rapportino '
+            'come prova di dove sei intervenuto. Non ti seguiamo in background.',
+        senzaDiEsso:
+            'Puoi compilare e firmare il rapportino lo stesso: resterà senza coordinate, e '
+            'l\'indirizzo che hai scritto vale comunque.',
+        cta: 'Consenti la posizione',
+      );
+      if (!consents) return;
+    }
+
+    final coords = await service.getCurrentPosition();
 
     if (coords == null) {
       messenger.showSnackBar(

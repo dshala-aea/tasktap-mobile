@@ -25,7 +25,7 @@ import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart';
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
 /// Fake LocationService that always returns a fixed coord.
-class _FakeLocationService implements ILocationService {
+class _FakeLocationService extends ILocationService {
   @override
   Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654, lng: 9.1859);
 }

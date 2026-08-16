@@ -5,6 +5,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
 import '../../core/dictation/dictation_service.dart';
+import '../../core/notifications/notification_service.dart';
 import '../../core/security/biometric_service.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -47,12 +48,16 @@ class ImpostazioniScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
+                  // The OS prompt now happens here, at the moment the technician asks for
+                  // notifications, and only after a sheet has said what will be sent. It used to
+                  // fire during `runTaskTapApp()` — the first thing on screen at first launch,
+                  // before any context existed to judge it by.
                   _ToggleRow(
                     icon: LucideIcons.bell,
                     title: 'Notifiche push',
                     subtitle: 'Ricevi avvisi in tempo reale',
                     value: settings.pushAbilitate,
-                    onChanged: (_) => notifier.toggle(key: 'pushAbilitate'),
+                    onChanged: (_) => _togglePush(context, settings.pushAbilitate, notifier),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.clipboardList,
@@ -166,6 +171,72 @@ class ImpostazioniScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Turning push on is the moment to ask the OS — and the moment to say why first.
+  ///
+  /// Turning it *off* asks nothing: an OS permission the technician granted once is theirs to keep,
+  /// and revoking the app's own setting is not a reason to touch it.
+  ///
+  /// A denial reverts the switch rather than leaving it on. A control that reports a state the
+  /// system will not honour is the same defect as the biometric toggle below, and the same defect
+  /// as a settings switch wired to nothing: it tells the technician they will be notified when they
+  /// will not be.
+  Future<void> _togglePush(
+    BuildContext context,
+    bool currentlyOn,
+    ImpostazioniNotifier notifier,
+  ) async {
+    if (currentlyOn) {
+      notifier.toggle(key: 'pushAbilitate');
+      return;
+    }
+
+    if (!NotificationService.isAvailable) {
+      // Firebase never initialised — an explicitly supported degraded path. Say so instead of
+      // flipping a switch that cannot deliver anything.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Le notifiche non sono disponibili su questo dispositivo.'),
+        ),
+      );
+      return;
+    }
+
+    final service = NotificationService.instance;
+
+    // Already granted in a previous run: no purpose sheet, no OS dialog, just honour the switch.
+    if (!await service.hasPermission()) {
+      if (!context.mounted) return;
+      final wants = await askPermissionPurpose(
+        context,
+        icon: LucideIcons.bell,
+        titolo: 'Avvisi sul lavoro',
+        motivo:
+            'Ti avvisiamo quando ti viene assegnato un intervento, quando cambia un appuntamento '
+            'e quando un rapportino ha bisogno di te. Nient\'altro.',
+        senzaDiEsso:
+            'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in Calendario, '
+            'ma lo scopri quando apri l\'app.',
+        cta: 'Attiva le notifiche',
+      );
+      if (!wants) return;
+
+      if (!await service.ensurePermission()) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Le notifiche restano bloccate dal sistema. Puoi consentirle dalle impostazioni '
+              'del telefono.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    notifier.toggle(key: 'pushAbilitate');
   }
 }
 

@@ -153,6 +153,11 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
     }
+    // Asked before the spinner goes up, not underneath it: a system dialog appearing over a
+    // half-started clock-in reads as the app malfunctioning, and the technician cannot tell whether
+    // their timbratura went through while they decide.
+    if (!await _confirmGpsPurpose()) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -192,6 +197,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   }
 
   Future<void> _handleEndCantiere(CantiereWorkLogDto activeLog) async {
+    if (!await _confirmGpsPurpose()) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -234,6 +241,34 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /// States what the coordinates are for, before the OS asks for them.
+  ///
+  /// Returns false only when the technician declines the *explanation*. Declining here cancels the
+  /// timbratura rather than clocking in without a position, because on a cantiere the arrival and
+  /// departure coordinates are the point: a site presence record with no location is not the same
+  /// record, and silently downgrading it would hide that from both the technician and the office.
+  ///
+  /// Returns true when no dialog would appear at all — permission already held, already refused
+  /// permanently, or the setting turned off. In those cases the existing null-position path is the
+  /// honest one and there is nothing to explain.
+  Future<bool> _confirmGpsPurpose() async {
+    if (!await ref.read(locationServiceProvider).willPromptForPermission()) return true;
+    if (!mounted) return false;
+
+    return askPermissionPurpose(
+      context,
+      icon: LucideIcons.mapPin,
+      titolo: 'Timbratura di cantiere',
+      motivo:
+          'Registriamo dove sei quando entri e quando esci dal cantiere. Serve a dimostrare la '
+          'tua presenza in cantiere, per la sicurezza e per le ore. Due punti, non un percorso.',
+      senzaDiEsso:
+          'Senza posizione la timbratura di cantiere non viene registrata. La timbratura normale '
+          'della giornata, nella scheda Timbra, funziona senza GPS.',
+      cta: 'Consenti la posizione',
+    );
+  }
 
   String _networkErrorMessage(Object e) {
     if (e is DioException) {

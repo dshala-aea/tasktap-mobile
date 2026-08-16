@@ -18,15 +18,46 @@ typedef GpsCoords = ({double lat, double lng});
 
 /// Contract for obtaining the device's current GPS position.
 abstract class ILocationService {
+  /// Const so the two implementations below can stay const singletons.
+  ///
+  /// This is `extends`, not `implements`, precisely so [willPromptForPermission] can carry a
+  /// default: Dart's `implements` demands every member be restated, which would have put the same
+  /// `=> false` in four test fakes.
+  const ILocationService();
+
   /// Returns the current GPS position, or null if unavailable/denied.
   /// Never throws — failures are silently absorbed.
   Future<GpsCoords?> getCurrentPosition();
+
+  /// Whether calling [getCurrentPosition] would put an OS permission dialog on screen.
+  ///
+  /// Exists so the UI can state the purpose *before* the system asks. The prompt used to appear
+  /// inside an "Acquisisci" button with nothing saying what the coordinate was for or what happened
+  /// if they refused — and on iOS the dialog cannot be shown again, so the first ask is the only
+  /// one there is.
+  ///
+  /// Concrete rather than abstract so the test fakes and [DisabledLocationService] inherit the
+  /// honest answer (they never prompt) instead of each having to restate it.
+  Future<bool> willPromptForPermission() async => false;
 }
 
 // ── Real implementation ───────────────────────────────────────────────────────
 
-class LocationService implements ILocationService {
+class LocationService extends ILocationService {
   const LocationService();
+
+  /// Only `denied` produces a dialog. `deniedForever` never asks again — there the honest move is
+  /// to let the call fail and tell the technician where the system setting lives, not to open a
+  /// purpose sheet that leads nowhere.
+  @override
+  Future<bool> willPromptForPermission() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return false;
+      return await Geolocator.checkPermission() == LocationPermission.denied;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   Future<GpsCoords?> getCurrentPosition() async {
@@ -66,7 +97,7 @@ class LocationService implements ILocationService {
 ///
 /// Returns null exactly as the real service does on a denial, so every call site already handles
 /// it — the position is simply absent, and no record claims one was taken.
-class DisabledLocationService implements ILocationService {
+class DisabledLocationService extends ILocationService {
   const DisabledLocationService();
 
   @override
