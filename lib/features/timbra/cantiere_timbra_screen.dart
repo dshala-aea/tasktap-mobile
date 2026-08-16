@@ -28,6 +28,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
@@ -249,7 +250,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       if (status == 404) {
         return 'Nessuna sessione cantiere attiva trovata.';
       }
-      return 'Errore server ($status). Riprova più tardi.';
+      // Everything else goes through the shared humaniser. This used to end in
+      // `Errore server ($status)` — a number the technician cannot use, in the one line telling
+      // them their presence on site was not recorded.
+      return humanErrorMessage(e);
     }
     return 'Connessione richiesta per la timbratura cantiere.';
   }

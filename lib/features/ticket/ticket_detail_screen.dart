@@ -57,7 +57,24 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
       backgroundColor: context.colors.bg2,
       body: ticketAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        // This reads the local mirror, so a failure here is the device's database, not the network.
+        // It used to render `Errore: $e` — a Drift exception, full width, as the entire screen.
+        // There is nothing a technician can do about it except back out, so say that.
+        error: (e, _) => SafeArea(
+          child: Column(
+            children: [
+              ScreenHeader(title: 'Ticket', showBack: true),
+              const Expanded(
+                child: UnavailableState(
+                  titolo: 'Ticket non leggibile',
+                  motivo:
+                      'I dati salvati sul telefono non si aprono. Torna indietro e riprova; se '
+                      'continua, sincronizza dalla Dashboard.',
+                ),
+              ),
+            ],
+          ),
+        ),
         data: (ticket) {
           if (ticket == null) {
             return SafeArea(

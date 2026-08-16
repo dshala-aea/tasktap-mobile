@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/draft_submission_state.dart';
@@ -51,7 +52,10 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
       await queue.enqueue(widget.reportId);
       await queue.processAll();
     } catch (e) {
-      setState(() => _submitError = e.toString());
+      // The red line under the submit button. It printed `e.toString()`, which put a Dio stack at
+      // the exact moment two people have just signed and the only question is whether the record
+      // survived.
+      setState(() => _submitError = humanErrorMessage(e, azione: 'inviare il rapportino'));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

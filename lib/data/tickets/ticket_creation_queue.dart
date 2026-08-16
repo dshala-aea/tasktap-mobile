@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/error_message.dart';
 import '../../features/ticket/ticket_api_client.dart';
 import 'pending_ticket_repository.dart';
 import 'pending_ticket_state.dart';
@@ -142,8 +143,12 @@ class TicketCreationQueue {
       return TicketCreationOutcome.submitted(id, serverId);
     } catch (e) {
       // NEVER delete on failure — keep the ticket for a manual retry.
-      await _repo.updateState(id: id, state: PendingTicketState.failed, error: e.toString());
-      return TicketCreationOutcome.failed(id, e.toString());
+      //
+      // The stored string is rendered verbatim on the ticket list ("Invio non riuscito: …"), so it
+      // has to be a sentence rather than an exception.
+      final reason = humanErrorMessage(e, azione: 'creare il ticket');
+      await _repo.updateState(id: id, state: PendingTicketState.failed, error: reason);
+      return TicketCreationOutcome.failed(id, reason);
     }
   }
 }

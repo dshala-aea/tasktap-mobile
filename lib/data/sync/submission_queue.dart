@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/error_message.dart';
 import '../local/app_database.dart';
 import '../reports/draft_report_repository.dart';
 import '../reports/report_submit_api_client.dart';
@@ -164,10 +165,16 @@ class SubmissionQueue {
       await _repo.markSubmitted(draft.id);
     } catch (e) {
       // NEVER delete the draft on failure — keep it for retry.
+      //
+      // Humanised here rather than at the point it is drawn, because this column is the *only*
+      // thing the Riepilogo step has to explain a failed send: it is read back long after the
+      // exception is gone, sometimes on a different day. It used to store `e.toString()`, so the
+      // subtitle under "Invio fallito" — the sentence a technician reads when a signed rapportino
+      // did not leave the phone — was a Dio stack.
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,
-        error: e.toString(),
+        error: humanErrorMessage(e, azione: 'inviare il rapportino'),
       );
     }
   }

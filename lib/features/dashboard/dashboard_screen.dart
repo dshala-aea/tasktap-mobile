@@ -185,7 +185,21 @@ class _ScheduleSliver extends StatelessWidget {
           child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
         ),
       ),
-      error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      // Was `SizedBox.shrink()`. A failed read of today's schedules therefore rendered as an
+      // absence — the same picture as a day with no work booked. The one screen a technician opens
+      // to find out whether they have a job this morning would have told them they had none.
+      //
+      // It is drawn as unavailable rather than as an error because it is not the technician's
+      // mistake and there is no red channel to spend on it; the reason names the one action that
+      // can fix it.
+      error: (err, stack) => const SliverToBoxAdapter(
+        child: UnavailableState(
+          titolo: 'Elenco non disponibile',
+          motivo:
+              'Non è stato possibile leggere gli interventi salvati sul telefono. '
+              'Tira giù per sincronizzare.',
+        ),
+      ),
     );
   }
 }

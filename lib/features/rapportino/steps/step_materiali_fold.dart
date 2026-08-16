@@ -286,10 +286,18 @@ class StepMaterialiFold extends ConsumerWidget {
         ),
       );
     } catch (e) {
+      // Local capture and file write — never a server call, so there is no status to interpret and
+      // one honest sentence covers every way it fails. It used to print the exception, which on a
+      // full phone read as the app crashing rather than the storage being full.
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Errore: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
+            ),
+            backgroundColor: context.colors.red,
+          ),
+        );
       }
     }
   }

@@ -400,7 +400,11 @@ void main() {
       final draft = await repo.getDraft('report-1');
       expect(draft, isNotNull); // draft is NOT deleted
       expect(draft!.submissionState, 'failed');
-      expect(draft.submissionError, contains('Network error'));
+      // This column is rendered verbatim under "Invio fallito" in the Riepilogo step, so it must
+      // hold a sentence rather than the exception. It used to store `e.toString()`.
+      expect(draft.submissionError, isNot(contains('Network error')));
+      expect(draft.submissionError, isNot(contains('Exception')));
+      expect(draft.submissionError, contains('Niente è andato perso'));
     });
 
     test('failed draft can be retried', () async {
@@ -443,7 +447,8 @@ void main() {
 
       final draft = await repo.getDraft('report-1');
       expect(draft!.submissionState, 'failed');
-      expect(draft.submissionError, contains('Storage error'));
+      expect(draft.submissionError, isNot(contains('Storage error')));
+      expect(draft.submissionError, isNot(contains('Exception')));
       // submit was NOT called
       verifyNever(
         () => mockApiClient.submitReport(

@@ -205,7 +205,11 @@ void main() {
       final row = await repo.getById(outcome.localId);
       expect(row, isNotNull);
       expect(row!.state, 'failed');
-      expect(row.error, contains('Network error'));
+      // Rendered verbatim on the ticket list as "Invio non riuscito: …", so it is a sentence and
+      // never the exception.
+      expect(row.error, isNot(contains('Network error')));
+      expect(row.error, isNot(contains('Exception')));
+      expect(row.error, contains('Niente è andato perso'));
       expect(onSubmittedCalls, 0);
     });
 
