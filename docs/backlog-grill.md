@@ -95,6 +95,31 @@ Note this is also, accidentally, the only thing currently enforcing decision 1.
 
 ---
 
+## Closed since (2026-08-16/17)
+
+- **8. GPS/notification permission strategy** — done. `askPermissionPurpose`
+  (`lib/core/widgets/permission_purpose_sheet.dart`) states the purpose *and what still works
+  without it* before the OS dialog. The notification request moved out of `runTaskTapApp()` — it
+  was the first thing on screen at first launch — and now fires when the technician turns the
+  setting on. `pushAbilitate` defaults to true, so it is also reconciled against the real OS
+  answer at load, or a fresh install would show the switch on with permission never asked.
+  Location asks at both call sites; the cantiere one asks *before* the spinner.
+- **9. AI/STT** — done earlier (`dedafd6`, `c6962ed`): on-device only, capability-gated,
+  Impostazioni reports what the handset can do. `POST /api/ai/transcribe` stays unwired.
+- **10. Further contract mismatches** — done. `test/contract/request_body_contract_test.dart`
+  drives the real client methods through a capturing Dio adapter and checks body keys, query
+  parameter names and the sort grammar for all 36 write routes. A new POST fails the build until
+  someone writes a case or records why it cannot be checked.
+- **GDPR (decision 3)** — mobile now exposes consent and export read-only under Altro → Sistema
+  → *I miei dati*. Deletion is deliberately absent, and the screen says so and says who to ask.
+  Consent is read-only until the `consentType` catalogue is pinned down.
+
+> **A warning worth carrying.** Two checks in that contract file exist only to stop it passing
+> while proving nothing, and one of them caught a real mistake in its own scanner: the regex
+> matched type arguments with `[^>]*`, which cannot match `.post<Map<String, dynamic>>(`. It found
+> 23 of 36 routes and the coverage test passed anyway. **A coverage check's failure mode is that
+> it goes quiet, never that it goes loud.** Floor the counts.
+
 ## Open, not yet asked
 
 Carried from the backlog, in rough dependency order:
@@ -106,13 +131,14 @@ Carried from the backlog, in rough dependency order:
 5. **Form/wizard buttons too large** — should draw attention without dominating.
 6. **Animations** — modern feel across shell and transitions.
 7. **Navigation and user flow** rework.
-8. **GPS captured silently** when permission is granted, rather than prompting per report; and a
-   coherent permission strategy (notifications, GPS) — ask at the moment of need or when the
-   related setting is switched on.
-9. **AI/STT** — embed speech-to-text in the app vs delegate responsibility to the user.
-   `POST /api/ai/transcribe` exists; the blocker is an audio-recording dependency plus microphone
-   permissions on both platforms, which is a platform change to weigh against the pilot date. The
-   AI Act transparency angle belongs with decision 3.
-10. **Further contract mismatches** — the response-shape guard covers `GET` bodies. Request bodies
-    on POST/PUT are NOT yet checked against the snapshot; the sort-grammar bug shows query
-    parameters are a third unchecked surface.
+8. ~~GPS/permission strategy~~ — see *Closed since*.
+9. ~~AI/STT~~ — see *Closed since*.
+10. ~~Further contract mismatches~~ — see *Closed since*.
+11. **Client-book confidentiality is still enforced only by accident.** Decision 1 above is not
+    built. The only thing stopping enumeration today is the forward-looking sync window, which is
+    a side effect, not a control — and the app's own token can call `GET /api/Customers`
+    directly. Decision 3b (permission-gated browse, narrow rate-limited search, both audited) is
+    server work and has not started.
+12. **Real settings** — `GET/PUT /api/NotificationSettings` is wired; `PUT /api/Users/me/preferences`
+    and `PUT /api/Auth/profile` are not, so several Impostazioni toggles still write local prefs
+    the server never sees.

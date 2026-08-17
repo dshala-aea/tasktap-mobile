@@ -1,11 +1,17 @@
 # Mobile redesign + wiring — handoff
 
-Branch `feat/mobile-rack-redesign`, twenty-three commits, **711/711 tests green, `flutter analyze` clean**
-at every one. Baseline before this work was 637 tests.
+Branch `feat/mobile-rack-redesign`. **887/887 tests green, `flutter analyze` clean** as of
+2026-08-17. Baseline before this branch was 637 tests.
 
-Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3. Everything below
-is either verified against the code or against `../docs/api/openapi.snapshot.json` and the C#
-controllers — nothing here is recalled.
+Written 2026-08-14 at the end of a session that ran out of context mid-Phase-3, and revised
+2026-08-17. Everything below is either verified against the code or against
+`../docs/api/openapi.snapshot.json` and the C# controllers — nothing here is recalled.
+
+> **Read this before acting on a pasted brief.** A long "modernize the mobile app" prompt arrived
+> on 2026-08-16 naming rapportino defects — raw GUIDs, picker-vs-free-text, a split Avanti/Invia,
+> an unreadable Riepilogo — every one of which was already fixed on this branch. Verify each named
+> defect against the code before planning anything. Re-doing shipped work is the default failure
+> mode here, and this document is one of the reasons: it goes stale faster than the code.
 
 ---
 
@@ -52,7 +58,7 @@ Prefer changing these over touching screens.
 
 ---
 
-## Two bug classes worth grepping for first
+## Four bug classes worth grepping for first
 
 ### 1. A fixed-dark surface with a theme-flipping foreground
 
@@ -83,6 +89,39 @@ is no honest destination, delete the control** — that is what happened to "Nuo
 whose only possible target was a placeholder.
 
 ---
+
+### 3. A subsystem that is complete, tested, and never started
+
+The whole entitlement layer — repository, service, Drift table, twelve passing tests — had
+**zero call sites**. `initEntitlementRefreshWatcher` was never invoked from anywhere, so the cache
+was permanently null, `hasFeatureProvider` had no UI readers, and the Altro hub offered every paid
+module to every tenant. The server refused them on arrival, which is the wrong place to find out.
+
+Nothing flags this: it compiles, the analyzer is clean, and its tests are green because they
+construct the objects themselves. Grep for the *initialiser*, not the class. `home_shell.dart`'s
+`initState` is where this app starts its watchers, and it is the list to check a subsystem against.
+
+Two related traps found the same day:
+
+- **A reconnect-only watcher never runs on a good connection.** The entitlement refresh listened
+  for `onReconnect` and nothing else, so a device online at launch that never dropped signal never
+  fetched. It now fetches eagerly *and* on reconnect.
+- **A setting that defaults to on, gating a permission that is never asked for.** Moving the
+  notification prompt out of startup left `pushAbilitate: true` on a fresh install, so the switch
+  read on while the OS had never been asked. Any setting that mirrors an OS permission has to be
+  reconciled against the real answer at load.
+
+### 4. Exceptions rendered to the technician
+
+Five surfaces printed `e.toString()`, two of them at the worst possible moment: the red line under
+*Invia rapportino*, and the subtitle of the *Invio fallito* card — both read just after two people
+have signed, when the only questions are whether the work survived and what to do now.
+
+`humanErrorMessage` (`lib/core/utils/error_message.dart`) is the one place that converts a thrown
+object into a sentence. Two rules worth keeping: the two queues humanise **at the catch**, because
+their error columns are rendered verbatim days later when the exception is long gone; and no
+message prints an HTTP status code, because the number is unusable on a site and reads as a fault
+the technician caused.
 
 ## Stale-comment hazard
 
@@ -186,9 +225,10 @@ technician `/api/app/*` endpoints, real settings, and AI.
    `pianificazione/calendar`. Honour `sezioniNonDisponibili` wherever present.
 3. **Report tail** — `firma-cliente`, `firma-tecnico`, `invia`, `pdf`, `annulla`, `mail`. Overlaps
    Phase 4's rapportino wizard; do them together.
-4. **Real settings** — `GET/PUT /api/NotificationSettings`, `PUT /api/Users/me/preferences`,
-   `PUT /api/Auth/profile`. The Impostazioni toggles currently write local prefs the server never
-   sees.
+4. **Real settings** — partly done. `GET/PUT /api/NotificationSettings` is wired
+   (`data/settings/notification_settings_api_client.dart`, reconciled in `impostazioni_provider`).
+   `PUT /api/Users/me/preferences` and `PUT /api/Auth/profile` are still unwired — zero references
+   in `lib/` — so the remaining toggles write local prefs the server never sees.
 5. ~~**AI**~~ — **partly done**. `reports/draft` + `quota` are wired into the rapportino wizard's
    Dettagli step, gated on the report having a `scheduleId` (the endpoint requires one).
 
@@ -206,10 +246,12 @@ technician `/api/app/*` endpoints, real settings, and AI.
 Shipped: the wizard's dark-mode defects (`474f014`), admin forms inheriting the input theme
 (`52e8fe0`), and one header across the app (`abad1e6`).
 
-**Still open, and scoped deliberately:** the 27 admin CRUD screens keep raw `TextFormField` /
-`ListView` bodies rather than `AppTextField` and rack cells. They now inherit the correct theme, so
-they are coherent rather than bespoke — but they are not *composed* in the world. That is a
-separate, well-bounded rebuild worth scoping on its own rather than smuggling in.
+**Half closed since.** The fields were converted in `5e170cb` — `TextFormField` now appears in
+**zero** files under `lib/features/admin/`, and `AppTextField` in eight. The **list bodies were
+not**: eight admin files still build a raw `ListView` rather than rack cells (twelve do use
+`RackCell`/`AppCard`/`ListRow`). So the remaining work is smaller than this paragraph used to
+claim, and it is list composition only. Re-count before scoping — do not take this line's word
+for it.
 
 Three guard tests now hold the line, all in `app_palette_test.dart`: no bare
 `OutlineInputBorder()`, no Material `AppBar` outside the signature modal, and on-dark ink contrast
@@ -228,15 +270,46 @@ Historical, all fixed:
   the neutral default, which is why a second table existed.
 - ~~Screens on Material `AppBar`~~ — all converted to `ScreenHeaderBar`.
 
-### Phase 5 (untouched)
+### Phase 5 (barely started)
 
-`node ~/.claude/skills/impeccable/scripts/detect.mjs --json <targets>`, then the
-`impeccable-finish-reviewer`, then `impeccable-documenter` to write `DESIGN.md` from the built
-world. **The reviewer needs light and dark screenshots and this environment cannot produce them** —
-no emulator, and Flutter will not render headless on `/mnt/d`. Either capture them on a Windows
-device or accept a code-only review, and disclose which.
+`node ~/.claude/skills/impeccable/scripts/detect.mjs --json lib` was run on 2026-08-16 and returned
+`[]`. That is worth exactly what it is worth: the detector is largely web-oriented and a clean run
+is not a design review.
+
+Still to do: the `impeccable-finish-reviewer`, then `impeccable-documenter` to write `DESIGN.md`
+from the built world. **The reviewer needs light and dark screenshots and this environment cannot
+produce them** — no emulator, and Flutter will not render headless on `/mnt/d`. Either capture them
+on a Windows device or accept a code-only review, and disclose which.
+
+The screens added since have never been seen running by anyone: *I miei dati*, the permission
+purpose sheet, and the `UnavailableState` on the dashboard and ticket detail. They are the first
+things to put in front of a device.
 
 ---
+
+## The contract gate, and how it nearly lied
+
+`test/contract/request_body_contract_test.dart` covers all 36 write routes: it drives the real
+client methods through a Dio whose adapter records the request and refuses it, then checks body
+keys, query parameter names and the sort grammar against the snapshot. A new POST fails the build
+until someone adds a case or records why it cannot be checked.
+
+Two of its tests exist only to stop the file passing while proving nothing, and **one of them
+caught a real mistake in the file's own scanner**: the regex matched type arguments with `[^>]*`,
+which cannot match `.post<Map<String, dynamic>>(` because the generic contains a `>` of its own.
+It found 23 of 36 routes and the coverage test passed anyway.
+
+> A coverage check's failure mode is that it goes **quiet**, never that it goes loud. Floor the
+> counts — `isNotEmpty` proves nothing.
+
+The same applies to the schema side: a route whose `$ref` does not resolve passes the assertion
+without comparing a single key, so the number of routes that really compared keys is floored too.
+Cross-check the scanner against `dart run tool/extract_routes.dart` before believing the app has
+lost routes.
+
+Note also that the GDPR routes carry **no response schema** in the snapshot — the controller
+returns anonymous objects — so the conformance gate cannot guard them at all, and
+`test/data/gdpr/gdpr_api_client_test.dart` is the only thing holding those shapes.
 
 ## Working notes for this repo
 
