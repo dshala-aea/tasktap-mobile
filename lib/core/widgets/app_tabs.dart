@@ -34,8 +34,106 @@ class AppTabs extends StatefulWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
 
+  /// The strip's fixed height.
+  ///
+  /// Exposed because [SliverPinnedTabs] has to declare the same number as a sliver extent, and a
+  /// pinned header whose extent disagrees with its child either clips the underline or leaves a
+  /// gap under it.
+  static const double height = 44;
+
   @override
   State<AppTabs> createState() => _AppTabsState();
+}
+
+/// [AppTabs] as a sliver that stays put once it reaches the top.
+///
+/// The ticket detail screen put its strip in a `SliverToBoxAdapter`, so it scrolled away with
+/// everything else. Reading anything in a tab meant scrolling past the timer, the fact card and
+/// the strip itself — and then switching tab meant scrolling back up to find the control, choosing
+/// one, and scrolling down again. With seven tabs that is the whole interaction, and it is why the
+/// screen read as "too many tabs" when the count was not really the problem.
+///
+/// Pinned, the strip is reachable from anywhere in the content, and which tab you are in stays on
+/// screen while you read it.
+///
+/// Paints an opaque background on purpose: a pinned header is drawn over the content scrolling
+/// beneath it, and a transparent one shows the rows sliding through the labels.
+class SliverPinnedTabs extends StatelessWidget {
+  const SliverPinnedTabs({
+    super.key,
+    required this.tabs,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  final List<AppTab> tabs;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _PinnedTabsDelegate(
+        tabs: tabs,
+        selectedIndex: selectedIndex,
+        onSelected: onSelected,
+        background: context.colors.bg2,
+        divider: context.colors.borderLight,
+      ),
+    );
+  }
+}
+
+class _PinnedTabsDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedTabsDelegate({
+    required this.tabs,
+    required this.selectedIndex,
+    required this.onSelected,
+    required this.background,
+    required this.divider,
+  });
+
+  final List<AppTab> tabs;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final Color background;
+  final Color divider;
+
+  @override
+  double get minExtent => AppTabs.height;
+
+  @override
+  double get maxExtent => AppTabs.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: background,
+        // Only once something is actually passing underneath. A permanent rule would draw a second
+        // line under the strip while it is still sitting in the page, competing with the active
+        // tab's own yellow underline.
+        border: overlapsContent
+            ? Border(bottom: BorderSide(color: divider, width: 1))
+            : null,
+      ),
+      child: AppTabs(tabs: tabs, selectedIndex: selectedIndex, onSelected: onSelected),
+    );
+  }
+
+  /// [onSelected] is deliberately not compared.
+  ///
+  /// Call sites build it as a closure over `setState`, so it is a new object on every parent build
+  /// and identity-comparing it would rebuild the strip on every frame the screen rebuilds — which
+  /// would also restart the auto-scroll that reveals the selected tab. What it *does* is fixed, so
+  /// the fields that change what the strip shows are the ones that matter here.
+  @override
+  bool shouldRebuild(_PinnedTabsDelegate old) =>
+      old.selectedIndex != selectedIndex ||
+      old.tabs != tabs ||
+      old.background != background ||
+      old.divider != divider;
 }
 
 class _AppTabsState extends State<AppTabs> {
@@ -100,7 +198,7 @@ class _AppTabsState extends State<AppTabs> {
     final onSelected = widget.onSelected;
 
     return SizedBox(
-      height: 44,
+      height: AppTabs.height,
       // Fades at both ends, so a strip that continues past the frame looks like one. Without it
       // seven tabs and four tabs are indistinguishable until you happen to drag.
       child: ShaderMask(

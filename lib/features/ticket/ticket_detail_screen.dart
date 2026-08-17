@@ -31,6 +31,37 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   int _tabIndex = 0;
 
+  /// Owned here rather than by the body, which is rebuilt on every ticket change.
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Switch tab, and show the new one from its start.
+  ///
+  /// Only needed because the strip is pinned. Before, it scrolled away with the page, so the only
+  /// way to reach it was to scroll back to the top — which meant every switch happened from the
+  /// top and landed there. Pinned, the strip is reachable from the bottom of a long Ore list, and
+  /// without this a technician switching to Allegati would land in the middle of the photos with
+  /// nothing indicating they were not at the beginning.
+  ///
+  /// Returning to the top rather than to the strip's own resting position is deliberate: it needs
+  /// no geometry, it cannot land wrong, and it is the same view as opening the ticket fresh. The
+  /// cost is re-scrolling past the fact card, which is four rows.
+  void _selectTab(int index) {
+    if (index == _tabIndex) return;
+    setState(() => _tabIndex = index);
+    if (!_scrollController.hasClients || _scrollController.offset == 0) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
   /// Ordered by who is holding the phone.
   ///
   /// Four tabs fit a phone; there are seven. The old order put Pianificazioni third and
@@ -96,8 +127,9 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             statusMap: statusMap,
             typeMap: typeMap,
             tabIndex: _tabIndex,
-            onTabSelected: (i) => setState(() => _tabIndex = i),
+            onTabSelected: _selectTab,
             tabs: _tabs,
+            scrollController: _scrollController,
           );
         },
       ),
@@ -113,6 +145,7 @@ class _TicketDetailBody extends ConsumerWidget {
     required this.tabIndex,
     required this.onTabSelected,
     required this.tabs,
+    required this.scrollController,
   });
 
   final Ticket ticket;
@@ -121,6 +154,7 @@ class _TicketDetailBody extends ConsumerWidget {
   final int tabIndex;
   final ValueChanged<int> onTabSelected;
   final List<AppTab> tabs;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -189,6 +223,7 @@ class _TicketDetailBody extends ConsumerWidget {
 
           Expanded(
             child: CustomScrollView(
+              controller: scrollController,
               slivers: [
                 // Timer: status and control together, at the top of the content.
                 //
@@ -242,9 +277,19 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
                 ),
 
-                // Tabs
-                SliverToBoxAdapter(
-                  child: AppTabs(tabs: tabs, selectedIndex: tabIndex, onSelected: onTabSelected),
+                // Tabs — pinned, so the control that switches them is reachable from anywhere in
+                // the content below.
+                //
+                // This was a `SliverToBoxAdapter`, so the strip scrolled away with the timer and
+                // the fact card above it. Reading a tab meant scrolling past all of that, and
+                // switching tab then meant scrolling back up to find the strip, choosing one, and
+                // scrolling down again — on every switch. With seven tabs that round trip *is* the
+                // screen, which is why it read as "too many tabs" when the count was not the
+                // problem.
+                SliverPinnedTabs(
+                  tabs: tabs,
+                  selectedIndex: tabIndex,
+                  onSelected: onTabSelected,
                 ),
 
                 // Tab content
