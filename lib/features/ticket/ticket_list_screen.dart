@@ -10,6 +10,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -314,7 +315,10 @@ class _TicketRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shortId = ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
+    // Was `#${id.substring(0, 8)}` — eight hex characters of a GUID under every row, which no
+    // technician can match to anything. Where the ticket has no number the subtitle is dropped
+    // rather than filled with the id, and the title carries the row on its own.
+    final reference = ticketReference(ticket.numero);
     final dateLabel = DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
 
     return ListRow(
@@ -329,7 +333,7 @@ class _TicketRow extends ConsumerWidget {
         child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
       ),
       title: ticket.title,
-      subtitle: '#$shortId',
+      subtitle: reference,
       meta: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,

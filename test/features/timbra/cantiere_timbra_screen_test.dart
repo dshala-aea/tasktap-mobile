@@ -303,12 +303,43 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('shows ticket reference in active session card', (tester) async {
+    // The session carries a ticket id and nothing else, so this row used to render
+    // `#${ticketId.substring(0, 8)}` — and the old test asserted exactly that, which is how the
+    // GUID fragment survived review. It now resolves against the local mirror to the job's name.
+    testWidgets('names the linked ticket, rather than printing its id', (tester) async {
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'tick-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              title: 'Sostituzione pompa',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('tick-1'), findsOneWidget);
+      expect(find.text('Sostituzione pompa'), findsOneWidget);
+      expect(find.textContaining('tick-1'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets('drops the row entirely when the mirror does not hold the ticket', (tester) async {
+      // Nothing seeded. The honest answer is silence: printing the id back would name the job
+      // with something the technician cannot match to anything in front of them.
+      final api = _FakeApiClient(activeLog: _activeLog());
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TICKET'), findsNothing);
+      expect(find.textContaining('tick-1'), findsNothing);
       await _teardown(tester);
     });
 

@@ -182,6 +182,17 @@ class TicketDto {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String title;
+
+  /// The per-tenant display number — what a technician and the customer both call this job.
+  ///
+  /// It has been on the wire the whole time: mobile sync returns the `Ticket` entity itself and
+  /// the entity carries `Numero`. This client simply never read it, so every ticket surface fell
+  /// back to `id.substring(0, 8)` and titled the screen with eight hex characters of a GUID.
+  ///
+  /// Null for tickets created before numbering existed. Null means *no number*, and the UI shows
+  /// nothing rather than reaching for the id again.
+  final String? numero;
+
   final String? description;
   final String customerId;
   final String locationId;
@@ -202,6 +213,7 @@ class TicketDto {
     required this.createdAt,
     this.updatedAt,
     required this.title,
+    this.numero,
     this.description,
     required this.customerId,
     required this.locationId,
@@ -223,6 +235,7 @@ class TicketDto {
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: _dt(j['updatedAt']),
     title: j['title'] as String,
+    numero: j['numero'] as String?,
     description: j['description'] as String?,
     customerId: j['customerId'] as String,
     locationId: j['locationId'] as String,

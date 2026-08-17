@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/clienti/cliente_overview_api_client.dart';
+import '../ticket/ticket_label.dart';
 import 'clienti_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -203,7 +204,7 @@ class _ClienteDetailBody extends ConsumerWidget {
             SliverList(
               delegate: SliverChildBuilderDelegate((context, i) {
                 final ticket = tickets[i];
-                final shortId = ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
+                final reference = ticketReference(ticket.numero);
                 final dateLabel = DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 19),
@@ -218,7 +219,7 @@ class _ClienteDetailBody extends ConsumerWidget {
                       child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
                     ),
                     title: ticket.title,
-                    subtitle: '#$shortId',
+                    subtitle: reference,
                     meta: Text(
                       dateLabel,
                       style: TextStyle(fontSize: 10, color: context.colors.inkMuted),

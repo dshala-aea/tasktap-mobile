@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -64,14 +65,14 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
   }
 }
 
-class _SquadraDetailBody extends StatelessWidget {
+class _SquadraDetailBody extends ConsumerWidget {
   const _SquadraDetailBody({required this.squadra, required this.membri});
 
   final Map<String, dynamic> squadra;
   final List<Map<String, dynamic>> membri;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final nome = squadra['nome'] as String? ?? '';
     final descrizione = squadra['descrizione'] as String? ?? '';
     final spec = squadra['specializzazione'] as String? ?? '';
@@ -135,9 +136,19 @@ class _SquadraDetailBody extends StatelessWidget {
               final membro = membri[i];
               final userId = membro['userId'] as String? ?? '';
               final ruolo = membro['ruolo'] as String? ?? 'Membro';
+              // A crew member was listed by `userId.substring(0, 8)` — a person, named at their
+              // own colleagues with eight characters of a GUID. `/api/squadre/{id}` returns raw
+              // SquadraMember rows and carries no name, so the name comes from the colleagues
+              // mirror the app already syncs for the rapportino staff picker.
+              //
+              // That substring was also a crash: `userId` defaults to '' when the key is missing,
+              // and `''.substring(0, 8)` throws RangeError, taking the whole list with it.
+              final nome = userId.isEmpty
+                  ? null
+                  : ref.watch(colleagueNameProvider(userId)).valueOrNull;
               return ListRow(
                 leading: const CircleAvatar(radius: 18, child: Icon(LucideIcons.user, size: 18)),
-                title: userId.substring(0, 8),
+                title: nome ?? 'Membro non sincronizzato',
                 subtitle: ruolo,
                 meta: IconButton(
                   icon: const Icon(LucideIcons.userMinus, size: 18),

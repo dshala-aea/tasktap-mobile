@@ -78,6 +78,13 @@ class Tickets extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   TextColumn get title => text()();
+
+  /// The per-tenant display number the office and the customer use for this job.
+  ///
+  /// Nullable because tickets created before numbering existed do not have one. Absent means the
+  /// ticket has no number — never a reason to fall back to the id.
+  TextColumn get numero => text().nullable()();
+
   TextColumn get description => text().nullable()();
   TextColumn get customerId => text()();
   TextColumn get locationId => text()();
@@ -577,7 +584,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -641,6 +648,16 @@ class AppDatabase extends _$AppDatabase {
           // is the honest answer for every rapportino that predates the column.
           await m.addColumn(draftReports, draftReports.isAiAssisted);
         }
+        if (from < 12) {
+          // The ticket's display number, which the server has been sending all along.
+          //
+          // Adding the column is not enough on its own: existing rows are null, and the delta
+          // cursor means an unchanged ticket is never sent again — so on every device already in
+          // the field the number would stay null forever and the UI would keep falling back to a
+          // GUID fragment. `syncCursorGeneration` is bumped alongside this for that reason. A new
+          // column on a delta-synced table always needs both.
+          await m.addColumn(tickets, tickets.numero);
+        }
       },
     );
   }
@@ -661,7 +678,10 @@ class AppDatabase extends _$AppDatabase {
   /// a device on an older generation simply finds no row and syncs from scratch.
   ///
   /// v2 — 2026-08-16, the COALESCE(UpdatedAt, CreatedAt) delta fix.
-  static const String syncCursorGeneration = 'v2';
+  /// v3 — 2026-08-17, schema 12 added `tickets.numero`. The column arrives empty and a delta sync
+  ///      would never refill it, because the tickets it needs are precisely the ones that have not
+  ///      changed. Same reasoning as v2: a cursor can outlive its own correctness.
+  static const String syncCursorGeneration = 'v3';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

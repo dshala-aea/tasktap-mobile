@@ -33,6 +33,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
+import '../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
@@ -502,7 +503,7 @@ class _CheckInBody extends StatelessWidget {
 
 // ── _ActiveSessionBody ────────────────────────────────────────────────────────
 
-class _ActiveSessionBody extends StatelessWidget {
+class _ActiveSessionBody extends ConsumerWidget {
   const _ActiveSessionBody({
     required this.activeLog,
     required this.isLoading,
@@ -516,8 +517,17 @@ class _ActiveSessionBody extends StatelessWidget {
   final VoidCallback onEnd;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final dateLabel = DateFormat('dd/MM/yyyy', 'it').format(activeLog.workDate.toLocal());
+
+    // The session carries a ticket id and nothing else, so the row read `#3f2a1c8e`. Resolved
+    // against the local mirror to the job's own name — which is what the technician is standing
+    // in front of — and dropped entirely when the mirror does not hold it, rather than printing
+    // the id back at them.
+    final ticketId = activeLog.ticketId;
+    final ticketLabel = ticketId == null
+        ? null
+        : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
@@ -559,14 +569,8 @@ class _ActiveSessionBody extends StatelessWidget {
                       ? activeLog.startTime.substring(0, 5)
                       : activeLog.startTime,
                 ),
-                if (activeLog.ticketId != null)
-                  KeyVal(
-                    label: 'Ticket',
-                    value: activeLog.ticketId!.length > 8
-                        ? '#${activeLog.ticketId!.substring(0, 8)}'
-                        : '#${activeLog.ticketId}',
-                    showDivider: false,
-                  ),
+                if (ticketLabel != null)
+                  KeyVal(label: 'Ticket', value: ticketLabel, showDivider: false),
               ],
             ),
           ),

@@ -14,6 +14,7 @@ import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../rapportino/create_draft.dart';
 import 'ticket_detail_api_client.dart';
+import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'ticket_workflow_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -125,7 +126,7 @@ class _TicketDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statusName = statusMap[ticket.statusId] ?? '';
     final typeName = typeMap[ticket.typeId] ?? '';
-    final shortId = ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
+    final reference = ticketReference(ticket.numero);
     final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(ticket.createdAt.toLocal());
     final closedLabel = ticket.closedAt != null
         ? DateFormat('dd/MM/yyyy', 'it').format(ticket.closedAt!.toLocal())
@@ -148,9 +149,18 @@ class _TicketDetailBody extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // The job leads; the reference supports it.
+          //
+          // This was the other way round — `#3f2a1c8e` as the page title, in the largest type on
+          // the screen, with the ticket's actual name demoted to the subtitle. The technician
+          // arrived at a screen whose headline was eight characters of a GUID and had to read the
+          // second line to find out which job they were looking at.
+          //
+          // Where the ticket has no number the subtitle is simply absent. Nothing is invented and
+          // the id never comes back.
           ScreenHeader(
-            title: '#$shortId',
-            subtitle: ticket.title,
+            title: ticket.title,
+            subtitle: reference,
             showBack: true,
             actions: [
               HeaderIconBtn(

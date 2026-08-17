@@ -197,6 +197,7 @@ class SyncService {
               createdAt: t.createdAt,
               updatedAt: Value(t.updatedAt),
               title: t.title,
+              numero: Value(t.numero),
               description: Value(t.description),
               customerId: t.customerId,
               locationId: t.locationId,
