@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -16,8 +17,7 @@ class AdminCustomerListScreen extends StatefulWidget {
   const AdminCustomerListScreen({super.key});
 
   @override
-  State<AdminCustomerListScreen> createState() =>
-      _AdminCustomerListScreenState();
+  State<AdminCustomerListScreen> createState() => _AdminCustomerListScreenState();
 }
 
 class _AdminCustomerListScreenState extends State<AdminCustomerListScreen> {
@@ -44,9 +44,12 @@ class _AdminCustomerListScreenState extends State<AdminCustomerListScreen> {
           onToggleInactive: (v) => setState(() => _showInactive = v),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo cliente',
-        onPressed: () => context.push('/altro/clienti/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo cliente',
+          onPressed: () => context.push('/altro/clienti/nuovo'),
+        ),
       ),
     );
   }
@@ -74,7 +77,8 @@ class _AdminCustomerListBody extends ConsumerWidget {
 
     final filtered = allCustomers.where((c) {
       final matchActive = showInactive || c.isActive;
-      final matchQuery = query.isEmpty ||
+      final matchQuery =
+          query.isEmpty ||
           c.companyName.toLowerCase().contains(query.toLowerCase()) ||
           (c.city?.toLowerCase().contains(query.toLowerCase()) ?? false);
       return matchActive && matchQuery;
@@ -83,84 +87,72 @@ class _AdminCustomerListBody extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () => ref.read(syncProvider.notifier).performSync(),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Clienti',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca per ragione sociale o città…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        // ── Filter toggle ──────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-            child: Row(
-              children: [
-                AppChip(
-                  label: 'Attivi',
-                  active: !showInactive,
-                  onTap: () => onToggleInactive(false),
-                ),
-                const SizedBox(width: 8),
-                AppChip(
-                  label: 'Tutti',
-                  active: showInactive,
-                  onTap: () => onToggleInactive(true),
-                ),
-              ],
+        slivers: [
+          SliverToBoxAdapter(
+            child: ScreenHeader(
+              title: 'Clienti',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
           ),
-        ),
-        if (customersAsync.isLoading)
-          const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: searchCtrl,
+              hint: 'Cerca per ragione sociale o città…',
+              onChanged: onQueryChanged,
+            ),
+          ),
+          // ── Filter toggle ──────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              child: Row(
+                children: [
+                  AppChip(
+                    label: 'Attivi',
+                    active: !showInactive,
+                    onTap: () => onToggleInactive(false),
+                  ),
+                  const SizedBox(width: 8),
+                  AppChip(
+                    label: 'Tutti',
+                    active: showInactive,
+                    onTap: () => onToggleInactive(true),
+                  ),
+                ],
               ),
             ),
-          )
-        else if (filtered.isEmpty)
-          SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.users,
-              title: 'Nessun cliente',
-              body: 'Crea un nuovo cliente con il pulsante +.',
-            ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final customer = filtered[i];
-                return _AdminCustomerRow(
-                  customer: customer,
-                  isLast: i == filtered.length - 1,
-                );
-              },
-              childCount: filtered.length,
-            ),
           ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          if (customersAsync.isLoading)
+            const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              ),
+            )
+          else if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.users,
+                title: 'Nessun cliente',
+                body: 'Crea un nuovo cliente con il pulsante +.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final customer = filtered[i];
+                return _AdminCustomerRow(customer: customer, isLast: i == filtered.length - 1);
+              }, childCount: filtered.length),
+            ),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
       ),
     );
   }
 }
 
 class _AdminCustomerRow extends StatelessWidget {
-  const _AdminCustomerRow({
-    required this.customer,
-    required this.isLast,
-  });
+  const _AdminCustomerRow({required this.customer, required this.isLast});
 
   final Customer customer;
   final bool isLast;
@@ -174,11 +166,7 @@ class _AdminCustomerRow extends StatelessWidget {
       leading: AppAvatar(name: customer.companyName, size: 40),
       title: '${customer.companyName}$statusLabel',
       subtitle: cityLabel,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: () => context.push('/altro/clienti/${customer.id}'),
     );

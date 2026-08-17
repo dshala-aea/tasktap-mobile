@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -11,11 +12,12 @@ import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single cantiere by id from Drift cache.
-final adminCantiereDetailProvider =
-    StreamProvider.autoDispose.family<CantieriData?, String>((ref, id) {
+final adminCantiereDetailProvider = StreamProvider.autoDispose.family<CantieriData?, String>((
+  ref,
+  id,
+) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.cantieri)..where((c) => c.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.cantieri)..where((c) => c.id.equals(id))).watchSingleOrNull();
 });
 
 /// Admin cantiere detail — read-only with edit FAB.
@@ -26,17 +28,19 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cantiereAsync =
-        ref.watch(adminCantiereDetailProvider(cantiereId));
+    final cantiereAsync = ref.watch(adminCantiereDetailProvider(cantiereId));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.pencil,
-        tooltip: 'Modifica',
-        onPressed: () async {
-          await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          icon: LucideIcons.pencil,
+          tooltip: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>('/altro/cantieri/$cantiereId/modifica');
+          },
+        ),
       ),
       body: cantiereAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -45,15 +49,13 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
           if (cantiere == null) {
             return const UnavailableState(
               titolo: 'Cantiere non disponibile',
-              motivo: "L'elenco cantieri non è ancora sincronizzato sul "
+              motivo:
+                  "L'elenco cantieri non è ancora sincronizzato sul "
                   'dispositivo, quindi questo cantiere non può essere '
                   'letto dalla cache locale anche se esiste sul server.',
             );
           }
-          return _CantiereDetailBody(
-            cantiere: cantiere,
-            cantiereId: cantiereId,
-          );
+          return _CantiereDetailBody(cantiere: cantiere, cantiereId: cantiereId);
         },
       ),
     );
@@ -61,10 +63,7 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
 }
 
 class _CantiereDetailBody extends StatelessWidget {
-  const _CantiereDetailBody({
-    required this.cantiere,
-    required this.cantiereId,
-  });
+  const _CantiereDetailBody({required this.cantiere, required this.cantiereId});
 
   final CantieriData cantiere;
   final String cantiereId;
@@ -88,12 +87,7 @@ class _CantiereDetailBody extends StatelessWidget {
             actions: [
               PopupMenuButton<String>(
                 icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Modifica'),
-                  ),
-                ],
+                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
                 onSelected: (v) {
                   if (v == 'edit') {
                     context.push('/altro/cantieri/$cantiereId/modifica');
@@ -112,19 +106,19 @@ class _CantiereDetailBody extends StatelessWidget {
                 _InfoRow(label: 'Nome', value: cantiere.name),
                 _InfoRow(label: 'Città', value: cantiere.city ?? '—'),
                 _InfoRow(label: 'Indirizzo', value: cantiere.address ?? '—'),
-                _InfoRow(
-                    label: 'CAP', value: cantiere.postalCode ?? '—'),
+                _InfoRow(label: 'CAP', value: cantiere.postalCode ?? '—'),
                 _InfoRow(label: 'Inizio', value: startLabel),
                 _InfoRow(label: 'Fine', value: endLabel),
                 _InfoRow(
-                    label: 'Note',
-                    value: cantiere.notes?.isNotEmpty == true
-                        ? cantiere.notes!
-                        : '—'),
+                  label: 'Note',
+                  value: cantiere.notes?.isNotEmpty == true ? cantiere.notes! : '—',
+                ),
               ],
             ),
           ),
         ),
+
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }
@@ -145,17 +139,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

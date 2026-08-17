@@ -1,7 +1,6 @@
 // lib/features/calendario/views/settimana_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
@@ -10,6 +9,7 @@ import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Calendario → Settimana view: 7-column day grid for the selected week with
 /// compact event chips per day. Columns are scrollable horizontally; chips
@@ -45,7 +45,7 @@ class SettimanaView extends ConsumerWidget {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.fromLTRB(8, 0, 8, context.navClearance),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: days.map((day) {
@@ -65,13 +65,14 @@ class SettimanaView extends ConsumerWidget {
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
                     color: isToday ? context.colors.surfaceInverse : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: AppRack.insetShape,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           dayAbbr.format(day).toUpperCase(),
-                          style: GoogleFonts.manrope(
+                          style: TextStyle(
+                            fontFamily: 'Manrope',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: isToday ? AppColors.Y : context.colors.inkMuted,
@@ -81,11 +82,11 @@ class SettimanaView extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${day.day}',
-                          style: GoogleFonts.sora(
+                          style: TextStyle(
+                            fontFamily: 'Sora',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color:
-                                isToday ? context.colors.inkInverse : context.colors.ink,
+                            color: isToday ? context.colors.inkInverse : context.colors.ink,
                           ),
                         ),
                       ],
@@ -94,16 +95,17 @@ class SettimanaView extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 // Event chips
-                ...daySchedules.map((s) => _WeekEventChip(
-                      schedule: s,
-                      onTap: () => onEventTap?.call(s),
-                    )),
+                ...daySchedules.map(
+                  (s) => _WeekEventChip(schedule: s, onTap: () => onEventTap?.call(s)),
+                ),
                 if (daySchedules.isEmpty)
                   SizedBox(
                     height: 32,
                     child: Center(
-                      child: Text('–',
-                          style: TextStyle(color: context.colors.inkDisabled, fontSize: 12)),
+                      child: Text(
+                        '–',
+                        style: TextStyle(color: context.colors.inkDisabled, fontSize: 12),
+                      ),
                     ),
                   ),
               ],
@@ -132,14 +134,15 @@ class _WeekEventChip extends StatelessWidget {
       child: AppTappable(
         onTap: onTap,
         color: pair.background,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: AppRack.insetShape,
         border: Border.all(color: pair.foreground.withAlpha(51), width: 0.5),
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Text(
           schedule.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.manrope(
+          style: TextStyle(
+            fontFamily: 'Manrope',
             fontSize: 10,
             fontWeight: FontWeight.w600,
             color: pair.foreground,

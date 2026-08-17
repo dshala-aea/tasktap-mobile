@@ -18,10 +18,7 @@ final dioProvider = Provider<Dio>((ref) {
       baseUrl: Env.apiBaseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
+      headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
     ),
   );
 
@@ -74,10 +71,7 @@ final dioProvider = Provider<Dio>((ref) {
 /// 3. On second 401 (refresh failed): calls [AuthInterceptor.onForcedSignOut]
 ///    so the app can route to /login.
 class AuthInterceptor extends Interceptor {
-  AuthInterceptor({
-    required this.dio,
-    required this.authRepo,
-  });
+  AuthInterceptor({required this.dio, required this.authRepo});
 
   final Dio dio;
   final IAuthRepository authRepo;
@@ -86,10 +80,7 @@ class AuthInterceptor extends Interceptor {
   void Function()? onForcedSignOut;
 
   @override
-  void onRequest(
-    RequestOptions options,
-    RequestInterceptorHandler handler,
-  ) {
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final user = authRepo.currentUser;
     if (user != null) {
       options.headers['Authorization'] = 'Bearer ${user.accessToken}';
@@ -98,15 +89,11 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
-  Future<void> onError(
-    DioException err,
-    ErrorInterceptorHandler handler,
-  ) async {
+  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
     final response = err.response;
 
     // Only handle 401 Unauthorized — and only once (not on retry).
-    if (response?.statusCode == 401 &&
-        err.requestOptions.extra['_retried'] != true) {
+    if (response?.statusCode == 401 && err.requestOptions.extra['_retried'] != true) {
       // Attempt silent refresh.
       final refreshResult = await authRepo.refreshSession();
 
@@ -114,8 +101,7 @@ class AuthInterceptor extends Interceptor {
         // Token refreshed — retry the original request.
         final options = err.requestOptions
           ..extra['_retried'] = true
-          ..headers['Authorization'] =
-              'Bearer ${refreshResult.user!.accessToken}';
+          ..headers['Authorization'] = 'Bearer ${refreshResult.user!.accessToken}';
 
         try {
           final retryResponse = await dio.fetch(options);

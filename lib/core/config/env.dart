@@ -22,16 +22,10 @@
 /// SENTRY_DSN is optional: when absent, crash reporting is a no-op.
 abstract final class Env {
   /// Zitadel OIDC issuer — e.g. https://tasktap-auth.advantedgeautomation.com
-  static const String oidcIssuer = String.fromEnvironment(
-    'OIDC_ISSUER',
-    defaultValue: '',
-  );
+  static const String oidcIssuer = String.fromEnvironment('OIDC_ISSUER', defaultValue: '');
 
   /// OIDC client id of the mobile (Native) app.
-  static const String oidcClientId = String.fromEnvironment(
-    'OIDC_CLIENT_ID',
-    defaultValue: '',
-  );
+  static const String oidcClientId = String.fromEnvironment('OIDC_CLIENT_ID', defaultValue: '');
 
   /// OIDC redirect URI (custom scheme). Must match the app's registered scheme
   /// and the Zitadel Native app's redirect URI — e.g. it.tasktap.app://callback
@@ -41,10 +35,7 @@ abstract final class Env {
   );
 
   /// TaskTap backend REST API base URL — e.g. https://api.tasktap.io
-  static const String apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: '',
-  );
+  static const String apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
 
   /// Sentry DSN for crash reporting.
   ///
@@ -54,14 +45,9 @@ abstract final class Env {
   ///
   /// Obtain the DSN from your Sentry project settings and pass it at build time:
   ///   `--dart-define=SENTRY_DSN=https://<KEY>@o<ORG>.ingest.sentry.io/<PROJECT>`
-  static const String sentryDsn = String.fromEnvironment(
-    'SENTRY_DSN',
-    defaultValue: '',
-  );
+  static const String sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 
   /// Returns true when all required env vars are present.
   static bool get isConfigured =>
-      oidcIssuer.isNotEmpty &&
-      oidcClientId.isNotEmpty &&
-      apiBaseUrl.isNotEmpty;
+      oidcIssuer.isNotEmpty && oidcClientId.isNotEmpty && apiBaseUrl.isNotEmpty;
 }

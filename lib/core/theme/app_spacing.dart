@@ -1,3 +1,5 @@
+import 'app_rack.dart';
+
 /// TaskTap spacing scale (4 pt base).
 abstract final class AppSpacing {
   static const double xs = 4;
@@ -20,14 +22,25 @@ abstract final class AppSpacing {
   /// Off the 4pt scale on purpose, and the only member that is. Nothing else should be.
   static const double pagePadding = 19;
 
-  /// Standard card border radius.
-  static const double cardRadius = 12;
+  // ── Corner language ───────────────────────────────────────────────────────
+  //
+  // These were 12 / 10 / 10 — the moulded rounded-card idiom every app in this category ships.
+  // The rack is machined, not moulded, so they now delegate to [AppRack]. They stay here as
+  // aliases rather than being deleted because the theme and a handful of screens reference them
+  // by these names, and one edit to the token layer was cheaper and safer than nine to the theme.
+  //
+  // The floating pill nav is the deliberate exception and keeps its own large radius: it is the
+  // load strap across the bottom of the bay, a different object, and a pinned brand commitment.
 
-  /// Standard button border radius.
-  static const double buttonRadius = 10;
+  /// A cell — the app's container. See [AppRack.cellRadius].
+  static const double cardRadius = AppRack.cellRadius;
 
-  /// Standard input border radius.
-  static const double inputRadius = 10;
+  /// A control. Same as a cell: a button is a cell you can press.
+  static const double buttonRadius = AppRack.cellRadius;
+
+  /// A compartment inside a cell — an input, a material line, an hour tile.
+  /// See [AppRack.insetRadius].
+  static const double inputRadius = AppRack.insetRadius;
 
   /// Bottom nav bar height (including safe-area overlay).
   static const double bottomNavHeight = 64;

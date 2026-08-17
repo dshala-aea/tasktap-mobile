@@ -9,22 +9,21 @@ import 'package:tasktap_mobile/core/location/location_service.dart';
 
 // ── Fake implementations ──────────────────────────────────────────────────────
 
-class _FakeLocationServiceReturnsCoords implements ILocationService {
+class _FakeLocationServiceReturnsCoords extends ILocationService {
   const _FakeLocationServiceReturnsCoords();
 
   @override
-  Future<GpsCoords?> getCurrentPosition() async =>
-      (lat: 45.4654219, lng: 9.1859243);
+  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654219, lng: 9.1859243);
 }
 
-class _FakeLocationServiceReturnsNull implements ILocationService {
+class _FakeLocationServiceReturnsNull extends ILocationService {
   const _FakeLocationServiceReturnsNull();
 
   @override
   Future<GpsCoords?> getCurrentPosition() async => null;
 }
 
-class _FakeLocationServiceThrows implements ILocationService {
+class _FakeLocationServiceThrows extends ILocationService {
   const _FakeLocationServiceThrows();
 
   @override

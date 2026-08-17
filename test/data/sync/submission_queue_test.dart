@@ -18,8 +18,7 @@ class MockReportSubmitApiClient extends Mock implements ReportSubmitApiClient {}
 
 class FakeSubmitReportRequest extends Fake implements SubmitReportRequest {}
 
-class FakeReportAttachmentUploadResponse extends Fake
-    implements ReportAttachmentUploadResponse {}
+class FakeReportAttachmentUploadResponse extends Fake implements ReportAttachmentUploadResponse {}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Helpers
@@ -39,54 +38,70 @@ Future<void> _insertDraft(
   String? suffix,
 }) async {
   final s = suffix ?? id;
-  await db.into(db.draftReports).insert(DraftReportsCompanion.insert(
-        id: id,
-        tenantId: 'tenant-1',
-        createdAt: DateTime.utc(2026, 1, 1),
-        title: 'Test rapportino',
-        insertedUserId: 'user-1',
-        locationId: 'loc-1',
-        isLocalOnly: const Value(true),
-        submissionState: Value(submissionState),
-        idempotencyKey: Value(idempotencyKey),
-        customerSignatureAllegatoId: Value(customerSigId),
-        technicianSignatureAllegatoId: Value(technicianSigId),
-      ));
-
-  // Insert a staff row
-  await db.into(db.reportStaffTable).insert(ReportStaffTableCompanion.insert(
-        id: 'staff-$s',
-        tenantId: 'tenant-1',
-        createdAt: DateTime.utc(2026, 1, 1),
-        reportId: id,
-        userId: 'user-1',
-      ));
-
-  // Insert a materiale row
-  await db.into(db.reportMateriali).insert(ReportMaterialiCompanion.insert(
-        id: 'mat-$s',
-        tenantId: 'tenant-1',
-        createdAt: DateTime.utc(2026, 1, 1),
-        reportId: id,
-        quantity: 1.0,
-        freeTextName: const Value('Vite'),
-      ));
-
-  if (isPendingAllegato) {
-    await db.into(db.reportAllegati).insert(ReportAllegatiCompanion.insert(
-          id: 'allegato-local-$s',
+  await db
+      .into(db.draftReports)
+      .insert(
+        DraftReportsCompanion.insert(
+          id: id,
           tenantId: 'tenant-1',
           createdAt: DateTime.utc(2026, 1, 1),
-          fileName: 'photo.jpg',
-          contentType: 'image/jpeg',
-          sizeBytes: 1024,
-          storagePath: '/local/photo.jpg',
-          url: '/local/photo.jpg',
-          entityType: 1,
-          entityId: id,
-          uploadedByUserId: 'user-1',
-          isPendingUpload: const Value(true),
-        ));
+          title: 'Test rapportino',
+          insertedUserId: 'user-1',
+          locationId: 'loc-1',
+          isLocalOnly: const Value(true),
+          submissionState: Value(submissionState),
+          idempotencyKey: Value(idempotencyKey),
+          customerSignatureAllegatoId: Value(customerSigId),
+          technicianSignatureAllegatoId: Value(technicianSigId),
+        ),
+      );
+
+  // Insert a staff row
+  await db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: 'staff-$s',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: id,
+          userId: 'user-1',
+        ),
+      );
+
+  // Insert a materiale row
+  await db
+      .into(db.reportMateriali)
+      .insert(
+        ReportMaterialiCompanion.insert(
+          id: 'mat-$s',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: id,
+          quantity: 1.0,
+          freeTextName: const Value('Vite'),
+        ),
+      );
+
+  if (isPendingAllegato) {
+    await db
+        .into(db.reportAllegati)
+        .insert(
+          ReportAllegatiCompanion.insert(
+            id: 'allegato-local-$s',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            fileName: 'photo.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 1024,
+            storagePath: '/local/photo.jpg',
+            url: '/local/photo.jpg',
+            entityType: 1,
+            entityId: id,
+            uploadedByUserId: 'user-1',
+            isPendingUpload: const Value(true),
+          ),
+        );
   }
 }
 
@@ -115,31 +130,25 @@ void main() {
 
   group('DraftSubmissionState', () {
     test('fromString maps all known values', () {
-      expect(DraftSubmissionState.fromString('draft'),
-          DraftSubmissionState.draft);
-      expect(DraftSubmissionState.fromString('readyToSubmit'),
-          DraftSubmissionState.readyToSubmit);
-      expect(DraftSubmissionState.fromString('uploadingMedia'),
-          DraftSubmissionState.uploadingMedia);
-      expect(DraftSubmissionState.fromString('submitting'),
-          DraftSubmissionState.submitting);
-      expect(DraftSubmissionState.fromString('submitted'),
-          DraftSubmissionState.submitted);
-      expect(DraftSubmissionState.fromString('failed'),
-          DraftSubmissionState.failed);
+      expect(DraftSubmissionState.fromString('draft'), DraftSubmissionState.draft);
+      expect(DraftSubmissionState.fromString('readyToSubmit'), DraftSubmissionState.readyToSubmit);
+      expect(
+        DraftSubmissionState.fromString('uploadingMedia'),
+        DraftSubmissionState.uploadingMedia,
+      );
+      expect(DraftSubmissionState.fromString('submitting'), DraftSubmissionState.submitting);
+      expect(DraftSubmissionState.fromString('submitted'), DraftSubmissionState.submitted);
+      expect(DraftSubmissionState.fromString('failed'), DraftSubmissionState.failed);
     });
 
     test('fromString returns draft for null or unknown', () {
-      expect(DraftSubmissionState.fromString(null),
-          DraftSubmissionState.draft);
-      expect(DraftSubmissionState.fromString('garbage'),
-          DraftSubmissionState.draft);
+      expect(DraftSubmissionState.fromString(null), DraftSubmissionState.draft);
+      expect(DraftSubmissionState.fromString('garbage'), DraftSubmissionState.draft);
     });
 
     test('toPersistedString is stable', () {
       expect(DraftSubmissionState.draft.toPersistedString(), 'draft');
-      expect(DraftSubmissionState.readyToSubmit.toPersistedString(),
-          'readyToSubmit');
+      expect(DraftSubmissionState.readyToSubmit.toPersistedString(), 'readyToSubmit');
       expect(DraftSubmissionState.submitted.toPersistedString(), 'submitted');
       expect(DraftSubmissionState.failed.toPersistedString(), 'failed');
     });
@@ -184,29 +193,33 @@ void main() {
 
   group('idempotency key stability across retries', () {
     test('retry reuses the same idempotency key', () async {
-      await _insertDraft(db, submissionState: 'failed',
-          idempotencyKey: 'stable-key-abc');
+      await _insertDraft(db, submissionState: 'failed', idempotencyKey: 'stable-key-abc');
 
       // Mock API to succeed on retry
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-            replayed: false,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async => const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+          replayed: false,
+        ),
+      );
 
       // Capture the idempotency key used in the submit call
       String? capturedKey;
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
-        capturedKey =
-            inv.namedArguments[#idempotencyKey] as String?;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedKey = inv.namedArguments[#idempotencyKey] as String?;
         return const SubmitReportResponse(
           id: 'report-1',
           title: 'Test',
@@ -224,18 +237,17 @@ void main() {
 
   group('SubmissionQueue.processAll — no pending allegati', () {
     test('draft with no pending allegati skips to submitting', () async {
-      await _insertDraft(db, submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1');
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
 
       await queue.processAll();
 
@@ -245,18 +257,17 @@ void main() {
       expect(draft.stato, 'Inviato');
     });
 
-    test('submit maps draft → SubmitReportRequest with correct field names',
-        () async {
-      await _insertDraft(db, submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1');
+    test('submit maps draft → SubmitReportRequest with correct field names', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
 
       SubmitReportRequest? capturedRequest;
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
-        capturedRequest =
-            inv.namedArguments[#request] as SubmitReportRequest?;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
         return const SubmitReportResponse(
           id: 'report-1',
           title: 'Test',
@@ -280,43 +291,49 @@ void main() {
 
   group('SubmissionQueue.processAll — with pending allegati', () {
     test('uploads pending allegati before submitting', () async {
-      await _insertDraft(db,
-          submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1',
-          isPendingAllegato: true);
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        isPendingAllegato: true,
+      );
 
-      when(() => mockApiClient.uploadAttachment(
-            reportId: any(named: 'reportId'),
-            localPath: any(named: 'localPath'),
-            fileName: any(named: 'fileName'),
-            contentType: any(named: 'contentType'),
-          )).thenAnswer((_) async =>
-          const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-1'));
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenAnswer(
+        (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-1'),
+      );
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
 
       await queue.processAll();
 
       // Upload was called once
-      verify(() => mockApiClient.uploadAttachment(
-            reportId: 'report-1',
-            localPath: '/local/photo.jpg',
-            fileName: 'photo.jpg',
-            contentType: 'image/jpeg',
-          )).called(1);
+      verify(
+        () => mockApiClient.uploadAttachment(
+          reportId: 'report-1',
+          localPath: '/local/photo.jpg',
+          fileName: 'photo.jpg',
+          contentType: 'image/jpeg',
+        ),
+      ).called(1);
 
       // Allegato is no longer pending
       final allegati = await repo.getAllegati('report-1');
-      final uploaded =
-          allegati.where((a) => !a.isPendingUpload).toList();
+      final uploaded = allegati.where((a) => !a.isPendingUpload).toList();
       expect(uploaded.length, 1);
 
       // Draft is submitted
@@ -324,28 +341,33 @@ void main() {
       expect(draft!.submissionState, 'submitted');
     });
 
-    test('maps local allegato id → server allegato id in photoAllegatoIds',
-        () async {
-      await _insertDraft(db,
-          submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1',
-          isPendingAllegato: true);
+    test('maps local allegato id → server allegato id in photoAllegatoIds', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        isPendingAllegato: true,
+      );
 
-      when(() => mockApiClient.uploadAttachment(
-            reportId: any(named: 'reportId'),
-            localPath: any(named: 'localPath'),
-            fileName: any(named: 'fileName'),
-            contentType: any(named: 'contentType'),
-          )).thenAnswer((_) async =>
-          const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-99'));
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenAnswer(
+        (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-99'),
+      );
 
       SubmitReportRequest? capturedRequest;
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
-        capturedRequest =
-            inv.namedArguments[#request] as SubmitReportRequest?;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
         return const SubmitReportResponse(
           id: 'report-1',
           title: 'Test',
@@ -357,44 +379,46 @@ void main() {
       await queue.processAll();
 
       // photoAllegatoIds now contains the SERVER id, not the local one
-      expect(capturedRequest!.photoAllegatoIds,
-          contains('server-allegato-99'));
-      expect(capturedRequest!.photoAllegatoIds,
-          isNot(contains('allegato-local-report-1')));
+      expect(capturedRequest!.photoAllegatoIds, contains('server-allegato-99'));
+      expect(capturedRequest!.photoAllegatoIds, isNot(contains('allegato-local-report-1')));
     });
   });
 
   group('SubmissionQueue — failure path', () {
     test('failure sets state to failed and preserves draft', () async {
-      await _insertDraft(db, submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-fail');
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-fail');
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenThrow(Exception('Network error'));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenThrow(Exception('Network error'));
 
       await queue.processAll();
 
       final draft = await repo.getDraft('report-1');
       expect(draft, isNotNull); // draft is NOT deleted
       expect(draft!.submissionState, 'failed');
-      expect(draft.submissionError, contains('Network error'));
+      // This column is rendered verbatim under "Invio fallito" in the Riepilogo step, so it must
+      // hold a sentence rather than the exception. It used to store `e.toString()`.
+      expect(draft.submissionError, isNot(contains('Network error')));
+      expect(draft.submissionError, isNot(contains('Exception')));
+      expect(draft.submissionError, contains('Niente è andato perso'));
     });
 
     test('failed draft can be retried', () async {
-      await _insertDraft(db, submissionState: 'failed',
-          idempotencyKey: 'stable-retry-key');
+      await _insertDraft(db, submissionState: 'failed', idempotencyKey: 'stable-retry-key');
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
 
       await queue.retry('report-1');
 
@@ -403,50 +427,62 @@ void main() {
     });
 
     test('attachment upload failure sets failed state', () async {
-      await _insertDraft(db,
-          submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-attach-fail',
-          isPendingAllegato: true);
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-attach-fail',
+        isPendingAllegato: true,
+      );
 
-      when(() => mockApiClient.uploadAttachment(
-            reportId: any(named: 'reportId'),
-            localPath: any(named: 'localPath'),
-            fileName: any(named: 'fileName'),
-            contentType: any(named: 'contentType'),
-          )).thenThrow(Exception('Storage error'));
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+        ),
+      ).thenThrow(Exception('Storage error'));
 
       await queue.processAll();
 
       final draft = await repo.getDraft('report-1');
       expect(draft!.submissionState, 'failed');
-      expect(draft.submissionError, contains('Storage error'));
+      expect(draft.submissionError, isNot(contains('Storage error')));
+      expect(draft.submissionError, isNot(contains('Exception')));
       // submit was NOT called
-      verifyNever(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          ));
+      verifyNever(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      );
     });
   });
 
   group('SubmissionQueue — multiple drafts', () {
     test('processAll processes each ready draft independently', () async {
       // Insert two separate ready drafts
-      await _insertDraft(db, id: 'report-A',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-A');
-      await _insertDraft(db, id: 'report-B',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-B');
+      await _insertDraft(
+        db,
+        id: 'report-A',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-A',
+      );
+      await _insertDraft(
+        db,
+        id: 'report-B',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-B',
+      );
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
         final req = inv.namedArguments[#request] as SubmitReportRequest;
-        return SubmitReportResponse(
-          id: req.id,
-          title: req.title,
-          stato: '1',
-          inviatoAt: null,
-        );
+        return SubmitReportResponse(id: req.id, title: req.title, stato: '1', inviatoAt: null);
       });
 
       await queue.processAll();
@@ -457,27 +493,31 @@ void main() {
       expect(b!.submissionState, 'submitted');
     });
 
-    test('failure on one draft does not prevent other from submitting',
-        () async {
-      await _insertDraft(db, id: 'report-good',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-good');
-      await _insertDraft(db, id: 'report-bad',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-bad');
+    test('failure on one draft does not prevent other from submitting', () async {
+      await _insertDraft(
+        db,
+        id: 'report-good',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-good',
+      );
+      await _insertDraft(
+        db,
+        id: 'report-bad',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-bad',
+      );
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
         final req = inv.namedArguments[#request] as SubmitReportRequest;
         if (req.id == 'report-bad') {
           throw Exception('Bad draft fails');
         }
-        return SubmitReportResponse(
-          id: req.id,
-          title: req.title,
-          stato: '1',
-          inviatoAt: null,
-        );
+        return SubmitReportResponse(id: req.id, title: req.title, stato: '1', inviatoAt: null);
       });
 
       await queue.processAll();
@@ -498,15 +538,9 @@ void main() {
         locationId: 'loc-1',
         title: 'Test',
         materialiNotRequired: false,
-        staff: [
-          SubmitReportStaffDto(userId: 'user-1', kmTraveled: 10.5),
-        ],
-        materiali: [
-          SubmitReportMaterialeDto(quantity: 2.0, freeTextName: 'Bullone'),
-        ],
-        controlli: [
-          SubmitReportControlloDto(ticketControlId: 'ctrl-1', boolValue: true),
-        ],
+        staff: [SubmitReportStaffDto(userId: 'user-1', kmTraveled: 10.5)],
+        materiali: [SubmitReportMaterialeDto(quantity: 2.0, freeTextName: 'Bullone')],
+        controlli: [SubmitReportControlloDto(ticketControlId: 'ctrl-1', boolValue: true)],
       );
 
       final json = req.toJson();
@@ -521,11 +555,7 @@ void main() {
     });
 
     test('toJson omits null optional fields', () {
-      const req = SubmitReportRequest(
-        id: 'guid-1',
-        locationId: 'loc-1',
-        title: 'T',
-      );
+      const req = SubmitReportRequest(id: 'guid-1', locationId: 'loc-1', title: 'T');
       final json = req.toJson();
       expect(json.containsKey('scheduleId'), isFalse);
       expect(json.containsKey('ticketId'), isFalse);
@@ -549,8 +579,7 @@ void main() {
       expect(json['pauseMinutes'], 30);
     });
 
-    test('materiale toJson mirrors backend SubmitReportMaterialeDto fields',
-        () {
+    test('materiale toJson mirrors backend SubmitReportMaterialeDto fields', () {
       const m = SubmitReportMaterialeDto(
         materialeId: 'mat-guid-1',
         quantity: 3.5,
@@ -566,8 +595,7 @@ void main() {
       expect(json['magazzinoId'], 'mag-1');
     });
 
-    test('controllo toJson mirrors backend SubmitReportControlloDto fields',
-        () {
+    test('controllo toJson mirrors backend SubmitReportControlloDto fields', () {
       const c = SubmitReportControlloDto(
         ticketControlId: 'ctrl-1',
         stringValue: 'OK',
@@ -620,24 +648,27 @@ void main() {
       expect(ready.first.id, 'r1');
     });
 
-    test('getPendingAllegati returns only isPendingUpload=true allegati',
-        () async {
+    test('getPendingAllegati returns only isPendingUpload=true allegati', () async {
       await _insertDraft(db, isPendingAllegato: true);
       // Also insert a non-pending allegato
-      await db.into(db.reportAllegati).insert(ReportAllegatiCompanion.insert(
-            id: 'allegato-uploaded',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            fileName: 'old.jpg',
-            contentType: 'image/jpeg',
-            sizeBytes: 512,
-            storagePath: '/server/old.jpg',
-            url: 'https://server/old.jpg',
-            entityType: 1,
-            entityId: 'report-1',
-            uploadedByUserId: 'user-1',
-            isPendingUpload: const Value(false),
-          ));
+      await db
+          .into(db.reportAllegati)
+          .insert(
+            ReportAllegatiCompanion.insert(
+              id: 'allegato-uploaded',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              fileName: 'old.jpg',
+              contentType: 'image/jpeg',
+              sizeBytes: 512,
+              storagePath: '/server/old.jpg',
+              url: 'https://server/old.jpg',
+              entityType: 1,
+              entityId: 'report-1',
+              uploadedByUserId: 'user-1',
+              isPendingUpload: const Value(false),
+            ),
+          );
 
       final pending = await repo.getPendingAllegati('report-1');
       expect(pending.length, 1);
@@ -655,9 +686,7 @@ void main() {
       expect(allegati.first.isPendingUpload, isFalse);
     });
 
-    test(
-        'markAllegatoUploaded replaces local id with server id when different',
-        () async {
+    test('markAllegatoUploaded replaces local id with server id when different', () async {
       await _insertDraft(db, isPendingAllegato: true);
       await repo.markAllegatoUploaded(
         localId: 'allegato-local-report-1',

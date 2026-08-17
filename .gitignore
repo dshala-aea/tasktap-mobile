@@ -20,3 +20,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Impeccable decision-page scratch state
+.impeccable/

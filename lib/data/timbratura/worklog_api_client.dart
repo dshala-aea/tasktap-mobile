@@ -32,12 +32,12 @@ class MobileSessionDto {
   final double? longitude; // null for simple timbra
 
   Map<String, dynamic> toJson() => {
-        'clientId': clientId,
-        'startTime': startTime.toUtc().toIso8601String(),
-        'endTime': endTime?.toUtc().toIso8601String(),
-        'latitude': latitude,
-        'longitude': longitude,
-      };
+    'clientId': clientId,
+    'startTime': startTime.toUtc().toIso8601String(),
+    'endTime': endTime?.toUtc().toIso8601String(),
+    'latitude': latitude,
+    'longitude': longitude,
+  };
 }
 
 // ── Response DTOs ─────────────────────────────────────────────────────────────
@@ -59,17 +59,14 @@ class UpsertSessionResponse {
   final String? tipoOra;
   final bool isActive;
 
-  factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) =>
-      UpsertSessionResponse(
-        clientId: json['clientId'] as String,
-        workLogId: json['workLogId'] as String,
-        startTime: DateTime.parse(json['startTime'] as String),
-        endTime: json['endTime'] != null
-            ? DateTime.parse(json['endTime'] as String)
-            : null,
-        tipoOra: json['tipoOra'] as String?,
-        isActive: json['isActive'] as bool? ?? false,
-      );
+  factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) => UpsertSessionResponse(
+    clientId: json['clientId'] as String,
+    workLogId: json['workLogId'] as String,
+    startTime: DateTime.parse(json['startTime'] as String),
+    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    tipoOra: json['tipoOra'] as String?,
+    isActive: json['isActive'] as bool? ?? false,
+  );
 }
 
 class TodayWorkLogDto {
@@ -89,17 +86,14 @@ class TodayWorkLogDto {
   final bool isActive;
   final String? tipoOra;
 
-  factory TodayWorkLogDto.fromJson(Map<String, dynamic> json) =>
-      TodayWorkLogDto(
-        id: json['id'] as String,
-        clientId: json['clientId'] as String,
-        startTime: DateTime.parse(json['startTime'] as String),
-        endTime: json['endTime'] != null
-            ? DateTime.parse(json['endTime'] as String)
-            : null,
-        isActive: json['isActive'] as bool? ?? false,
-        tipoOra: json['tipoOra'] as String?,
-      );
+  factory TodayWorkLogDto.fromJson(Map<String, dynamic> json) => TodayWorkLogDto(
+    id: json['id'] as String,
+    clientId: json['clientId'] as String,
+    startTime: DateTime.parse(json['startTime'] as String),
+    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    isActive: json['isActive'] as bool? ?? false,
+    tipoOra: json['tipoOra'] as String?,
+  );
 }
 
 // ── Giornata (GET /api/WorkLog/today) ─────────────────────────────────────────
@@ -123,13 +117,12 @@ class GiornataActionDto {
   final String? reasonCode;
   final String? reason;
 
-  factory GiornataActionDto.fromJson(Map<String, dynamic> json) =>
-      GiornataActionDto(
-        action: json['action'] as String,
-        enabled: json['enabled'] as bool? ?? false,
-        reasonCode: json['reasonCode'] as String?,
-        reason: json['reason'] as String?,
-      );
+  factory GiornataActionDto.fromJson(Map<String, dynamic> json) => GiornataActionDto(
+    action: json['action'] as String,
+    enabled: json['enabled'] as bool? ?? false,
+    reasonCode: json['reasonCode'] as String?,
+    reason: json['reason'] as String?,
+  );
 }
 
 /// The server's view of the signed-in user's day.
@@ -157,15 +150,15 @@ class GiornataDto {
   }
 
   factory GiornataDto.fromJson(Map<String, dynamic> json) => GiornataDto(
-        status: json['status'] as String? ?? 'ClockedOut',
-        workedMinutes: (json['workedMinutes'] as num?)?.toInt() ?? 0,
-        breakMinutes: (json['breakMinutes'] as num?)?.toInt() ?? 0,
-        isPayrollLocked: json['isPayrollLocked'] as bool? ?? false,
-        actions: (json['availableActions'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
-            .map(GiornataActionDto.fromJson)
-            .toList(),
-      );
+    status: json['status'] as String? ?? 'ClockedOut',
+    workedMinutes: (json['workedMinutes'] as num?)?.toInt() ?? 0,
+    breakMinutes: (json['breakMinutes'] as num?)?.toInt() ?? 0,
+    isPayrollLocked: json['isPayrollLocked'] as bool? ?? false,
+    actions: (json['availableActions'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(GiornataActionDto.fromJson)
+        .toList(),
+  );
 }
 
 // ── Client ────────────────────────────────────────────────────────────────────
@@ -180,24 +173,17 @@ class WorklogApiClient {
   /// Idempotent upsert: the server matches on (tenant, user, clientId) and
   /// updates the row (e.g. fills endTime) without creating duplicates.
   /// Throws [DioException] on network / server error.
-  Future<List<UpsertSessionResponse>> upsertSessions(
-    List<MobileSessionDto> sessions,
-  ) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/worklog/mobile/sessions',
-      data: {
-        'sessions': sessions.map((s) => s.toJson()).toList(),
-      },
+      data: {'sessions': sessions.map((s) => s.toJson()).toList()},
     );
 
     final data = response.data;
     if (data == null) throw StateError('Risposta vuota da upsertSessions');
 
     final list = data['sessions'] as List<dynamic>? ?? [];
-    return list
-        .cast<Map<String, dynamic>>()
-        .map(UpsertSessionResponse.fromJson)
-        .toList();
+    return list.cast<Map<String, dynamic>>().map(UpsertSessionResponse.fromJson).toList();
   }
 
   /// GET /api/worklog/mobile/today
@@ -205,15 +191,10 @@ class WorklogApiClient {
   /// Returns the current user's WorkLogs for today.
   /// Throws [DioException] on network / server error.
   Future<List<TodayWorkLogDto>> getToday() async {
-    final response = await _dio.get<List<dynamic>>(
-      '/api/worklog/mobile/today',
-    );
+    final response = await _dio.get<List<dynamic>>('/api/worklog/mobile/today');
 
     final list = response.data ?? [];
-    return list
-        .cast<Map<String, dynamic>>()
-        .map(TodayWorkLogDto.fromJson)
-        .toList();
+    return list.cast<Map<String, dynamic>>().map(TodayWorkLogDto.fromJson).toList();
   }
 
   /// GET /api/WorkLog/today

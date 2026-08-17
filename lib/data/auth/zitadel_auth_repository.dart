@@ -23,8 +23,8 @@ class ZitadelAuthRepository implements IAuthRepository {
     FlutterAppAuth? appAuth,
     FlutterSecureStorage? storage,
     bool restore = true,
-  })  : _appAuth = appAuth ?? FlutterAppAuth(),
-        _storage = storage ?? const FlutterSecureStorage() {
+  }) : _appAuth = appAuth ?? FlutterAppAuth(),
+       _storage = storage ?? const FlutterSecureStorage() {
     if (restore) unawaited(_restore());
   }
 
@@ -34,8 +34,7 @@ class ZitadelAuthRepository implements IAuthRepository {
 
   final FlutterAppAuth _appAuth;
   final FlutterSecureStorage _storage;
-  final StreamController<AuthUser?> _controller =
-      StreamController<AuthUser?>.broadcast();
+  final StreamController<AuthUser?> _controller = StreamController<AuthUser?>.broadcast();
 
   AuthUser? _current;
 
@@ -189,11 +188,7 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// so a cold-start-offline session has something to display without ever
   /// putting a bearer token on disk.
   Future<void> _persistCachedIdentity(AuthUser user) async {
-    final json = jsonEncode({
-      'id': user.id,
-      'email': user.email,
-      'displayName': user.displayName,
-    });
+    final json = jsonEncode({'id': user.id, 'email': user.email, 'displayName': user.displayName});
     await _storage.write(key: _cachedIdentityKey, value: json);
   }
 
@@ -244,8 +239,7 @@ class ZitadelAuthRepository implements IAuthRepository {
       displayName: (claims['name'] ?? claims['preferred_username'])?.toString(),
       accessToken: accessToken,
       refreshToken: refreshToken ?? '',
-      expiresAt:
-          (expiry ?? DateTime.now().toUtc().add(const Duration(hours: 1))).toUtc(),
+      expiresAt: (expiry ?? DateTime.now().toUtc().add(const Duration(hours: 1))).toUtc(),
     );
   }
 
@@ -277,9 +271,7 @@ class ZitadelAuthRepository implements IAuthRepository {
         msg.contains('host')) {
       return const NetworkError();
     }
-    if (msg.contains('invalid_grant') ||
-        msg.contains('refresh') ||
-        msg.contains('expired')) {
+    if (msg.contains('invalid_grant') || msg.contains('refresh') || msg.contains('expired')) {
       return const SessionExpired();
     }
     return UnknownAuthError(e.toString());

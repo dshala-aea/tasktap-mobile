@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
+import '../../core/router/app_router.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
-import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// Dashboard screen — Hero + active job(s) + stats + quick actions + upcoming.
+/// The technician's day, in the order they need it.
+///
+/// Running clocks, today's interventi, the next seven days, then the two things worth starting
+/// from here. The stat grid that used to sit above all of it is gone — see the Oggi section.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -23,316 +27,214 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final userName = user?.displayName ?? user?.email ?? 'Tecnico';
-
-    final inProgressAsync = ref.watch(inProgressSchedulesProvider);
     final stats = ref.watch(dashboardStatsProvider);
+    final trackers = ref.watch(visibleTrackersProvider);
+    final todayAsync = ref.watch(todaySchedulesProvider);
     final upcomingAsync = ref.watch(upcomingSchedulesProvider);
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
+      // The hero paints over the rail, so the rail starts below it. Without this the world's
+      // most load-bearing mark is hidden behind the one panel guaranteed to be on screen.
       body: RefreshIndicator(
         onRefresh: () => ref.read(syncProvider.notifier).performSync(),
         child: CustomScrollView(
-        slivers: [
-          // ── Hero ──────────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: DashboardHero(
-              userName: userName,
-              actions: [
-                HeaderIconBtn(
-                  icon: LucideIcons.bell,
-                  label: 'Notifiche',
-                  glass: true,
-                  onTap: () {},
-                ),
-                HeaderIconBtn(
-                  icon: LucideIcons.user,
-                  label: 'Profilo',
-                  glass: true,
-                  onTap: () {},
-                ),
-              ],
-              // What is running right now, from GET /api/worklog/active, in preference to what
-              // the calendar says should be. A schedule marked in-progress is an intention; a
-              // running tracker is the clock somebody is being paid against, and the two disagree
-              // whenever a technician starts late, stays on, or is somewhere else entirely.
-              child: ref.watch(activeTrackersProvider).when(
-                    data: (trackers) => trackers.isEmpty
-                        ? inProgressAsync.when(
-                            data: (jobs) => jobs.isEmpty
-                                ? const _NoActiveJobGlass()
-                                : _ActiveJobSection(jobs: jobs),
-                            loading: () => const _HeroLoadingIndicator(),
-                            error: (err, stack) => const _NoActiveJobGlass(),
-                          )
-                        : _ActiveTrackersSection(trackers: trackers),
-                    loading: () => const _HeroLoadingIndicator(),
-                    // The endpoint being unreachable is not evidence that nothing is running, so
-                    // fall back to the calendar rather than claiming the day is idle.
-                    error: (err, stack) => inProgressAsync.when(
-                      data: (jobs) => jobs.isEmpty
-                          ? const _NoActiveJobGlass()
-                          : _ActiveJobSection(jobs: jobs),
-                      loading: () => const _HeroLoadingIndicator(),
-                      error: (e, st) => const _NoActiveJobGlass(),
-                    ),
+          slivers: [
+            // ── Hero ──────────────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: DashboardHero(
+                userName: userName,
+                actions: [
+                  HeaderIconBtn(
+                    icon: LucideIcons.bell,
+                    label: 'Notifiche',
+                    glass: true,
+                    onTap: () => context.push(AppRoutes.altroNotifiche),
                   ),
+                  HeaderIconBtn(
+                    icon: LucideIcons.user,
+                    label: 'Profilo',
+                    glass: true,
+                    onTap: () => context.push(AppRoutes.altroProfilo),
+                  ),
+                ],
+                // Only what is actually running, and nothing at all when nothing is.
+                //
+                // A placeholder here was still a placeholder: the hero drew a grey glass panel
+                // reading "Non hai interventi attivi al momento" for the ordinary condition of
+                // being between jobs, which is most of the morning. There is no information in
+                // it — the absence of rows already says it — and it was the first thing on the
+                // screen. Nothing running now costs nothing on screen.
+                child: trackers.isEmpty ? null : ActiveTrackerStrip(trackers: trackers),
+              ),
             ),
-          ),
 
-          // ── Stats 2×2 ─────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 20, 19, 0),
-              child: AppCard(
-                padding: EdgeInsets.zero,
-                child: StatsGrid(
-                  items: [
-                    StatItem(
-                        label: 'Interventi\noggi',
-                        value: stats.todayCount.toString()),
-                    StatItem(
-                        label: 'In corso',
-                        value: stats.inProgressCount.toString()),
-                    StatItem(
-                        label: 'Completati',
-                        value: stats.completedCount.toString()),
-                    StatItem(
-                        label: 'Prossimi',
-                        value: stats.upcomingCount.toString()),
+            // ── Oggi ──────────────────────────────────────────────────────────
+            //
+            // Today's interventi were a number in a 2×2 stat grid — `Interventi oggi  3` — while
+            // the only list on the screen started at tomorrow. The one question a technician opens
+            // this app to answer was the one thing rendered as a digit.
+            //
+            // The grid is gone with it. Four counts derivable from the two lists beneath them,
+            // taking the width of the screen above the fold, is the hero-metric template doing
+            // nothing: nobody acts on "Completati 2". What survives is the one count that is not
+            // visible in the list itself — how many of today's jobs are already done — folded into
+            // the section heading.
+            SliverToBoxAdapter(
+              child: SectionTitle(
+                title: 'Oggi',
+                trailing: stats.completedCount > 0
+                    ? '${stats.completedCount} di ${stats.todayCount} completati'
+                    : null,
+              ),
+            ),
+            _ScheduleSliver(
+              schedules: todayAsync,
+              emptyTitle: 'Nessun intervento oggi',
+              emptyBody: 'Buona giornata. I lavori assegnati appariranno qui.',
+              showDate: false,
+            ),
+
+            // ── Prossimi interventi ───────────────────────────────────────────
+            const SliverToBoxAdapter(child: SectionTitle(title: 'Prossimi')),
+            _ScheduleSliver(
+              schedules: upcomingAsync,
+              emptyTitle: 'Nessun intervento in programma',
+              emptyBody: 'I prossimi interventi appariranno qui dopo la sincronizzazione.',
+            ),
+
+            // ── Start something ───────────────────────────────────────────────
+            //
+            // Below the work, not above it. These are the two things a technician *starts* from
+            // here; "Rapportini" and "Magazzino" were also here and are places to *go*, which the
+            // Altro tab already is. A shortcut to a screen one tap away is not a shortcut.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(19, 20, 19, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: QuickAction(
+                        icon: LucideIcons.ticket,
+                        label: 'Nuovo\nticket',
+                        onTap: () => context.push('/ticket/new'),
+                      ),
+                    ),
+                    Expanded(
+                      child: QuickAction(
+                        icon: LucideIcons.clock,
+                        label: 'Timbra\ncantiere',
+                        onTap: () => context.push(AppRoutes.cantiereTimbra),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-          ),
 
-          // ── Quick Actions ─────────────────────────────────────────────────
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(19, 20, 19, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Expanded(
-                    child: QuickAction(
-                      icon: LucideIcons.history,
-                      label: 'Storico',
-                    ),
-                  ),
-                  Expanded(
-                    child: QuickAction(
-                      icon: LucideIcons.calendarPlus,
-                      label: 'Nuova\npianificazione',
-                    ),
-                  ),
-                  Expanded(
-                    child: QuickAction(
-                      icon: LucideIcons.ticket,
-                      label: 'Nuovo\nticket',
-                    ),
-                  ),
-                  Expanded(
-                    child: QuickAction(
-                      icon: LucideIcons.fileText,
-                      label: 'Nuovo\nreport',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+            // Bottom padding so the last card clears the floating bottom nav.
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-          // ── Prossimi interventi ───────────────────────────────────────────
-          const SliverToBoxAdapter(
-            child: SectionTitle(title: 'Prossimi interventi'),
-          ),
+/// A list of interventi, or the reason there isn't one. Used for both Oggi and Prossimi.
+class _ScheduleSliver extends StatelessWidget {
+  const _ScheduleSliver({
+    required this.schedules,
+    required this.emptyTitle,
+    required this.emptyBody,
+    this.showDate = true,
+  });
 
-          upcomingAsync.when(
-            data: (schedules) => schedules.isEmpty
-                ? const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 19),
-                      child: EmptyState(
-                        icon: LucideIcons.calendarOff,
-                        title: 'Nessun intervento in programma',
-                        body:
-                            'I prossimi interventi appariranno qui dopo la sincronizzazione.',
-                      ),
-                    ),
-                  )
-                : SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) => Padding(
-                        padding: EdgeInsets.fromLTRB(19, i == 0 ? 0 : 8, 19, 8),
-                        child: _UpcomingItem(schedule: schedules[i]),
-                      ),
-                      childCount: schedules.length,
-                    ),
-                  ),
-            loading: () => const SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(),
+  final AsyncValue<List<Schedule>> schedules;
+
+  /// False for today's list, where every row would carry the same date.
+  final bool showDate;
+  final String emptyTitle;
+  final String emptyBody;
+
+  @override
+  Widget build(BuildContext context) {
+    return schedules.when(
+      data: (list) => list.isEmpty
+          ? SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 19),
+                child: EmptyState(
+                  icon: LucideIcons.calendarOff,
+                  title: emptyTitle,
+                  body: emptyBody,
                 ),
               ),
+            )
+          : SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => Padding(
+                  padding: EdgeInsets.fromLTRB(19, i == 0 ? 0 : 8, 19, 8),
+                  child: _UpcomingItem(schedule: list[i], showDate: showDate),
+                ),
+                childCount: list.length,
+              ),
             ),
-            error: (err, stack) =>
-                const SliverToBoxAdapter(child: SizedBox.shrink()),
-          ),
-
-          // Bottom padding so the last card clears the floating bottom nav.
-          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-        ],
+      loading: () => const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+        ),
+      ),
+      // Was `SizedBox.shrink()`. A failed read of today's schedules therefore rendered as an
+      // absence — the same picture as a day with no work booked. The one screen a technician opens
+      // to find out whether they have a job this morning would have told them they had none.
+      //
+      // It is drawn as unavailable rather than as an error because it is not the technician's
+      // mistake and there is no red channel to spend on it; the reason names the one action that
+      // can fix it.
+      error: (err, stack) => const SliverToBoxAdapter(
+        child: UnavailableState(
+          titolo: 'Elenco non disponibile',
+          motivo:
+              'Non è stato possibile leggere gli interventi salvati sul telefono. '
+              'Tira giù per sincronizzare.',
         ),
       ),
     );
   }
 }
-
-// ── No active job empty state (inside hero) ────────────────────────────────────
-
-class _NoActiveJobGlass extends StatelessWidget {
-  const _NoActiveJobGlass();
-
-  @override
-  Widget build(BuildContext context) {
-    return const GlassCard(
-      child: EmptyState(
-        icon: LucideIcons.briefcase,
-        title: 'Nessuna attività in corso',
-        body: 'Non hai interventi attivi al momento.',
-        action: AppButton(
-          label: 'Cerca ticket aperti',
-          size: AppButtonSize.sm,
-          variant: AppButtonVariant.dark,
-          onPressed: null,
-        ),
-      ),
-    );
-  }
-}
-
-// ── Hero loading ───────────────────────────────────────────────────────────────
-
-class _HeroLoadingIndicator extends StatelessWidget {
-  const _HeroLoadingIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(24),
-        child: CircularProgressIndicator(color: AppColors.WHITE),
-      ),
-    );
-  }
-}
-
-// ── Active job section (shows the first in-progress job) ──────────────────────
-
-class _ActiveJobSection extends ConsumerWidget {
-  const _ActiveJobSection({required this.jobs});
-
-  final List<Schedule> jobs;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Show the first in-progress job; timer is static for now (live timer in P3).
-    final job = jobs.first;
-    final location = ref.watch(locationByIdProvider(job.locationId)).valueOrNull;
-    final customerName = location != null
-        ? ref
-            .watch(customerByIdProvider(location.customerId))
-            .valueOrNull
-            ?.companyName
-        : null;
-
-    return ActiveJobCard(
-      stato: 'In corso',
-      title: job.title.isNotEmpty ? job.title : 'Intervento',
-      client: customerName,
-      elapsed: '00:00:00',
-      onOpen: null,
-    );
-  }
-}
-
-// ── Running timers ─────────────────────────────────────────────────────────────
-
-/// Every tracker that is running, one card each.
-///
-/// A list, not a value: attendance, cantiere and ticket time are three independent clocks and all
-/// three can run at once — clocked in, on a site, with a ticket open. Showing one would hide the
-/// other two, and the hidden one is the one that gets left running overnight.
-class _ActiveTrackersSection extends ConsumerWidget {
-  const _ActiveTrackersSection({required this.trackers});
-
-  final List<ActiveTracker> trackers;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // One clock for the whole section, ticking each second. Until it produces its first value the
-    // cards still show a correct elapsed time — computed from the device clock, not from nothing.
-    final now = ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc();
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < trackers.length; i++) ...[
-          if (i > 0) const SizedBox(height: 10),
-          ActiveJobCard(
-            stato: _statoFor(trackers[i].kind),
-            title: trackers[i].label ?? _titleFor(trackers[i].kind),
-            client: null,
-            elapsed: formatElapsed(trackers[i].elapsedAt(now)),
-            onOpen: null,
-          ),
-        ],
-      ],
-    );
-  }
-
-  static String _statoFor(ActiveTrackerKind kind) => switch (kind) {
-        ActiveTrackerKind.attendance => 'Timbrato',
-        ActiveTrackerKind.cantiere => 'In cantiere',
-        ActiveTrackerKind.ticket => 'In corso',
-      };
-
-  /// Attendance is against the day rather than a thing, so the kind is the only honest title.
-  static String _titleFor(ActiveTrackerKind kind) => switch (kind) {
-        ActiveTrackerKind.attendance => 'Giornata di lavoro',
-        ActiveTrackerKind.cantiere => 'Cantiere',
-        ActiveTrackerKind.ticket => 'Intervento',
-      };
-}
-
-// ── Upcoming intervento card ───────────────────────────────────────────────────
 
 class _UpcomingItem extends ConsumerWidget {
-  const _UpcomingItem({required this.schedule});
+  const _UpcomingItem({required this.schedule, this.showDate = true});
 
   final Schedule schedule;
+  final bool showDate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
     final customerName = location != null
-        ? ref
-            .watch(customerByIdProvider(location.customerId))
-            .valueOrNull
-            ?.companyName
+        ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
         : null;
 
-    final dateLabel =
-        DateFormat('EEE d MMM', 'it').format(schedule.activityDate.toLocal());
+    // Built only when it is going to be shown — today's rows never render a date, and formatting
+    // one there costs a locale lookup to throw the result away.
+    final dateLabel = showDate
+        ? DateFormat('EEE d MMM', 'it').format(schedule.activityDate.toLocal())
+        : '';
     final timeLabel = _minutesToTime(schedule.timeStartMinutes);
-    final subtitle = [customerName, location?.city]
-        .where((s) => s != null && s.isNotEmpty)
-        .join(' · ');
+    final subtitle = [
+      customerName,
+      location?.city,
+    ].where((s) => s != null && s.isNotEmpty).join(' · ');
 
-    return AppCard.pressable(
-      onTap: () {},
+    final ticketId = schedule.ticketId;
+
+    // Was `AppCard.pressable(onTap: () {})` — a card that rippled under the thumb and went
+    // nowhere. A scheduled intervento opens its ticket where it has one; where it has none there
+    // is nothing to open, so it renders as a plain cell and does not invite the tap at all.
+    return AppCard(
+      onTap: ticketId != null ? () => context.push(AppRoutes.ticketDetailPath(ticketId)) : null,
       child: Row(
         children: [
           Expanded(
@@ -344,7 +246,8 @@ class _UpcomingItem extends ConsumerWidget {
                   schedule.title.isNotEmpty ? schedule.title : 'Intervento',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -356,7 +259,8 @@ class _UpcomingItem extends ConsumerWidget {
                     subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 12,
                       color: context.colors.inkMuted,
                     ),
@@ -370,19 +274,25 @@ class _UpcomingItem extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                dateLabel,
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.ink,
+              // On today's list the date is the same on every row, so it says nothing and the
+              // time — the thing that orders the day — gets the weight instead.
+              if (showDate)
+                Text(
+                  dateLabel,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.ink,
+                  ),
                 ),
-              ),
               Text(
                 timeLabel,
-                style: GoogleFonts.manrope(
-                  fontSize: 11,
-                  color: context.colors.inkMuted,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: showDate ? 11 : 15,
+                  fontWeight: showDate ? FontWeight.w400 : FontWeight.w700,
+                  color: showDate ? context.colors.inkMuted : context.colors.ink,
                 ),
               ),
             ],

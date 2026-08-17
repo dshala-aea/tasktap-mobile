@@ -48,27 +48,20 @@ void main() {
 
   group('PendingTicketState', () {
     test('fromString maps all known values', () {
-      expect(PendingTicketState.fromString('pendingSync'),
-          PendingTicketState.pendingSync);
-      expect(PendingTicketState.fromString('submitting'),
-          PendingTicketState.submitting);
-      expect(PendingTicketState.fromString('submitted'),
-          PendingTicketState.submitted);
-      expect(PendingTicketState.fromString('failed'),
-          PendingTicketState.failed);
+      expect(PendingTicketState.fromString('pendingSync'), PendingTicketState.pendingSync);
+      expect(PendingTicketState.fromString('submitting'), PendingTicketState.submitting);
+      expect(PendingTicketState.fromString('submitted'), PendingTicketState.submitted);
+      expect(PendingTicketState.fromString('failed'), PendingTicketState.failed);
     });
 
     test('fromString returns pendingSync for null or unknown', () {
       expect(PendingTicketState.fromString(null), PendingTicketState.pendingSync);
-      expect(
-          PendingTicketState.fromString('garbage'), PendingTicketState.pendingSync);
+      expect(PendingTicketState.fromString('garbage'), PendingTicketState.pendingSync);
     });
   });
 
   group('TicketCreationQueue.create — offline (the load-bearing case)', () {
-    test(
-        'a ticket created offline is persisted locally and never touches the network',
-        () async {
+    test('a ticket created offline is persisted locally and never touches the network', () async {
       final outcome = await queue.create(
         title: 'Perdita idrica',
         customerId: 'cust-1',
@@ -89,18 +82,19 @@ void main() {
       expect(row.statusId, 1);
       expect(row.typeId, 2);
 
-      verifyNever(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          ));
+      verifyNever(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      );
     });
 
-    test('an offline ticket survives and is sent automatically on reconnect',
-        () async {
+    test('an offline ticket survives and is sent automatically on reconnect', () async {
       final outcome = await queue.create(
         title: 'Perdita idrica',
         customerId: 'cust-1',
@@ -110,16 +104,18 @@ void main() {
         isOnline: false,
       );
 
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenAnswer((_) async => 'server-ticket-1');
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((_) async => 'server-ticket-1');
 
       // Simulates the reconnect hook (TicketCreationQueueWatcher).
       await queue.processAll();
@@ -130,8 +126,7 @@ void main() {
       expect(onSubmittedCalls, 1);
     });
 
-    test('nothing is lost when the device never reconnects — draft stays queued',
-        () async {
+    test('nothing is lost when the device never reconnects — draft stays queued', () async {
       final outcome = await queue.create(
         title: 'Perdita idrica',
         customerId: 'cust-1',
@@ -150,16 +145,18 @@ void main() {
 
   group('TicketCreationQueue.create — online success', () {
     test('creates immediately when online and marks submitted', () async {
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenAnswer((_) async => 'server-ticket-2');
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((_) async => 'server-ticket-2');
 
       final outcome = await queue.create(
         title: 'Sostituzione filtro',
@@ -181,16 +178,18 @@ void main() {
 
   group('TicketCreationQueue.create — online failure (ambiguous outcome)', () {
     test('failed attempt is preserved locally, never deleted', () async {
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenThrow(Exception('Network error'));
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenThrow(Exception('Network error'));
 
       final outcome = await queue.create(
         title: 'Sostituzione filtro',
@@ -206,7 +205,11 @@ void main() {
       final row = await repo.getById(outcome.localId);
       expect(row, isNotNull);
       expect(row!.state, 'failed');
-      expect(row.error, contains('Network error'));
+      // Rendered verbatim on the ticket list as "Invio non riuscito: …", so it is a sentence and
+      // never the exception.
+      expect(row.error, isNot(contains('Network error')));
+      expect(row.error, isNot(contains('Exception')));
+      expect(row.error, contains('Niente è andato perso'));
       expect(onSubmittedCalls, 0);
     });
 
@@ -215,9 +218,11 @@ void main() {
     /// first send was unknown and a blind resend could raise a second customer-visible ticket.
     /// The server now keys on the client id and returns the ticket it already created, so the
     /// resend is safe and the technician is no longer asked to adjudicate it.
-    test('processAll retries a failed (already-sent) ticket, because clientId makes it safe',
-        () async {
-      when(() => mockApiClient.createTicket(
+    test(
+      'processAll retries a failed (already-sent) ticket, because clientId makes it safe',
+      () async {
+        when(
+          () => mockApiClient.createTicket(
             title: any(named: 'title'),
             description: any(named: 'description'),
             customerId: any(named: 'customerId'),
@@ -226,21 +231,23 @@ void main() {
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
             clientId: any(named: 'clientId'),
-          )).thenThrow(Exception('Timeout'));
+          ),
+        ).thenThrow(Exception('Timeout'));
 
-      final outcome = await queue.create(
-        title: 'Sostituzione filtro',
-        customerId: 'cust-2',
-        locationId: 'loc-2',
-        statusId: 1,
-        typeId: 1,
-        isOnline: true,
-      );
-      expect((await repo.getById(outcome.localId))!.state, 'failed');
+        final outcome = await queue.create(
+          title: 'Sostituzione filtro',
+          customerId: 'cust-2',
+          locationId: 'loc-2',
+          statusId: 1,
+          typeId: 1,
+          isOnline: true,
+        );
+        expect((await repo.getById(outcome.localId))!.state, 'failed');
 
-      // The connection comes back and the send succeeds this time.
-      clearInteractions(mockApiClient);
-      when(() => mockApiClient.createTicket(
+        // The connection comes back and the send succeeds this time.
+        clearInteractions(mockApiClient);
+        when(
+          () => mockApiClient.createTicket(
             title: any(named: 'title'),
             description: any(named: 'description'),
             customerId: any(named: 'customerId'),
@@ -249,30 +256,34 @@ void main() {
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
             clientId: any(named: 'clientId'),
-          )).thenAnswer((_) async => 'server-ticket-9');
+          ),
+        ).thenAnswer((_) async => 'server-ticket-9');
 
-      await queue.processAll();
+        await queue.processAll();
 
-      final row = await repo.getById(outcome.localId);
-      expect(row!.state, 'submitted');
-      expect(row.serverTicketId, 'server-ticket-9');
-    });
+        final row = await repo.getById(outcome.localId);
+        expect(row!.state, 'submitted');
+        expect(row.serverTicketId, 'server-ticket-9');
+      },
+    );
 
     /// Every attempt must carry the SAME id. A fresh one per attempt would deduplicate nothing —
     /// the server would see two unrelated creates and make two tickets, which is the exact
     /// failure the key exists to prevent.
     test('every attempt sends the local row id as clientId, unchanged', () async {
       final sentClientIds = <String?>[];
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenAnswer((invocation) async {
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((invocation) async {
         sentClientIds.add(invocation.namedArguments[#clientId] as String?);
         throw Exception('Timeout');
       });
@@ -293,18 +304,19 @@ void main() {
       expect(sentClientIds, everyElement(equals(outcome.localId)));
     });
 
-    test('an explicit user-initiated retry can resend a failed ticket',
-        () async {
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenThrow(Exception('Network error'));
+    test('an explicit user-initiated retry can resend a failed ticket', () async {
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenThrow(Exception('Network error'));
 
       final firstOutcome = await queue.create(
         title: 'Sostituzione filtro',
@@ -316,16 +328,18 @@ void main() {
       );
       expect(firstOutcome.isFailed, isTrue);
 
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenAnswer((_) async => 'server-ticket-3');
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((_) async => 'server-ticket-3');
 
       final retryOutcome = await queue.retry(firstOutcome.localId);
       expect(retryOutcome.isSubmitted, isTrue);
@@ -355,16 +369,18 @@ void main() {
         isOnline: false,
       );
 
-      when(() => mockApiClient.createTicket(
-            title: any(named: 'title'),
-            description: any(named: 'description'),
-            customerId: any(named: 'customerId'),
-            locationId: any(named: 'locationId'),
-            assignedUserId: any(named: 'assignedUserId'),
-            statusId: any(named: 'statusId'),
-            typeId: any(named: 'typeId'),
-            clientId: any(named: 'clientId'),
-          )).thenAnswer((inv) async {
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((inv) async {
         final title = inv.namedArguments[#title] as String;
         return 'server-$title';
       });
@@ -381,8 +397,7 @@ void main() {
   });
 
   group('PendingTicketRepository.watchUnresolved', () {
-    test('excludes submitted rows, includes pendingSync/submitting/failed',
-        () async {
+    test('excludes submitted rows, includes pendingSync/submitting/failed', () async {
       await repo.insert(
         id: 'p1',
         title: 'A',

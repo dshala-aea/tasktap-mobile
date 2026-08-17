@@ -47,6 +47,7 @@ dependencies:
   # Field capture
   signature: ^5.5.0
   image_picker: ^1.1.2
+  local_auth: ^2.3.0
   geolocator: ^13.0.4
 
   # Icons
@@ -66,6 +67,7 @@ dependencies:
   # When the dart-define is absent (tests, local runs without a DSN) Sentry
   # is NOT initialised and the app still works normally.
   sentry_flutter: ^9.27.0
+  speech_to_text: ^7.4.0
 
 dev_dependencies:
   flutter_test:
@@ -124,3 +126,36 @@ flutter:
 
   assets:
     - assets/icons/
+
+  # Sora and Manrope, bundled rather than fetched.
+  #
+  # They were reaching the app only through the `google_fonts` runtime package, which downloads a
+  # family on first use and falls back to the platform font until it lands. In an app whose stated
+  # design center is offline that is the wrong default: a technician's first run in a plant room
+  # got the system sans, and the two pinned typefaces are a brand commitment.
+  #
+  # Eighteen call sites were worse off still — they wrote `fontFamily: 'Sora'` / `'Manrope'`
+  # directly, naming families that were never declared here, so they had been rendering as the
+  # platform font on every device since the day they were written. Declaring the families is what
+  # makes those work at all.
+  #
+  # Only the weights the app actually uses are shipped: Sora 400/600/700, Manrope 400/500/600/700.
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-400.ttf
+          weight: 400
+        - asset: assets/fonts/Sora-600.ttf
+          weight: 600
+        - asset: assets/fonts/Sora-700.ttf
+          weight: 700
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-400.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-500.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-600.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-700.ttf
+          weight: 700

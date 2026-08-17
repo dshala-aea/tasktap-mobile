@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 
 /// Dashboard hero header.
 ///
-/// Spec: dark radial/linear gradient with 0.45 black overlay, bottom radius 30,
-/// minHeight ~430; "Bentornato" (Manrope 500/16 white) + user name
+/// Dark gradient band with a 0.45 black overlay and a 30dp bottom radius, sized by its content:
+/// "Bentornato" (Manrope 500/16 white) + user name
 /// (Sora 700/26 YELLOW); top-right glass actions (bell, user); holds glass
 /// cards via [child].
 ///
@@ -26,14 +25,22 @@ class DashboardHero extends StatelessWidget {
     this.greeting = 'Bentornato',
     this.actions = const [],
     this.child,
-    this.minHeight = 430,
+    this.minHeight,
   });
 
   final String userName;
   final String greeting;
   final List<Widget> actions;
   final Widget? child;
-  final double minHeight;
+
+  /// Floor for the dark band. Null — the normal case — means the hero is exactly as tall as what
+  /// is inside it.
+  ///
+  /// It used to be 430 unconditionally. With nothing running that is most of a phone screen given
+  /// to an empty gradient with a name at the top, and the day's work started below the fold. The
+  /// panel is a header when there is nothing to show and a panel when there is; its height should
+  /// say which.
+  final double? minHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +59,7 @@ class DashboardHero extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(color: Colors.black.withAlpha(115)), // 0.45
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: minHeight),
+            constraints: BoxConstraints(minHeight: minHeight ?? 0),
             child: SafeArea(
               bottom: false,
               child: Padding(
@@ -70,7 +77,8 @@ class DashboardHero extends StatelessWidget {
                             children: [
                               Text(
                                 greeting,
-                                style: GoogleFonts.manrope(
+                                style: TextStyle(
+                                  fontFamily: 'Manrope',
                                   fontSize: 16,
                                   fontWeight: FontWeight.w500,
                                   color: AppColors.WHITE,
@@ -81,7 +89,8 @@ class DashboardHero extends StatelessWidget {
                                 userName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.sora(
+                                style: TextStyle(
+                                  fontFamily: 'Sora',
                                   fontSize: 26,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.Y,
@@ -90,16 +99,10 @@ class DashboardHero extends StatelessWidget {
                             ],
                           ),
                         ),
-                        for (final action in actions) ...[
-                          const SizedBox(width: 6),
-                          action,
-                        ],
+                        for (final action in actions) ...[const SizedBox(width: 6), action],
                       ],
                     ),
-                    if (child != null) ...[
-                      const SizedBox(height: 20),
-                      child!,
-                    ],
+                    if (child != null) ...[const SizedBox(height: 20), child!],
                   ],
                 ),
               ),

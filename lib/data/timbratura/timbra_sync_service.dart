@@ -18,8 +18,7 @@ import '../api/dio_client.dart';
 import 'timbra_session_assembler.dart';
 import 'work_session_repository.dart';
 import 'worklog_api_client.dart';
-import '../../features/timbra/timbra_providers.dart'
-    show workSessionRepositoryProvider;
+import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -33,11 +32,9 @@ final timbraSyncServiceProvider = Provider<TimbraSyncService>((ref) {
 // ── Service ───────────────────────────────────────────────────────────────────
 
 class TimbraSyncService {
-  TimbraSyncService({
-    required IWorkSessionRepository repo,
-    required WorklogApiClient apiClient,
-  })  : _repo = repo,
-        _apiClient = apiClient;
+  TimbraSyncService({required IWorkSessionRepository repo, required WorklogApiClient apiClient})
+    : _repo = repo,
+      _apiClient = apiClient;
 
   final IWorkSessionRepository _repo;
   final WorklogApiClient _apiClient;

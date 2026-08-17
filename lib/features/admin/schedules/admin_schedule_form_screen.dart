@@ -2,6 +2,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -21,12 +23,10 @@ class AdminScheduleFormScreen extends ConsumerStatefulWidget {
   final String? scheduleId;
 
   @override
-  ConsumerState<AdminScheduleFormScreen> createState() =>
-      _AdminScheduleFormScreenState();
+  ConsumerState<AdminScheduleFormScreen> createState() => _AdminScheduleFormScreenState();
 }
 
-class _AdminScheduleFormScreenState
-    extends ConsumerState<AdminScheduleFormScreen> {
+class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
@@ -48,9 +48,9 @@ class _AdminScheduleFormScreenState
 
   Future<void> _loadSchedule() async {
     final db = ref.read(appDatabaseProvider);
-    final schedule = await (db.select(db.schedules)
-          ..where((s) => s.id.equals(widget.scheduleId!)))
-        .getSingleOrNull();
+    final schedule = await (db.select(
+      db.schedules,
+    )..where((s) => s.id.equals(widget.scheduleId!))).getSingleOrNull();
     if (schedule != null && mounted) {
       setState(() {
         _titleCtrl.text = schedule.title;
@@ -89,33 +89,27 @@ class _AdminScheduleFormScreenState
   }
 
   Future<void> _pickStartTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _startTime,
-    );
+    final picked = await showTimePicker(context: context, initialTime: _startTime);
     if (picked != null) setState(() => _startTime = picked);
   }
 
   Future<void> _pickEndTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _endTime,
-    );
+    final picked = await showTimePicker(context: context, initialTime: _endTime);
     if (picked != null) setState(() => _endTime = picked);
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedUserId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona un tecnico')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona un tecnico')));
       return;
     }
     if (_selectedLocationId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona una sede')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona una sede')));
       return;
     }
     if (!ensureOnlineOrWarn(context, ref)) return;
@@ -134,9 +128,7 @@ class _AdminScheduleFormScreenState
           locationId: _selectedLocationId,
           ticketId: _selectedTicketId,
           title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
         );
       } else {
         await api.createSchedule(
@@ -148,9 +140,7 @@ class _AdminScheduleFormScreenState
           ticketId: _selectedTicketId,
           statusId: 0,
           title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
         );
       }
 
@@ -159,18 +149,14 @@ class _AdminScheduleFormScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              _isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata',
-            ),
+            content: Text(_isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata'),
           ),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -184,18 +170,13 @@ class _AdminScheduleFormScreenState
     final locationsAsync = ref.watch(allLocationsProvider);
     final locations = locationsAsync.valueOrNull ?? [];
 
-    final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it')
-        .format(_selectedDate);
+    final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it').format(_selectedDate);
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(
-          _isEditing ? 'Modifica pianificazione' : 'Nuova pianificazione',
-        ),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica pianificazione' : 'Nuova pianificazione',
+        showBack: true,
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -212,15 +193,9 @@ class _AdminScheduleFormScreenState
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(19),
+          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
-              controller: _titleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Titolo',
-                border: OutlineInputBorder(),
-              ),
-            ),
+            AppTextField(label: 'Titolo', controller: _titleCtrl),
             const SizedBox(height: 16),
 
             // ── Date picker ──────────────────────────────────────────────
@@ -260,55 +235,41 @@ class _AdminScheduleFormScreenState
             const SizedBox(height: 8),
 
             // ── Technician selector ──────────────────────────────────────
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — controlled field, needs value not initialValue
-              value: _selectedUserId,
-              decoration: const InputDecoration(
-                labelText: 'Tecnico *',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                ...technicians.map((t) => DropdownMenuItem(
+            AppFieldShell(
+              label: 'Tecnico *',
+              child: DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _selectedUserId,
+                items: [
+                  ...technicians.map(
+                    (t) => DropdownMenuItem(
                       value: t['id'] as String,
-                      child: Text(
-                        t['displayName'] as String? ??
-                            t['email'] as String? ??
-                            '',
-                      ),
-                    )),
-              ],
-              onChanged: (v) => setState(() => _selectedUserId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
+                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                    ),
+                  ),
+                ],
+                onChanged: (v) => setState(() => _selectedUserId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
+              ),
             ),
             const SizedBox(height: 16),
 
             // ── Location selector ────────────────────────────────────────
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — controlled field, needs value not initialValue
-              value: _selectedLocationId,
-              decoration: const InputDecoration(
-                labelText: 'Sede *',
-                border: OutlineInputBorder(),
+            AppFieldShell(
+              label: 'Sede *',
+              child: DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _selectedLocationId,
+                items: locations
+                    .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedLocationId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
               ),
-              items: locations
-                  .map((l) => DropdownMenuItem(
-                        value: l.id,
-                        child: Text(l.name),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedLocationId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
           ],
         ),
       ),

@@ -2,13 +2,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/offline_guard.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_text_field.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -25,12 +24,10 @@ class AdminCustomerFormScreen extends ConsumerStatefulWidget {
   bool get isEditMode => customerId != null;
 
   @override
-  ConsumerState<AdminCustomerFormScreen> createState() =>
-      _AdminCustomerFormScreenState();
+  ConsumerState<AdminCustomerFormScreen> createState() => _AdminCustomerFormScreenState();
 }
 
-class _AdminCustomerFormScreenState
-    extends ConsumerState<AdminCustomerFormScreen> {
+class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _companyNameCtrl;
   late final TextEditingController _taxIdCtrl;
@@ -66,9 +63,9 @@ class _AdminCustomerFormScreenState
 
   Future<void> _loadCustomer() async {
     final db = ref.read(appDatabaseProvider);
-    final customer = await (db.select(db.customers)
-          ..where((c) => c.id.equals(widget.customerId!)))
-        .getSingleOrNull();
+    final customer = await (db.select(
+      db.customers,
+    )..where((c) => c.id.equals(widget.customerId!))).getSingleOrNull();
     if (customer == null || !mounted) return;
     _companyNameCtrl.text = customer.companyName;
     _taxIdCtrl.text = customer.taxId ?? '';
@@ -139,11 +136,7 @@ class _AdminCustomerFormScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              widget.isEditMode
-                  ? 'Cliente aggiornato'
-                  : 'Cliente creato con successo',
-            ),
+            content: Text(widget.isEditMode ? 'Cliente aggiornato' : 'Cliente creato con successo'),
             backgroundColor: context.colors.green,
           ),
         );
@@ -151,12 +144,9 @@ class _AdminCustomerFormScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Errore: $e'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Errore: $e'), backgroundColor: context.colors.red));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -167,42 +157,31 @@ class _AdminCustomerFormScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
+      appBar: ScreenHeaderBar(
+        title: widget.isEditMode ? 'Modifica cliente' : 'Nuovo cliente',
+        showBack: true,
         backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: context.colors.inkInverse,
-        elevation: 0,
-        title: Text(
-          widget.isEditMode ? 'Modifica cliente' : 'Nuovo cliente',
-          style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
-        ),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(19, 16, 19, 100),
+          padding: EdgeInsets.fromLTRB(19, 16, 19, context.navClearance),
           children: [
             // ── Required ───────────────────────────────────────────────────
             AppTextField(
               label: 'Ragione sociale *',
               hint: 'Es. Rossi S.r.l.',
               controller: _companyNameCtrl,
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
-            AppTextField(
-              label: 'P.IVA',
-              controller: _taxIdCtrl,
-            ),
+            AppTextField(label: 'P.IVA', controller: _taxIdCtrl),
             const SizedBox(height: 24),
 
             // ── Contact ────────────────────────────────────────────────────
             _sectionLabel(context, 'Contatto'),
             const SizedBox(height: 12),
-            AppTextField(
-              label: 'Referente',
-              controller: _contactPersonCtrl,
-            ),
+            AppTextField(label: 'Referente', controller: _contactPersonCtrl),
             const SizedBox(height: 16),
             AppTextField(
               label: 'Telefono',
@@ -220,15 +199,9 @@ class _AdminCustomerFormScreenState
             // ── Address ────────────────────────────────────────────────────
             _sectionLabel(context, 'Indirizzo'),
             const SizedBox(height: 12),
-            AppTextField(
-              label: 'Indirizzo',
-              controller: _addressCtrl,
-            ),
+            AppTextField(label: 'Indirizzo', controller: _addressCtrl),
             const SizedBox(height: 16),
-            AppTextField(
-              label: 'Città',
-              controller: _cityCtrl,
-            ),
+            AppTextField(label: 'Città', controller: _cityCtrl),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -241,10 +214,7 @@ class _AdminCustomerFormScreenState
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: AppTextField(
-                    label: 'Paese',
-                    controller: _countryCtrl,
-                  ),
+                  child: AppTextField(label: 'Paese', controller: _countryCtrl),
                 ),
               ],
             ),
@@ -253,11 +223,7 @@ class _AdminCustomerFormScreenState
             // ── Notes ──────────────────────────────────────────────────────
             _sectionLabel(context, 'Note'),
             const SizedBox(height: 12),
-            AppTextField.multiline(
-              label: 'Note',
-              controller: _notesCtrl,
-              maxLines: 4,
-            ),
+            AppTextField.multiline(label: 'Note', controller: _notesCtrl, maxLines: 4),
             const SizedBox(height: 32),
 
             // ── Submit ─────────────────────────────────────────────────────

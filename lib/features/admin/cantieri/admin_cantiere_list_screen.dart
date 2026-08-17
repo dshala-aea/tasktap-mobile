@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -13,12 +14,9 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// All cantieri from Drift cache, alphabetical.
 ///
 /// Reads the local mirror the sync now fills.
-final adminCantieriProvider =
-    StreamProvider.autoDispose<List<CantieriData>>((ref) {
+final adminCantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.cantieri)
-        ..orderBy([(c) => OrderingTerm.asc(c.name)]))
-      .watch();
+  return (db.select(db.cantieri)..orderBy([(c) => OrderingTerm.asc(c.name)])).watch();
 });
 
 /// Admin cantiere list — with FAB to create.
@@ -26,8 +24,7 @@ class AdminCantiereListScreen extends StatefulWidget {
   const AdminCantiereListScreen({super.key});
 
   @override
-  State<AdminCantiereListScreen> createState() =>
-      _AdminCantiereListScreenState();
+  State<AdminCantiereListScreen> createState() => _AdminCantiereListScreenState();
 }
 
 class _AdminCantiereListScreenState extends State<AdminCantiereListScreen> {
@@ -51,9 +48,12 @@ class _AdminCantiereListScreenState extends State<AdminCantiereListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo cantiere',
-        onPressed: () => context.push('/altro/cantieri/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo cantiere',
+          onPressed: () => context.push('/altro/cantieri/nuovo'),
+        ),
       ),
     );
   }
@@ -84,45 +84,42 @@ class _AdminCantiereListBody extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () => ref.read(syncProvider.notifier).performSync(),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Cantieri',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca per nome o città…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        if (cantieriAsync.isLoading)
-          const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          )
-        else if (filtered.isEmpty)
+        slivers: [
           SliverToBoxAdapter(
-            child: UnavailableState(
-              icon: LucideIcons.hardHat,
-              titolo: 'Cantieri non disponibili',
-              motivo: "L'elenco cantieri non è ancora sincronizzato sul "
-                  'dispositivo. I cantieri creati con il pulsante + vengono '
-                  'salvati sul server ma non compariranno in questa lista '
-                  'finché la sincronizzazione non sarà collegata.',
+            child: ScreenHeader(
+              title: 'Cantieri',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: searchCtrl,
+              hint: 'Cerca per nome o città…',
+              onChanged: onQueryChanged,
+            ),
+          ),
+          if (cantieriAsync.isLoading)
+            const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              ),
+            )
+          else if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: UnavailableState(
+                icon: LucideIcons.hardHat,
+                titolo: 'Cantieri non disponibili',
+                motivo:
+                    "L'elenco cantieri non è ancora sincronizzato sul "
+                    'dispositivo. I cantieri creati con il pulsante + vengono '
+                    'salvati sul server ma non compariranno in questa lista '
+                    'finché la sincronizzazione non sarà collegata.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final cantiere = filtered[i];
                 final cityLabel = cantiere.city ?? '—';
                 return _AdminCantiereRow(
@@ -130,23 +127,17 @@ class _AdminCantiereListBody extends ConsumerWidget {
                   cityLabel: cityLabel,
                   isLast: i == filtered.length - 1,
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
       ),
     );
   }
 }
 
 class _AdminCantiereRow extends StatelessWidget {
-  const _AdminCantiereRow({
-    required this.cantiere,
-    required this.cityLabel,
-    required this.isLast,
-  });
+  const _AdminCantiereRow({required this.cantiere, required this.cityLabel, required this.isLast});
 
   final CantieriData cantiere;
   final String cityLabel;
@@ -162,19 +153,11 @@ class _AdminCantiereRow extends StatelessWidget {
           color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          LucideIcons.hardHat,
-          size: 20,
-          color: context.colors.inkMuted,
-        ),
+        child: Icon(LucideIcons.hardHat, size: 20, color: context.colors.inkMuted),
       ),
       title: cantiere.name,
       subtitle: cityLabel,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: () => context.push('/altro/cantieri/${cantiere.id}'),
     );

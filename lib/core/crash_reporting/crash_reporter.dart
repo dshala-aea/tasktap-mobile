@@ -33,11 +33,7 @@ abstract interface class CrashReporter {
   // ── API ───────────────────────────────────────────────────────────────────
 
   /// Capture an exception with an optional stack trace and context.
-  Future<void> captureException(
-    Object exception, {
-    StackTrace? stackTrace,
-    String? hint,
-  });
+  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint});
 
   /// Capture a non-fatal message.
   Future<void> captureMessage(String message);
@@ -53,11 +49,7 @@ final class _NoOpCrashReporter implements CrashReporter {
   const _NoOpCrashReporter();
 
   @override
-  Future<void> captureException(
-    Object exception, {
-    StackTrace? stackTrace,
-    String? hint,
-  }) async {}
+  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint}) async {}
 
   @override
   Future<void> captureMessage(String message) async {}

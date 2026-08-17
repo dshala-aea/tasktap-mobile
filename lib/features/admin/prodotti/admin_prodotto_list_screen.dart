@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -10,8 +11,9 @@ import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches prodotti assistenza from backend API.
-final adminProdottiAssistenzaProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
+  ref,
+) async {
   final api = ref.watch(adminApiClientProvider);
   return api.fetchProdottiAssistenza();
 });
@@ -33,9 +35,12 @@ class AdminProdottoListScreen extends ConsumerWidget {
           data: (prodotti) => _ProdottoListBody(prodotti: prodotti),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo prodotto',
-        onPressed: () => context.push('/altro/prodotti/nuovo'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo prodotto',
+          onPressed: () => context.push('/altro/prodotti/nuovo'),
+        ),
       ),
     );
   }
@@ -75,33 +80,32 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminProdottiAssistenzaProvider.future),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Prodotti Assistenza',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: _searchCtrl,
-            hint: 'Cerca per nome…',
-            onChanged: (q) => setState(() => _query = q),
-          ),
-        ),
-        if (filtered.isEmpty)
+        slivers: [
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.wrench,
-              title: 'Nessun prodotto',
-              body: 'Crea un nuovo prodotto con il pulsante +.',
+            child: ScreenHeader(
+              title: 'Prodotti Assistenza',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: _searchCtrl,
+              hint: 'Cerca per nome…',
+              onChanged: (q) => setState(() => _query = q),
+            ),
+          ),
+          if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.wrench,
+                title: 'Nessun prodotto',
+                body: 'Crea un nuovo prodotto con il pulsante +.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final prodotto = filtered[i];
                 final name = prodotto['name'] as String? ?? '';
                 final customerId = prodotto['customerId'] as String? ?? '';
@@ -112,17 +116,12 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
                   customerName: customerName,
                   isActive: isActive,
                   isLast: i == filtered.length - 1,
-                  onTap: () => context.push(
-                    '/altro/prodotti/${prodotto['id']}',
-                    extra: prodotto,
-                  ),
+                  onTap: () => context.push('/altro/prodotti/${prodotto['id']}', extra: prodotto),
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
       ),
     );
   }
@@ -153,19 +152,11 @@ class _ProdottoRow extends StatelessWidget {
           color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          LucideIcons.wrench,
-          size: 20,
-          color: context.colors.inkMuted,
-        ),
+        child: Icon(LucideIcons.wrench, size: 20, color: context.colors.inkMuted),
       ),
       title: name,
       subtitle: customerName,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: onTap,
     );

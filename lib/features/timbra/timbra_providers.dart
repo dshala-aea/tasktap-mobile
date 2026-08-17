@@ -26,8 +26,7 @@ final workSessionRepositoryProvider = Provider<IWorkSessionRepository>((ref) {
 // ── Today's sessions (reactive stream) ───────────────────────────────────────
 
 /// Stream of today's [WorkSession]s in chronological order.
-final todaySessionsProvider =
-    StreamProvider.autoDispose<List<WorkSession>>((ref) {
+final todaySessionsProvider = StreamProvider.autoDispose<List<WorkSession>>((ref) {
   final repo = ref.watch(workSessionRepositoryProvider);
   return repo.watchTodaySessions();
 });
@@ -59,15 +58,14 @@ class TimbraState {
     bool? isOnPause,
     DateTime? shiftStartTime,
     Object? pauseStartTime = _sentinel,
-  }) =>
-      TimbraState(
-        isOnShift: isOnShift ?? this.isOnShift,
-        isOnPause: isOnPause ?? this.isOnPause,
-        shiftStartTime: shiftStartTime ?? this.shiftStartTime,
-        pauseStartTime: identical(pauseStartTime, _sentinel)
-            ? this.pauseStartTime
-            : pauseStartTime as DateTime?,
-      );
+  }) => TimbraState(
+    isOnShift: isOnShift ?? this.isOnShift,
+    isOnPause: isOnPause ?? this.isOnPause,
+    shiftStartTime: shiftStartTime ?? this.shiftStartTime,
+    pauseStartTime: identical(pauseStartTime, _sentinel)
+        ? this.pauseStartTime
+        : pauseStartTime as DateTime?,
+  );
 }
 
 const _sentinel = Object();
@@ -269,18 +267,10 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
       final now = DateTime.now().toUtc();
       if (!current.isOnShift) {
         // Start shift
-        await _repo.addEvent(
-          id: _uuid.v4(),
-          eventTime: now,
-          eventType: _kIngresso,
-        );
+        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kIngresso);
       } else {
         // End shift
-        await _repo.addEvent(
-          id: _uuid.v4(),
-          eventTime: now,
-          eventType: _kFine,
-        );
+        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kFine);
       }
       state = const AsyncData(null);
       // Best-effort sync after punch (fire-and-forget; ignore failure).
@@ -296,17 +286,9 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       final now = DateTime.now().toUtc();
       if (current.isOnPause) {
-        await _repo.addEvent(
-          id: _uuid.v4(),
-          eventTime: now,
-          eventType: _kRipresa,
-        );
+        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kRipresa);
       } else {
-        await _repo.addEvent(
-          id: _uuid.v4(),
-          eventTime: now,
-          eventType: _kPausa,
-        );
+        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kPausa);
       }
       state = const AsyncData(null);
       // Best-effort sync after pause/resume (fire-and-forget; ignore failure).
@@ -317,8 +299,9 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final punchNotifierProvider =
-    StateNotifierProvider.autoDispose<PunchNotifier, AsyncValue<void>>((ref) {
+final punchNotifierProvider = StateNotifierProvider.autoDispose<PunchNotifier, AsyncValue<void>>((
+  ref,
+) {
   return PunchNotifier(
     ref.watch(workSessionRepositoryProvider),
     ref.watch(timbraSyncServiceProvider),

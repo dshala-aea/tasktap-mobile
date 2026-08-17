@@ -1,17 +1,17 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_card.dart';
-// section_title omitted — using inline _SL below
+// Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Ore
@@ -30,10 +30,7 @@ class StepOre extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(reportEditorProvider(reportId));
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final totalOre = state.staffRows.fold<double>(
-      0,
-      (sum, r) => sum + r.effectiveHours,
-    );
+    final totalOre = state.staffRows.fold<double>(0, (sum, r) => sum + r.effectiveHours);
 
     return Column(
       children: [
@@ -41,7 +38,7 @@ class StepOre extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(19, 16, 19, 8),
             children: [
-              _SL(title:'Tecnici / Ore lavorate'),
+              StepLabel(title: 'Tecnici / Ore lavorate'),
               const SizedBox(height: 12),
               if (state.staffRows.isEmpty)
                 Padding(
@@ -75,9 +72,7 @@ class StepOre extends ConsumerWidget {
                 label: const Text('Aggiungi tecnico'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -102,8 +97,11 @@ class StepOre extends ConsumerWidget {
   /// A picker also means no keyboard: one thumb, gloves on, in the rain.
   void _showAddStaffDialog(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final alreadyAdded =
-        ref.read(reportEditorProvider(reportId)).staffRows.map((r) => r.userId).toSet();
+    final alreadyAdded = ref
+        .read(reportEditorProvider(reportId))
+        .staffRows
+        .map((r) => r.userId)
+        .toSet();
 
     showModalBottomSheet<void>(
       context: context,
@@ -115,27 +113,24 @@ class StepOre extends ConsumerWidget {
 
           return SafeArea(
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(ctx).size.height * 0.7,
-              ),
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
               child: colleagues.when(
                 loading: () => const Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-                error: (_, _) => const _StaffPickerMessage(
-                  text: 'Impossibile leggere l\'elenco dei colleghi.',
-                ),
+                error: (_, _) =>
+                    const _StaffPickerMessage(text: 'Impossibile leggere l\'elenco dei colleghi.'),
                 data: (all) {
                   // Someone already on this rapportino is not offered again — re-adding them
                   // would double their hours, and the list is short enough that a disabled row
                   // would just be noise.
-                  final selectable =
-                      all.where((c) => !alreadyAdded.contains(c.id)).toList();
+                  final selectable = all.where((c) => !alreadyAdded.contains(c.id)).toList();
 
                   if (all.isEmpty) {
                     return const _StaffPickerMessage(
-                      text: 'Nessun collega disponibile.\n\n'
+                      text:
+                          'Nessun collega disponibile.\n\n'
                           'L\'elenco arriva dalla sincronizzazione: collegati a internet una '
                           'volta e riprova.',
                     );
@@ -171,10 +166,7 @@ class StepOre extends ConsumerWidget {
                               leading: const Icon(LucideIcons.user, size: 28),
                               title: Text(
                                 c.displayName,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
                               ),
                               onTap: () {
                                 notifier.addStaff(
@@ -250,13 +242,9 @@ class _StaffTileState extends State<_StaffTile> {
   @override
   void initState() {
     super.initState();
-    _hoursCtrl = TextEditingController(
-      text: widget.row.hoursWorked?.toStringAsFixed(1) ?? '',
-    );
+    _hoursCtrl = TextEditingController(text: widget.row.hoursWorked?.toStringAsFixed(1) ?? '');
     _kmCtrl = TextEditingController(
-      text: widget.row.kmTraveled > 0
-          ? widget.row.kmTraveled.toStringAsFixed(1)
-          : '',
+      text: widget.row.kmTraveled > 0 ? widget.row.kmTraveled.toStringAsFixed(1) : '',
     );
   }
 
@@ -282,10 +270,7 @@ class _StaffTileState extends State<_StaffTile> {
               Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(
-                  color: AppColors.YSoft,
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: AppColors.YSoft, shape: BoxShape.circle),
                 child: Icon(LucideIcons.user, size: 18, color: context.colors.ink),
               ),
               const SizedBox(width: 10),
@@ -301,23 +286,18 @@ class _StaffTileState extends State<_StaffTile> {
               ),
               // Timer badge / start button
               if (row.timerRunning)
-                _RunningTimerBadge(
-                  startedAt: row.timerStartedAt,
-                  onStop: widget.onStopTimer,
-                )
+                _RunningTimerBadge(startedAt: row.timerStartedAt, onStop: widget.onStopTimer)
               else
                 IconButton(
                   icon: Icon(LucideIcons.timer, color: context.colors.inkMuted),
                   tooltip: 'Avvia timer',
-                  constraints:
-                      const BoxConstraints(minWidth: 44, minHeight: 44),
+                  constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                   onPressed: widget.onStartTimer,
                 ),
               IconButton(
                 icon: Icon(LucideIcons.trash2, color: context.colors.red),
                 tooltip: 'Rimuovi',
-                constraints:
-                    const BoxConstraints(minWidth: 44, minHeight: 44),
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                 onPressed: widget.onRemove,
               ),
             ],
@@ -423,13 +403,13 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
       border: Border.all(color: AppColors.Y),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Text(
-          '$hh:$mm:$ss',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-            color: context.colors.ink,
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
+        '$hh:$mm:$ss',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: context.colors.ink,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
       ),
     );
   }
@@ -452,20 +432,17 @@ class _NumField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixText: suffix,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    // Label above and the theme's own decoration, like every other field. This one also
+    // hand-rolled its border radius and padding, so an ore box did not match the box beside it.
+    return AppFieldShell(
+      label: label,
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(suffixText: suffix),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+        onChanged: onChanged,
       ),
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-      ],
-      onChanged: onChanged,
     );
   }
 }
@@ -484,7 +461,7 @@ class _TotalOreCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.CHARCOAL,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRack.freeShape,
         boxShadow: context.colors.shadow,
       ),
       child: Row(
@@ -494,8 +471,10 @@ class _TotalOreCard extends StatelessWidget {
             children: [
               Text(
                 'Totale ore',
-                style: TextStyle(
-                  color: context.colors.inkMuted,
+                style: const TextStyle(
+                  // On CHARCOAL, which is dark in both themes. `inkMuted` measured 1.9:1 here in
+                  // light mode — the label above the headline figure of the hours step.
+                  color: AppColors.onDarkMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -517,8 +496,8 @@ class _TotalOreCard extends StatelessWidget {
             children: [
               Text(
                 'Tecnici',
-                style: TextStyle(
-                  color: context.colors.inkMuted,
+                style: const TextStyle(
+                  color: AppColors.onDarkMuted,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -526,8 +505,9 @@ class _TotalOreCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '$staffCount',
-                style: TextStyle(
-                  color: context.colors.inkInverse,
+                style: const TextStyle(
+                  // `inkInverse` went near-black here the moment dark mode was on.
+                  color: AppColors.onDark,
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
@@ -535,25 +515,6 @@ class _TotalOreCard extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
       ),
     );
   }

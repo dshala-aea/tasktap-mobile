@@ -14,11 +14,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// );
 /// ```
 class AppToggle extends StatelessWidget {
-  const AppToggle({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
+  const AppToggle({super.key, required this.value, required this.onChanged});
 
   final bool value;
   final ValueChanged<bool>? onChanged;
@@ -66,11 +62,7 @@ class AppToggle extends StatelessWidget {
                         color: context.colors.surface,
                         shape: BoxShape.circle,
                         boxShadow: [
-                          BoxShadow(
-                            color: Color(0x26000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 1),
-                          ),
+                          BoxShadow(color: Color(0x26000000), blurRadius: 4, offset: Offset(0, 1)),
                         ],
                       ),
                     ),

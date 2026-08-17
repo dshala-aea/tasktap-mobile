@@ -3,21 +3,22 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/key_val.dart';
-// section_title omitted — using inline _SL below
+import '../../../core/utils/error_message.dart';
+// Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -51,10 +52,48 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
       await queue.enqueue(widget.reportId);
       await queue.processAll();
     } catch (e) {
-      setState(() => _submitError = e.toString());
+      // The red line under the submit button. It printed `e.toString()`, which put a Dio stack at
+      // the exact moment two people have just signed and the only question is whether the record
+      // survived.
+      setState(() => _submitError = humanErrorMessage(e, azione: 'inviare il rapportino'));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// The customer as a person would name it: the cached company name, else what was typed.
+  ///
+  /// Falls back to the free text rather than the id — an unresolvable id is not worth printing,
+  /// and a name typed by hand is still the answer to "who is this for".
+  static String _customerLabel(WidgetRef ref, ReportEditorState state) {
+    final id = state.customerId;
+    if (id != null && id.isNotEmpty) {
+      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? const <Customer>[]) {
+        if (c.id == id) return c.companyName;
+      }
+    }
+    final typed = state.customerFreeText;
+    return (typed?.isNotEmpty ?? false) ? typed! : '—';
+  }
+
+  /// Ticket or cantiere as one line. They are alternatives, so four rows for them was three too
+  /// many, and "(lib.)" was internal vocabulary for a distinction the reader does not have.
+  static String? _riferimento(WidgetRef ref, ReportEditorState state) {
+    final ticketId = state.ticketId;
+    if (ticketId != null && ticketId.isNotEmpty) {
+      for (final t in ref.watch(allTicketsProvider).valueOrNull ?? const <Ticket>[]) {
+        if (t.id == ticketId) return 'Ticket · ${t.title}';
+      }
+    }
+    final cantiereId = state.cantiereId;
+    if (cantiereId != null && cantiereId.isNotEmpty) {
+      for (final c in ref.watch(allCantieriProvider).valueOrNull ?? const <CantieriData>[]) {
+        if (c.id == cantiereId) return 'Cantiere · ${c.name}';
+      }
+    }
+    if (state.ticketFreeText?.isNotEmpty ?? false) return 'Ticket · ${state.ticketFreeText}';
+    if (state.cantiereFreeText?.isNotEmpty ?? false) return 'Cantiere · ${state.cantiereFreeText}';
+    return null;
   }
 
   @override
@@ -75,52 +114,38 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           ],
 
           // ── Summary ────────────────────────────────────────────────────────
-          _SL(title:'Riepilogo dati'),
-          const SizedBox(height: 8),
+          //
+          // This card is the last thing read before two people sign. It used to print raw GUIDs:
+          // `Cliente  3f2a1c8e-…`, and separate `Ticket` / `Ticket (lib.)` rows for what is one
+          // fact stored two ways. Nobody can check a rapportino against a GUID, so the step that
+          // exists to be checked could not be.
           AppCard(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               children: [
-                KeyVal(
-                  label: 'Titolo',
-                  value: state.title.isEmpty ? '—' : state.title,
-                ),
-                KeyVal(
-                  label: 'Cliente',
-                  value: state.customerId ??
-                      state.customerFreeText ??
-                      '—',
-                ),
-                KeyVal(
-                  label: 'Indirizzo',
-                  value: state.workAddress ?? '—',
-                ),
-                if (state.ticketId != null)
-                  KeyVal(label: 'Ticket', value: state.ticketId!),
-                if (state.ticketFreeText != null)
-                  KeyVal(label: 'Ticket (lib.)', value: state.ticketFreeText!),
-                if (state.cantiereId != null)
-                  KeyVal(label: 'Cantiere', value: state.cantiereId!),
-                if (state.cantiereFreeText != null)
-                  KeyVal(label: 'Cantiere (lib.)', value: state.cantiereFreeText!),
-                KeyVal(
-                  label: 'Tecnici',
-                  value: '${state.staffRows.length}',
-                ),
+                KeyVal(label: 'Titolo', value: state.title.isEmpty ? '—' : state.title),
+                // Stated on the page the technician signs off, not only in a database column.
+                // They are attesting to this record; they should be able to see that part of it
+                // was drafted for them.
+                if (state.isAiAssisted)
+                  const KeyVal(label: 'Redazione', value: 'Bozza generata con AI, poi rivista'),
+                KeyVal(label: 'Cliente', value: _customerLabel(ref, state)),
+                KeyVal(label: 'Indirizzo', value: state.workAddress ?? '—'),
+                if (_riferimento(ref, state) case final riferimento?)
+                  KeyVal(label: 'Riferimento', value: riferimento),
+                KeyVal(label: 'Tecnici', value: '${state.staffRows.length}'),
                 KeyVal(
                   label: 'Ore totali',
-                  value: '${state.staffRows.fold<double>(0, (s, r) => s + r.effectiveHours).toStringAsFixed(1)} h',
+                  value:
+                      '${state.staffRows.fold<double>(0, (s, r) => s + r.effectiveHours).toStringAsFixed(1)} h',
                 ),
                 KeyVal(
                   label: 'Materiali',
-                  value: state.materialiNotRequired
-                      ? 'Nessuno'
-                      : '${state.materialeRows.length}',
+                  value: state.materialiNotRequired ? 'Nessuno' : '${state.materialeRows.length}',
                 ),
                 KeyVal(
                   label: 'Foto',
-                  value:
-                      '${state.allegatoRows.where((a) => !a.isSignature).length}',
+                  value: '${state.allegatoRows.where((a) => !a.isSignature).length}',
                   showDivider: false,
                 ),
               ],
@@ -129,7 +154,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           const SizedBox(height: 20),
 
           // ── Firma cliente ──────────────────────────────────────────────────
-          _SL(title:'Firma cliente *'),
+          StepLabel(title: 'Firma cliente *'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'cliente',
@@ -141,7 +166,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           const SizedBox(height: 20),
 
           // ── Firma tecnico ──────────────────────────────────────────────────
-          _SL(title:'Firma tecnico *'),
+          StepLabel(title: 'Firma tecnico *'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'tecnico',
@@ -157,9 +182,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             stream: repo.watchDraft(widget.reportId),
             builder: (context, snap) {
               final draft = snap.data;
-              final subState = DraftSubmissionState.fromString(
-                draft?.submissionState ?? 'draft',
-              );
+              final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
 
               if (subState == DraftSubmissionState.submitted) {
                 return _StatusCard(
@@ -212,26 +235,17 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,
                       title: 'Pronto per l\'invio',
-                      subtitle:
-                          'Il rapportino è completo e pronto per essere inviato.',
+                      subtitle: 'Il rapportino è completo e pronto per essere inviato.',
                     ),
                   if (_submitError != null) ...[
                     const SizedBox(height: 8),
-                    Text(
-                      _submitError!,
-                      style: TextStyle(
-                          color: context.colors.red, fontSize: 12),
-                    ),
+                    Text(_submitError!, style: TextStyle(color: context.colors.red, fontSize: 12)),
                   ],
                   const SizedBox(height: 12),
                   AppButton(
                     label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
-                    icon: _submitting
-                        ? null
-                        : const Icon(LucideIcons.send),
-                    onPressed: validation.isValid && !_submitting
-                        ? _onInvia
-                        : null,
+                    icon: _submitting ? null : const Icon(LucideIcons.send),
+                    onPressed: validation.isValid && !_submitting ? _onInvia : null,
                     isLoading: _submitting,
                     size: AppButtonSize.lg,
                   ),
@@ -257,9 +271,13 @@ class _ValidationPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
+        // A tint of the theme's own amber, not a fixed cream. The panel was #FFF8E1 while every
+        // line of text inside it takes `context.colors.ink` — which is near-white in dark mode.
+        // The result was white text on cream, on the one panel that lists what is blocking the
+        // technician from submitting.
+        color: context.colors.amber.withValues(alpha: 0.12),
         border: Border.all(color: context.colors.amber),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppRack.freeShape,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,10 +289,7 @@ class _ValidationPanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Da completare prima dell\'invio:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: context.colors.ink,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.ink),
                 ),
               ),
             ],
@@ -286,15 +301,10 @@ class _ValidationPanel extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(LucideIcons.circle,
-                      size: 6, color: context.colors.amber),
+                  Icon(LucideIcons.circle, size: 6, color: context.colors.amber),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      msg,
-                      style: TextStyle(
-                          color: context.colors.ink, fontSize: 14),
-                    ),
+                    child: Text(msg, style: TextStyle(color: context.colors.ink, fontSize: 14)),
                   ),
                 ],
               ),
@@ -354,18 +364,11 @@ class _StatusCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                    fontSize: 15,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 15),
                 ),
                 if (subtitle != null) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle!,
-                    style: TextStyle(color: color, fontSize: 12),
-                  ),
+                  Text(subtitle!, style: TextStyle(color: color, fontSize: 12)),
                 ],
               ],
             ),
@@ -410,18 +413,14 @@ class _SignatureBlock extends ConsumerWidget {
                 File(localPath!),
                 height: 120,
                 fit: BoxFit.contain,
-                errorBuilder: (ctx, e, _) => Icon(
-                  LucideIcons.imageOff,
-                  color: context.colors.inkMuted,
-                  size: 40,
-                ),
+                errorBuilder: (ctx, e, _) =>
+                    Icon(LucideIcons.imageOff, color: context.colors.inkMuted, size: 40),
               ),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(LucideIcons.checkCircle2,
-                    color: context.colors.green, size: 16),
+                Icon(LucideIcons.checkCircle2, color: context.colors.green, size: 16),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -431,12 +430,8 @@ class _SignatureBlock extends ConsumerWidget {
                 ),
                 TextButton(
                   onPressed: () => _clearSig(ref),
-                  style: TextButton.styleFrom(
-                      minimumSize: const Size(44, 44)),
-                  child: Text(
-                    'Cancella',
-                    style: TextStyle(color: context.colors.red),
-                  ),
+                  style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+                  child: Text('Cancella', style: TextStyle(color: context.colors.red)),
                 ),
               ],
             ),
@@ -446,17 +441,13 @@ class _SignatureBlock extends ConsumerWidget {
               height: 120,
               decoration: BoxDecoration(
                 color: context.colors.bg2,
-                border: Border.all(
-                  color: context.colors.borderStrong,
-                  style: BorderStyle.solid,
-                ),
+                border: Border.all(color: context.colors.borderStrong, style: BorderStyle.solid),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
                 child: Text(
                   'Firma $label non acquisita',
-                  style: TextStyle(
-                      color: context.colors.inkMuted, fontSize: 13),
+                  style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
                 ),
               ),
             ),
@@ -488,17 +479,9 @@ class _SignatureBlock extends ConsumerWidget {
 
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     if (isCustomer) {
-      await notifier.saveCustomerSignature(
-        allegatoId: id,
-        bytes: bytes,
-        localPath: file.path,
-      );
+      await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
     } else {
-      await notifier.saveTechnicianSignature(
-        allegatoId: id,
-        bytes: bytes,
-        localPath: file.path,
-      );
+      await notifier.saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
     }
   }
 
@@ -545,9 +528,16 @@ class _SigDialogState extends State<_SigDialog> {
     return Dialog.fullscreen(
       child: Column(
         children: [
+          // Stays an AppBar, unlike the ten screen headers converted to ScreenHeaderBar. This is a
+          // full-screen modal dismissed with an X, not a screen navigated back from, and
+          // ScreenHeader draws a back chevron — the wrong affordance for a sheet you cancel.
+          //
+          // Its ink is fixed rather than themed for the usual reason: the bar is CHARCOAL under
+          // both themes, and `inkInverse` flipped to near-black, taking the title and the close
+          // button off the dialog that captures the customer's signature.
           AppBar(
             backgroundColor: AppColors.CHARCOAL,
-            foregroundColor: context.colors.inkInverse,
+            foregroundColor: AppColors.onDark,
             title: const Text('Acquisisci firma'),
             leading: IconButton(
               icon: const Icon(LucideIcons.x),
@@ -556,10 +546,7 @@ class _SigDialogState extends State<_SigDialog> {
             actions: [
               TextButton(
                 onPressed: () => _ctrl.clear(),
-                child: Text(
-                  'Cancella',
-                  style: TextStyle(color: context.colors.inkMuted),
-                ),
+                child: Text('Cancella', style: TextStyle(color: context.colors.inkMuted)),
               ),
               TextButton(
                 onPressed: () async {
@@ -574,10 +561,7 @@ class _SigDialogState extends State<_SigDialog> {
                 },
                 child: const Text(
                   'Conferma',
-                  style: TextStyle(
-                    color: AppColors.Y,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -590,31 +574,9 @@ class _SigDialogState extends State<_SigDialog> {
             ),
           ),
           Expanded(
-            child: Signature(
-              controller: _ctrl,
-              backgroundColor: context.colors.bg1,
-            ),
+            child: Signature(controller: _ctrl, backgroundColor: context.colors.bg1),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
       ),
     );
   }

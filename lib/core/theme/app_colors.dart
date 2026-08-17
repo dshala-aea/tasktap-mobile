@@ -103,6 +103,52 @@ abstract final class AppColors {
   /// REDSOFT rgb(255,209,209).
   static const Color REDSOFT = Color(0xFFFFD1D1);
 
+  // ── Punch clock (theme-invariant) ────────────────────────────────────────
+  //
+  // The timbratura screens are dark under both themes on purpose — they are read at arm's length
+  // in a van cab at 6am and the giant clock is the whole screen. These are the values they need
+  // and they do not belong in [AppPalette], which is for tokens that flip.
+
+  /// The ground of the timbratura screens.
+  ///
+  /// Was written as a bare `Color(0xFF1A1A1A)` in eight places across two files. It happens to
+  /// equal the dark palette's `bg2`, which made it look like a token when it is not one: this
+  /// surface stays dark when the app is in light mode, so it must not follow the palette.
+  static const Color punchGround = Color(0xFF1A1A1A);
+
+  /// The end-shift disc gradient, light stop.
+  ///
+  /// The punch screens carried `#FF6B6B`/`#CC3333` and `#CC0000` — three more reds on top of the
+  /// one [RED] the app had just been consolidated onto, and a different hue family besides, so
+  /// "stop" on the clock screen was a visibly different colour from "delete" everywhere else.
+  /// These two are [RED] lightened and darkened; they read as the same red because they are.
+  static const Color stopLight = Color(0xFFE4564F);
+
+  /// The end-shift disc gradient, dark stop. See [stopLight].
+  static const Color stopDark = Color(0xFFA32222);
+
+  // ── Ink for surfaces that are dark under BOTH themes ─────────────────────
+  //
+  // The app keeps producing the same bug: a CHARCOAL bar, hero or panel — dark whatever the theme
+  // — painted with `context.colors.inkInverse` or `inkMuted`, both of which flip. Four separate
+  // sites had it (the dashboard hero's client line, the ticket form's AppBar, the rapportino
+  // wizard's AppBar and signature dialog, the Totale ore card), and the totals card managed to be
+  // wrong in *both* directions at once: `inkMuted` measures 1.9:1 on CHARCOAL in light mode, and
+  // `inkInverse` goes near-black in dark mode.
+  //
+  // The fix is to stop reaching for a flipping token on a surface that does not flip. These two
+  // do not flip either, and their names say what they are for.
+
+  /// Primary text on a permanently dark surface. 15.9:1 on [CHARCOAL].
+  static const Color onDark = WHITE;
+
+  /// Secondary text on a permanently dark surface.
+  ///
+  /// White at 75%, which lands at 9.4:1 on [CHARCOAL] — clearly subordinate to [onDark] and still
+  /// far above the floor. The muted greys are the trap here: they are tuned against the light
+  /// theme's own backgrounds, not against a dark panel sitting inside it.
+  static const Color onDarkMuted = Color(0xBFFFFFFF);
+
   // ── Shadows (documented; used via BoxShadow helpers) ─────────────────────
 
   /// SH — standard card shadow: 0 3px 5.5px rgba(0,0,0,0.10).
@@ -117,12 +163,7 @@ abstract final class AppColors {
   /// SH_INSET — inset shadow: inset 0 2px 4px rgba(0,0,0,0.10).
   /// Flutter doesn't support CSS inset; approximate with inner shadow.
   static const List<BoxShadow> SH_INSET = [
-    BoxShadow(
-      color: Color(0x1A000000),
-      offset: Offset(0, 2),
-      blurRadius: 4,
-      spreadRadius: -2,
-    ),
+    BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2),
   ];
 
   // ── Legacy aliases (keep screens compiling) ───────────────────────────────

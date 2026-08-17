@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+import '../../data/api/json_parse.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AdminApiClient
@@ -40,8 +41,7 @@ class AdminApiClient {
         if (country != null && country.isNotEmpty) 'country': country,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (email != null && email.isNotEmpty) 'email': email,
-        if (contactPerson != null && contactPerson.isNotEmpty)
-          'contactPerson': contactPerson,
+        if (contactPerson != null && contactPerson.isNotEmpty) 'contactPerson': contactPerson,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
@@ -233,8 +233,7 @@ class AdminApiClient {
         'ticketId': ?ticketId,
         'allDay': allDay,
         if (title != null && title.isNotEmpty) 'title': title,
-        if (description != null && description.isNotEmpty)
-          'description': description,
+        if (description != null && description.isNotEmpty) 'description': description,
         'teamLeadId': ?teamLeadId,
         'staffIds': ?staffIds,
         'squadraId': ?squadraId,
@@ -280,20 +279,15 @@ class AdminApiClient {
   // ── Tickets ─────────────────────────────────────────────────────────────
 
   Future<void> assignTicket(String ticketId, String? userId) async {
-    await _dio.put(
-      '/api/tickets/$ticketId',
-      data: {
-        'assignedUserId': ?userId,
-      },
-    );
+    await _dio.put('/api/tickets/$ticketId', data: {'assignedUserId': ?userId});
   }
 
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
-    final res = await _dio.get<List<dynamic>>(
+    final res = await _dio.get<Map<String, dynamic>>(
       '/api/users',
-      queryParameters: {'role': 'Technician', 'isActive': 'true'},
+      queryParameters: {'role': 'Technician', 'isActive': 'true', 'pageSize': 200},
     );
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(res.data);
   }
 
   // ── Materiali ────────────────────────────────────────────────────────────
@@ -313,10 +307,8 @@ class AdminApiClient {
       data: {
         'code': code,
         'name': name,
-        if (description != null && description.isNotEmpty)
-          'description': description,
-        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty)
-          'unitOfMeasure': unitOfMeasure,
+        if (description != null && description.isNotEmpty) 'description': description,
+        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty) 'unitOfMeasure': unitOfMeasure,
         if (category != null && category.isNotEmpty) 'category': category,
         if (marca != null && marca.isNotEmpty) 'marca': marca,
         'purchasePrice': ?purchasePrice,
@@ -357,8 +349,8 @@ class AdminApiClient {
   // ── ProdottoAssistenza ──────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchProdottiAssistenza() async {
-    final res = await _dio.get<List<dynamic>>('/api/prodottoassistenza');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza');
+    return pagedItems(res.data);
   }
 
   Future<String> createProdottoAssistenza({
@@ -376,12 +368,9 @@ class AdminApiClient {
         'name': name,
         'customerId': customerId,
         'locationId': locationId,
-        if (description != null && description.isNotEmpty)
-          'description': description,
-        if (serialNumber != null && serialNumber.isNotEmpty)
-          'serialNumber': serialNumber,
-        if (warrantyExpiryDate != null)
-          'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
+        if (description != null && description.isNotEmpty) 'description': description,
+        if (serialNumber != null && serialNumber.isNotEmpty) 'serialNumber': serialNumber,
+        if (warrantyExpiryDate != null) 'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
@@ -407,8 +396,7 @@ class AdminApiClient {
         'locationId': ?locationId,
         'description': ?description,
         'serialNumber': ?serialNumber,
-        if (warrantyExpiryDate != null)
-          'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
+        if (warrantyExpiryDate != null) 'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         'notes': ?notes,
         'isActive': ?isActive,
       },
@@ -418,8 +406,8 @@ class AdminApiClient {
   // ── Contracts ────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchContracts() async {
-    final res = await _dio.get<List<dynamic>>('/api/contracts');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/contracts');
+    return pagedItems(res.data);
   }
 
   Future<String> createContract({
@@ -441,8 +429,7 @@ class AdminApiClient {
         'name': name,
         'customerId': customerId,
         'startDate': startDate.toIso8601String(),
-        if (description != null && description.isNotEmpty)
-          'description': description,
+        if (description != null && description.isNotEmpty) 'description': description,
         'locationId': ?locationId,
         'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
@@ -492,8 +479,8 @@ class AdminApiClient {
   // ── Squadre ─────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchSquadre() async {
-    final res = await _dio.get<List<dynamic>>('/api/squadre');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/squadre');
+    return pagedItems(res.data);
   }
 
   Future<Map<String, dynamic>?> fetchSquadraDetail(String id) async {
@@ -512,8 +499,7 @@ class AdminApiClient {
       '/api/squadre',
       data: {
         'nome': nome,
-        if (descrizione != null && descrizione.isNotEmpty)
-          'descrizione': descrizione,
+        if (descrizione != null && descrizione.isNotEmpty) 'descrizione': descrizione,
         if (specializzazione != null && specializzazione.isNotEmpty)
           'specializzazione': specializzazione,
         if (coloreCalendario != null && coloreCalendario.isNotEmpty)
@@ -551,10 +537,7 @@ class AdminApiClient {
     required String userId,
     String ruolo = 'Membro',
   }) async {
-    await _dio.post(
-      '/api/squadre/$squadraId/membri',
-      data: {'userId': userId, 'ruolo': ruolo},
-    );
+    await _dio.post('/api/squadre/$squadraId/membri', data: {'userId': userId, 'ruolo': ruolo});
   }
 
   Future<void> removeSquadraMember(String squadraId, String userId) async {
@@ -568,15 +551,13 @@ class AdminApiClient {
     int page = 1,
     int pageSize = 50,
   }) async {
-    final res = await _dio.get<List<dynamic>>(
+    // Read as an envelope here and as a bare list in ticket_detail_api_client until now — the
+    // same endpoint, two shapes, one app. This was the broken one.
+    final res = await _dio.get<Map<String, dynamic>>(
       '/api/reports',
-      queryParameters: {
-        'stato': ?stato,
-        'page': page,
-        'pageSize': pageSize,
-      },
+      queryParameters: {'stato': ?stato, 'page': page, 'pageSize': pageSize},
     );
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(res.data);
   }
 
   Future<void> controllaReport(String reportId) async {

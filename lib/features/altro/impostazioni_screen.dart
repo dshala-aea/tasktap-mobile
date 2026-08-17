@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
+import '../../core/dictation/dictation_service.dart';
+import '../../core/notifications/notification_service.dart';
+import '../../core/security/biometric_service.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
@@ -33,42 +36,35 @@ class ImpostazioniScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: ScreenHeader(
-                title: 'Impostazioni',
-                showBack: true,
-              ),
-            ),
+            SliverToBoxAdapter(child: ScreenHeader(title: 'Impostazioni', showBack: true)),
 
             // ── Profile card ───────────────────────────────────────────────
             SliverToBoxAdapter(
-              child: _ProfileCard(
-                displayName: displayName,
-                email: user?.email,
-              ),
+              child: _ProfileCard(displayName: displayName, email: user?.email),
             ),
 
             // ── Notifiche ──────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Notifiche'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
+                  // The OS prompt now happens here, at the moment the technician asks for
+                  // notifications, and only after a sheet has said what will be sent. It used to
+                  // fire during `runTaskTapApp()` — the first thing on screen at first launch,
+                  // before any context existed to judge it by.
                   _ToggleRow(
                     icon: LucideIcons.bell,
                     title: 'Notifiche push',
                     subtitle: 'Ricevi avvisi in tempo reale',
                     value: settings.pushAbilitate,
-                    onChanged: (_) => notifier.toggle(key: 'pushAbilitate'),
+                    onChanged: (_) => _togglePush(context, settings.pushAbilitate, notifier),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.clipboardList,
                     title: 'Interventi',
                     subtitle: 'Nuovi interventi assegnati',
                     value: settings.notificheInterventi,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheInterventi'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheInterventi'),
                     showDivider: false,
                   ),
                   _ToggleRow(
@@ -76,8 +72,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Rapportini',
                     subtitle: 'Aggiornamenti sui rapportini',
                     value: settings.notificheRapportini,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheRapportini'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheRapportini'),
                     showDivider: false,
                   ),
                 ],
@@ -85,9 +80,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── App ───────────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'App'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'App')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -101,7 +94,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                   _ToggleRow(
                     icon: LucideIcons.mapPin,
                     title: 'Geolocalizzazione',
-                    subtitle: 'Posizione GPS per i rapportini',
+                    subtitle: 'Registra la posizione a inizio e fine cantiere',
                     value: settings.geoLocazione,
                     onChanged: (_) => notifier.toggle(key: 'geoLocazione'),
                   ),
@@ -118,35 +111,38 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Account ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Account'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Account')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
                   _ToggleRow(
                     icon: LucideIcons.fingerprint,
                     title: 'Autenticazione biometrica',
-                    subtitle: 'Accesso con impronta o Face ID',
+                    subtitle: 'Richiedi impronta o Face ID all\'apertura',
                     value: settings.autenticazioneBiometrica,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'autenticazioneBiometrica'),
+                    onChanged: (_) => _toggleBiometrics(context, ref, settings),
                     showDivider: false,
                   ),
                 ],
               ),
             ),
 
-            // ── Sistema ───────────────────────────────────────────────────
+            // ── Dettatura ─────────────────────────────────────────────────
+            //
+            // A readout, not a switch. Whether dictation works is decided by the handset — an
+            // on-device recogniser, the Italian language pack, microphone permission — and none
+            // of that is something the app can turn on. What it can do is say which part is
+            // missing, so a technician who cannot find the microphone gets an answer instead of
+            // filing a bug, and so a fleet can be checked without instrumenting a build.
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Dettatura')),
             const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Sistema'),
+              child: _SettingsGroup(children: [_DictationDiagnosticsRow()]),
             ),
+
+            // ── Sistema ───────────────────────────────────────────────────
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
             SliverToBoxAdapter(
-              child: _SettingsGroup(
-                children: [
-                  _LogoutSettingRow(ref: ref),
-                ],
-              ),
+              child: _SettingsGroup(children: [_LogoutSettingRow(ref: ref)]),
             ),
 
             // ── Version footer ─────────────────────────────────────────────
@@ -159,7 +155,8 @@ class ImpostazioniScreen extends ConsumerWidget {
                     error: (_, _) => const SizedBox.shrink(),
                     data: (info) => Text(
                       'TaskTap v${info.displayVersion}',
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 11,
                         color: context.colors.inkDisabled,
                       ),
@@ -169,12 +166,128 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
-            const SliverPadding(padding: EdgeInsets.only(bottom: 60)),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),
     );
   }
+
+  /// Turning push on is the moment to ask the OS — and the moment to say why first.
+  ///
+  /// Turning it *off* asks nothing: an OS permission the technician granted once is theirs to keep,
+  /// and revoking the app's own setting is not a reason to touch it.
+  ///
+  /// A denial reverts the switch rather than leaving it on. A control that reports a state the
+  /// system will not honour is the same defect as the biometric toggle below, and the same defect
+  /// as a settings switch wired to nothing: it tells the technician they will be notified when they
+  /// will not be.
+  Future<void> _togglePush(
+    BuildContext context,
+    bool currentlyOn,
+    ImpostazioniNotifier notifier,
+  ) async {
+    if (currentlyOn) {
+      notifier.toggle(key: 'pushAbilitate');
+      return;
+    }
+
+    if (!NotificationService.isAvailable) {
+      // Firebase never initialised — an explicitly supported degraded path. Say so instead of
+      // flipping a switch that cannot deliver anything.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Le notifiche non sono disponibili su questo dispositivo.'),
+        ),
+      );
+      return;
+    }
+
+    final service = NotificationService.instance;
+
+    // Already granted in a previous run: no purpose sheet, no OS dialog, just honour the switch.
+    if (!await service.hasPermission()) {
+      if (!context.mounted) return;
+      final wants = await askPermissionPurpose(
+        context,
+        icon: LucideIcons.bell,
+        titolo: 'Avvisi sul lavoro',
+        motivo:
+            'Ti avvisiamo quando ti viene assegnato un intervento, quando cambia un appuntamento '
+            'e quando un rapportino ha bisogno di te. Nient\'altro.',
+        senzaDiEsso:
+            'Senza notifiche l\'app funziona lo stesso: trovi tutto in Dashboard e in Calendario, '
+            'ma lo scopri quando apri l\'app.',
+        cta: 'Attiva le notifiche',
+      );
+      if (!wants) return;
+
+      if (!await service.ensurePermission()) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Le notifiche restano bloccate dal sistema. Puoi consentirle dalle impostazioni '
+              'del telefono.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    notifier.toggle(key: 'pushAbilitate');
+  }
+}
+
+/// Turn the biometric lock on only if this device can actually honour it.
+///
+/// The toggle used to flip a bool unconditionally, with no biometrics package in the project at
+/// all — a technician could switch it on and believe the data on their phone was protected. Two
+/// things have to be true before it may go on: the hardware exists with something enrolled, and
+/// the technician can pass the prompt right now. Enabling a lock nobody can open is its own
+/// failure mode.
+Future<void> _toggleBiometrics(
+  BuildContext context,
+  WidgetRef ref,
+  ImpostazioniState settings,
+) async {
+  final notifier = ref.read(impostazioniProvider.notifier);
+  final messenger = ScaffoldMessenger.of(context);
+
+  // Turning it off needs no ceremony: the user is already past the lock.
+  if (settings.autenticazioneBiometrica) {
+    notifier.toggle(key: 'autenticazioneBiometrica');
+    return;
+  }
+
+  final service = ref.read(biometricServiceProvider);
+
+  if (!await service.isAvailable()) {
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Nessuna impronta o Face ID configurati su questo dispositivo. '
+          'Aggiungili nelle impostazioni del telefono, poi riprova.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  // Prove it works before relying on it.
+  final ok = await service.authenticate(
+    reason: 'Conferma la tua identità per attivare il blocco biometrico',
+  );
+
+  if (!ok) {
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Verifica non riuscita. Blocco biometrico non attivato.')),
+    );
+    return;
+  }
+
+  notifier.toggle(key: 'autenticazioneBiometrica');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -194,10 +307,7 @@ class _ProfileCard extends StatelessWidget {
       child: AppCard(
         child: Row(
           children: [
-            AppAvatar(
-              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
-              size: 48,
-            ),
+            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 48),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -208,7 +318,8 @@ class _ProfileCard extends StatelessWidget {
                     displayName.isNotEmpty ? displayName : (email ?? '—'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: context.colors.ink,
@@ -219,7 +330,8 @@ class _ProfileCard extends StatelessWidget {
                       email!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 12,
                         color: context.colors.inkMuted,
                       ),
@@ -248,7 +360,8 @@ class _SettingsSectionTitle extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(19, 20, 19, 8),
       child: Text(
         title.toUpperCase(),
-        style: GoogleFonts.manrope(
+        style: TextStyle(
+          fontFamily: 'Manrope',
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: context.colors.inkMuted,
@@ -306,9 +419,7 @@ class _ToggleRow extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 56),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        border: showDivider
-            ? Border(bottom: BorderSide(color: context.colors.borderLight))
-            : null,
+        border: showDivider ? Border(bottom: BorderSide(color: context.colors.borderLight)) : null,
       ),
       child: Row(
         children: [
@@ -329,7 +440,8 @@ class _ToggleRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -337,7 +449,8 @@ class _ToggleRow extends StatelessWidget {
                 ),
                 Text(
                   subtitle,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 11,
                     color: context.colors.inkMuted,
                   ),
@@ -370,8 +483,7 @@ class _LogoutSettingRow extends StatelessWidget {
           color: context.colors.redSoft,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Icon(LucideIcons.logOut, size: 17,
-            color: Color(0xFFAA0000)),
+        child: Icon(LucideIcons.logOut, size: 17, color: context.colors.red),
       ),
       title: 'Esci dall\'account',
       subtitle: 'Disconnetti questo dispositivo',
@@ -385,13 +497,9 @@ class _LogoutSettingRow extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Esci dall\'account'),
-        content:
-            const Text('Sei sicuro di voler uscire dall\'account?'),
+        content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: context.colors.red),
@@ -403,5 +511,113 @@ class _LogoutSettingRow extends StatelessWidget {
     if (confirmed == true) {
       await ref.read(loginProvider.notifier).signOut();
     }
+  }
+}
+
+
+/// What this handset can and cannot do about dictation, item by item.
+///
+/// Exists because "voice-assisted entry works" is not a property of the app — it is a property of
+/// the phone in someone's hand, and it varies across a fleet. ADR-0017 accepts that and requires
+/// the app to degrade honestly rather than reach for the network; this is where the honesty is
+/// legible. It is also the fastest way to answer the question the ADR could not: whether offline
+/// Italian is actually present on the hardware technicians carry.
+class _DictationDiagnosticsRow extends ConsumerWidget {
+  const _DictationDiagnosticsRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final capability = ref.watch(dictationCapabilityProvider);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: capability.when(
+        loading: () => const _DictationLine(label: 'Verifica in corso…', state: null),
+        error: (_, _) => const _DictationLine(label: 'Verifica non riuscita', state: false),
+        data: (c) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              c.canDictate ? 'Dettatura disponibile' : 'Dettatura non disponibile',
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: context.colors.ink,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _DictationLine(label: 'Riconoscimento vocale', state: c.recognizerAvailable),
+            _DictationLine(
+              label: c.italianLocaleId == null ? 'Italiano' : 'Italiano (${c.italianLocaleId})',
+              state: c.italianAvailable,
+            ),
+            // The one that decides it. Everything else can be true and dictation still refused,
+            // because recognition that needs a server is no use in a plant room and would send
+            // site audio off the device.
+            _DictationLine(
+              label: 'Funziona offline (sul dispositivo)',
+              state: c.onDeviceRecognitionAvailable,
+            ),
+            _DictationLine(label: 'Microfono consentito', state: c.microphoneGranted),
+            if (!c.canDictate) ...[
+              const SizedBox(height: 10),
+              Text(
+                c.unavailableMessage!,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  height: 1.4,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Puoi comunque compilare il rapportino scrivendo normalmente.',
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 11,
+                  height: 1.4,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DictationLine extends StatelessWidget {
+  const _DictationLine({required this.label, required this.state});
+
+  /// Null while the answer is still being fetched.
+  final bool? state;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, colour) = switch (state) {
+      true => (LucideIcons.checkCircle2, context.colors.green),
+      false => (LucideIcons.alertCircle, context.colors.inkMuted),
+      null => (LucideIcons.circle, context.colors.inkDisabled),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: colour),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

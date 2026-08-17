@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -26,15 +27,15 @@ class AdminProdottoDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.pencil,
-        tooltip: 'Modifica',
-        onPressed: () async {
-          await context.push<bool>(
-            '/altro/prodotti/${prodotto['id']}/modifica',
-            extra: prodotto,
-          );
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          icon: LucideIcons.pencil,
+          tooltip: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>('/altro/prodotti/${prodotto['id']}/modifica', extra: prodotto);
+          },
+        ),
       ),
       body: CustomScrollView(
         slivers: [
@@ -52,23 +53,23 @@ class AdminProdottoDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _InfoRow(label: 'Nome', value: name),
+                  _InfoRow(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
                   _InfoRow(
-                      label: 'Descrizione',
-                      value: description.isNotEmpty ? description : '—'),
+                    label: 'Numero di serie',
+                    value: serialNumber.isNotEmpty ? serialNumber : '—',
+                  ),
+                  _InfoRow(label: 'Scadenza garanzia', value: warrantyLabel),
                   _InfoRow(
-                      label: 'Numero di serie',
-                      value: serialNumber.isNotEmpty ? serialNumber : '—'),
-                  _InfoRow(
-                      label: 'Scadenza garanzia',
-                      value: warrantyLabel),
-                  _InfoRow(
-                      label: 'Note',
-                      value: notes.isNotEmpty ? notes : '—',
-                      showDivider: false),
+                    label: 'Note',
+                    value: notes.isNotEmpty ? notes : '—',
+                    showDivider: false,
+                  ),
                 ],
               ),
             ),
           ),
+
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );
@@ -76,11 +77,7 @@ class AdminProdottoDetailScreen extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.showDivider = true,
-  });
+  const _InfoRow({required this.label, required this.value, this.showDivider = true});
 
   final String label;
   final String value;
@@ -95,17 +92,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

@@ -22,17 +22,16 @@ void main() {
   late EntitlementService service;
 
   Response<Map<String, dynamic>> ok(Map<String, dynamic> body) => Response(
-        requestOptions: RequestOptions(path: '/api/Auth/me'),
-        statusCode: 200,
-        data: body,
-      );
+    requestOptions: RequestOptions(path: '/api/Auth/me'),
+    statusCode: 200,
+    data: body,
+  );
 
   Map<String, dynamic> meBody({
     List<String> features = const ['clienti', 'team', 'sistema', 'rapportini', 'magazzino'],
     List<String> capabilities = const ['rapportini.report.write'],
     String seatType = 'field',
-  }) =>
-      {'features': features, 'capabilities': capabilities, 'seatType': seatType};
+  }) => {'features': features, 'capabilities': capabilities, 'seatType': seatType};
 
   void stub(Response<Map<String, dynamic>> response) {
     when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) async => response);
@@ -80,20 +79,18 @@ void main() {
     });
 
     test('a network error leaves the cache untouched', () async {
-      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
-        DioException(requestOptions: RequestOptions(path: '/api/Auth/me')),
-      );
+      when(
+        () => dio.get<Map<String, dynamic>>(any()),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/Auth/me')));
 
       expect(await service.refresh(), isFalse);
       expect(await repo.hasFeature('magazzino'), isTrue);
     });
 
     test('a non-200 leaves the cache untouched', () async {
-      stub(Response(
-        requestOptions: RequestOptions(path: '/api/Auth/me'),
-        statusCode: 503,
-        data: null,
-      ));
+      stub(
+        Response(requestOptions: RequestOptions(path: '/api/Auth/me'), statusCode: 503, data: null),
+      );
 
       expect(await service.refresh(), isFalse);
       expect(await repo.hasFeature('magazzino'), isTrue);

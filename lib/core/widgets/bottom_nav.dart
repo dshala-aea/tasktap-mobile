@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_rack.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
   static const IconData ticket = LucideIcons.ticket;
@@ -33,12 +34,7 @@ class AppBottomNavItem {
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
 /// ```
 class AppBottomNav extends StatelessWidget {
-  const AppBottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    this.items,
-  });
+  const AppBottomNav({super.key, required this.currentIndex, required this.onTap, this.items});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -81,11 +77,7 @@ class AppBottomNav extends StatelessWidget {
                 // two. Loose fit: a tab still takes only what it needs when there is room.
                 for (var i = 0; i < tabs.length; i++)
                   Flexible(
-                    child: _NavTab(
-                      item: tabs[i],
-                      active: i == currentIndex,
-                      onTap: () => onTap(i),
-                    ),
+                    child: _NavTab(item: tabs[i], active: i == currentIndex, onTap: () => onTap(i)),
                   ),
               ],
             ),
@@ -97,11 +89,7 @@ class AppBottomNav extends StatelessWidget {
 }
 
 class _NavTab extends StatelessWidget {
-  const _NavTab({
-    required this.item,
-    required this.active,
-    required this.onTap,
-  });
+  const _NavTab({required this.item, required this.active, required this.onTap});
 
   final AppBottomNavItem item;
   final bool active;
@@ -122,13 +110,14 @@ class _NavTab extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
+          // The rack's own drawer movement, and it stops when the OS says stop. Both platforms
+          // require this: "Remove animations" on Android and Reduce Motion on iOS both surface as
+          // MediaQuery.disableAnimations, and a nav bar that keeps sliding through it is the
+          // single most noticeable place to ignore the setting.
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
+          curve: AppRack.slideOut,
           constraints: const BoxConstraints(minHeight: 44),
-          padding: EdgeInsets.symmetric(
-            horizontal: active ? 16 : 14,
-            vertical: 10,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: active ? 16 : 14, vertical: 10),
           decoration: BoxDecoration(
             color: active ? AppColors.Y : Colors.transparent,
             borderRadius: BorderRadius.circular(19),
@@ -139,7 +128,13 @@ class _NavTab extends StatelessWidget {
               Icon(
                 item.icon,
                 size: 18,
-                color: active ? context.colors.brandOn : context.colors.inkDisabled,
+                // Inactive tabs were `inkDisabled` — #B4B4B4, which measures 1.9:1 on the white
+                // pill. These are the app's five primary destinations, they are icon-only when
+                // inactive, and a technician navigates by them one-handed in direct sun. 1.9:1
+                // is not a low-emphasis treatment there, it is an invisible one. `inkMuted`
+                // clears the 4.5:1 floor at 5.3:1 and still reads as clearly unselected against
+                // the yellow pill.
+                color: active ? context.colors.brandOn : context.colors.inkMuted,
               ),
               if (active) ...[
                 const SizedBox(width: 8),
@@ -151,7 +146,8 @@ class _NavTab extends StatelessWidget {
                     maxLines: 1,
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(
+                    style: TextStyle(
+                      fontFamily: 'Sora',
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: context.colors.brandOn,

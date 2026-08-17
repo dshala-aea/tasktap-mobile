@@ -1,12 +1,10 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/widgets/app_button.dart';
-import '../../core/widgets/app_stepper.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -34,16 +32,12 @@ const _kSteps = [
 ];
 
 class RapportinoFormScreen extends ConsumerStatefulWidget {
-  const RapportinoFormScreen({
-    super.key,
-    required this.reportId,
-  });
+  const RapportinoFormScreen({super.key, required this.reportId});
 
   final String reportId;
 
   @override
-  ConsumerState<RapportinoFormScreen> createState() =>
-      _RapportinoFormScreenState();
+  ConsumerState<RapportinoFormScreen> createState() => _RapportinoFormScreenState();
 }
 
 class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
@@ -73,42 +67,22 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
   Widget build(BuildContext context) {
     final editorState = ref.watch(reportEditorProvider(widget.reportId));
 
-    // Build header context string from ticket/cantiere if linked.
-    String? contextSubtitle;
-    if (editorState.ticketId != null && editorState.ticketId!.isNotEmpty) {
-      contextSubtitle = 'Ticket: ${editorState.ticketId}';
-    } else if (editorState.cantiereId != null &&
-        editorState.cantiereId!.isNotEmpty) {
-      contextSubtitle = 'Cantiere: ${editorState.cantiereId}';
-    } else if (editorState.ticketFreeText?.isNotEmpty ?? false) {
-      contextSubtitle = 'Ticket: ${editorState.ticketFreeText}';
-    }
+    // The subtitle used to read "Ticket: 3f2a1c8e-…" — the raw id, in the most prominent piece of
+    // secondary text on the screen. What it is linked to is now named properly at the top of
+    // Dettagli, where the name is resolvable; repeating it here as a GUID was worse than silence.
+    // From Ore onwards it carries the rapportino's own title instead, so the header answers "which
+    // one am I in" once the field that names it has scrolled out of reach.
+    final subtitle = _isFirst || editorState.title.isEmpty ? null : editorState.title;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
+      // The last AppBar in the app. Its hand-rolled title Column also carried a fifth instance of
+      // the fixed-dark bug: the subtitle took `inkMuted`, which measures 1.9:1 on CHARCOAL in
+      // light mode. ScreenHeader's own dark variant renders both lines correctly.
+      appBar: ScreenHeaderBar(
+        title: 'Rapportino',
+        subtitle: subtitle,
         backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: context.colors.inkInverse,
-        elevation: 0,
-        titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Rapportino',
-              style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
-            ),
-            if (contextSubtitle != null)
-              Text(
-                contextSubtitle,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: context.colors.inkMuted,
-                  fontSize: 11,
-                ),
-              ),
-          ],
-        ),
         actions: [
           // Autosave indicator
           Padding(
@@ -117,25 +91,28 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.Y,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
                   )
-                : const Icon(LucideIcons.cloud,
-                    size: 20, color: AppColors.Y),
+                : const Icon(LucideIcons.cloud, size: 20, color: AppColors.Y),
           ),
         ],
       ),
       body: Column(
         children: [
           // ── Stepper ────────────────────────────────────────────────────────
+          //
+          // The bar names the step, so the header does not have to: two dark bands stacked under
+          // each other, one saying "Rapportino" and the other repeating "Dettagli" in 10px under
+          // a numbered disc, was most of the first viewport spent on chrome.
           Container(
             color: AppColors.CHARCOAL,
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            padding: const EdgeInsets.fromLTRB(19, 0, 19, 8),
             child: AppStepper(
               steps: _kSteps,
               currentIndex: _stepIndex,
+              // Jump straight back to a step already filled in. Correcting the cliente from the
+              // summary used to mean pressing Indietro three times.
+              onStepSelected: (i) => setState(() => _step = _FormStep.values[i]),
             ),
           ),
 
@@ -150,12 +127,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           ),
 
           // ── Sticky bottom navigation bar ───────────────────────────────────
-          _BottomNavBar(
-            isFirst: _isFirst,
-            isLast: _isLast,
-            onBack: _goBack,
-            onNext: _goNext,
-          ),
+          _BottomNavBar(isFirst: _isFirst, isLast: _isLast, onBack: _goBack, onNext: _goNext),
         ],
       ),
     );
@@ -165,8 +137,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     return switch (_step) {
       _FormStep.dettagli => StepDettagli(key: key, reportId: widget.reportId),
       _FormStep.ore => StepOre(key: key, reportId: widget.reportId),
-      _FormStep.materiali =>
-        StepMaterialiFold(key: key, reportId: widget.reportId),
+      _FormStep.materiali => StepMaterialiFold(key: key, reportId: widget.reportId),
       _FormStep.riepilogo => StepRiepilogo(key: key, reportId: widget.reportId),
     };
   }
@@ -199,22 +170,29 @@ class _BottomNavBar extends StatelessWidget {
         child: Row(
           children: [
             if (!isFirst) ...[
-              Expanded(
-                child: AppButton.secondary(
+              // Full width only while it is sharing the bar with Avanti. On Riepilogo the real
+              // action is Invia, sitting just above; a full-width secondary button underneath it
+              // was the largest control on the screen and pointed backwards.
+              if (isLast)
+                AppButton.secondary(
                   label: 'Indietro',
                   onPressed: onBack,
                   size: AppButtonSize.lg,
+                  fullWidth: false,
+                )
+              else
+                Expanded(
+                  child: AppButton.secondary(
+                    label: 'Indietro',
+                    onPressed: onBack,
+                    size: AppButtonSize.lg,
+                  ),
                 ),
-              ),
               if (!isLast) const SizedBox(width: 12),
             ],
             if (!isLast)
               Expanded(
-                child: AppButton(
-                  label: 'Avanti',
-                  onPressed: onNext,
-                  size: AppButtonSize.lg,
-                ),
+                child: AppButton(label: 'Avanti', onPressed: onNext, size: AppButtonSize.lg),
               ),
           ],
         ),

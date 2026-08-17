@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -17,17 +18,19 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final customerAsync =
-        ref.watch(customerDetailProvider(customerId));
+    final customerAsync = ref.watch(customerDetailProvider(customerId));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.pencil,
-        tooltip: 'Modifica',
-        onPressed: () async {
-          await context.push<bool>('/altro/clienti/$customerId/modifica');
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          icon: LucideIcons.pencil,
+          tooltip: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>('/altro/clienti/$customerId/modifica');
+          },
+        ),
       ),
       body: customerAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -52,11 +55,7 @@ class _CustomerDetailBody extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Cliente',
-            subtitle: customer.companyName,
-            showBack: true,
-          ),
+          child: ScreenHeader(title: 'Cliente', subtitle: customer.companyName, showBack: true),
         ),
         // ── Avatar hero ──────────────────────────────────────────────────
         SliverToBoxAdapter(
@@ -79,8 +78,7 @@ class _CustomerDetailBody extends StatelessWidget {
                     _infoRow(context, 'Ragione sociale', customer.companyName),
                     if (customer.taxId != null && customer.taxId!.isNotEmpty)
                       _infoRow(context, 'P.IVA', customer.taxId!),
-                    if (customer.contactPerson != null &&
-                        customer.contactPerson!.isNotEmpty)
+                    if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
                       _infoRow(context, 'Referente', customer.contactPerson!),
                     if (customer.phone != null && customer.phone!.isNotEmpty)
                       _infoRow(context, 'Telefono', customer.phone!),
@@ -90,11 +88,9 @@ class _CustomerDetailBody extends StatelessWidget {
                       _infoRow(context, 'Indirizzo', customer.address!),
                     if (customer.city != null && customer.city!.isNotEmpty)
                       _infoRow(context, 'Città', customer.city!),
-                    if (customer.postalCode != null &&
-                        customer.postalCode!.isNotEmpty)
+                    if (customer.postalCode != null && customer.postalCode!.isNotEmpty)
                       _infoRow(context, 'CAP', customer.postalCode!),
-                    if (customer.country != null &&
-                        customer.country!.isNotEmpty)
+                    if (customer.country != null && customer.country!.isNotEmpty)
                       _infoRow(context, 'Paese', customer.country!),
                   ],
                 ),
@@ -114,15 +110,9 @@ class _CustomerDetailBody extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Note',
-                        style: AppTextStyles.titleMedium,
-                      ),
+                      Text('Note', style: AppTextStyles.titleMedium),
                       const SizedBox(height: 8),
-                      Text(
-                        customer.notes!,
-                        style: AppTextStyles.bodyMedium,
-                      ),
+                      Text(customer.notes!, style: AppTextStyles.bodyMedium),
                     ],
                   ),
                 ),
@@ -142,20 +132,17 @@ class _CustomerDetailBody extends StatelessWidget {
                   children: [
                     Text(
                       'Stato',
-                      style: AppTextStyles.bodyMedium
-                          .copyWith(color: context.colors.inkMuted),
+                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
                     ),
                     const Spacer(),
-                    StatusPill(
-                      stato: customer.isActive ? 'Attivo' : 'Inattivo',
-                    ),
+                    StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo'),
                   ],
                 ),
               ),
             ),
           ),
         ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }
@@ -168,17 +155,9 @@ class _CustomerDetailBody extends StatelessWidget {
         children: [
           SizedBox(
             width: 120,
-            child: Text(
-              label,
-              style: AppTextStyles.bodySmall.copyWith(color: ctx.colors.inkMuted),
-            ),
+            child: Text(label, style: AppTextStyles.bodySmall.copyWith(color: ctx.colors.inkMuted)),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: AppTextStyles.bodyMedium,
-            ),
-          ),
+          Expanded(child: Text(value, style: AppTextStyles.bodyMedium)),
         ],
       ),
     );

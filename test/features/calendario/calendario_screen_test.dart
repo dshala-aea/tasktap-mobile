@@ -40,10 +40,8 @@ Widget _buildScreen({
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
-      if (initialView != null)
-        calendarioViewProvider.overrideWith((ref) => initialView),
-      if (initialDate != null)
-        selectedDateProvider.overrideWith((ref) => initialDate),
+      if (initialView != null) calendarioViewProvider.overrideWith((ref) => initialView),
+      if (initialDate != null) selectedDateProvider.overrideWith((ref) => initialDate),
     ],
     child: const MaterialApp(home: CalendarioScreen()),
   );
@@ -53,38 +51,45 @@ Widget _buildScreen({
 /// (Completato), so tests can verify date-grouping across both days.
 Future<void> seedSchedules(AppDatabase db) async {
   final today = DateTime.now();
-  final todayUtc =
-      DateTime(today.year, today.month, today.day).toUtc();
+  final todayUtc = DateTime(today.year, today.month, today.day).toUtc();
   final tomorrowUtc = todayUtc.add(const Duration(days: 1));
 
-  await db.into(db.schedules).insert(SchedulesCompanion.insert(
-        id: 'sched-today',
-        tenantId: 'tenant-1',
-        createdAt: todayUtc,
-        activityDate: todayUtc,
-        timeStartMinutes: 480, // 08:00
-        timeEndMinutes: 600,   // 10:00
-        userId: 'u1',
-        statusId: 2, // In corso
-        locationId: 'loc-1',
-        title: 'Intervento mattina',
-        description: 'Descrizione intervento',
-        ticketId: const Value('ticket-abc'),
-      ));
+  await db
+      .into(db.schedules)
+      .insert(
+        SchedulesCompanion.insert(
+          id: 'sched-today',
+          tenantId: 'tenant-1',
+          createdAt: todayUtc,
+          activityDate: todayUtc,
+          timeStartMinutes: 480, // 08:00
+          timeEndMinutes: 600, // 10:00
+          userId: 'u1',
+          statusId: 2, // In corso
+          locationId: 'loc-1',
+          title: 'Intervento mattina',
+          description: 'Descrizione intervento',
+          ticketId: const Value('ticket-abc'),
+        ),
+      );
 
-  await db.into(db.schedules).insert(SchedulesCompanion.insert(
-        id: 'sched-tomorrow',
-        tenantId: 'tenant-1',
-        createdAt: tomorrowUtc,
-        activityDate: tomorrowUtc,
-        timeStartMinutes: 540, // 09:00
-        timeEndMinutes: 660,   // 11:00
-        userId: 'u1',
-        statusId: 5, // Completato
-        locationId: 'loc-2',
-        title: 'Intervento domani',
-        description: '',
-      ));
+  await db
+      .into(db.schedules)
+      .insert(
+        SchedulesCompanion.insert(
+          id: 'sched-tomorrow',
+          tenantId: 'tenant-1',
+          createdAt: tomorrowUtc,
+          activityDate: tomorrowUtc,
+          timeStartMinutes: 540, // 09:00
+          timeEndMinutes: 660, // 11:00
+          userId: 'u1',
+          statusId: 5, // Completato
+          locationId: 'loc-2',
+          title: 'Intervento domani',
+          description: '',
+        ),
+      );
 }
 
 // ── Test setup ─────────────────────────────────────────────────────────────────
@@ -126,18 +131,140 @@ void main() {
     CalendarioView view = CalendarioView.giorno,
     DateTime? date,
   }) async {
-    await tester.pumpWidget(_buildScreen(
-      db: db,
-      repo: repo,
-      initialView: view,
-      initialDate: date,
-    ));
+    await tester.pumpWidget(_buildScreen(db: db, repo: repo, initialView: view, initialDate: date));
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
   }
 
   // ── Scaffold ───────────────────────────────────────────────────────────────
+
+  /// Moving between periods, which the calendar could not do.
+  ///
+  /// The only date controls were a week strip that reaches inside the week it is already on and a
+  /// "vai a oggi" icon. In Mese the strip was hidden, so a month view could show no month but the
+  /// current one — and nothing on screen named the month it was showing.
+  group('CalendarioScreen — period navigation', () {
+    testWidgets('names the month, and can leave it', (tester) async {
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          repo: repo,
+          initialView: CalendarioView.mese,
+          initialDate: DateTime(2026, 8, 15),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Agosto 2026'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Periodo successivo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Settembre 2026'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Periodo precedente'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Periodo precedente'));
+      await tester.pumpAndSettle();
+      expect(find.text('Luglio 2026'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a step means a day in Giorno and a week in Settimana', (tester) async {
+      // Same two arrows, different unit — the view decides what "next" measures.
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          repo: repo,
+          initialView: CalendarioView.giorno,
+          initialDate: DateTime(2026, 8, 15),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Periodo successivo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Domenica 16 agosto'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          repo: repo,
+          initialView: CalendarioView.settimana,
+          initialDate: DateTime(2026, 8, 15),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 15 Aug 2026 is a Saturday; its week is Mon 10 – Sun 16.
+      expect(find.text('10 – 16 ago'), findsOneWidget);
+      await tester.tap(find.byTooltip('Periodo successivo'));
+      await tester.pumpAndSettle();
+      expect(find.text('17 – 23 ago'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Lista is a rolling window, so it offers no steps', (tester) async {
+      // Anchored to today by definition. Arrows there would move nothing.
+      await tester.pumpWidget(
+        _buildScreen(db: db, repo: repo, initialView: CalendarioView.lista),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Prossimi 30 giorni'), findsOneWidget);
+      expect(find.byTooltip('Periodo successivo'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Oggi appears only once the calendar has moved off today', (tester) async {
+      await tester.pumpWidget(
+        _buildScreen(db: db, repo: repo, initialView: CalendarioView.giorno),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Oggi'), findsNothing, reason: 'a control for a state you are in');
+
+      await tester.tap(find.byTooltip('Periodo successivo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Oggi'), findsOneWidget);
+
+      await tester.tap(find.text('Oggi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Oggi'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('swiping across the body steps the period', (tester) async {
+      // The gesture people try first, and the one that works with a phone in one hand.
+      await tester.pumpWidget(
+        _buildScreen(
+          db: db,
+          repo: repo,
+          initialView: CalendarioView.mese,
+          initialDate: DateTime(2026, 8, 15),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.fling(find.byType(MeseView), const Offset(-300, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(find.text('Settembre 2026'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
 
   group('CalendarioScreen — shell', () {
     testWidgets('renders Scaffold with "Calendario" title', (tester) async {
@@ -159,8 +286,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('tab switch — tapping Settimana renders SettimanaView',
-        (tester) async {
+    testWidgets('tab switch — tapping Settimana renders SettimanaView', (tester) async {
       await pump(tester, view: CalendarioView.giorno);
       // GiornoView should start visible
       expect(find.byType(GiornoView), findsOneWidget);
@@ -174,8 +300,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('tab switch — tapping Mese renders MeseView',
-        (tester) async {
+    testWidgets('tab switch — tapping Mese renders MeseView', (tester) async {
       await pump(tester, view: CalendarioView.giorno);
       await tester.tap(find.text('Mese'));
       await tester.pumpAndSettle();
@@ -184,8 +309,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('tab switch — tapping Lista renders ListaView',
-        (tester) async {
+    testWidgets('tab switch — tapping Lista renders ListaView', (tester) async {
       await pump(tester, view: CalendarioView.giorno);
       await tester.tap(find.text('Lista'));
       await tester.pumpAndSettle();
@@ -297,8 +421,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('groups schedules by day (two date section headers)',
-        (tester) async {
+    testWidgets('groups schedules by day (two date section headers)', (tester) async {
       await seedSchedules(db);
       await pump(tester, view: CalendarioView.lista);
       // The two schedules are on different days → two date section headers.
@@ -344,14 +467,8 @@ void main() {
     });
 
     test('DateRange equality', () {
-      final a = DateRange(
-        start: DateTime(2026, 6, 1),
-        end: DateTime(2026, 6, 8),
-      );
-      final b = DateRange(
-        start: DateTime(2026, 6, 1),
-        end: DateTime(2026, 6, 8),
-      );
+      final a = DateRange(start: DateTime(2026, 6, 1), end: DateTime(2026, 6, 8));
+      final b = DateRange(start: DateTime(2026, 6, 1), end: DateTime(2026, 6, 8));
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
     });

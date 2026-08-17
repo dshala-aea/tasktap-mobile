@@ -28,7 +28,9 @@ import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 Future<void> _seedSubmittedDraft(AppDatabase db, {String id = 'report-1'}) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: id,
           tenantId: 'tenant-1',
@@ -47,7 +49,9 @@ Future<void> _seedSubmittedDraft(AppDatabase db, {String id = 'report-1'}) async
 }
 
 Future<void> _seedMateriali(AppDatabase db, String reportId) async {
-  await db.into(db.reportMateriali).insert(
+  await db
+      .into(db.reportMateriali)
+      .insert(
         ReportMaterialiCompanion.insert(
           id: 'mat-1',
           tenantId: 'tenant-1',
@@ -59,7 +63,9 @@ Future<void> _seedMateriali(AppDatabase db, String reportId) async {
           unitPrice: const Value(1.50),
         ),
       );
-  await db.into(db.reportMateriali).insert(
+  await db
+      .into(db.reportMateriali)
+      .insert(
         ReportMaterialiCompanion.insert(
           id: 'mat-2',
           tenantId: 'tenant-1',
@@ -74,12 +80,8 @@ Future<void> _seedMateriali(AppDatabase db, String reportId) async {
 
 Widget _buildView({required AppDatabase db, String reportId = 'report-1'}) {
   return ProviderScope(
-    overrides: [
-      appDatabaseProvider.overrideWithValue(db),
-    ],
-    child: MaterialApp(
-      home: RapportinoViewScreen(reportId: reportId),
-    ),
+    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    child: MaterialApp(home: RapportinoViewScreen(reportId: reportId)),
   );
 }
 
@@ -108,8 +110,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders KeyVal rows Sede, Tecnico, Cliente, Ore',
-        (tester) async {
+    testWidgets('renders KeyVal rows Sede, Tecnico, Cliente, Ore', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
@@ -169,8 +170,7 @@ void main() {
   });
 
   group('RapportinoViewScreen — firma cliente', () {
-    testWidgets('firma block shown when customerSignatureAllegatoId is set',
-        (tester) async {
+    testWidgets('firma block shown when customerSignatureAllegatoId is set', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();

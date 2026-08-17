@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Compact rounded badge pill.
 ///
@@ -14,13 +14,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: context.colors.ink);
 /// ```
 class AppBadge extends StatelessWidget {
-  const AppBadge({
-    super.key,
-    required this.label,
-    this.small = false,
-    this.bgColor,
-    this.fgColor,
-  });
+  const AppBadge({super.key, required this.label, this.small = false, this.bgColor, this.fgColor});
 
   final String label;
   final bool small;
@@ -38,13 +32,17 @@ class AppBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(9),
+        // 3, not 9. A badge is ink printed on the label card, and printed marks on a machined
+        // label are not lozenges. At this size the difference is small and it is the difference
+        // between the app looking drawn and looking specified.
+        borderRadius: BorderRadius.circular(3),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         child: Text(
           label,
-          style: GoogleFonts.manrope(
+          style: TextStyle(
+            fontFamily: 'Manrope',
             fontSize: fontSize,
             fontWeight: FontWeight.w500,
             color: fg,
@@ -65,12 +63,7 @@ class AppBadge extends StatelessWidget {
 /// AppChip(label: 'Settimana', onTap: () {});
 /// ```
 class AppChip extends StatelessWidget {
-  const AppChip({
-    super.key,
-    required this.label,
-    this.active = false,
-    this.onTap,
-  });
+  const AppChip({super.key, required this.label, this.active = false, this.onTap});
 
   final String label;
   final bool active;
@@ -82,7 +75,7 @@ class AppChip extends StatelessWidget {
     final fg = active ? context.colors.inkInverse : context.colors.ink;
     final borderColor = active ? context.colors.surfaceInverse : context.colors.borderMedium;
 
-    const radius = 5.0;
+    const radius = AppRack.insetRadius;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
@@ -95,7 +88,8 @@ class AppChip extends StatelessWidget {
         child: Center(
           child: Text(
             label,
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 11,
               fontWeight: FontWeight.w500,
               color: fg,

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+import '../../data/api/json_parse.dart';
 
 class TicketApiClient {
   TicketApiClient(this._dio);
@@ -28,8 +29,7 @@ class TicketApiClient {
       '/api/tickets',
       data: {
         'title': title,
-        if (description != null && description.isNotEmpty)
-          'description': description,
+        if (description != null && description.isNotEmpty) 'description': description,
         'customerId': customerId,
         'locationId': locationId,
         'assignedUserId': ?assignedUserId,
@@ -43,12 +43,14 @@ class TicketApiClient {
   }
 
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
-    final response = await _dio.get<List<dynamic>>(
+    // A paginated envelope, not a bare array — see [pagedItems]. Asking Dio for List<dynamic>
+    // here threw on the cast, which is why the technician picker on ticket creation came up empty.
+    final response = await _dio.get<Map<String, dynamic>>(
       '/api/users',
-      queryParameters: {'role': 'Technician', 'isActive': 'true'},
+      queryParameters: {'role': 'Technician', 'isActive': 'true', 'pageSize': 200},
     );
 
-    return (response.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(response.data);
   }
 }
 

@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -12,12 +13,9 @@ import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// All schedules from Drift cache, ordered by date desc.
-final adminSchedulesProvider =
-    StreamProvider.autoDispose<List<Schedule>>((ref) {
+final adminSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.schedules)
-        ..orderBy([(s) => OrderingTerm.desc(s.activityDate)]))
-      .watch();
+  return (db.select(db.schedules)..orderBy([(s) => OrderingTerm.desc(s.activityDate)])).watch();
 });
 
 /// Admin schedule list — filterable by date range.
@@ -25,8 +23,7 @@ class AdminScheduleListScreen extends StatefulWidget {
   const AdminScheduleListScreen({super.key});
 
   @override
-  State<AdminScheduleListScreen> createState() =>
-      _AdminScheduleListScreenState();
+  State<AdminScheduleListScreen> createState() => _AdminScheduleListScreenState();
 }
 
 class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
@@ -50,9 +47,12 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuova pianificazione',
-        onPressed: () => context.push('/altro/pianificazioni/nuova'),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuova pianificazione',
+          onPressed: () => context.push('/altro/pianificazioni/nuova'),
+        ),
       ),
     );
   }
@@ -82,67 +82,59 @@ class _AdminScheduleListBody extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () => ref.read(syncProvider.notifier).performSync(),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Pianificazioni',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca per titolo…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        if (schedulesAsync.isLoading)
-          const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          )
-        else if (filtered.isEmpty)
+        slivers: [
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.calendarDays,
-              title: 'Nessuna pianificazione',
-              body: 'Crea una nuova pianificazione con il pulsante +.',
+            child: ScreenHeader(
+              title: 'Pianificazioni',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: searchCtrl,
+              hint: 'Cerca per titolo…',
+              onChanged: onQueryChanged,
+            ),
+          ),
+          if (schedulesAsync.isLoading)
+            const SliverToBoxAdapter(
+              child: Center(
+                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              ),
+            )
+          else if (filtered.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.calendarDays,
+                title: 'Nessuna pianificazione',
+                body: 'Crea una nuova pianificazione con il pulsante +.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final schedule = filtered[i];
-                final dateLabel = DateFormat('EEE d MMM HH:mm', 'it')
-                    .format(schedule.activityDate.toLocal());
+                final dateLabel = DateFormat(
+                  'EEE d MMM HH:mm',
+                  'it',
+                ).format(schedule.activityDate.toLocal());
                 return _AdminScheduleRow(
                   schedule: schedule,
                   dateLabel: dateLabel,
                   isLast: i == filtered.length - 1,
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
       ),
     );
   }
 }
 
 class _AdminScheduleRow extends StatelessWidget {
-  const _AdminScheduleRow({
-    required this.schedule,
-    required this.dateLabel,
-    required this.isLast,
-  });
+  const _AdminScheduleRow({required this.schedule, required this.dateLabel, required this.isLast});
 
   final Schedule schedule;
   final String dateLabel;
@@ -158,19 +150,11 @@ class _AdminScheduleRow extends StatelessWidget {
           color: context.colors.bg3,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          LucideIcons.calendarDays,
-          size: 20,
-          color: context.colors.inkMuted,
-        ),
+        child: Icon(LucideIcons.calendarDays, size: 20, color: context.colors.inkMuted),
       ),
       title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
       subtitle: dateLabel,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: () => context.push('/altro/pianificazioni/${schedule.id}'),
     );

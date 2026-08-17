@@ -40,7 +40,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       backgroundColor: context.colors.bg1,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            // No nav clearance here: login is the one screen outside the shell.
+            AppSpacing.pagePadding,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -52,16 +58,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.xxxl),
 
               // ── Heading ──────────────────────────────────────────────────
-              Text(
-                'Accedi',
-                style: AppTextStyles.headlineLarge,
-              ),
+              Text('Accedi', style: AppTextStyles.headlineLarge),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Verrai reindirizzato all\'accesso sicuro TaskTap.',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: context.colors.inkFaint,
-                ),
+                style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
               ),
 
               const SizedBox(height: AppSpacing.xxl),
@@ -96,10 +97,7 @@ class _TaskTapLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
           decoration: BoxDecoration(
             color: AppColors.brand,
             borderRadius: BorderRadius.circular(AppSpacing.sm),
@@ -113,10 +111,7 @@ class _TaskTapLogo extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
-        Text(
-          'TaskTap',
-          style: AppTextStyles.headlineMedium,
-        ),
+        Text('TaskTap', style: AppTextStyles.headlineMedium),
       ],
     );
   }
@@ -131,10 +126,7 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: context.colors.red.withAlpha(20),
         border: Border.all(color: context.colors.red.withAlpha(80)),
@@ -148,9 +140,7 @@ class _ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: context.colors.red,
-              ),
+              style: AppTextStyles.bodySmall.copyWith(color: context.colors.red),
             ),
           ),
         ],

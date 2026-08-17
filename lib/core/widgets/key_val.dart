@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -29,12 +28,13 @@ class KeyVal extends StatelessWidget {
   final bool vertical;
   final bool showDivider;
 
-  static TextStyle _labelStyle(BuildContext context) => GoogleFonts.manrope(
-        fontSize: 10,
-        fontWeight: FontWeight.w700,
-        color: context.colors.inkMuted,
-        letterSpacing: 0.3,
-      );
+  static TextStyle _labelStyle(BuildContext context) => TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 10,
+    fontWeight: FontWeight.w700,
+    color: context.colors.inkMuted,
+    letterSpacing: 0.3,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -44,12 +44,7 @@ class KeyVal extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (showDivider)
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: context.colors.borderLight,
-          ),
+        if (showDivider) Divider(height: 1, thickness: 1, color: context.colors.borderLight),
       ],
     );
   }
@@ -59,17 +54,15 @@ class KeyVal extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Text(
-            label.toUpperCase(),
-            style: _labelStyle(context),
-          ),
+          Text(label.toUpperCase(), style: _labelStyle(context)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               value,
               textAlign: TextAlign.end,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
                 color: context.colors.ink,
@@ -92,7 +85,8 @@ class KeyVal extends StatelessWidget {
           Text(
             value,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: context.colors.ink,

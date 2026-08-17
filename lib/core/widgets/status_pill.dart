@@ -12,11 +12,7 @@ import 'badge.dart';
 /// StatusPill(stato: 'Completato', small: true);
 /// ```
 class StatusPill extends StatelessWidget {
-  const StatusPill({
-    super.key,
-    required this.stato,
-    this.small = false,
-  });
+  const StatusPill({super.key, required this.stato, this.small = false});
 
   /// Italian status string — one of the 13 values in DESIGN-SPEC.md.
   final String stato;
@@ -28,11 +24,6 @@ class StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final pair = statusColor(stato);
 
-    return AppBadge(
-      label: stato,
-      small: small,
-      bgColor: pair.background,
-      fgColor: pair.foreground,
-    );
+    return AppBadge(label: stato, small: small, bgColor: pair.background, fgColor: pair.foreground);
   }
 }

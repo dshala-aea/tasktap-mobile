@@ -48,16 +48,9 @@ void main() {
     });
 
     test('copyWith with clear flags sets fields to null', () {
-      const initial = NewTicketFormState(
-        customerId: 'c1',
-        locationId: 'l1',
-        title: 'Test',
-      );
+      const initial = NewTicketFormState(customerId: 'c1', locationId: 'l1', title: 'Test');
 
-      final updated = initial.copyWith(
-        clearCustomerId: true,
-        clearLocationId: true,
-      );
+      final updated = initial.copyWith(clearCustomerId: true, clearLocationId: true);
       expect(updated.customerId, isNull);
       expect(updated.locationId, isNull);
       expect(updated.title, 'Test');
@@ -201,29 +194,45 @@ void main() {
       db = AppDatabase(NativeDatabase.memory());
       mockDio = MockDio();
 
-      await db.into(db.customers).insert(CustomersCompanion.insert(
-            id: 'cust-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            companyName: 'Acme Srl',
-          ));
-      await db.into(db.locations).insert(LocationsCompanion.insert(
-            id: 'loc-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            customerId: 'cust-1',
-            name: 'Sede Milano',
-          ));
-      await db.into(db.ticketTypes).insert(TicketTypesCompanion.insert(
-            id: const Value(1),
-            tenantId: 'tenant-1',
-            name: 'Manutenzione',
-          ));
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-            id: const Value(1),
-            tenantId: 'tenant-1',
-            name: 'Aperto',
-          ));
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              companyName: 'Acme Srl',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-1',
+              name: 'Sede Milano',
+            ),
+          );
+      await db
+          .into(db.ticketTypes)
+          .insert(
+            TicketTypesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Manutenzione',
+            ),
+          );
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
     });
 
     tearDown(() async {
@@ -243,9 +252,7 @@ void main() {
     AppButton avantiButton(WidgetTester tester) =>
         tester.widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'));
 
-    testWidgets(
-        'blocks submit until cliente, sede, titolo and tipo are chosen',
-        (tester) async {
+    testWidgets('blocks submit until cliente, sede, titolo and tipo are chosen', (tester) async {
       await tester.pumpWidget(buildScreen());
       await tester.pumpAndSettle();
 
@@ -272,10 +279,7 @@ void main() {
       // ── Step 2 (Dettagli): titolo + tipo required ───────────────────────
       expect(avantiButton(tester).onPressed, isNull);
 
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'Perdita idrica',
-      );
+      await tester.enterText(find.byType(TextFormField).first, 'Perdita idrica');
       await tester.pump();
       // Titolo alone isn't enough — tipo is still missing.
       expect(avantiButton(tester).onPressed, isNull);
@@ -288,10 +292,7 @@ void main() {
 
       // Never reached Riepilogo, and the mock Dio was never asked to POST —
       // proof that nothing got submitted while fields were missing.
-      verifyNever(() => mockDio.post<Map<String, dynamic>>(
-            any(),
-            data: any(named: 'data'),
-          ));
+      verifyNever(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data')));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -317,29 +318,45 @@ void main() {
       db = AppDatabase(NativeDatabase.memory());
       mockDio = MockDio();
 
-      await db.into(db.customers).insert(CustomersCompanion.insert(
-            id: 'cust-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            companyName: 'Acme Srl',
-          ));
-      await db.into(db.locations).insert(LocationsCompanion.insert(
-            id: 'loc-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            customerId: 'cust-1',
-            name: 'Sede Milano',
-          ));
-      await db.into(db.ticketTypes).insert(TicketTypesCompanion.insert(
-            id: const Value(1),
-            tenantId: 'tenant-1',
-            name: 'Manutenzione',
-          ));
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-            id: const Value(1),
-            tenantId: 'tenant-1',
-            name: 'Aperto',
-          ));
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              companyName: 'Acme Srl',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-1',
+              name: 'Sede Milano',
+            ),
+          );
+      await db
+          .into(db.ticketTypes)
+          .insert(
+            TicketTypesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Manutenzione',
+            ),
+          );
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
     });
 
     tearDown(() async {
@@ -361,11 +378,9 @@ void main() {
             builder: (context) => Scaffold(
               body: Center(
                 child: TextButton(
-                  onPressed: () => Navigator.of(context).push<bool>(
-                    MaterialPageRoute(
-                      builder: (_) => const NewTicketFormScreen(),
-                    ),
-                  ),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push<bool>(MaterialPageRoute(builder: (_) => const NewTicketFormScreen())),
                   child: const Text('Apri form'),
                 ),
               ),
@@ -392,10 +407,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Step 2: Dettagli
-      await tester.enterText(
-        find.byType(TextFormField).first,
-        'Perdita idrica',
-      );
+      await tester.enterText(find.byType(TextFormField).first, 'Perdita idrica');
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tipo-null')));
       await tester.pumpAndSettle();
@@ -419,8 +431,7 @@ void main() {
     // to drive a submit in a widget test when the button itself (found via
     // its exact label) is unambiguous, sidestepping that layering.
     Future<void> tapCreaTicket(WidgetTester tester) async {
-      final button =
-          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Crea ticket'));
+      final button = tester.widget<AppButton>(find.widgetWithText(AppButton, 'Crea ticket'));
       button.onPressed!();
       await tester.pumpAndSettle();
     }
@@ -434,9 +445,9 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets(
-        'a ticket created offline is persisted locally and never touches the network',
-        (tester) async {
+    testWidgets('a ticket created offline is persisted locally and never touches the network', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildLauncher(isOnline: false));
       await tester.pumpAndSettle();
       await fillWizardAndReachRiepilogo(tester);
@@ -444,10 +455,7 @@ void main() {
       await tapCreaTicket(tester);
 
       // The create request was never sent — nothing to duplicate later.
-      verifyNever(() => mockDio.post<Map<String, dynamic>>(
-            any(),
-            data: any(named: 'data'),
-          ));
+      verifyNever(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data')));
 
       // The typed ticket is safe in the local outbox, not discarded.
       final rows = await db.select(db.pendingTickets).get();
@@ -468,40 +476,42 @@ void main() {
     });
 
     testWidgets(
-        'a ticket created offline survives and is sent once the queue is flushed on reconnect',
-        (tester) async {
-      await tester.pumpWidget(buildLauncher(isOnline: false));
-      await tester.pumpAndSettle();
-      await fillWizardAndReachRiepilogo(tester);
-      await tapCreaTicket(tester);
-      await flushSnackBarTimer(tester);
+      'a ticket created offline survives and is sent once the queue is flushed on reconnect',
+      (tester) async {
+        await tester.pumpWidget(buildLauncher(isOnline: false));
+        await tester.pumpAndSettle();
+        await fillWizardAndReachRiepilogo(tester);
+        await tapCreaTicket(tester);
+        await flushSnackBarTimer(tester);
 
-      final queued = await db.select(db.pendingTickets).get();
-      expect(queued.single.state, 'pendingSync');
+        final queued = await db.select(db.pendingTickets).get();
+        expect(queued.single.state, 'pendingSync');
 
-      // Reconnect: the server now accepts the create.
-      when(() => mockDio.post<Map<String, dynamic>>(
-            any(),
-            data: any(named: 'data'),
-          )).thenAnswer((_) async => Response(
+        // Reconnect: the server now accepts the create.
+        when(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data'))).thenAnswer(
+          (_) async => Response(
             requestOptions: RequestOptions(path: '/api/tickets'),
             data: {'ticketId': 'server-ticket-1'},
             statusCode: 200,
-          ));
+          ),
+        );
 
-      final container = ProviderContainer(overrides: [
-        appDatabaseProvider.overrideWithValue(db),
-        dioProvider.overrideWithValue(mockDio),
-      ]);
-      addTearDown(container.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            dioProvider.overrideWithValue(mockDio),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      // This is exactly what the reconnect watcher calls in the real app
-      // (TicketCreationQueueWatcher.initTicketCreationQueueWatcher).
-      await container.read(ticketCreationQueueProvider).processAll();
+        // This is exactly what the reconnect watcher calls in the real app
+        // (TicketCreationQueueWatcher.initTicketCreationQueueWatcher).
+        await container.read(ticketCreationQueueProvider).processAll();
 
-      final synced = await db.select(db.pendingTickets).get();
-      expect(synced.single.state, 'submitted');
-      expect(synced.single.serverTicketId, 'server-ticket-1');
-    });
+        final synced = await db.select(db.pendingTickets).get();
+        expect(synced.single.state, 'submitted');
+        expect(synced.single.serverTicketId, 'server-ticket-1');
+      },
+    );
   });
 }

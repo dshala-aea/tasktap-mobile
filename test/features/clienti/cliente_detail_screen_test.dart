@@ -69,31 +69,31 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(
-    WidgetTester tester, {
-    String customerId = 'cust-1',
-  }) async {
-    await tester
-        .pumpWidget(_buildDetail(db: db, repo: repo, customerId: customerId));
+  Future<void> pump(WidgetTester tester, {String customerId = 'cust-1'}) async {
+    await tester.pumpWidget(_buildDetail(db: db, repo: repo, customerId: customerId));
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
   }
 
   Future<void> seedCustomer(AppDatabase db) async {
-    await db.into(db.customers).insert(CustomersCompanion.insert(
-          id: 'cust-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          companyName: 'ACME Srl',
-          city: const Value('Milano'),
-          taxId: const Value('IT12345678901'),
-          address: const Value('Via Roma 1'),
-          phone: const Value('+39 02 1234567'),
-          email: const Value('info@acme.it'),
-          contactPerson: const Value('Luca Rossi'),
-          notes: const Value('Cliente storico, priorità alta.'),
-        ));
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'ACME Srl',
+            city: const Value('Milano'),
+            taxId: const Value('IT12345678901'),
+            address: const Value('Via Roma 1'),
+            phone: const Value('+39 02 1234567'),
+            email: const Value('info@acme.it'),
+            contactPerson: const Value('Luca Rossi'),
+            notes: const Value('Cliente storico, priorità alta.'),
+          ),
+        );
   }
 
   group('ClienteDetailScreen', () {
@@ -128,10 +128,7 @@ void main() {
       await seedCustomer(db);
       await pump(tester);
 
-      expect(
-        find.text('Cliente storico, priorità alta.'),
-        findsOneWidget,
-      );
+      expect(find.text('Cliente storico, priorità alta.'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -147,26 +144,34 @@ void main() {
 
     testWidgets('shows ticket list rows when tickets exist', (tester) async {
       await seedCustomer(db);
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Perdita idrica',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't2',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 2),
-            title: 'Manutenzione',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Perdita idrica',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 2),
+              title: 'Manutenzione',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 

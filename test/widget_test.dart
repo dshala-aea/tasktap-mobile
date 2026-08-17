@@ -28,8 +28,7 @@ void main() {
     registerFallbackValue(RequestOptions(path: '/'));
   });
 
-  testWidgets('TaskTapApp smoke test — renders without error',
-      (WidgetTester tester) async {
+  testWidgets('TaskTapApp smoke test — renders without error', (WidgetTester tester) async {
     final repo = _MockAuthRepository();
     final authStream = StreamController<AuthUser?>.broadcast();
     final db = AppDatabase(NativeDatabase.memory());
@@ -37,10 +36,8 @@ void main() {
 
     // Stub the sync endpoint so HomeShell's performSync doesn't throw.
     when(
-      () => mockDio.get<Map<String, dynamic>>(
-        any(),
-        queryParameters: any(named: 'queryParameters'),
-      ),
+      () =>
+          mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
     ).thenAnswer(
       (_) async => Response<Map<String, dynamic>>(
         requestOptions: RequestOptions(path: '/api/sync/mobile'),

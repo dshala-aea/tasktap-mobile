@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/notifications/notification_service.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/widgets/widgets.dart';
 import 'notifiche_provider.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -19,9 +18,9 @@ enum _NotificaFilter { tutte, nonLette }
 
 extension _FilterLabel on _NotificaFilter {
   String get label => switch (this) {
-        _NotificaFilter.tutte => 'Tutte',
-        _NotificaFilter.nonLette => 'Non lette',
-      };
+    _NotificaFilter.tutte => 'Tutte',
+    _NotificaFilter.nonLette => 'Non lette',
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -94,13 +93,13 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                     // A bare text action, so the splash is the only thing that confirms the
                     // press at all — the list it clears is below the fold on a full inbox.
                     AppTappable(
-                      onTap: () =>
-                          ref.read(notificheProvider.notifier).segnaLette(),
+                      onTap: () => ref.read(notificheProvider.notifier).segnaLette(),
                       borderRadius: BorderRadius.circular(6),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                       child: Text(
                         'Segna tutte',
-                        style: GoogleFonts.manrope(
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: context.colors.blue,
@@ -144,27 +143,24 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
               )
             else
               SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final n = filtered[i];
-                    return _NotificaRow(
-                      notifica: n,
-                      isLast: i == filtered.length - 1,
-                      // Marking read was the only thing a tap did. The row already carried
-                      // relatedEntityType/relatedEntityId — the same pair a push tap resolves
-                      // through DeepLinkIntent — so opening the notification centre and tapping
-                      // an item left the technician to go and find the job themselves.
-                      onTap: () {
-                        ref.read(notificheProvider.notifier).segnaLetta(n.id);
-                        _openRelatedEntity(context, n);
-                      },
-                    );
-                  },
-                  childCount: filtered.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, i) {
+                  final n = filtered[i];
+                  return _NotificaRow(
+                    notifica: n,
+                    isLast: i == filtered.length - 1,
+                    // Marking read was the only thing a tap did. The row already carried
+                    // relatedEntityType/relatedEntityId — the same pair a push tap resolves
+                    // through DeepLinkIntent — so opening the notification centre and tapping
+                    // an item left the technician to go and find the job themselves.
+                    onTap: () {
+                      ref.read(notificheProvider.notifier).segnaLetta(n.id);
+                      _openRelatedEntity(context, n);
+                    },
+                  );
+                }, childCount: filtered.length),
               ),
 
-            const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),
@@ -177,11 +173,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _NotificaRow extends StatelessWidget {
-  const _NotificaRow({
-    required this.notifica,
-    required this.isLast,
-    required this.onTap,
-  });
+  const _NotificaRow({required this.notifica, required this.isLast, required this.onTap});
 
   final AppNotifica notifica;
   final bool isLast;
@@ -200,8 +192,7 @@ class _NotificaRow extends StatelessWidget {
               color: context.colors.blue.withAlpha(26),
               borderRadius: BorderRadius.circular(10),
             ),
-            child:
-                Icon(LucideIcons.bell, size: 20, color: context.colors.blue),
+            child: Icon(LucideIcons.bell, size: 20, color: context.colors.blue),
           ),
           if (!notifica.letta)
             Positioned(
@@ -223,7 +214,7 @@ class _NotificaRow extends StatelessWidget {
       subtitle: notifica.corpo,
       meta: Text(
         _formatTime(notifica.timestamp),
-        style: GoogleFonts.manrope(fontSize: 10, color: context.colors.inkMuted),
+        style: TextStyle(fontFamily: 'Manrope', fontSize: 10, color: context.colors.inkMuted),
       ),
       showDivider: !isLast,
       onTap: onTap,

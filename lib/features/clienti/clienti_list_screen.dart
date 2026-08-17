@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -83,10 +84,7 @@ class _ClientiListBody extends ConsumerWidget {
         if (customersAsync.isLoading)
           const SliverToBoxAdapter(
             child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
             ),
           )
         else if (filtered.isEmpty)
@@ -99,36 +97,26 @@ class _ClientiListBody extends ConsumerWidget {
           )
         else
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final customer = filtered[i];
-                return _ClienteRow(
-                  customer: customer,
-                  isLast: i == filtered.length - 1,
-                );
-              },
-              childCount: filtered.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, i) {
+              final customer = filtered[i];
+              return _ClienteRow(customer: customer, isLast: i == filtered.length - 1);
+            }, childCount: filtered.length),
           ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }
 }
 
 class _ClienteRow extends ConsumerWidget {
-  const _ClienteRow({
-    required this.customer,
-    required this.isLast,
-  });
+  const _ClienteRow({required this.customer, required this.isLast});
 
   final Customer customer;
   final bool isLast;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final countAsync =
-        ref.watch(ticketCountForCustomerProvider(customer.id));
+    final countAsync = ref.watch(ticketCountForCustomerProvider(customer.id));
     final ticketCount = countAsync.valueOrNull ?? 0;
 
     final cityLabel = customer.city ?? '—';
@@ -138,11 +126,7 @@ class _ClienteRow extends ConsumerWidget {
       leading: AppAvatar(name: customer.companyName, size: 40),
       title: customer.companyName,
       subtitle: subLabel,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: () => context.push(AppRoutes.clientiDetail(customer.id)),
     );

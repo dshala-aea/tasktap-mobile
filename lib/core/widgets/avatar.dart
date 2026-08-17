@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -16,11 +15,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// AppAvatar(name: 'giovanni@example.com', size: 48);
 /// ```
 class AppAvatar extends StatelessWidget {
-  const AppAvatar({
-    super.key,
-    required this.name,
-    this.size = 36,
-  });
+  const AppAvatar({super.key, required this.name, this.size = 36});
 
   final String name;
   final double size;
@@ -41,10 +36,7 @@ class AppAvatar extends StatelessWidget {
   }
 
   String _initials() {
-    final parts = name
-        .split(RegExp(r'[\s@.]+'))
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final parts = name.split(RegExp(r'[\s@.]+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
@@ -56,14 +48,12 @@ class AppAvatar extends StatelessWidget {
       width: size,
       height: size,
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: _bgColor(),
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: _bgColor(), shape: BoxShape.circle),
         child: Center(
           child: Text(
             _initials(),
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: size * 0.36,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,

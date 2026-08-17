@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -11,12 +10,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// QuickAction(icon: LucideIcons.plus, label: 'Nuovo', onTap: () {});
 /// ```
 class QuickAction extends StatelessWidget {
-  const QuickAction({
-    super.key,
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const QuickAction({super.key, required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
@@ -38,10 +32,7 @@ class QuickAction extends StatelessWidget {
               Container(
                 width: 50,
                 height: 50,
-                decoration: const BoxDecoration(
-                  color: AppColors.Y,
-                  shape: BoxShape.circle,
-                ),
+                decoration: const BoxDecoration(color: AppColors.Y, shape: BoxShape.circle),
                 child: Icon(icon, size: 20, color: context.colors.ink),
               ),
               const SizedBox(height: 6),
@@ -50,7 +41,8 @@ class QuickAction extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.manrope(
+                style: TextStyle(
+                  fontFamily: 'Manrope',
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   color: context.colors.ink,

@@ -44,6 +44,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.red,
     required this.redSoft,
     required this.brandOn,
+    required this.railSurface,
+    required this.railHighlight,
+    required this.ledge,
+    required this.labelCard,
+    required this.silhouette,
   });
 
   // ── Ink: what text and icons are written in ───────────────────────────────
@@ -108,6 +113,36 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// in both themes. Light text on `#FFF10E` would be unreadable.
   final Color brandOn;
 
+  // ── Rack materials ────────────────────────────────────────────────────────
+  //
+  // The van. These are the only warm colours in the palette, and that is the point: every
+  // neutral above is a true grey, so the alu and the label card read as *material* against the
+  // app's chrome rather than as another step on the background ramp. Strip the content out of a
+  // screen and these four are what make it recognisable.
+
+  /// The anodized aluminium extrusion the cells hang off.
+  final Color railSurface;
+
+  /// The machined highlight down the rail's outer edge.
+  final Color railHighlight;
+
+  /// The graphite pull bar on a cell's leading edge. Goes brand yellow when the cell is strapped —
+  /// running, selected, live — which is the app's single most important state change.
+  final Color ledge;
+
+  /// The printed card in the label window: the surface a cell's content is actually read off.
+  ///
+  /// Warm where [surface] is neutral. In light mode it is bone, and ink measures 9.9:1 on it; in
+  /// dark mode it is a warm near-black at 12.9:1. It is not interchangeable with [surface] —
+  /// [surface] is a sheet or an input, this is a cell.
+  final Color labelCard;
+
+  /// The cut line of a shadow board: what is drawn where something belongs and is absent.
+  ///
+  /// Held above 3:1 against [labelCard] in both themes. It is a graphical object carrying meaning,
+  /// not decoration, so it takes the non-text contrast floor rather than being allowed to fade.
+  final Color silhouette;
+
   // ── Instances ─────────────────────────────────────────────────────────────
 
   /// Exactly today's values. Adopting the new names must not move a single pixel in light mode.
@@ -128,7 +163,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     borderStrong: Color(0xFFD9D9D9),
     divider: Color(0xFFD4D4D4),
     shadow: [BoxShadow(color: Color(0x1A000000), offset: Offset(0, 3), blurRadius: 5.5)],
-    shadowInset: [BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2)],
+    shadowInset: [
+      BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2),
+    ],
     amber: Color(0xFFFFB200),
     green: Color(0xFF4CAF50),
     blue: Color(0xFF2563EB),
@@ -136,6 +173,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
     red: Color(0xFFD32F2F),
     redSoft: Color(0xFFFFD1D1),
     brandOn: Color(0xFF363636),
+    railSurface: Color(0xFFC9CAC4),
+    railHighlight: Color(0xFFE8E9E4),
+    ledge: Color(0xFF3A3C39),
+    labelCard: Color(0xFFF4F2EA),
+    silhouette: Color(0xFF8E8C80),
   );
 
   /// The dark palette.
@@ -171,7 +213,9 @@ class AppPalette extends ThemeExtension<AppPalette> {
     divider: Color(0xFF3A3A3A),
     // Heavier and blacker: the light theme's 10% black over a near-black ground does nothing.
     shadow: [BoxShadow(color: Color(0x66000000), offset: Offset(0, 3), blurRadius: 8)],
-    shadowInset: [BoxShadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 6, spreadRadius: -2)],
+    shadowInset: [
+      BoxShadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 6, spreadRadius: -2),
+    ],
     amber: Color(0xFFFFC44D),
     green: Color(0xFF6FCF74),
     blue: Color(0xFF7AA7F5),
@@ -180,6 +224,14 @@ class AppPalette extends ThemeExtension<AppPalette> {
     // A tint of the dark red rather than the light theme's pastel, which would glare here.
     redSoft: Color(0xFF4A2320),
     brandOn: Color(0xFF363636),
+    // The van with the doors shut and the work light on. The alu darkens but keeps its warmth;
+    // the ledge goes blacker than any background step so it still reads as hardware against a
+    // dark cell, which a mid-grey would not.
+    railSurface: Color(0xFF4A4C46),
+    railHighlight: Color(0xFF5E605A),
+    ledge: Color(0xFF0E0F0D),
+    labelCard: Color(0xFF262720),
+    silhouette: Color(0xFF66645A),
   );
 
   @override
@@ -208,6 +260,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? red,
     Color? redSoft,
     Color? brandOn,
+    Color? railSurface,
+    Color? railHighlight,
+    Color? ledge,
+    Color? labelCard,
+    Color? silhouette,
   }) {
     return AppPalette(
       ink: ink ?? this.ink,
@@ -234,6 +291,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
       red: red ?? this.red,
       redSoft: redSoft ?? this.redSoft,
       brandOn: brandOn ?? this.brandOn,
+      railSurface: railSurface ?? this.railSurface,
+      railHighlight: railHighlight ?? this.railHighlight,
+      ledge: ledge ?? this.ledge,
+      labelCard: labelCard ?? this.labelCard,
+      silhouette: silhouette ?? this.silhouette,
     );
   }
 
@@ -269,6 +331,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
       red: c(red, other.red),
       redSoft: c(redSoft, other.redSoft),
       brandOn: c(brandOn, other.brandOn),
+      railSurface: c(railSurface, other.railSurface),
+      railHighlight: c(railHighlight, other.railHighlight),
+      ledge: c(ledge, other.ledge),
+      labelCard: c(labelCard, other.labelCard),
+      silhouette: c(silhouette, other.silhouette),
     );
   }
 }
@@ -279,6 +346,5 @@ extension AppPaletteContext on BuildContext {
   ///
   /// A widget test that pumps a bare `MaterialApp` registers no extension, and a screen that
   /// renders in the wrong colours is a better failure there than one that cannot render at all.
-  AppPalette get colors =>
-      Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
+  AppPalette get colors => Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
 }

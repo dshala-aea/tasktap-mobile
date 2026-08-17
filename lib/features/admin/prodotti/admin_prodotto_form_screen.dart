@@ -2,6 +2,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -20,12 +22,10 @@ class AdminProdottoFormScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? prodotto;
 
   @override
-  ConsumerState<AdminProdottoFormScreen> createState() =>
-      _AdminProdottoFormScreenState();
+  ConsumerState<AdminProdottoFormScreen> createState() => _AdminProdottoFormScreenState();
 }
 
-class _AdminProdottoFormScreenState
-    extends ConsumerState<AdminProdottoFormScreen> {
+class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
@@ -79,15 +79,15 @@ class _AdminProdottoFormScreenState
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCustomerId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona un cliente')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona un cliente')));
       return;
     }
     if (_selectedLocationId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Seleziona una sede')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Seleziona una sede')));
       return;
     }
     if (!ensureOnlineOrWarn(context, ref)) return;
@@ -102,32 +102,24 @@ class _AdminProdottoFormScreenState
           name: _nameCtrl.text.trim(),
           customerId: _selectedCustomerId,
           locationId: _selectedLocationId,
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           serialNumber: _serialNumberCtrl.text.trim().isEmpty
               ? null
               : _serialNumberCtrl.text.trim(),
           warrantyExpiryDate: _warrantyExpiryDate,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
       } else {
         await api.createProdottoAssistenza(
           name: _nameCtrl.text.trim(),
           customerId: _selectedCustomerId!,
           locationId: _selectedLocationId!,
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           serialNumber: _serialNumberCtrl.text.trim().isEmpty
               ? null
               : _serialNumberCtrl.text.trim(),
           warrantyExpiryDate: _warrantyExpiryDate,
-          notes: _notesCtrl.text.trim().isEmpty
-              ? null
-              : _notesCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
       }
 
@@ -135,19 +127,13 @@ class _AdminProdottoFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Prodotto aggiornato' : 'Prodotto creato',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Prodotto aggiornato' : 'Prodotto creato')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -167,11 +153,9 @@ class _AdminProdottoFormScreenState
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Modifica prodotto' : 'Nuovo prodotto'),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica prodotto' : 'Nuovo prodotto',
+        showBack: true,
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -188,70 +172,45 @@ class _AdminProdottoFormScreenState
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(19),
+          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
+            AppTextField(
+              label: 'Nome *',
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedCustomerId,
-              decoration: const InputDecoration(
-                labelText: 'Cliente *',
-                border: OutlineInputBorder(),
+            AppFieldShell(
+              label: 'Cliente *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedCustomerId,
+                items: customers
+                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedCustomerId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
               ),
-              items: customers
-                  .map((c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.companyName),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedCustomerId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<String>(
-              initialValue: _selectedLocationId,
-              decoration: const InputDecoration(
-                labelText: 'Sede *',
-                border: OutlineInputBorder(),
+            AppFieldShell(
+              label: 'Sede *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedLocationId,
+                items: locations
+                    .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedLocationId = v),
+                validator: (v) => v == null ? 'Campo obbligatorio' : null,
               ),
-              items: locations
-                  .map((l) => DropdownMenuItem(
-                        value: l.id,
-                        child: Text(l.name),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedLocationId = v),
-              validator: (v) => v == null ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Descrizione',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _serialNumberCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Numero di serie',
-                border: OutlineInputBorder(),
-              ),
-            ),
+            AppTextField(label: 'Numero di serie', controller: _serialNumberCtrl),
             const SizedBox(height: 16),
 
             ListTile(
@@ -264,14 +223,7 @@ class _AdminProdottoFormScreenState
             const Divider(),
             const SizedBox(height: 8),
 
-            TextFormField(
-              controller: _notesCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
           ],
         ),
       ),

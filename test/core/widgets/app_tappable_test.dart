@@ -11,8 +11,11 @@ import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 /// moving the colour back onto a wrapping Container would leave every test below passing except
 /// the last one.
 void main() {
-  Future<void> pump(WidgetTester tester, Widget child) =>
-      tester.pumpWidget(MaterialApp(home: Scaffold(body: Center(child: child))));
+  Future<void> pump(WidgetTester tester, Widget child) => tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(body: Center(child: child)),
+    ),
+  );
 
   testWidgets('calls onTap', (tester) async {
     var taps = 0;
@@ -24,17 +27,15 @@ void main() {
 
   testWidgets('calls onLongPress', (tester) async {
     var longPresses = 0;
-    await pump(
-      tester,
-      AppTappable(onLongPress: () => longPresses++, child: const Text('Apri')),
-    );
+    await pump(tester, AppTappable(onLongPress: () => longPresses++, child: const Text('Apri')));
 
     await tester.longPress(find.text('Apri'));
     expect(longPresses, 1);
   });
 
-  testWidgets('a null onTap leaves the surface inert rather than swallowing the tap',
-      (tester) async {
+  testWidgets('a null onTap leaves the surface inert rather than swallowing the tap', (
+    tester,
+  ) async {
     var outerTaps = 0;
     await pump(
       tester,

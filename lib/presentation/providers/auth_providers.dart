@@ -44,10 +44,7 @@ final currentUserProvider = Provider<AuthUser?>((ref) {
 
 /// State for the login screen.
 class LoginState {
-  const LoginState({
-    this.isLoading = false,
-    this.failure,
-  });
+  const LoginState({this.isLoading = false, this.failure});
 
   final bool isLoading;
   final AuthFailure? failure;
@@ -90,7 +87,6 @@ class LoginNotifier extends StateNotifier<LoginState> {
   }
 }
 
-final loginProvider =
-    StateNotifierProvider.autoDispose<LoginNotifier, LoginState>((ref) {
+final loginProvider = StateNotifierProvider.autoDispose<LoginNotifier, LoginState>((ref) {
   return LoginNotifier(ref.watch(authRepositoryProvider));
 });

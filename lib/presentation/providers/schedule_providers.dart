@@ -7,8 +7,7 @@ import '../../data/sync/sync_service.dart';
 // ── Today's schedules ──────────────────────────────────────────────────────────
 
 /// Stream of today's schedules from the local Drift DB (fully offline).
-final todaySchedulesProvider =
-    StreamProvider.autoDispose<List<Schedule>>((ref) {
+final todaySchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   // "Today" is the UTC calendar day — schedules' activityDate is stored as a
   // UTC-midnight date, so the window must be UTC to bucket correctly across the
@@ -28,8 +27,7 @@ final todaySchedulesProvider =
 });
 
 /// Stream of schedules in [today, today+7d] from the local Drift DB.
-final weekSchedulesProvider =
-    StreamProvider.autoDispose<List<Schedule>>((ref) {
+final weekSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   final today = DateTime.now().toUtc();
   final start = DateTime.utc(today.year, today.month, today.day);
@@ -38,8 +36,7 @@ final weekSchedulesProvider =
   return (db.select(db.schedules)
         ..where(
           (s) =>
-              s.activityDate.isBiggerOrEqualValue(start) &
-              s.activityDate.isSmallerThanValue(end),
+              s.activityDate.isBiggerOrEqualValue(start) & s.activityDate.isSmallerThanValue(end),
         )
         ..orderBy([
           (s) => OrderingTerm.asc(s.activityDate),
@@ -51,37 +48,27 @@ final weekSchedulesProvider =
 // ── Customer / Location look-ups ───────────────────────────────────────────────
 
 /// Look up a single [Customer] by id from the local cache.
-final customerByIdProvider =
-    StreamProvider.autoDispose.family<Customer?, String>((ref, id) {
+final customerByIdProvider = StreamProvider.autoDispose.family<Customer?, String>((ref, id) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.customers)
-        ..where((c) => c.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.customers)..where((c) => c.id.equals(id))).watchSingleOrNull();
 });
 
 /// Look up a single [Location] by id from the local cache.
-final locationByIdProvider =
-    StreamProvider.autoDispose.family<Location?, String>((ref, id) {
+final locationByIdProvider = StreamProvider.autoDispose.family<Location?, String>((ref, id) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.locations)
-        ..where((l) => l.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.locations)..where((l) => l.id.equals(id))).watchSingleOrNull();
 });
 
 /// Look up a single [Ticket] by id from the local cache.
-final ticketByIdProvider =
-    StreamProvider.autoDispose.family<Ticket?, String>((ref, id) {
+final ticketByIdProvider = StreamProvider.autoDispose.family<Ticket?, String>((ref, id) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.tickets)
-        ..where((t) => t.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.tickets)..where((t) => t.id.equals(id))).watchSingleOrNull();
 });
 
 // ── Draft reports ──────────────────────────────────────────────────────────────
 
 /// Stream of all draft reports for the current user from the local Drift DB.
-final draftReportsProvider =
-    StreamProvider.autoDispose<List<DraftReport>>((ref) {
+final draftReportsProvider = StreamProvider.autoDispose<List<DraftReport>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.draftReports)
         ..where((r) => r.stato.equals('Bozza'))
@@ -91,8 +78,7 @@ final draftReportsProvider =
 
 // ── All cached customers/locations/materiali (for pickers) ────────────────────
 
-final allCustomersProvider =
-    StreamProvider.autoDispose<List<Customer>>((ref) {
+final allCustomersProvider = StreamProvider.autoDispose<List<Customer>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.customers)
         ..where((c) => c.isActive.equals(true))
@@ -105,8 +91,7 @@ final allCustomersProvider =
 /// Consumers (`step_materiali_fold.dart`) still degrade to a free-text field when the list is
 /// empty — a first run before the first sync, or a tenant with no catalogue — so a technician is
 /// never blocked from recording a materiale by name.
-final allMaterialiProvider =
-    StreamProvider.autoDispose<List<MaterialiData>>((ref) {
+final allMaterialiProvider = StreamProvider.autoDispose<List<MaterialiData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.materiali)
         ..where((m) => m.isActive.equals(true))
@@ -122,16 +107,33 @@ final allMaterialiProvider =
 /// or type one. When this list is empty the step says so and offers no way to invent an entry,
 /// because the previous behaviour was to fabricate `user-<timestamp>` and let those hours reach
 /// payroll attributed to nobody.
-final allColleaguesProvider =
-    StreamProvider.autoDispose<List<Colleague>>((ref) {
+final allColleaguesProvider = StreamProvider.autoDispose<List<Colleague>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.colleagues)
-        ..orderBy([(c) => OrderingTerm.asc(c.displayName)]))
-      .watch();
+  return (db.select(db.colleagues)..orderBy([(c) => OrderingTerm.asc(c.displayName)])).watch();
 });
 
-final allLocationsProvider =
-    StreamProvider.autoDispose<List<Location>>((ref) {
+/// One colleague's display name, from the same local mirror.
+///
+/// Exists because screens were rendering raw user ids at people. The ticket detail's "Tecnico" row
+/// showed `assignedUserId` verbatim — a GUID — which is not a name, is not memorable, and tells a
+/// technician nothing about who holds the job.
+///
+/// Resolving it here rather than through `/api/app/interventi/{id}` (which returns a resolved
+/// `tecnico` string) is the deliberate choice: the mirror is already synced and already on the
+/// device, so the name is there with no signal. An online lookup would have made the most basic
+/// fact on the screen the one thing that disappears in a plant room.
+///
+/// Null when the id is unknown to the mirror — a colleague who left, or a sync that has not landed
+/// yet. Callers fall back to the id rather than to an empty string: an unfamiliar id is at least
+/// something to read out over the phone.
+final colleagueNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, userId) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(
+    db.colleagues,
+  )..where((c) => c.id.equals(userId))).watchSingleOrNull().map((c) => c?.displayName);
+});
+
+final allLocationsProvider = StreamProvider.autoDispose<List<Location>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.locations)
         ..where((l) => l.isActive.equals(true))
@@ -139,22 +141,16 @@ final allLocationsProvider =
       .watch();
 });
 
-final allTicketsProvider =
-    StreamProvider.autoDispose<List<Ticket>>((ref) {
+final allTicketsProvider = StreamProvider.autoDispose<List<Ticket>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.tickets)
-        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
-      .watch();
+  return (db.select(db.tickets)..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).watch();
 });
 
 /// The cantieri, from the local mirror the sync fills.
 ///
 /// Consumers (`step_dettagli.dart`'s `_TicketCantierePicker`) still degrade to a free-text field
 /// when the list is empty, so report submission is never blocked.
-final allCantieriProvider =
-    StreamProvider.autoDispose<List<CantieriData>>((ref) {
+final allCantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.cantieri)
-        ..orderBy([(c) => OrderingTerm.asc(c.name)]))
-      .watch();
+  return (db.select(db.cantieri)..orderBy([(c) => OrderingTerm.asc(c.name)])).watch();
 });

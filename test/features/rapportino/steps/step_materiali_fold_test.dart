@@ -29,10 +29,10 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 class MockDio extends Mock implements Dio {}
 
 Response<T> _okResponse<T>(T data, String path) => Response<T>(
-      data: data,
-      statusCode: 200,
-      requestOptions: RequestOptions(path: path),
-    );
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 const _reportId = 'draft-1';
 const _ticketId = 'ticket-1';
@@ -43,22 +43,24 @@ ProviderContainer _buildContainer({
   bool isOnline = true,
   String? ticketId = _ticketId,
 }) {
-  final container = ProviderContainer(overrides: [
-    appDatabaseProvider.overrideWithValue(db),
-    dioProvider.overrideWithValue(dio ?? MockDio()),
-    isOnlineProvider.overrideWithValue(isOnline),
-    reportEditorProvider(_reportId).overrideWith(
-      (ref) => ReportEditorNotifier(
-        initialState: ReportEditorState(
-          reportId: _reportId,
-          tenantId: 'tenant-1',
-          insertedUserId: 'user-1',
-          ticketId: ticketId,
+  final container = ProviderContainer(
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      dioProvider.overrideWithValue(dio ?? MockDio()),
+      isOnlineProvider.overrideWithValue(isOnline),
+      reportEditorProvider(_reportId).overrideWith(
+        (ref) => ReportEditorNotifier(
+          initialState: ReportEditorState(
+            reportId: _reportId,
+            tenantId: 'tenant-1',
+            insertedUserId: 'user-1',
+            ticketId: ticketId,
+          ),
+          repo: DraftReportRepository(db),
         ),
-        repo: DraftReportRepository(db),
       ),
-    ),
-  ]);
+    ],
+  );
   return container;
 }
 
@@ -86,56 +88,53 @@ void main() {
     testWidgets('renders the real checklist items with type-driven inputs', (tester) async {
       final dio = MockDio();
       when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse(
-          [
-            {
-              'id': 'grp-1',
-              'name': 'Sezione A',
-              'description': null,
-              'sortOrder': 0,
-              'subgroups': <dynamic>[],
-              'controls': [
-                {
-                  'id': 'tc-1',
-                  'templateControlId': 'tpl-1',
-                  'controlLineageId': 'lin-1',
-                  'label': 'Pressione OK',
-                  'description': null,
-                  'type': 0, // Checkbox
-                  'isRequired': true,
-                  'options': null,
-                  'valoreLimite': null,
-                  'sortOrder': 0,
-                  'status': 'Pending',
-                  'stringValue': null,
-                  'boolValue': null,
-                  'dateValue': null,
-                  'completedByReportId': null,
-                  'completedAt': null,
-                },
-                {
-                  'id': 'tc-2',
-                  'templateControlId': 'tpl-2',
-                  'controlLineageId': 'lin-2',
-                  'label': 'Note aggiuntive',
-                  'description': null,
-                  'type': 1, // FreeText
-                  'isRequired': false,
-                  'options': null,
-                  'valoreLimite': null,
-                  'sortOrder': 1,
-                  'status': 'Pending',
-                  'stringValue': null,
-                  'boolValue': null,
-                  'dateValue': null,
-                  'completedByReportId': null,
-                  'completedAt': null,
-                },
-              ],
-            },
-          ],
-          '/api/tickets/$_ticketId/controls',
-        ),
+        (_) async => _okResponse([
+          {
+            'id': 'grp-1',
+            'name': 'Sezione A',
+            'description': null,
+            'sortOrder': 0,
+            'subgroups': <dynamic>[],
+            'controls': [
+              {
+                'id': 'tc-1',
+                'templateControlId': 'tpl-1',
+                'controlLineageId': 'lin-1',
+                'label': 'Pressione OK',
+                'description': null,
+                'type': 0, // Checkbox
+                'isRequired': true,
+                'options': null,
+                'valoreLimite': null,
+                'sortOrder': 0,
+                'status': 'Pending',
+                'stringValue': null,
+                'boolValue': null,
+                'dateValue': null,
+                'completedByReportId': null,
+                'completedAt': null,
+              },
+              {
+                'id': 'tc-2',
+                'templateControlId': 'tpl-2',
+                'controlLineageId': 'lin-2',
+                'label': 'Note aggiuntive',
+                'description': null,
+                'type': 1, // FreeText
+                'isRequired': false,
+                'options': null,
+                'valoreLimite': null,
+                'sortOrder': 1,
+                'status': 'Pending',
+                'stringValue': null,
+                'boolValue': null,
+                'dateValue': null,
+                'completedByReportId': null,
+                'completedAt': null,
+              },
+            ],
+          },
+        ], '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
@@ -156,42 +155,38 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('ticking a checkbox control writes the answer to editor state',
-        (tester) async {
+    testWidgets('ticking a checkbox control writes the answer to editor state', (tester) async {
       final dio = MockDio();
       when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse(
-          [
-            {
-              'id': 'grp-1',
-              'name': 'Sezione A',
-              'description': null,
-              'sortOrder': 0,
-              'subgroups': <dynamic>[],
-              'controls': [
-                {
-                  'id': 'tc-1',
-                  'templateControlId': 'tpl-1',
-                  'controlLineageId': 'lin-1',
-                  'label': 'Pressione OK',
-                  'description': null,
-                  'type': 0,
-                  'isRequired': true,
-                  'options': null,
-                  'valoreLimite': null,
-                  'sortOrder': 0,
-                  'status': 'Pending',
-                  'stringValue': null,
-                  'boolValue': null,
-                  'dateValue': null,
-                  'completedByReportId': null,
-                  'completedAt': null,
-                },
-              ],
-            },
-          ],
-          '/api/tickets/$_ticketId/controls',
-        ),
+        (_) async => _okResponse([
+          {
+            'id': 'grp-1',
+            'name': 'Sezione A',
+            'description': null,
+            'sortOrder': 0,
+            'subgroups': <dynamic>[],
+            'controls': [
+              {
+                'id': 'tc-1',
+                'templateControlId': 'tpl-1',
+                'controlLineageId': 'lin-1',
+                'label': 'Pressione OK',
+                'description': null,
+                'type': 0,
+                'isRequired': true,
+                'options': null,
+                'valoreLimite': null,
+                'sortOrder': 0,
+                'status': 'Pending',
+                'stringValue': null,
+                'boolValue': null,
+                'dateValue': null,
+                'completedByReportId': null,
+                'completedAt': null,
+              },
+            ],
+          },
+        ], '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
@@ -215,38 +210,35 @@ void main() {
     testWidgets('typing into a free-text control writes the answer', (tester) async {
       final dio = MockDio();
       when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse(
-          [
-            {
-              'id': 'grp-1',
-              'name': 'Sezione A',
-              'description': null,
-              'sortOrder': 0,
-              'subgroups': <dynamic>[],
-              'controls': [
-                {
-                  'id': 'tc-2',
-                  'templateControlId': 'tpl-2',
-                  'controlLineageId': 'lin-2',
-                  'label': 'Note aggiuntive',
-                  'description': null,
-                  'type': 1,
-                  'isRequired': false,
-                  'options': null,
-                  'valoreLimite': null,
-                  'sortOrder': 0,
-                  'status': 'Pending',
-                  'stringValue': null,
-                  'boolValue': null,
-                  'dateValue': null,
-                  'completedByReportId': null,
-                  'completedAt': null,
-                },
-              ],
-            },
-          ],
-          '/api/tickets/$_ticketId/controls',
-        ),
+        (_) async => _okResponse([
+          {
+            'id': 'grp-1',
+            'name': 'Sezione A',
+            'description': null,
+            'sortOrder': 0,
+            'subgroups': <dynamic>[],
+            'controls': [
+              {
+                'id': 'tc-2',
+                'templateControlId': 'tpl-2',
+                'controlLineageId': 'lin-2',
+                'label': 'Note aggiuntive',
+                'description': null,
+                'type': 1,
+                'isRequired': false,
+                'options': null,
+                'valoreLimite': null,
+                'sortOrder': 0,
+                'status': 'Pending',
+                'stringValue': null,
+                'boolValue': null,
+                'dateValue': null,
+                'completedByReportId': null,
+                'completedAt': null,
+              },
+            ],
+          },
+        ], '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
@@ -265,11 +257,11 @@ void main() {
   });
 
   group('Controlli checklist — empty / not applicable', () {
-    testWidgets('says honestly that no controls are planned for this ticket',
-        (tester) async {
+    testWidgets('says honestly that no controls are planned for this ticket', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls'))
-          .thenAnswer((_) async => _okResponse(<dynamic>[], '/api/tickets/$_ticketId/controls'));
+      when(
+        () => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls'),
+      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/tickets/$_ticketId/controls'));
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
@@ -282,37 +274,28 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     });
 
-    testWidgets('explains that controls require a linked ticket when there is none',
-        (tester) async {
+    testWidgets('explains that controls require a linked ticket when there is none', (
+      tester,
+    ) async {
       final container = _buildContainer(db: db, ticketId: null);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('non è collegato a nessun ticket'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('non è collegato a nessun ticket'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
   });
 
   group('Controlli checklist — offline', () {
-    testWidgets('says plainly it is offline instead of showing an empty list',
-        (tester) async {
+    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('Controlli non disponibili offline'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Nessun controllo previsto per questo intervento.'),
-        findsNothing,
-      );
+      expect(find.textContaining('Controlli non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun controllo previsto per questo intervento.'), findsNothing);
       // Offline must never degrade into the old typed-ID box either.
       expect(find.text('Aggiungi controllo'), findsNothing);
     });

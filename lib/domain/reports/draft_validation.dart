@@ -74,8 +74,8 @@ DraftValidationResult validateDraft({
   }
 
   // Customer: either a cached id or a free-text fallback
-  final hasCustomer = (draft.customerId?.isNotEmpty ?? false) ||
-      (customerFreeText?.isNotEmpty ?? false);
+  final hasCustomer =
+      (draft.customerId?.isNotEmpty ?? false) || (customerFreeText?.isNotEmpty ?? false);
   if (!hasCustomer) {
     issues.add(DraftValidationIssue.missingCustomer);
   }
@@ -88,13 +88,11 @@ DraftValidationResult validateDraft({
     issues.add(DraftValidationIssue.noMateriali);
   }
 
-  if (draft.customerSignatureAllegatoId == null ||
-      draft.customerSignatureAllegatoId!.isEmpty) {
+  if (draft.customerSignatureAllegatoId == null || draft.customerSignatureAllegatoId!.isEmpty) {
     issues.add(DraftValidationIssue.missingCustomerSignature);
   }
 
-  if (draft.technicianSignatureAllegatoId == null ||
-      draft.technicianSignatureAllegatoId!.isEmpty) {
+  if (draft.technicianSignatureAllegatoId == null || draft.technicianSignatureAllegatoId!.isEmpty) {
     issues.add(DraftValidationIssue.missingTechnicianSignature);
   }
 

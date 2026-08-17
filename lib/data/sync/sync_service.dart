@@ -32,13 +32,9 @@ class SyncService {
       queryParams['since'] = lastSync.toUtc().toIso8601String();
     }
 
-    final response = await dio.get<Map<String, dynamic>>(
-      _path,
-      queryParameters: queryParams,
-    );
+    final response = await dio.get<Map<String, dynamic>>(_path, queryParameters: queryParams);
 
-    final payload =
-        SyncResultDto.fromJson(response.data as Map<String, dynamic>);
+    final payload = SyncResultDto.fromJson(response.data as Map<String, dynamic>);
 
     await db.transaction(() async {
       await _upsertCustomers(payload.customers);
@@ -79,19 +75,20 @@ class SyncService {
 
     await db.transaction(() async {
       await db.delete(db.colleagues).go();
-      await db.batch((b) => b.insertAll(
-            db.colleagues,
-            list.map((c) => ColleaguesCompanion.insert(
-                  id: c.id,
-                  displayName: c.displayName,
-                )),
-          ));
+      await db.batch(
+        (b) => b.insertAll(
+          db.colleagues,
+          list.map((c) => ColleaguesCompanion.insert(id: c.id, displayName: c.displayName)),
+        ),
+      );
     });
   }
 
   Future<void> _upsertMateriali(List<MaterialeDto> list) async {
     for (final m in list) {
-      await db.into(db.materiali).insertOnConflictUpdate(
+      await db
+          .into(db.materiali)
+          .insertOnConflictUpdate(
             MaterialiCompanion.insert(
               id: m.id,
               tenantId: m.tenantId,
@@ -114,7 +111,9 @@ class SyncService {
   /// The cantieri a technician may be sent to.
   Future<void> _upsertCantieri(List<CantiereDto> list) async {
     for (final c in list) {
-      await db.into(db.cantieri).insertOnConflictUpdate(
+      await db
+          .into(db.cantieri)
+          .insertOnConflictUpdate(
             CantieriCompanion.insert(
               id: c.id,
               tenantId: c.tenantId,
@@ -137,7 +136,9 @@ class SyncService {
 
   Future<void> _upsertCustomers(List<CustomerDto> list) async {
     for (final c in list) {
-      await db.into(db.customers).insertOnConflictUpdate(
+      await db
+          .into(db.customers)
+          .insertOnConflictUpdate(
             CustomersCompanion.insert(
               id: c.id,
               tenantId: c.tenantId,
@@ -161,7 +162,9 @@ class SyncService {
 
   Future<void> _upsertLocations(List<LocationDto> list) async {
     for (final l in list) {
-      await db.into(db.locations).insertOnConflictUpdate(
+      await db
+          .into(db.locations)
+          .insertOnConflictUpdate(
             LocationsCompanion.insert(
               id: l.id,
               tenantId: l.tenantId,
@@ -185,7 +188,9 @@ class SyncService {
 
   Future<void> _upsertTickets(List<TicketDto> list) async {
     for (final t in list) {
-      await db.into(db.tickets).insertOnConflictUpdate(
+      await db
+          .into(db.tickets)
+          .insertOnConflictUpdate(
             TicketsCompanion.insert(
               id: t.id,
               tenantId: t.tenantId,
@@ -212,7 +217,9 @@ class SyncService {
 
   Future<void> _upsertSchedules(List<ScheduleDto> list) async {
     for (final s in list) {
-      await db.into(db.schedules).insertOnConflictUpdate(
+      await db
+          .into(db.schedules)
+          .insertOnConflictUpdate(
             SchedulesCompanion.insert(
               id: s.id,
               tenantId: s.tenantId,
@@ -220,8 +227,7 @@ class SyncService {
               updatedAt: Value(s.updatedAt),
               ticketId: Value(s.ticketId),
               activityDate: s.activityDate,
-              timeStartMinutes:
-                  ScheduleDto.parseTimeToMinutes(s.timeStart),
+              timeStartMinutes: ScheduleDto.parseTimeToMinutes(s.timeStart),
               timeEndMinutes: ScheduleDto.parseTimeToMinutes(s.timeEnd),
               userId: s.userId,
               statusId: s.statusId,
@@ -235,12 +241,12 @@ class SyncService {
       // Replaced wholesale rather than merged: the payload is the whole truth about who is on
       // this schedule, and someone removed from a squadra must stop appearing on the device the
       // same way they stop appearing on the server.
-      await (db.delete(db.scheduleAssignees)
-            ..where((t) => t.scheduleId.equals(s.id)))
-          .go();
+      await (db.delete(db.scheduleAssignees)..where((t) => t.scheduleId.equals(s.id))).go();
 
       for (final a in s.assignees) {
-        await db.into(db.scheduleAssignees).insertOnConflictUpdate(
+        await db
+            .into(db.scheduleAssignees)
+            .insertOnConflictUpdate(
               ScheduleAssigneesCompanion.insert(
                 scheduleId: s.id,
                 userId: a.userId,
@@ -257,7 +263,9 @@ class SyncService {
 
   Future<void> _upsertDraftReports(List<ReportDto> list) async {
     for (final r in list) {
-      await db.into(db.draftReports).insertOnConflictUpdate(
+      await db
+          .into(db.draftReports)
+          .insertOnConflictUpdate(
             DraftReportsCompanion.insert(
               id: r.id,
               tenantId: r.tenantId,
@@ -273,10 +281,8 @@ class SyncService {
               startedAt: Value(r.startedAt),
               endedAt: Value(r.endedAt),
               documentTemplateId: Value(r.documentTemplateId),
-              customerSignatureAllegatoId:
-                  Value(r.customerSignatureAllegatoId),
-              technicianSignatureAllegatoId:
-                  Value(r.technicianSignatureAllegatoId),
+              customerSignatureAllegatoId: Value(r.customerSignatureAllegatoId),
+              technicianSignatureAllegatoId: Value(r.technicianSignatureAllegatoId),
               technicianNotes: Value(r.technicianNotes),
               closedAt: Value(r.closedAt),
               stato: Value(r.stato),
@@ -296,7 +302,9 @@ class SyncService {
 
   Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
     for (final s in list) {
-      await db.into(db.ticketStatuses).insertOnConflictUpdate(
+      await db
+          .into(db.ticketStatuses)
+          .insertOnConflictUpdate(
             TicketStatusesCompanion.insert(
               id: Value(s.id),
               tenantId: s.tenantId,
@@ -310,7 +318,9 @@ class SyncService {
 
   Future<void> _upsertTicketTypes(List<TicketTypeDto> list) async {
     for (final t in list) {
-      await db.into(db.ticketTypes).insertOnConflictUpdate(
+      await db
+          .into(db.ticketTypes)
+          .insertOnConflictUpdate(
             TicketTypesCompanion.insert(
               id: Value(t.id),
               tenantId: t.tenantId,
@@ -335,36 +345,24 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 /// Provides the [SyncService].
 final syncServiceProvider = Provider<SyncService>((ref) {
-  return SyncService(
-    db: ref.watch(appDatabaseProvider),
-    dio: ref.watch(dioProvider),
-  );
+  return SyncService(db: ref.watch(appDatabaseProvider), dio: ref.watch(dioProvider));
 });
 
 /// Notifier that manages sync state (idle / syncing / error / done).
 enum SyncStatus { idle, syncing, done, error }
 
 class SyncState {
-  const SyncState({
-    this.status = SyncStatus.idle,
-    this.lastSync,
-    this.errorMessage,
-  });
+  const SyncState({this.status = SyncStatus.idle, this.lastSync, this.errorMessage});
 
   final SyncStatus status;
   final DateTime? lastSync;
   final String? errorMessage;
 
-  SyncState copyWith({
-    SyncStatus? status,
-    DateTime? lastSync,
-    String? errorMessage,
-  }) =>
-      SyncState(
-        status: status ?? this.status,
-        lastSync: lastSync ?? this.lastSync,
-        errorMessage: errorMessage,
-      );
+  SyncState copyWith({SyncStatus? status, DateTime? lastSync, String? errorMessage}) => SyncState(
+    status: status ?? this.status,
+    lastSync: lastSync ?? this.lastSync,
+    errorMessage: errorMessage,
+  );
 }
 
 class SyncNotifier extends StateNotifier<SyncState> {
@@ -389,18 +387,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final ts = await _service.sync();
       state = SyncState(status: SyncStatus.done, lastSync: ts);
     } catch (e) {
-      state = state.copyWith(
-        status: SyncStatus.error,
-        errorMessage: e.toString(),
-      );
+      state = state.copyWith(status: SyncStatus.error, errorMessage: e.toString());
     }
   }
 }
 
-final syncProvider =
-    StateNotifierProvider<SyncNotifier, SyncState>((ref) {
-  return SyncNotifier(
-    ref.watch(syncServiceProvider),
-    ref.watch(appDatabaseProvider),
-  );
+final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
+  return SyncNotifier(ref.watch(syncServiceProvider), ref.watch(appDatabaseProvider));
 });

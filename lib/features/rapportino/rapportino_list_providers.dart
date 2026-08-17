@@ -14,57 +14,49 @@ import '../../presentation/providers/report_editor_providers.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Stream of all local drafts (isLocalOnly == true), newest first.
-final rapportiniListProvider =
-    StreamProvider.autoDispose<List<DraftReport>>((ref) {
+final rapportiniListProvider = StreamProvider.autoDispose<List<DraftReport>>((ref) {
   final repo = ref.watch(draftReportRepositoryProvider);
   return repo.watchLocalDrafts();
 });
 
 /// Stream a single draft by id — for the view screen.
-final rapportinoByIdProvider =
-    StreamProvider.autoDispose.family<DraftReport?, String>((ref, reportId) {
+final rapportinoByIdProvider = StreamProvider.autoDispose.family<DraftReport?, String>((
+  ref,
+  reportId,
+) {
   final repo = ref.watch(draftReportRepositoryProvider);
   return repo.watchDraft(reportId);
 });
 
 /// Stream staff rows for a given report.
-final rapportinoStaffProvider =
-    StreamProvider.autoDispose.family<List<ReportStaffTableData>, String>(
-  (ref, reportId) {
-    final repo = ref.watch(draftReportRepositoryProvider);
-    return repo.watchStaff(reportId);
-  },
-);
+final rapportinoStaffProvider = StreamProvider.autoDispose
+    .family<List<ReportStaffTableData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchStaff(reportId);
+    });
 
 /// Stream materiali rows for a given report.
-final rapportinoMaterialiProvider =
-    StreamProvider.autoDispose.family<List<ReportMaterialiData>, String>(
-  (ref, reportId) {
-    final repo = ref.watch(draftReportRepositoryProvider);
-    return repo.watchMateriali(reportId);
-  },
-);
+final rapportinoMaterialiProvider = StreamProvider.autoDispose
+    .family<List<ReportMaterialiData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchMateriali(reportId);
+    });
 
 /// Derived: total ore from staff rows for a given report.
 /// Returns a formatted string like "3h 30min" or "—".
-final rapportinoOreProvider =
-    Provider.autoDispose.family<String, String>((ref, reportId) {
+final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, reportId) {
   final staffAsync = ref.watch(rapportinoStaffProvider(reportId));
   return staffAsync.when(
     loading: () => '—',
     error: (e, s) => '—',
     data: (rows) {
-      final totalMinutes = rows.fold<double>(
-        0,
-        (acc, r) {
-          if (r.startTime != null && r.endTime != null) {
-            final worked =
-                r.endTime!.difference(r.startTime!).inMinutes - r.pauseMinutes;
-            return acc + worked;
-          }
-          return acc + ((r.hoursWorked ?? 0.0) * 60.0);
-        },
-      );
+      final totalMinutes = rows.fold<double>(0, (acc, r) {
+        if (r.startTime != null && r.endTime != null) {
+          final worked = r.endTime!.difference(r.startTime!).inMinutes - r.pauseMinutes;
+          return acc + worked;
+        }
+        return acc + ((r.hoursWorked ?? 0.0) * 60.0);
+      });
       if (totalMinutes <= 0) return '—';
       final h = totalMinutes ~/ 60;
       final m = (totalMinutes % 60).round();
@@ -96,13 +88,11 @@ String rapportinoStatusLabel(DraftReport draft) {
 
 /// Returns true when the draft is submitted (read-only view mode).
 bool rapportinoIsSubmitted(DraftReport draft) {
-  return DraftSubmissionState.fromString(draft.submissionState) ==
-      DraftSubmissionState.submitted;
+  return DraftSubmissionState.fromString(draft.submissionState) == DraftSubmissionState.submitted;
 }
 
 /// Returns true when the draft is in-flight (uploading or submitting).
 bool rapportinoIsInFlight(DraftReport draft) {
   final sub = DraftSubmissionState.fromString(draft.submissionState);
-  return sub == DraftSubmissionState.uploadingMedia ||
-      sub == DraftSubmissionState.submitting;
+  return sub == DraftSubmissionState.uploadingMedia || sub == DraftSubmissionState.submitting;
 }

@@ -50,8 +50,7 @@ class NewTicketFormState {
       description: clearDescription ? null : (description ?? this.description),
       typeId: clearTypeId ? null : (typeId ?? this.typeId),
       statusId: clearStatusId ? null : (statusId ?? this.statusId),
-      assignedUserId:
-          clearAssignedUserId ? null : (assignedUserId ?? this.assignedUserId),
+      assignedUserId: clearAssignedUserId ? null : (assignedUserId ?? this.assignedUserId),
     );
   }
 

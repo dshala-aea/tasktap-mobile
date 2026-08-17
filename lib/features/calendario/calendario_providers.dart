@@ -11,8 +11,7 @@ import '../../data/sync/sync_service.dart';
 enum CalendarioView { giorno, settimana, mese, lista }
 
 /// Currently selected view (default: Giorno).
-final calendarioViewProvider =
-    StateProvider<CalendarioView>((ref) => CalendarioView.giorno);
+final calendarioViewProvider = StateProvider<CalendarioView>((ref) => CalendarioView.giorno);
 
 // ── Selected date ──────────────────────────────────────────────────────────────
 
@@ -35,8 +34,7 @@ class DateRange {
   final DateTime end;
 
   @override
-  bool operator ==(Object other) =>
-      other is DateRange && start == other.start && end == other.end;
+  bool operator ==(Object other) => other is DateRange && start == other.start && end == other.end;
 
   @override
   int get hashCode => Object.hash(start, end);
@@ -47,8 +45,10 @@ class DateRange {
 ///
 /// Both dates are normalized to UTC midnight before querying Drift, mirroring
 /// the convention used in schedule_providers.dart and dashboard_providers.dart.
-final schedulesInRangeProvider =
-    StreamProvider.autoDispose.family<List<Schedule>, DateRange>((ref, range) {
+final schedulesInRangeProvider = StreamProvider.autoDispose.family<List<Schedule>, DateRange>((
+  ref,
+  range,
+) {
   final db = ref.watch(appDatabaseProvider);
   final startUtc = range.start.toUtc();
   final endUtc = range.end.toUtc();
@@ -99,9 +99,7 @@ Map<DateTime, List<Schedule>> groupSchedulesByDay(List<Schedule> schedules) {
     map.putIfAbsent(key, () => []).add(s);
   }
   // Sort groups by date
-  final sorted = Map.fromEntries(
-    map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
-  );
+  final sorted = Map.fromEntries(map.entries.toList()..sort((a, b) => a.key.compareTo(b.key)));
   return sorted;
 }
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/app_button.dart';
 import '../../providers/auth_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -20,9 +20,7 @@ class ProfiloScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg1,
-      appBar: AppBar(
-        title: Text('Profilo', style: AppTextStyles.titleLarge),
-      ),
+      appBar: ScreenHeaderBar(title: 'Profilo', showBack: true),
       body: Padding(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         child: Column(
@@ -56,18 +54,13 @@ class ProfiloScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.base),
 
                     if (user.displayName != null) ...[
-                      Text(
-                        user.displayName!,
-                        style: AppTextStyles.titleMedium,
-                      ),
+                      Text(user.displayName!, style: AppTextStyles.titleMedium),
                       const SizedBox(height: AppSpacing.xs),
                     ],
 
                     Text(
                       user.email,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: context.colors.inkFaint,
-                      ),
+                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
                     ),
                   ],
                 ),
@@ -110,19 +103,12 @@ class ProfiloScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Disconnetti'),
-        content: const Text(
-          'Sei sicuro di voler uscire dall\'account?',
-        ),
+        content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: context.colors.red,
-            ),
+            style: TextButton.styleFrom(foregroundColor: context.colors.red),
             child: const Text('Disconnetti'),
           ),
         ],

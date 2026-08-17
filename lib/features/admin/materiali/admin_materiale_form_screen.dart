@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -18,12 +19,10 @@ class AdminMaterialeFormScreen extends ConsumerStatefulWidget {
   final String? materialeId;
 
   @override
-  ConsumerState<AdminMaterialeFormScreen> createState() =>
-      _AdminMaterialeFormScreenState();
+  ConsumerState<AdminMaterialeFormScreen> createState() => _AdminMaterialeFormScreenState();
 }
 
-class _AdminMaterialeFormScreenState
-    extends ConsumerState<AdminMaterialeFormScreen> {
+class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -53,9 +52,9 @@ class _AdminMaterialeFormScreenState
 
   Future<void> _loadMateriale() async {
     final db = ref.read(appDatabaseProvider);
-    final mat = await (db.select(db.materiali)
-          ..where((m) => m.id.equals(widget.materialeId!)))
-        .getSingleOrNull();
+    final mat = await (db.select(
+      db.materiali,
+    )..where((m) => m.id.equals(widget.materialeId!))).getSingleOrNull();
     if (!mounted) return;
     if (mat != null) {
       setState(() {
@@ -65,8 +64,7 @@ class _AdminMaterialeFormScreenState
         _unitOfMeasureCtrl.text = mat.unitOfMeasure ?? '';
         _categoryCtrl.text = mat.category ?? '';
         _marcaCtrl.text = mat.marca ?? '';
-        _purchasePriceCtrl.text =
-            mat.purchasePrice?.toStringAsFixed(2) ?? '';
+        _purchasePriceCtrl.text = mat.purchasePrice?.toStringAsFixed(2) ?? '';
         _salePriceCtrl.text = mat.salePrice?.toStringAsFixed(2) ?? '';
       });
     } else {
@@ -102,18 +100,12 @@ class _AdminMaterialeFormScreenState
           widget.materialeId!,
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           unitOfMeasure: _unitOfMeasureCtrl.text.trim().isEmpty
               ? null
               : _unitOfMeasureCtrl.text.trim(),
-          category: _categoryCtrl.text.trim().isEmpty
-              ? null
-              : _categoryCtrl.text.trim(),
-          marca: _marcaCtrl.text.trim().isEmpty
-              ? null
-              : _marcaCtrl.text.trim(),
+          category: _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim(),
+          marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
           purchasePrice: purchasePrice,
           salePrice: salePrice,
         );
@@ -121,18 +113,12 @@ class _AdminMaterialeFormScreenState
         await api.createMateriale(
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
-          description: _descriptionCtrl.text.trim().isEmpty
-              ? null
-              : _descriptionCtrl.text.trim(),
+          description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           unitOfMeasure: _unitOfMeasureCtrl.text.trim().isEmpty
               ? null
               : _unitOfMeasureCtrl.text.trim(),
-          category: _categoryCtrl.text.trim().isEmpty
-              ? null
-              : _categoryCtrl.text.trim(),
-          marca: _marcaCtrl.text.trim().isEmpty
-              ? null
-              : _marcaCtrl.text.trim(),
+          category: _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim(),
+          marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
           purchasePrice: purchasePrice,
           salePrice: salePrice,
         );
@@ -142,19 +128,13 @@ class _AdminMaterialeFormScreenState
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Materiale aggiornato' : 'Materiale creato',
-            ),
-          ),
+          SnackBar(content: Text(_isEditing ? 'Materiale aggiornato' : 'Materiale creato')),
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -166,15 +146,11 @@ class _AdminMaterialeFormScreenState
     if (_isEditing && _prefillFailed) {
       return Scaffold(
         backgroundColor: context.colors.bg2,
-        appBar: AppBar(
-          title: const Text('Modifica materiale'),
-          backgroundColor: context.colors.bg2,
-          foregroundColor: context.colors.ink,
-          elevation: 0,
-        ),
+        appBar: ScreenHeaderBar(title: 'Modifica materiale', showBack: true),
         body: const UnavailableState(
           titolo: 'Materiale non disponibile',
-          motivo: 'Il catalogo materiali non è ancora sincronizzato sul '
+          motivo:
+              'Il catalogo materiali non è ancora sincronizzato sul '
               'dispositivo, quindi non è possibile precompilare o '
               'modificare questo materiale da qui.',
         ),
@@ -183,11 +159,9 @@ class _AdminMaterialeFormScreenState
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Modifica materiale' : 'Nuovo materiale'),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica materiale' : 'Nuovo materiale',
+        showBack: true,
         actions: [
           TextButton(
             onPressed: _isSaving ? null : _save,
@@ -204,98 +178,60 @@ class _AdminMaterialeFormScreenState
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(19),
+          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
           children: [
-            TextFormField(
+            AppTextField(
+              label: 'Codice *',
               controller: _codeCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Codice *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
+            AppTextField(
+              label: 'Nome *',
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descriptionCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Descrizione',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
+            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
             const SizedBox(height: 16),
 
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Unità di misura',
+                    hint: 'pz, kg, mt…',
                     controller: _unitOfMeasureCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Unità di misura',
-                      border: OutlineInputBorder(),
-                      hintText: 'pz, kg, mt…',
-                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextFormField(
-                    controller: _marcaCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Marca',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
+                  child: AppTextField(label: 'Marca', controller: _marcaCtrl),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _categoryCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Categoria',
-                border: OutlineInputBorder(),
-              ),
-            ),
+            AppTextField(label: 'Categoria', controller: _categoryCtrl),
             const SizedBox(height: 16),
 
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Prezzo acquisto (€)',
                     controller: _purchasePriceCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Prezzo acquisto (€)',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextFormField(
+                  child: AppTextField(
+                    label: 'Prezzo vendita (€)',
                     controller: _salePriceCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Prezzo vendita (€)',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ),
               ],

@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -10,11 +11,12 @@ import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Single materiale by id from Drift cache.
-final adminMaterialeDetailProvider =
-    StreamProvider.autoDispose.family<MaterialiData?, String>((ref, id) {
+final adminMaterialeDetailProvider = StreamProvider.autoDispose.family<MaterialiData?, String>((
+  ref,
+  id,
+) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.materiali)..where((m) => m.id.equals(id)))
-      .watchSingleOrNull();
+  return (db.select(db.materiali)..where((m) => m.id.equals(id))).watchSingleOrNull();
 });
 
 /// Admin materiale detail — read-only with edit FAB.
@@ -25,19 +27,19 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final materialeAsync =
-        ref.watch(adminMaterialeDetailProvider(materialeId));
+    final materialeAsync = ref.watch(adminMaterialeDetailProvider(materialeId));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.pencil,
-        tooltip: 'Modifica',
-        onPressed: () async {
-          await context.push<bool>(
-            '/altro/magazzino/$materialeId/modifica',
-          );
-        },
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          icon: LucideIcons.pencil,
+          tooltip: 'Modifica',
+          onPressed: () async {
+            await context.push<bool>('/altro/magazzino/$materialeId/modifica');
+          },
+        ),
       ),
       body: materialeAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -46,7 +48,8 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
           if (materiale == null) {
             return const UnavailableState(
               titolo: 'Materiale non disponibile',
-              motivo: 'Il catalogo materiali non è ancora sincronizzato sul '
+              motivo:
+                  'Il catalogo materiali non è ancora sincronizzato sul '
                   'dispositivo, quindi questo materiale non può essere '
                   'letto dalla cache locale anche se esiste sul server.',
             );
@@ -75,12 +78,7 @@ class _MaterialeDetailBody extends StatelessWidget {
             actions: [
               PopupMenuButton<String>(
                 icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Modifica'),
-                  ),
-                ],
+                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
                 onSelected: (v) {
                   if (v == 'edit') {
                     context.push('/altro/magazzino/${materiale.id}/modifica');
@@ -121,8 +119,7 @@ class _MaterialeDetailBody extends StatelessWidget {
               children: [
                 if (!materiale.isActive)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
                       color: context.colors.red.withValues(alpha: 0.1),
@@ -140,45 +137,38 @@ class _MaterialeDetailBody extends StatelessWidget {
                 _InfoRow(label: 'Codice', value: materiale.code),
                 _InfoRow(label: 'Nome', value: materiale.name),
                 _InfoRow(
-                    label: 'Descrizione',
-                    value: materiale.description?.isNotEmpty == true
-                        ? materiale.description!
-                        : '—'),
+                  label: 'Descrizione',
+                  value: materiale.description?.isNotEmpty == true ? materiale.description! : '—',
+                ),
+                _InfoRow(label: 'Unità di misura', value: materiale.unitOfMeasure ?? '—'),
+                _InfoRow(label: 'Categoria', value: materiale.category ?? '—'),
+                _InfoRow(label: 'Marca', value: materiale.marca ?? '—'),
                 _InfoRow(
-                    label: 'Unità di misura',
-                    value: materiale.unitOfMeasure ?? '—'),
+                  label: 'Prezzo acquisto',
+                  value: materiale.purchasePrice != null
+                      ? '€${materiale.purchasePrice!.toStringAsFixed(2)}'
+                      : '—',
+                ),
                 _InfoRow(
-                    label: 'Categoria',
-                    value: materiale.category ?? '—'),
-                _InfoRow(
-                    label: 'Marca',
-                    value: materiale.marca ?? '—'),
-                _InfoRow(
-                    label: 'Prezzo acquisto',
-                    value: materiale.purchasePrice != null
-                        ? '€${materiale.purchasePrice!.toStringAsFixed(2)}'
-                        : '—'),
-                _InfoRow(
-                    label: 'Prezzo vendita',
-                    value: materiale.salePrice != null
-                        ? '€${materiale.salePrice!.toStringAsFixed(2)}'
-                        : '—',
-                    showDivider: false),
+                  label: 'Prezzo vendita',
+                  value: materiale.salePrice != null
+                      ? '€${materiale.salePrice!.toStringAsFixed(2)}'
+                      : '—',
+                  showDivider: false,
+                ),
               ],
             ),
           ),
         ),
+
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.showDivider = true,
-  });
+  const _InfoRow({required this.label, required this.value, this.showDivider = true});
 
   final String label;
   final String value;
@@ -193,17 +183,14 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
           ),
         ],
       ),

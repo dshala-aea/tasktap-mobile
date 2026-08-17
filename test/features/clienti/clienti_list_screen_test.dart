@@ -22,10 +22,7 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildList({
-  required AppDatabase db,
-  required MockAuthRepository repo,
-}) {
+Widget _buildList({required AppDatabase db, required MockAuthRepository repo}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
@@ -76,20 +73,28 @@ void main() {
   }
 
   Future<void> seedCustomers(AppDatabase db) async {
-    await db.into(db.customers).insert(CustomersCompanion.insert(
-          id: 'cust-1',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          companyName: 'ACME Srl',
-          city: const Value('Milano'),
-        ));
-    await db.into(db.customers).insert(CustomersCompanion.insert(
-          id: 'cust-2',
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 2),
-          companyName: 'Beta SpA',
-          city: const Value('Roma'),
-        ));
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'ACME Srl',
+            city: const Value('Milano'),
+          ),
+        );
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-2',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 2),
+            companyName: 'Beta SpA',
+            city: const Value('Roma'),
+          ),
+        );
   }
 
   group('ClientiListScreen', () {
@@ -140,16 +145,20 @@ void main() {
     testWidgets('shows ticket count in subtitle', (tester) async {
       await seedCustomers(db);
       // seed a ticket for cust-1
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Ticket test',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket test',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
       await pump(tester);
 
       expect(find.textContaining('1 ticket'), findsOneWidget);

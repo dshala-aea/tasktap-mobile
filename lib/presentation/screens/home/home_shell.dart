@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
+import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
@@ -25,8 +27,7 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell>
-    with WidgetsBindingObserver {
+class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -44,6 +45,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
       // falls back to a cached, signed-in-but-offline identity (see
       // ZitadelAuthRepository._restore).
       initAuthReconnectWatcher(ref);
+      // Which modules this tenant actually bought. The whole entitlement layer — repository,
+      // service, Drift table, tests — existed and was never started from anywhere, so the cache was
+      // permanently empty and the Altro hub offered every office module to every technician
+      // regardless. The server refused them on arrival, which is the wrong place to find out.
+      initEntitlementRefreshWatcher(ref);
     });
   }
 
@@ -72,7 +78,11 @@ class _HomeShellState extends ConsumerState<HomeShell>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: widget.navigationShell,
+      // The rail is drawn once here rather than per screen. It was reaching only four of the
+      // forty-two screens, so the world read as "ledged cards" everywhere else — and the rail is
+      // the mark that makes a column of cells a rack. It costs no layout: it paints inside the
+      // 19dp gutter every screen already indents by (see AppRack.railColumn).
+      body: Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell),
       // Extend body behind the floating pill so the hero/content scrolls under it.
       extendBody: true,
       bottomNavigationBar: AppBottomNav(

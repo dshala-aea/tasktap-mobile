@@ -1,7 +1,6 @@
 // lib/features/calendario/views/mese_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
@@ -9,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Calendario → Mese view: month calendar grid (weeks × 7). Each day cell
 /// shows event dots / count. Tapping a day selects it and switches to Giorno.
@@ -38,8 +38,7 @@ class MeseView extends ConsumerWidget {
     final grouped = groupSchedulesByDay(schedules);
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
-    final selectedKey =
-        DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final selectedKey = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
 
     final monthStart = DateTime(month.year, month.month, 1);
     final monthEnd = DateTime(month.year, month.month + 1, 0);
@@ -59,43 +58,35 @@ class MeseView extends ConsumerWidget {
     }
 
     final weekCount = (gridDays.length / 7).ceil();
-    final monthFmt = DateFormat('MMMM y', 'it');
     final dayNameFmt = DateFormat('EEE', 'it');
-    final weekdays = List.generate(
-        7, (i) => gridStart.add(Duration(days: i)));
+    final weekdays = List.generate(7, (i) => gridStart.add(Duration(days: i)));
 
     return Column(
       children: [
-        // Month + year title
-        Padding(
-          padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
-          child: Text(
-            _capitalize(monthFmt.format(month)),
-            style: GoogleFonts.sora(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: context.colors.ink,
-            ),
-          ),
-        ),
+        // No month title here. The period bar above the body names the period for every view and
+        // is what moves between them; a second "Agosto 2026" underneath it said the same thing
+        // twice and drifted out of step the moment either one was changed.
         // Weekday header row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
             children: weekdays
-                .map((d) => Expanded(
-                      child: Center(
-                        child: Text(
-                          dayNameFmt.format(d).toUpperCase(),
-                          style: GoogleFonts.manrope(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: context.colors.inkMuted,
-                            letterSpacing: 0.5,
-                          ),
+                .map(
+                  (d) => Expanded(
+                    child: Center(
+                      child: Text(
+                        dayNameFmt.format(d).toUpperCase(),
+                        style: TextStyle(
+                          fontFamily: 'Manrope',
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: context.colors.inkMuted,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    ))
+                    ),
+                  ),
+                )
                 .toList(),
           ),
         ),
@@ -127,9 +118,9 @@ class MeseView extends ConsumerWidget {
                             color: isSelected
                                 ? context.colors.surfaceInverse
                                 : isToday
-                                    ? AppColors.YSoft
-                                    : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
+                                ? AppColors.YSoft
+                                : Colors.transparent,
+                            borderRadius: AppRack.insetShape,
                             border: isToday && !isSelected
                                 ? Border.all(color: AppColors.Y, width: 1.5)
                                 : null,
@@ -138,21 +129,18 @@ class MeseView extends ConsumerWidget {
                               children: [
                                 Text(
                                   '${day.day}',
-                                  style: GoogleFonts.manrope(
+                                  style: TextStyle(
+                                    fontFamily: 'Manrope',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: isSelected
                                         ? context.colors.inkInverse
                                         : inMonth
-                                            ? context.colors.ink
-                                            : context.colors.inkDisabled,
+                                        ? context.colors.ink
+                                        : context.colors.inkDisabled,
                                   ),
                                 ),
-                                if (count > 0)
-                                  _EventDots(
-                                    count: count,
-                                    isSelected: isSelected,
-                                  ),
+                                if (count > 0) _EventDots(count: count, isSelected: isSelected),
                               ],
                             ),
                           ),
@@ -168,9 +156,6 @@ class MeseView extends ConsumerWidget {
       ],
     );
   }
-
-  static String _capitalize(String s) =>
-      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 class _EventDots extends StatelessWidget {

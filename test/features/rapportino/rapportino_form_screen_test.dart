@@ -34,7 +34,9 @@ class MockSubmissionQueue extends Mock implements SubmissionQueue {}
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 Future<void> _seedDraft(AppDatabase db, String reportId) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: reportId,
           tenantId: 'tenant-1',
@@ -48,20 +50,13 @@ Future<void> _seedDraft(AppDatabase db, String reportId) async {
       );
 }
 
-Widget _buildForm({
-  required AppDatabase db,
-  required String reportId,
-  SubmissionQueue? fakeQueue,
-}) {
+Widget _buildForm({required AppDatabase db, required String reportId, SubmissionQueue? fakeQueue}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
-      if (fakeQueue != null)
-        realSubmissionQueueProvider.overrideWithValue(fakeQueue),
+      if (fakeQueue != null) realSubmissionQueueProvider.overrideWithValue(fakeQueue),
     ],
-    child: MaterialApp(
-      home: RapportinoFormScreen(reportId: reportId),
-    ),
+    child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
   );
 }
 
@@ -85,8 +80,9 @@ void main() {
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // The step should contain a titolo text field
-      expect(find.text('Titolo *'), findsWidgets);
+      // Field labels are static text above the field now, not Material floating labels inside
+      // it, and a required marker is a coloured span — so this is rich text.
+      expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
       // Avanti button visible on step 1
       expect(find.text('Avanti'), findsOneWidget);
       // Indietro NOT visible on step 1
@@ -128,15 +124,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Back on step 1
-      expect(find.text('Titolo *'), findsWidgets);
+      expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
       expect(find.text('Indietro'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('step 3 (Materiali) renders Aggiungi materiale button',
-        (tester) async {
+    testWidgets('step 3 (Materiali) renders Aggiungi materiale button', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -153,8 +148,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('step 4 (Riepilogo) renders firma blocks + validation panel',
-        (tester) async {
+    testWidgets('step 4 (Riepilogo) renders firma blocks + validation panel', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -178,13 +172,12 @@ void main() {
   });
 
   group('RapportinoFormScreen — submit flow', () {
-    testWidgets(
-        'Invia rapportino button is disabled when validation not satisfied',
-        (tester) async {
+    testWidgets('Invia rapportino button is disabled when validation not satisfied', (
+      tester,
+    ) async {
       await _seedDraft(db, reportId);
       final fakeQueue = MockSubmissionQueue();
-      await tester.pumpWidget(
-          _buildForm(db: db, reportId: reportId, fakeQueue: fakeQueue));
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId, fakeQueue: fakeQueue));
       await tester.pumpAndSettle();
 
       // Navigate to step 4
@@ -206,8 +199,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('submit calls queue.enqueue + processAll when draft is valid',
-        (tester) async {
+    testWidgets('submit calls queue.enqueue + processAll when draft is valid', (tester) async {
       await _seedDraft(db, reportId);
       final fakeQueue = MockSubmissionQueue();
       when(() => fakeQueue.enqueue(any())).thenAnswer((_) async {});
@@ -234,7 +226,9 @@ void main() {
         ),
       );
       // Insert a staff row so staffCount >= 1
-      await db.into(db.reportStaffTable).insert(
+      await db
+          .into(db.reportStaffTable)
+          .insert(
             ReportStaffTableCompanion.insert(
               id: 'staff-1',
               tenantId: 'tenant-1',
@@ -246,42 +240,42 @@ void main() {
             ),
           );
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          realSubmissionQueueProvider.overrideWithValue(fakeQueue),
-          // Pre-fill editor state directly
-          reportEditorProvider(reportId).overrideWith(
-            (ref) => ReportEditorNotifier(
-              initialState: ReportEditorState(
-                reportId: reportId,
-                tenantId: 'tenant-1',
-                insertedUserId: 'user-1',
-                title: 'Test',
-                customerId: 'cust-1',
-                locationId: 'loc-1',
-                customerSignatureAllegatoId: 'sig-c-1',
-                customerSignatureLocalPath: '/tmp/sig-c.png',
-                technicianSignatureAllegatoId: 'sig-t-1',
-                technicianSignatureLocalPath: '/tmp/sig-t.png',
-                materialiNotRequired: true,
-                staffRows: [
-                  StaffRow(
-                    id: 'staff-1',
-                    userId: 'user-1',
-                    displayName: 'Mario Rossi',
-                    hoursWorked: 8.0,
-                  ),
-                ],
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            realSubmissionQueueProvider.overrideWithValue(fakeQueue),
+            // Pre-fill editor state directly
+            reportEditorProvider(reportId).overrideWith(
+              (ref) => ReportEditorNotifier(
+                initialState: ReportEditorState(
+                  reportId: reportId,
+                  tenantId: 'tenant-1',
+                  insertedUserId: 'user-1',
+                  title: 'Test',
+                  customerId: 'cust-1',
+                  locationId: 'loc-1',
+                  customerSignatureAllegatoId: 'sig-c-1',
+                  customerSignatureLocalPath: '/tmp/sig-c.png',
+                  technicianSignatureAllegatoId: 'sig-t-1',
+                  technicianSignatureLocalPath: '/tmp/sig-t.png',
+                  materialiNotRequired: true,
+                  staffRows: [
+                    StaffRow(
+                      id: 'staff-1',
+                      userId: 'user-1',
+                      displayName: 'Mario Rossi',
+                      hoursWorked: 8.0,
+                    ),
+                  ],
+                ),
+                repo: DraftReportRepository(db),
               ),
-              repo: DraftReportRepository(db),
             ),
-          ),
-        ],
-        child: MaterialApp(
-          home: RapportinoFormScreen(reportId: reportId),
+          ],
+          child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       // Navigate to step 4

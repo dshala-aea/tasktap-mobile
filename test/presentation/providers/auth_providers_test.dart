@@ -15,19 +15,15 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 AuthUser _fakeUser({String id = 'user-1', String token = 'tok'}) => AuthUser(
-      id: id,
-      email: 'tech@tasktap.io',
-      accessToken: token,
-      refreshToken: 'refresh',
-      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
+  id: id,
+  email: 'tech@tasktap.io',
+  accessToken: token,
+  refreshToken: 'refresh',
+  expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+);
 
 ProviderContainer _makeContainer(MockAuthRepository repo) {
-  return ProviderContainer(
-    overrides: [
-      authRepositoryProvider.overrideWithValue(repo),
-    ],
-  );
+  return ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repo)]);
 }
 
 void main() {
@@ -37,9 +33,7 @@ void main() {
   setUp(() {
     repo = MockAuthRepository();
     authStreamController = StreamController<AuthUser?>.broadcast();
-    when(() => repo.authStateChanges).thenAnswer(
-      (_) => authStreamController.stream,
-    );
+    when(() => repo.authStateChanges).thenAnswer((_) => authStreamController.stream);
     when(() => repo.currentUser).thenReturn(null);
   });
 
@@ -148,9 +142,7 @@ void main() {
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container
-          .read(loginProvider.notifier)
-          .signIn();
+      await container.read(loginProvider.notifier).signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -158,16 +150,14 @@ void main() {
     });
 
     test('signIn sets failure on InvalidCredentials', () async {
-      when(() => repo.signIn()).thenAnswer(
-            (_) async => (user: null, failure: const InvalidCredentials()),
-          );
+      when(
+        () => repo.signIn(),
+      ).thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container
-          .read(loginProvider.notifier)
-          .signIn();
+      await container.read(loginProvider.notifier).signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -175,16 +165,14 @@ void main() {
     });
 
     test('clearError resets failure to null', () async {
-      when(() => repo.signIn()).thenAnswer(
-            (_) async => (user: null, failure: const NetworkError()),
-          );
+      when(
+        () => repo.signIn(),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container
-          .read(loginProvider.notifier)
-          .signIn();
+      await container.read(loginProvider.notifier).signIn();
 
       expect(container.read(loginProvider).failure, isA<NetworkError>());
 
@@ -210,10 +198,7 @@ void main() {
     // These tests encode the redirect rules used in app_router.dart without
     // spinning up a real router — they verify the decision function directly.
 
-    String? routeRedirect({
-      required AsyncValue<AuthUser?> authAsync,
-      required bool isOnLogin,
-    }) {
+    String? routeRedirect({required AsyncValue<AuthUser?> authAsync, required bool isOnLogin}) {
       return authAsync.when(
         loading: () => null,
         error: (err, stack) => isOnLogin ? null : '/login',
@@ -227,68 +212,35 @@ void main() {
     }
 
     test('loading → no redirect (stay on current route)', () {
-      expect(
-        routeRedirect(authAsync: const AsyncLoading(), isOnLogin: false),
-        isNull,
-      );
+      expect(routeRedirect(authAsync: const AsyncLoading(), isOnLogin: false), isNull);
     });
 
     test('unauthenticated on protected route → /login', () {
-      expect(
-        routeRedirect(
-          authAsync: const AsyncData(null),
-          isOnLogin: false,
-        ),
-        equals('/login'),
-      );
+      expect(routeRedirect(authAsync: const AsyncData(null), isOnLogin: false), equals('/login'));
     });
 
     test('unauthenticated already on /login → no redirect', () {
-      expect(
-        routeRedirect(
-          authAsync: const AsyncData(null),
-          isOnLogin: true,
-        ),
-        isNull,
-      );
+      expect(routeRedirect(authAsync: const AsyncData(null), isOnLogin: true), isNull);
     });
 
     test('authenticated on /login → /oggi', () {
-      expect(
-        routeRedirect(
-          authAsync: AsyncData(_fakeUser()),
-          isOnLogin: true,
-        ),
-        equals('/oggi'),
-      );
+      expect(routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: true), equals('/oggi'));
     });
 
     test('authenticated on protected route → no redirect', () {
-      expect(
-        routeRedirect(
-          authAsync: AsyncData(_fakeUser()),
-          isOnLogin: false,
-        ),
-        isNull,
-      );
+      expect(routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: false), isNull);
     });
 
     test('error state on protected route → /login', () {
       expect(
-        routeRedirect(
-          authAsync: AsyncError(Exception('boom'), StackTrace.empty),
-          isOnLogin: false,
-        ),
+        routeRedirect(authAsync: AsyncError(Exception('boom'), StackTrace.empty), isOnLogin: false),
         equals('/login'),
       );
     });
 
     test('error state already on /login → no redirect', () {
       expect(
-        routeRedirect(
-          authAsync: AsyncError(Exception('boom'), StackTrace.empty),
-          isOnLogin: true,
-        ),
+        routeRedirect(authAsync: AsyncError(Exception('boom'), StackTrace.empty), isOnLogin: true),
         isNull,
       );
     });

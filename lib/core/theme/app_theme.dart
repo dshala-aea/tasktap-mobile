@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_palette.dart';
+import 'app_rack.dart';
 import 'app_spacing.dart';
 import 'app_text_styles.dart';
 
@@ -108,11 +109,15 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
 
     // ── Card ───────────────────────────────────────────────────────────────
+    //
+    // Material's own Card, for the places Flutter reaches for one on our behalf (dialogs, menus,
+    // banners). Given the rack's material and corner language so a framework-supplied surface
+    // does not arrive wearing the previous design system.
     cardTheme: CardThemeData(
-      color: p.bg1,
+      color: p.labelCard,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+        borderRadius: AppRack.freeShape,
         side: BorderSide(color: p.borderLight),
       ),
       margin: EdgeInsets.zero,
@@ -124,13 +129,8 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         backgroundColor: AppColors.Y,
         foregroundColor: p.ink,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.md,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
         textStyle: AppTextStyles.labelLarge,
         minimumSize: const Size(double.infinity, 48),
       ),
@@ -141,13 +141,8 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: OutlinedButton.styleFrom(
         foregroundColor: p.ink,
         side: BorderSide(color: p.borderMedium),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.md,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
         textStyle: AppTextStyles.labelLarge,
         minimumSize: const Size(double.infinity, 48),
       ),
@@ -158,28 +153,40 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: TextButton.styleFrom(
         foregroundColor: p.ink,
         textStyle: AppTextStyles.labelLarge,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.base,
-          vertical: AppSpacing.sm,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.sm),
       ),
     ),
 
     // ── Input Decoration ───────────────────────────────────────────────────
+    //
+    // Quiet by default, loud only on focus.
+    //
+    // Every field used to be filled *and* boxed on all four sides with a mid-weight border, which
+    // is what a Material floating label needs — something to notch itself into. AppTextField puts
+    // the label above the field now, so the box has nothing to hold and the border can go back to
+    // being a hairline. A form of eight fields was eight heavy rectangles competing with each
+    // other and with the content; it is now eight inset panels.
+    //
+    // Focus keeps the full 2px yellow. It is the one state that has to be unmistakable at arm's
+    // length, and it is the app's own colour rather than the platform's.
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: p.surface,
+      fillColor: p.bg3,
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.base,
+        horizontal: AppSpacing.md,
         vertical: AppSpacing.md,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: BorderSide(color: p.borderMedium),
+        borderSide: BorderSide(color: p.borderLight),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: BorderSide(color: p.borderMedium),
+        borderSide: BorderSide(color: p.borderLight),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
+        borderSide: BorderSide(color: p.borderLight),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
@@ -193,24 +200,14 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
         borderSide: BorderSide(color: p.red, width: 2),
       ),
-      labelStyle: AppTextStyles.bodyMedium.copyWith(
-        color: p.inkFaint,
-      ),
-      hintStyle: AppTextStyles.bodyMedium.copyWith(
-        color: p.inkDisabled,
-      ),
+      labelStyle: AppTextStyles.bodyMedium.copyWith(color: p.inkFaint),
+      hintStyle: AppTextStyles.bodyMedium.copyWith(color: p.inkDisabled),
       errorStyle: AppTextStyles.bodySmall.copyWith(color: p.red),
-      floatingLabelStyle: AppTextStyles.labelMedium.copyWith(
-        color: p.ink,
-      ),
+      floatingLabelStyle: AppTextStyles.labelMedium.copyWith(color: p.ink),
     ),
 
     // ── Divider ────────────────────────────────────────────────────────────
-    dividerTheme: DividerThemeData(
-      color: p.divider,
-      space: 1,
-      thickness: 1,
-    ),
+    dividerTheme: DividerThemeData(color: p.divider, space: 1, thickness: 1),
 
     // ── Chip ───────────────────────────────────────────────────────────────
     chipTheme: ChipThemeData(
@@ -221,10 +218,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         borderRadius: BorderRadius.circular(AppSpacing.sm),
         side: BorderSide(color: p.borderMedium),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.xs,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
     ),
 
     // ── FAB ────────────────────────────────────────────────────────────────
@@ -236,10 +230,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
     // ── List Tile ──────────────────────────────────────────────────────────
     listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: AppSpacing.base,
-        vertical: AppSpacing.xs,
-      ),
+      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
     ),
   );
 }

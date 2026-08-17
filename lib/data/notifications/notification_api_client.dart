@@ -34,14 +34,9 @@ class NotificationApiClient {
     };
     if (isRead != null) queryParams['isRead'] = isRead;
 
-    final response = await _dio.get(
-      '/api/notifications',
-      queryParameters: queryParams,
-    );
+    final response = await _dio.get('/api/notifications', queryParameters: queryParams);
 
-    return NotificationPageResponse.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    return NotificationPageResponse.fromJson(response.data as Map<String, dynamic>);
   }
 
   /// Mark a single notification as read.

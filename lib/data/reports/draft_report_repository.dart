@@ -30,45 +30,30 @@ class DraftReportRepository {
 
   /// Load a single draft by id.
   Future<DraftReport?> getDraft(String id) async {
-    return (
-      _db.select(_db.draftReports)..where((r) => r.id.equals(id))
-    ).getSingleOrNull();
+    return (_db.select(_db.draftReports)..where((r) => r.id.equals(id))).getSingleOrNull();
   }
 
   /// Stream a single draft (reactive — re-emits on every save).
   Stream<DraftReport?> watchDraft(String id) {
-    return (
-      _db.select(_db.draftReports)..where((r) => r.id.equals(id))
-    ).watchSingleOrNull();
+    return (_db.select(_db.draftReports)..where((r) => r.id.equals(id))).watchSingleOrNull();
   }
 
   /// Stream all local-only drafts, newest first.
   Stream<List<DraftReport>> watchLocalDrafts() {
-    return (
-      _db.select(_db.draftReports)
-        ..where((r) => r.isLocalOnly.equals(true))
-        ..orderBy([(r) => OrderingTerm.desc(r.updatedAt)])
-    ).watch();
+    return (_db.select(_db.draftReports)
+          ..where((r) => r.isLocalOnly.equals(true))
+          ..orderBy([(r) => OrderingTerm.desc(r.updatedAt)]))
+        .watch();
   }
 
   /// Delete a draft and all its children.
   Future<void> deleteDraft(String reportId) async {
     await _db.transaction(() async {
-      await (_db.delete(_db.reportStaffTable)
-            ..where((s) => s.reportId.equals(reportId)))
-          .go();
-      await (_db.delete(_db.reportMateriali)
-            ..where((m) => m.reportId.equals(reportId)))
-          .go();
-      await (_db.delete(_db.reportControlli)
-            ..where((c) => c.reportId.equals(reportId)))
-          .go();
-      await (_db.delete(_db.reportAllegati)
-            ..where((a) => a.entityId.equals(reportId)))
-          .go();
-      await (_db.delete(_db.draftReports)
-            ..where((r) => r.id.equals(reportId)))
-          .go();
+      await (_db.delete(_db.reportStaffTable)..where((s) => s.reportId.equals(reportId))).go();
+      await (_db.delete(_db.reportMateriali)..where((m) => m.reportId.equals(reportId))).go();
+      await (_db.delete(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).go();
+      await (_db.delete(_db.reportAllegati)..where((a) => a.entityId.equals(reportId))).go();
+      await (_db.delete(_db.draftReports)..where((r) => r.id.equals(reportId))).go();
     });
   }
 
@@ -79,15 +64,11 @@ class DraftReportRepository {
   }
 
   Future<void> deleteStaff(String staffId) async {
-    await (_db.delete(_db.reportStaffTable)
-          ..where((s) => s.id.equals(staffId)))
-        .go();
+    await (_db.delete(_db.reportStaffTable)..where((s) => s.id.equals(staffId))).go();
   }
 
   Future<List<ReportStaffTableData>> getStaff(String reportId) async {
-    return (_db.select(_db.reportStaffTable)
-          ..where((s) => s.reportId.equals(reportId)))
-        .get();
+    return (_db.select(_db.reportStaffTable)..where((s) => s.reportId.equals(reportId))).get();
   }
 
   Stream<List<ReportStaffTableData>> watchStaff(String reportId) {
@@ -104,15 +85,11 @@ class DraftReportRepository {
   }
 
   Future<void> deleteMateriale(String materialeId) async {
-    await (_db.delete(_db.reportMateriali)
-          ..where((m) => m.id.equals(materialeId)))
-        .go();
+    await (_db.delete(_db.reportMateriali)..where((m) => m.id.equals(materialeId))).go();
   }
 
   Future<List<ReportMaterialiData>> getMateriali(String reportId) async {
-    return (_db.select(_db.reportMateriali)
-          ..where((m) => m.reportId.equals(reportId)))
-        .get();
+    return (_db.select(_db.reportMateriali)..where((m) => m.reportId.equals(reportId))).get();
   }
 
   Stream<List<ReportMaterialiData>> watchMateriali(String reportId) {
@@ -129,15 +106,11 @@ class DraftReportRepository {
   }
 
   Future<List<ReportControlliData>> getControlli(String reportId) async {
-    return (_db.select(_db.reportControlli)
-          ..where((c) => c.reportId.equals(reportId)))
-        .get();
+    return (_db.select(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).get();
   }
 
   Stream<List<ReportControlliData>> watchControlli(String reportId) {
-    return (_db.select(_db.reportControlli)
-          ..where((c) => c.reportId.equals(reportId)))
-        .watch();
+    return (_db.select(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).watch();
   }
 
   // ── Allegati ───────────────────────────────────────────────────────────────
@@ -147,15 +120,11 @@ class DraftReportRepository {
   }
 
   Future<void> deleteAllegato(String allegatoId) async {
-    await (_db.delete(_db.reportAllegati)
-          ..where((a) => a.id.equals(allegatoId)))
-        .go();
+    await (_db.delete(_db.reportAllegati)..where((a) => a.id.equals(allegatoId))).go();
   }
 
   Future<List<ReportAllegatiData>> getAllegati(String reportId) async {
-    return (_db.select(_db.reportAllegati)
-          ..where((a) => a.entityId.equals(reportId)))
-        .get();
+    return (_db.select(_db.reportAllegati)..where((a) => a.entityId.equals(reportId))).get();
   }
 
   Stream<List<ReportAllegatiData>> watchAllegati(String reportId) {
@@ -184,30 +153,25 @@ class DraftReportRepository {
       id: Value(reportId),
       submissionState: Value(state.toPersistedString()),
       updatedAt: Value(DateTime.now().toUtc()),
-      idempotencyKey:
-          idempotencyKey != null ? Value(idempotencyKey) : const Value.absent(),
-      submissionError:
-          clearError || error == null ? const Value(null) : Value(error),
+      idempotencyKey: idempotencyKey != null ? Value(idempotencyKey) : const Value.absent(),
+      submissionError: clearError || error == null ? const Value(null) : Value(error),
     );
-    await (_db.update(_db.draftReports)
-          ..where((r) => r.id.equals(reportId)))
-        .write(companion);
+    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId))).write(companion);
   }
 
   /// Fetch all drafts currently in [readyToSubmit] state.
   Future<List<DraftReport>> getDraftsReadyToSubmit() async {
-    return (_db.select(_db.draftReports)
-          ..where((r) => r.submissionState
-              .equals(DraftSubmissionState.readyToSubmit.toPersistedString())))
+    return (_db.select(_db.draftReports)..where(
+          (r) => r.submissionState.equals(DraftSubmissionState.readyToSubmit.toPersistedString()),
+        ))
         .get();
   }
 
   /// Return all [ReportAllegatiData] for [reportId] that are still pending upload.
   Future<List<ReportAllegatiData>> getPendingAllegati(String reportId) async {
-    return (_db.select(_db.reportAllegati)
-          ..where((a) =>
-              a.entityId.equals(reportId) & a.isPendingUpload.equals(true)))
-        .get();
+    return (_db.select(
+      _db.reportAllegati,
+    )..where((a) => a.entityId.equals(reportId) & a.isPendingUpload.equals(true))).get();
   }
 
   /// Mark an allegato as uploaded; replace its local id with the server id.
@@ -217,26 +181,25 @@ class DraftReportRepository {
   }) async {
     // If the server echoed the same id, just clear the flag.
     if (localId == serverAllegatoId) {
-      await (_db.update(_db.reportAllegati)..where((a) => a.id.equals(localId)))
-          .write(const ReportAllegatiCompanion(
-        isPendingUpload: Value(false),
-      ));
+      await (_db.update(_db.reportAllegati)..where((a) => a.id.equals(localId))).write(
+        const ReportAllegatiCompanion(isPendingUpload: Value(false)),
+      );
       return;
     }
     // Otherwise replace the row with a new id (server assigned a different UUID).
-    final existing = await (_db.select(_db.reportAllegati)
-          ..where((a) => a.id.equals(localId)))
-        .getSingleOrNull();
+    final existing = await (_db.select(
+      _db.reportAllegati,
+    )..where((a) => a.id.equals(localId))).getSingleOrNull();
     if (existing == null) return;
 
     await _db.transaction(() async {
-      await (_db.delete(_db.reportAllegati)..where((a) => a.id.equals(localId)))
-          .go();
-      await _db.into(_db.reportAllegati).insert(
-            existing.toCompanion(true).copyWith(
-                  id: Value(serverAllegatoId),
-                  isPendingUpload: const Value(false),
-                ),
+      await (_db.delete(_db.reportAllegati)..where((a) => a.id.equals(localId))).go();
+      await _db
+          .into(_db.reportAllegati)
+          .insert(
+            existing
+                .toCompanion(true)
+                .copyWith(id: Value(serverAllegatoId), isPendingUpload: const Value(false)),
           );
     });
   }
@@ -256,18 +219,18 @@ class DraftReportRepository {
             technicianSignatureAllegatoId: Value(serverAllegatoId),
             updatedAt: Value(DateTime.now().toUtc()),
           );
-    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId)))
-        .write(companion);
+    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId))).write(companion);
   }
 
   /// Mark a draft as submitted (clear isLocalOnly flag).
   Future<void> markSubmitted(String reportId) async {
-    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId)))
-        .write(DraftReportsCompanion(
-      isLocalOnly: const Value(false),
-      stato: const Value('Inviato'),
-      updatedAt: Value(DateTime.now().toUtc()),
-    ));
+    await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId))).write(
+      DraftReportsCompanion(
+        isLocalOnly: const Value(false),
+        stato: const Value('Inviato'),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
   }
 
   // ── Signature helpers ──────────────────────────────────────────────────────

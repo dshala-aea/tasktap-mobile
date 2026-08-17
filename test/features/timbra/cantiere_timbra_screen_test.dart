@@ -25,18 +25,14 @@ import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart';
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
 /// Fake LocationService that always returns a fixed coord.
-class _FakeLocationService implements ILocationService {
+class _FakeLocationService extends ILocationService {
   @override
-  Future<GpsCoords?> getCurrentPosition() async =>
-      (lat: 45.4654, lng: 9.1859);
+  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654, lng: 9.1859);
 }
 
 /// Fake CantiereWorklogApiClient — no network calls.
 class _FakeApiClient extends CantiereWorklogApiClient {
-  _FakeApiClient({
-    this.activeLog,
-    this.endShouldThrow = false,
-  }) : super(Dio());
+  _FakeApiClient({this.activeLog, this.endShouldThrow = false}) : super(Dio());
 
   final CantiereWorkLogDto? activeLog;
   final bool endShouldThrow;
@@ -47,8 +43,7 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   bool endCalled = false;
 
   @override
-  Future<List<CantiereWorkLogDto>> getActive() async =>
-      activeLog != null ? [activeLog!] : [];
+  Future<List<CantiereWorkLogDto>> getActive() async => activeLog != null ? [activeLog!] : [];
 
   @override
   Future<void> startCantiere(StartCantiereRequest request) async {
@@ -99,16 +94,11 @@ Widget _buildScreen({
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),
-      locationServiceProvider
-          .overrideWithValue(locationService ?? _FakeLocationService()),
-      activeCantiereLogProvider
-          .overrideWith(() => _FakeActiveNotifier(apiClient.activeLog)),
+      locationServiceProvider.overrideWithValue(locationService ?? _FakeLocationService()),
+      activeCantiereLogProvider.overrideWith(() => _FakeActiveNotifier(apiClient.activeLog)),
     ],
     child: MaterialApp(
-      home: CantiereTimbraScreen(
-        ticketId: ticketId,
-        customerId: customerId,
-      ),
+      home: CantiereTimbraScreen(ticketId: ticketId, customerId: customerId),
     ),
   );
 }
@@ -116,13 +106,13 @@ Widget _buildScreen({
 // ── Test data ─────────────────────────────────────────────────────────────────
 
 CantiereWorkLogDto _activeLog() => CantiereWorkLogDto(
-      id: 'log-1',
-      cantiereId: 'cant-1',
-      customerId: 'cust-1',
-      ticketId: 'tick-1',
-      workDate: DateTime.utc(2026, 6, 23),
-      startTime: '08:00:00',
-    );
+  id: 'log-1',
+  cantiereId: 'cant-1',
+  customerId: 'cust-1',
+  ticketId: 'tick-1',
+  workDate: DateTime.utc(2026, 6, 23),
+  startTime: '08:00:00',
+);
 
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
@@ -173,12 +163,16 @@ void main() {
     });
 
     testWidgets('shows cantiere picker rows from Drift', (tester) async {
-      await db.into(db.cantieri).insert(CantieriCompanion.insert(
-            id: 'cant-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            name: 'Cantiere Via Roma',
-          ));
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
 
       final api = _FakeApiClient();
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
@@ -188,15 +182,11 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('shows linked ticket banner when ticketId provided',
-        (tester) async {
+    testWidgets('shows linked ticket banner when ticketId provided', (tester) async {
       final api = _FakeApiClient();
-      await tester.pumpWidget(_buildScreen(
-        db: db,
-        apiClient: api,
-        ticketId: 'tick-1',
-        customerId: 'cust-1',
-      ));
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, ticketId: 'tick-1', customerId: 'cust-1'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Collegato al ticket'), findsOneWidget);
@@ -213,21 +203,22 @@ void main() {
     });
 
     testWidgets('check-in calls startCantiere with correct ids', (tester) async {
-      await db.into(db.cantieri).insert(CantieriCompanion.insert(
-            id: 'cant-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            name: 'Cantiere Via Roma',
-            customerId: const drift.Value('cust-1'),
-          ));
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+              customerId: const drift.Value('cust-1'),
+            ),
+          );
 
       final api = _FakeApiClient();
-      await tester.pumpWidget(_buildScreen(
-        db: db,
-        apiClient: api,
-        ticketId: 'tick-1',
-        customerId: 'cust-1',
-      ));
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, ticketId: 'tick-1', customerId: 'cust-1'),
+      );
       await tester.pumpAndSettle();
 
       // Select the cantiere.
@@ -248,20 +239,25 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('shows validation error when no cantiere selected and clock-in tapped',
-        (tester) async {
+    testWidgets('shows validation error when no cantiere selected and clock-in tapped', (
+      tester,
+    ) async {
       // The clock-in button is disabled outright when the cache holds zero
       // cantieri (see `noCantieriAvailable` in cantiere_timbra_screen.dart) —
       // an honest response to db.cantieri never being synced. This test
       // exercises the "cantieri exist but none picked" validation path
       // instead, which is what the button becomes reachable for once
       // syncing is wired up.
-      await db.into(db.cantieri).insert(CantieriCompanion.insert(
-            id: 'cant-1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            name: 'Cantiere Via Roma',
-          ));
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
 
       final api = _FakeApiClient();
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
@@ -271,8 +267,7 @@ void main() {
       await tester.tap(find.text('Timbra ingresso cantiere'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Seleziona un cantiere prima di timbrare.'),
-          findsOneWidget);
+      expect(find.text('Seleziona un cantiere prima di timbrare.'), findsOneWidget);
       await _teardown(tester);
     });
   });
@@ -331,12 +326,8 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('shows Italian connection error when end call fails',
-        (tester) async {
-      final api = _FakeApiClient(
-        activeLog: _activeLog(),
-        endShouldThrow: true,
-      );
+    testWidgets('shows Italian connection error when end call fails', (tester) async {
+      final api = _FakeApiClient(activeLog: _activeLog(), endShouldThrow: true);
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
@@ -345,8 +336,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Connessione richiesta per la timbratura cantiere.'),
-          findsOneWidget);
+      expect(find.text('Connessione richiesta per la timbratura cantiere.'), findsOneWidget);
       await _teardown(tester);
     });
   });

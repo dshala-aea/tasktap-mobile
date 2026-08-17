@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -17,12 +16,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// SignaturePadPlaceholder(signed: true, signedAt: '20/06/2026 14:32');
 /// ```
 class SignaturePadPlaceholder extends StatelessWidget {
-  const SignaturePadPlaceholder({
-    super.key,
-    this.signed = false,
-    this.signedAt,
-    this.onTap,
-  });
+  const SignaturePadPlaceholder({super.key, this.signed = false, this.signedAt, this.onTap});
 
   final bool signed;
   final String? signedAt;
@@ -30,9 +24,7 @@ class SignaturePadPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final caption = signed
-        ? 'Firmato il ${signedAt ?? ''}'.trim()
-        : 'Tocca per firmare';
+    final caption = signed ? 'Firmato il ${signedAt ?? ''}'.trim() : 'Tocca per firmare';
 
     return Semantics(
       button: true,
@@ -48,9 +40,7 @@ class SignaturePadPlaceholder extends StatelessWidget {
             decoration: BoxDecoration(
               color: signed ? context.colors.bg2 : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
-              border: signed
-                  ? Border.all(color: context.colors.borderStrong, width: 1.5)
-                  : null,
+              border: signed ? Border.all(color: context.colors.borderStrong, width: 1.5) : null,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -63,7 +53,8 @@ class SignaturePadPlaceholder extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   caption,
-                  style: GoogleFonts.manrope(
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: signed ? context.colors.ink : context.colors.inkMuted,
@@ -97,20 +88,14 @@ class _DashedBorderPainter extends CustomPainter {
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(_radius),
-    );
+    final rrect = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(_radius));
     final path = Path()..addRRect(rrect);
 
     for (final metric in path.computeMetrics()) {
       var distance = 0.0;
       while (distance < metric.length) {
         final next = distance + _dash;
-        canvas.drawPath(
-          metric.extractPath(distance, next.clamp(0, metric.length)),
-          paint,
-        );
+        canvas.drawPath(metric.extractPath(distance, next.clamp(0, metric.length)), paint);
         distance = next + _gap;
       }
     }

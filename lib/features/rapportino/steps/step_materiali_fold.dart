@@ -2,6 +2,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,14 +11,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/app_toggle.dart';
-// section_title omitted — using inline _SL below
+// Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
+import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@ class StepMaterialiFold extends ConsumerWidget {
       children: [
         // ── "Nessun materiale" toggle ──────────────────────────────────────
         AppCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: EdgeInsets.fromLTRB(16, 4, 16, context.navClearance),
           child: Row(
             children: [
               Expanded(
@@ -69,7 +69,7 @@ class StepMaterialiFold extends ConsumerWidget {
 
         if (!state.materialiNotRequired) ...[
           // ── Materiali list ──────────────────────────────────────────────
-          _SL(title:'Materiali (${state.materialeRows.length})'),
+          StepLabel(title: 'Materiali (${state.materialeRows.length})'),
           const SizedBox(height: 8),
           if (state.materialeRows.isEmpty)
             Padding(
@@ -85,8 +85,7 @@ class StepMaterialiFold extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _MaterialeQtyStepper(
                   row: row,
-                  onQtyChanged: (qty) =>
-                      notifier.updateMateriale(row.copyWith(quantity: qty)),
+                  onQtyChanged: (qty) => notifier.updateMateriale(row.copyWith(quantity: qty)),
                   onRemove: () => notifier.removeMateriale(row.id),
                 ),
               ),
@@ -98,9 +97,7 @@ class StepMaterialiFold extends ConsumerWidget {
             label: const Text('Aggiungi materiale'),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
           const SizedBox(height: 24),
@@ -110,13 +107,13 @@ class StepMaterialiFold extends ConsumerWidget {
         // The checklist for this intervention, resolved server-side from the
         // ticket's maintenance-template version (ADR-0012) — not a free-text
         // "type an ID" box. See _ControlliChecklist.
-        _SL(title: 'Controlli'),
+        StepLabel(title: 'Controlli'),
         const SizedBox(height: 8),
         _ControlliChecklist(reportId: reportId, ticketId: state.ticketId),
         const SizedBox(height: 24),
 
         // ── Foto / Allegati sub-section ────────────────────────────────────
-        _SL(title:'Foto / Allegati (${photos.length})'),
+        StepLabel(title: 'Foto / Allegati (${photos.length})'),
         const SizedBox(height: 8),
         if (photos.isNotEmpty) ...[
           GridView.builder(
@@ -128,10 +125,8 @@ class StepMaterialiFold extends ConsumerWidget {
               mainAxisSpacing: 8,
             ),
             itemCount: photos.length,
-            itemBuilder: (ctx, i) => _PhotoThumb(
-              row: photos[i],
-              onRemove: () => notifier.removeAllegato(photos[i].id),
-            ),
+            itemBuilder: (ctx, i) =>
+                _PhotoThumb(row: photos[i], onRemove: () => notifier.removeAllegato(photos[i].id)),
           ),
           const SizedBox(height: 12),
         ],
@@ -139,32 +134,26 @@ class StepMaterialiFold extends ConsumerWidget {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: () =>
-                    _pickImage(context, ref, ImageSource.gallery),
+                onPressed: () => _pickImage(context, ref, ImageSource.gallery),
                 icon: const Icon(LucideIcons.image),
                 label: const Text('Galleria'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () =>
-                    _pickImage(context, ref, ImageSource.camera),
+                onPressed: () => _pickImage(context, ref, ImageSource.camera),
                 icon: const Icon(LucideIcons.camera),
                 label: const Text('Fotocamera'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.brand,
                   foregroundColor: context.colors.brandOn,
                   minimumSize: const Size(0, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ),
@@ -178,15 +167,12 @@ class StepMaterialiFold extends ConsumerWidget {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final materialiAsync = ref.read(allMaterialiProvider);
 
-    final nameCtrl = TextEditingController();
+    final catalogo = materialiAsync.valueOrNull ?? const <MaterialiData>[];
+
     final qtyCtrl = TextEditingController(text: '1');
     final uomCtrl = TextEditingController();
     String? selectedMaterialeId;
-    bool freeTextMode = true;
-
-    materialiAsync.whenData((list) {
-      if (list.isNotEmpty) freeTextMode = false;
-    });
+    String freeTextName = '';
 
     showDialog<void>(
       context: context,
@@ -197,71 +183,54 @@ class StepMaterialiFold extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                materialiAsync.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => TextField(
-                    controller: nameCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Nome materiale'),
-                  ),
-                  data: (list) {
-                    if (list.isEmpty || freeTextMode) {
-                      return Column(
-                        children: [
-                          TextField(
-                            controller: nameCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Nome materiale (testo libero)',
-                            ),
-                          ),
-                          if (list.isNotEmpty)
-                            TextButton(
-                              onPressed: () =>
-                                  setDialogState(() => freeTextMode = false),
-                              child: const Text('Seleziona da catalogo'),
-                            ),
-                        ],
-                      );
+                // Same single field as the rest of the wizard. This dialog is opened once per
+                // material — often a dozen times on one job — so the catalogo/testo-libero mode
+                // switch was being paid over and over on the same rapportino.
+                AppLookupField(
+                  label: 'Materiale',
+                  hint: 'Cerca a catalogo o scrivi il nome',
+                  items: [
+                    for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code),
+                  ],
+                  onSelected: (id) {
+                    selectedMaterialeId = id;
+                    freeTextName = '';
+                    // The catalogue knows the unit. Asking the technician to type "pz" after
+                    // picking a part that is already measured in pieces is a question with a
+                    // known answer.
+                    for (final m in catalogo) {
+                      if (m.id == id && (m.unitOfMeasure?.isNotEmpty ?? false)) {
+                        uomCtrl.text = m.unitOfMeasure!;
+                      }
                     }
-                    return DropdownButtonFormField<String>(
-                      initialValue: selectedMaterialeId,
-                      decoration: const InputDecoration(
-                          labelText: 'Materiale da catalogo'),
-                      isExpanded: true,
-                      items: list
-                          .map(
-                            (m) => DropdownMenuItem(
-                              value: m.id,
-                              child: Text(m.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) =>
-                          setDialogState(() => selectedMaterialeId = v),
-                    );
+                    setDialogState(() {});
+                  },
+                  onFreeText: (v) {
+                    selectedMaterialeId = null;
+                    freeTextName = v;
                   },
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: qtyCtrl,
-                        decoration: const InputDecoration(labelText: 'Qtà'),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'[0-9.]')),
-                        ],
+                      child: AppFieldShell(
+                        label: 'Qtà',
+                        child: TextField(
+                          controller: qtyCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: TextField(
-                        controller: uomCtrl,
-                        decoration: const InputDecoration(
-                            labelText: 'Unità (es. pz)'),
+                      child: AppFieldShell(
+                        label: 'Unità',
+                        child: TextField(
+                          controller: uomCtrl,
+                          decoration: const InputDecoration(hintText: 'pz'),
+                        ),
                       ),
                     ),
                   ],
@@ -270,23 +239,22 @@ class StepMaterialiFold extends ConsumerWidget {
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annulla'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
             ElevatedButton(
               onPressed: () {
                 final qty = double.tryParse(qtyCtrl.text) ?? 1.0;
                 final id = 'mat-${DateTime.now().millisecondsSinceEpoch}';
+                final typed = freeTextName.trim();
                 notifier.addMateriale(
                   MaterialeRow(
                     id: id,
                     reportId: reportId,
-                    materialeId: freeTextMode ? null : selectedMaterialeId,
-                    freeTextName: freeTextMode ? nameCtrl.text.trim() : null,
+                    materialeId: selectedMaterialeId,
+                    // Whichever one holds the answer. There is no mode to consult any more, so
+                    // the row records what is actually there.
+                    freeTextName: selectedMaterialeId == null && typed.isNotEmpty ? typed : null,
                     quantity: qty,
-                    unitOfMeasure:
-                        uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
+                    unitOfMeasure: uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
                   ),
                 );
                 Navigator.pop(ctx);
@@ -299,11 +267,7 @@ class StepMaterialiFold extends ConsumerWidget {
     );
   }
 
-  Future<void> _pickImage(
-    BuildContext context,
-    WidgetRef ref,
-    ImageSource source,
-  ) async {
+  Future<void> _pickImage(BuildContext context, WidgetRef ref, ImageSource source) async {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final picker = ImagePicker();
     try {
@@ -322,9 +286,17 @@ class StepMaterialiFold extends ConsumerWidget {
         ),
       );
     } catch (e) {
+      // Local capture and file write — never a server call, so there is no status to interpret and
+      // one honest sentence covers every way it fails. It used to print the exception, which on a
+      // full phone read as the app crashing rather than the storage being full.
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: ${e.toString()}')),
+          SnackBar(
+            content: const Text(
+              'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
+            ),
+            backgroundColor: context.colors.red,
+          ),
         );
       }
     }
@@ -350,8 +322,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          Icon(LucideIcons.package,
-              size: 18, color: context.colors.inkMuted),
+          Icon(LucideIcons.package, size: 18, color: context.colors.inkMuted),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -368,8 +339,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
                 if (row.unitOfMeasure != null)
                   Text(
                     row.unitOfMeasure!,
-                    style: TextStyle(
-                        color: context.colors.inkMuted, fontSize: 11),
+                    style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
                   ),
               ],
             ),
@@ -381,15 +351,14 @@ class _MaterialeQtyStepper extends StatelessWidget {
               _QtyBtn(
                 icon: LucideIcons.minus,
                 label: 'Diminuisci quantità',
-                onTap: row.quantity > 1
-                    ? () => onQtyChanged(row.quantity - 1)
-                    : null,
+                onTap: row.quantity > 1 ? () => onQtyChanged(row.quantity - 1) : null,
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
                   row.quantity.toStringAsFixed(
-                      row.quantity == row.quantity.truncateToDouble() ? 0 : 1),
+                    row.quantity == row.quantity.truncateToDouble() ? 0 : 1,
+                  ),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -406,10 +375,8 @@ class _MaterialeQtyStepper extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: Icon(LucideIcons.trash2,
-                color: context.colors.red, size: 18),
-            constraints:
-                const BoxConstraints(minWidth: 44, minHeight: 44),
+            icon: Icon(LucideIcons.trash2, color: context.colors.red, size: 18),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: onRemove,
           ),
         ],
@@ -487,8 +454,7 @@ class _PhotoThumb extends StatelessWidget {
             fit: BoxFit.cover,
             errorBuilder: (ctx, e, _) => Container(
               color: context.colors.bg3,
-              child: Icon(LucideIcons.imageOff,
-                  color: context.colors.inkMuted),
+              child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),
             ),
           ),
         ),
@@ -509,10 +475,7 @@ class _PhotoThumb extends StatelessWidget {
                 height: 44,
                 child: Center(
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: context.colors.red,
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: BoxDecoration(color: context.colors.red, shape: BoxShape.circle),
                     padding: const EdgeInsets.all(4),
                     child: const Icon(LucideIcons.x, color: Colors.white, size: 14),
                   ),
@@ -522,25 +485,6 @@ class _PhotoThumb extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _SL extends StatelessWidget {
-  const _SL({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF363636),
-      ),
     );
   }
 }
@@ -684,9 +628,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   @override
   Widget build(BuildContext context) {
     final c = widget.flat.control;
-    final rows = ref.watch(
-      reportEditorProvider(widget.reportId).select((s) => s.controlloRows),
-    );
+    final rows = ref.watch(reportEditorProvider(widget.reportId).select((s) => s.controlloRows));
     final existing = _findExisting(rows);
 
     return AppCard(
@@ -786,7 +728,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
         final currentValue = existing?.stringValue ?? c.stringValue;
         return DropdownButtonFormField<String>(
           initialValue: options.contains(currentValue) ? currentValue : null,
-          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+          decoration: const InputDecoration(isDense: true),
           isExpanded: true,
           items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
           onChanged: (v) {
@@ -802,11 +744,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   Widget _freeTextField() {
     return TextField(
       controller: _textCtrl,
-      decoration: const InputDecoration(
-        hintText: 'Valore',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
+      decoration: const InputDecoration(hintText: 'Valore', isDense: true),
       onChanged: (v) => _save(stringValue: v.trim().isEmpty ? null : v.trim()),
     );
   }

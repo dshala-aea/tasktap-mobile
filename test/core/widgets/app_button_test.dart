@@ -9,82 +9,55 @@ void main() {
   group('AppButton variants', () {
     testWidgets('primary renders and is tappable', (tester) async {
       var tapped = false;
-      await tester.pumpWidget(
-        _wrap(AppButton(label: 'Salva', onPressed: () => tapped = true)),
-      );
+      await tester.pumpWidget(_wrap(AppButton(label: 'Salva', onPressed: () => tapped = true)));
       expect(find.text('Salva'), findsOneWidget);
       await tester.tap(find.text('Salva'));
       expect(tapped, isTrue);
     });
 
     testWidgets('primary has brand-yellow background decoration', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton(label: 'Test', onPressed: () {})),
-      );
+      await tester.pumpWidget(_wrap(AppButton(label: 'Test', onPressed: () {})));
       final container = tester.widget<DecoratedBox>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(DecoratedBox),
-        ).first,
+        find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
       );
       final box = container.decoration as BoxDecoration;
       expect(box.color, equals(AppColors.Y));
     });
 
     testWidgets('secondary variant renders', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton.secondary(label: 'Annulla', onPressed: () {})),
-      );
+      await tester.pumpWidget(_wrap(AppButton.secondary(label: 'Annulla', onPressed: () {})));
       expect(find.text('Annulla'), findsOneWidget);
       // BG3 background
       final container = tester.widget<DecoratedBox>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(DecoratedBox),
-        ).first,
+        find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
       );
       final box = container.decoration as BoxDecoration;
       expect(box.color, equals(AppColors.BG3));
     });
 
     testWidgets('dark variant has DARK background', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton.dark(label: 'Dark', onPressed: () {})),
-      );
+      await tester.pumpWidget(_wrap(AppButton.dark(label: 'Dark', onPressed: () {})));
       final container = tester.widget<DecoratedBox>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(DecoratedBox),
-        ).first,
+        find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
       );
       final box = container.decoration as BoxDecoration;
       expect(box.color, equals(AppColors.DARK));
     });
 
     testWidgets('ghost variant renders without background colour', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton.ghost(label: 'Salta', onPressed: () {})),
-      );
+      await tester.pumpWidget(_wrap(AppButton.ghost(label: 'Salta', onPressed: () {})));
       expect(find.text('Salta'), findsOneWidget);
       final container = tester.widget<DecoratedBox>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(DecoratedBox),
-        ).first,
+        find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
       );
       final box = container.decoration as BoxDecoration;
       expect(box.color, equals(Colors.transparent));
     });
 
     testWidgets('danger variant has REDSOFT background', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton.danger(label: 'Elimina', onPressed: () {})),
-      );
+      await tester.pumpWidget(_wrap(AppButton.danger(label: 'Elimina', onPressed: () {})));
       final container = tester.widget<DecoratedBox>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(DecoratedBox),
-        ).first,
+        find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
       );
       final box = container.decoration as BoxDecoration;
       expect(box.color, equals(AppColors.REDSOFT));
@@ -118,11 +91,7 @@ void main() {
     testWidgets('icon appears when provided', (tester) async {
       await tester.pumpWidget(
         _wrap(
-          AppButton(
-            label: 'Con icona',
-            onPressed: () {},
-            icon: const Icon(Icons.add, size: 16),
-          ),
+          AppButton(label: 'Con icona', onPressed: () {}, icon: const Icon(Icons.add, size: 16)),
         ),
       );
       expect(find.byIcon(Icons.add), findsOneWidget);
@@ -130,40 +99,26 @@ void main() {
     });
 
     testWidgets('fullWidth wraps in SizedBox.expand', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton(label: 'Full', onPressed: () {}, fullWidth: true)),
-      );
+      await tester.pumpWidget(_wrap(AppButton(label: 'Full', onPressed: () {}, fullWidth: true)));
       expect(find.byType(SizedBox), findsWidgets);
     });
 
     testWidgets('isLoading shows CircularProgressIndicator', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppButton(label: 'Loading', isLoading: true)),
-      );
+      await tester.pumpWidget(_wrap(AppButton(label: 'Loading', isLoading: true)));
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('disabled (onPressed null) still renders', (tester) async {
-      await tester.pumpWidget(
-        _wrap(const AppButton(label: 'Disabled')),
-      );
+      await tester.pumpWidget(_wrap(const AppButton(label: 'Disabled')));
       expect(find.text('Disabled'), findsOneWidget);
     });
 
     testWidgets('minimum touch target is at least 44pt', (tester) async {
       await tester.pumpWidget(
-        _wrap(AppButton(
-          label: 'X',
-          onPressed: () {},
-          size: AppButtonSize.sm,
-          fullWidth: false,
-        )),
+        _wrap(AppButton(label: 'X', onPressed: () {}, size: AppButtonSize.sm, fullWidth: false)),
       );
       final constraints = tester.widget<ConstrainedBox>(
-        find.descendant(
-          of: find.byType(AppButton),
-          matching: find.byType(ConstrainedBox),
-        ).first,
+        find.descendant(of: find.byType(AppButton), matching: find.byType(ConstrainedBox)).first,
       );
       expect(constraints.constraints.minHeight, greaterThanOrEqualTo(44));
       expect(constraints.constraints.minWidth, greaterThanOrEqualTo(44));

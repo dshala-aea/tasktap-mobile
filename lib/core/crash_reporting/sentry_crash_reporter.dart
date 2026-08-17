@@ -15,11 +15,7 @@ final class SentryCrashReporter implements CrashReporter {
   const SentryCrashReporter();
 
   @override
-  Future<void> captureException(
-    Object exception, {
-    StackTrace? stackTrace,
-    String? hint,
-  }) async {
+  Future<void> captureException(Object exception, {StackTrace? stackTrace, String? hint}) async {
     await Sentry.captureException(
       exception,
       stackTrace: stackTrace,
@@ -34,8 +30,6 @@ final class SentryCrashReporter implements CrashReporter {
 
   @override
   void addBreadcrumb(String message, {String? category}) {
-    Sentry.addBreadcrumb(
-      Breadcrumb(message: message, category: category),
-    );
+    Sentry.addBreadcrumb(Breadcrumb(message: message, category: category));
   }
 }

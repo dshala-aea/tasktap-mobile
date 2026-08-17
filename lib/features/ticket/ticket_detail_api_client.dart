@@ -29,10 +29,7 @@ class TicketDetailApiClient {
       queryParameters: {'ticketId': ticketId, 'pageSize': 100},
     );
     final items = (response.data?['items'] as List<dynamic>?) ?? const [];
-    return items
-        .cast<Map<String, dynamic>>()
-        .map(TicketReportSummary.fromJson)
-        .toList();
+    return items.cast<Map<String, dynamic>>().map(TicketReportSummary.fromJson).toList();
   }
 
   /// Files uploaded directly to the ticket (not via a rapportino).
@@ -319,9 +316,7 @@ class TicketControlDto {
       status: json['status'] as String? ?? 'Pending',
       stringValue: json['stringValue'] as String?,
       boolValue: json['boolValue'] as bool?,
-      dateValue: json['dateValue'] != null
-          ? DateTime.tryParse(json['dateValue'] as String)
-          : null,
+      dateValue: json['dateValue'] != null ? DateTime.tryParse(json['dateValue'] as String) : null,
     );
   }
 }

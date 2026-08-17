@@ -33,7 +33,9 @@ Future<void> _seedDraft(
   String submissionState = 'draft',
   String stato = 'Bozza',
 }) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: id,
           tenantId: 'tenant-1',
@@ -50,12 +52,8 @@ Future<void> _seedDraft(
 
 Widget _buildList({required AppDatabase db}) {
   return ProviderScope(
-    overrides: [
-      appDatabaseProvider.overrideWithValue(db),
-    ],
-    child: const MaterialApp(
-      home: RapportiniListScreen(),
-    ),
+    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    child: const MaterialApp(home: RapportiniListScreen()),
   );
 }
 
@@ -88,8 +86,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatusPill with Bozza for a draft-state report',
-        (tester) async {
+    testWidgets('shows StatusPill with Bozza for a draft-state report', (tester) async {
       await _seedDraft(db, id: 'draft-1', submissionState: 'draft');
 
       await tester.pumpWidget(_buildList(db: db));
@@ -102,8 +99,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatusPill with Inviata for a submitted report',
-        (tester) async {
+    testWidgets('shows StatusPill with Inviata for a submitted report', (tester) async {
       await _seedDraft(
         db,
         id: 'draft-1',
@@ -124,12 +120,7 @@ void main() {
   group('RapportiniListScreen — filter chip', () {
     testWidgets('filter Bozza shows only bozza drafts', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Bozza A', submissionState: 'draft');
-      await _seedDraft(
-        db,
-        id: 'draft-2',
-        title: 'Inviata B',
-        submissionState: 'submitted',
-      );
+      await _seedDraft(db, id: 'draft-2', title: 'Inviata B', submissionState: 'submitted');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
@@ -154,12 +145,7 @@ void main() {
 
     testWidgets('filter Inviata shows only submitted drafts', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Bozza locale', submissionState: 'draft');
-      await _seedDraft(
-        db,
-        id: 'draft-2',
-        title: 'Già inviato',
-        submissionState: 'submitted',
-      );
+      await _seedDraft(db, id: 'draft-2', title: 'Già inviato', submissionState: 'submitted');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
@@ -176,8 +162,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('filter Pagata shows empty state (no local data yet)',
-        (tester) async {
+    testWidgets('filter Pagata shows empty state (no local data yet)', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Bozza A');
 
       await tester.pumpWidget(_buildList(db: db));

@@ -23,17 +23,18 @@ import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -50,8 +51,7 @@ final cantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
 });
 
 /// AsyncNotifier that loads the current open CantiereWorkLogDto (or null).
-class ActiveCantiereLogNotifier
-    extends AutoDisposeAsyncNotifier<CantiereWorkLogDto?> {
+class ActiveCantiereLogNotifier extends AutoDisposeAsyncNotifier<CantiereWorkLogDto?> {
   @override
   Future<CantiereWorkLogDto?> build() async {
     final client = ref.watch(cantiereWorklogApiClientProvider);
@@ -74,19 +74,14 @@ class ActiveCantiereLogNotifier
 }
 
 final activeCantiereLogProvider =
-    AutoDisposeAsyncNotifierProvider<ActiveCantiereLogNotifier,
-        CantiereWorkLogDto?>(() {
-  return ActiveCantiereLogNotifier();
-});
+    AutoDisposeAsyncNotifierProvider<ActiveCantiereLogNotifier, CantiereWorkLogDto?>(() {
+      return ActiveCantiereLogNotifier();
+    });
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class CantiereTimbraScreen extends ConsumerStatefulWidget {
-  const CantiereTimbraScreen({
-    super.key,
-    this.ticketId,
-    this.customerId,
-  });
+  const CantiereTimbraScreen({super.key, this.ticketId, this.customerId});
 
   /// The ticket that launched this screen (optional context link).
   final String? ticketId;
@@ -95,8 +90,7 @@ class CantiereTimbraScreen extends ConsumerStatefulWidget {
   final String? customerId;
 
   @override
-  ConsumerState<CantiereTimbraScreen> createState() =>
-      _CantiereTimbraScreenState();
+  ConsumerState<CantiereTimbraScreen> createState() => _CantiereTimbraScreenState();
 }
 
 class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
@@ -115,18 +109,13 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ScreenHeader(
-              title: 'Timbra cantiere',
-              showBack: true,
-            ),
+            ScreenHeader(title: 'Timbra cantiere', showBack: true),
             Expanded(
               child: activeLogAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => _ErrorBody(
                   message: _networkErrorMessage(e),
-                  onRetry: () =>
-                      ref.read(activeCantiereLogProvider.notifier).refresh(),
+                  onRetry: () => ref.read(activeCantiereLogProvider.notifier).refresh(),
                 ),
                 data: (activeLog) {
                   if (activeLog != null) {
@@ -144,8 +133,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                     selectedCantiere: _selectedCantiere,
                     isLoading: _isLoading,
                     errorMessage: _errorMessage,
-                    onCantiereSelected: (c) =>
-                        setState(() => _selectedCantiere = c),
+                    onCantiereSelected: (c) => setState(() => _selectedCantiere = c),
                     onStart: _handleStartCantiere,
                   );
                 },
@@ -162,24 +150,26 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   Future<void> _handleStartCantiere() async {
     final cantiere = _selectedCantiere;
     if (cantiere == null) {
-      setState(
-          () => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
+      setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
     }
+    // Asked before the spinner goes up, not underneath it: a system dialog appearing over a
+    // half-started clock-in reads as the app malfunctioning, and the technician cannot tell whether
+    // their timbratura went through while they decide.
+    if (!await _confirmGpsPurpose()) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final location =
-          await ref.read(locationServiceProvider).getCurrentPosition();
+      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
       await client.startCantiere(
         StartCantiereRequest(
           cantiereId: cantiere.id,
-          customerId:
-              cantiere.customerId ?? widget.customerId ?? '',
+          customerId: cantiere.customerId ?? widget.customerId ?? '',
           ticketId: widget.ticketId,
           arrivalLatitude: location?.lat,
           arrivalLongitude: location?.lng,
@@ -207,20 +197,18 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   }
 
   Future<void> _handleEndCantiere(CantiereWorkLogDto activeLog) async {
+    if (!await _confirmGpsPurpose()) return;
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final location =
-          await ref.read(locationServiceProvider).getCurrentPosition();
+      final location = await ref.read(locationServiceProvider).getCurrentPosition();
       final client = ref.read(cantiereWorklogApiClientProvider);
       await client.endCantiere(
-        EndCantiereRequest(
-          departureLatitude: location?.lat,
-          departureLongitude: location?.lng,
-        ),
+        EndCantiereRequest(departureLatitude: location?.lat, departureLongitude: location?.lng),
       );
       if (mounted) {
         ref.read(activeCantiereLogProvider.notifier).clearActive();
@@ -254,6 +242,34 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  /// States what the coordinates are for, before the OS asks for them.
+  ///
+  /// Returns false only when the technician declines the *explanation*. Declining here cancels the
+  /// timbratura rather than clocking in without a position, because on a cantiere the arrival and
+  /// departure coordinates are the point: a site presence record with no location is not the same
+  /// record, and silently downgrading it would hide that from both the technician and the office.
+  ///
+  /// Returns true when no dialog would appear at all — permission already held, already refused
+  /// permanently, or the setting turned off. In those cases the existing null-position path is the
+  /// honest one and there is nothing to explain.
+  Future<bool> _confirmGpsPurpose() async {
+    if (!await ref.read(locationServiceProvider).willPromptForPermission()) return true;
+    if (!mounted) return false;
+
+    return askPermissionPurpose(
+      context,
+      icon: LucideIcons.mapPin,
+      titolo: 'Timbratura di cantiere',
+      motivo:
+          'Registriamo dove sei quando entri e quando esci dal cantiere. Serve a dimostrare la '
+          'tua presenza in cantiere, per la sicurezza e per le ore. Due punti, non un percorso.',
+      senzaDiEsso:
+          'Senza posizione la timbratura di cantiere non viene registrata. La timbratura normale '
+          'della giornata, nella scheda Timbra, funziona senza GPS.',
+      cta: 'Consenti la posizione',
+    );
+  }
+
   String _networkErrorMessage(Object e) {
     if (e is DioException) {
       final status = e.response?.statusCode;
@@ -269,7 +285,10 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       if (status == 404) {
         return 'Nessuna sessione cantiere attiva trovata.';
       }
-      return 'Errore server ($status). Riprova più tardi.';
+      // Everything else goes through the shared humaniser. This used to end in
+      // `Errore server ($status)` — a number the technician cannot use, in the one line telling
+      // them their presence on site was not recorded.
+      return humanErrorMessage(e);
     }
     return 'Connessione richiesta per la timbratura cantiere.';
   }
@@ -306,8 +325,7 @@ class _CheckInBody extends StatelessWidget {
     // and the clock-in button below must not offer an action that can
     // never succeed.
     final cantieriValue = cantieriAsync.valueOrNull;
-    final noCantieriAvailable =
-        cantieriValue != null && cantieriValue.isEmpty;
+    final noCantieriAvailable = cantieriValue != null && cantieriValue.isEmpty;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
@@ -317,17 +335,16 @@ class _CheckInBody extends StatelessWidget {
           // Context banner (linked ticket)
           if (ticketId != null) ...[
             AppCard(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(LucideIcons.link,
-                      size: 16, color: context.colors.blue),
+                  Icon(LucideIcons.link, size: 16, color: context.colors.blue),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Collegato al ticket',
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: context.colors.ink,
@@ -343,7 +360,8 @@ class _CheckInBody extends StatelessWidget {
           // Section header
           Text(
             'Seleziona cantiere',
-            style: GoogleFonts.manrope(
+            style: TextStyle(
+              fontFamily: 'Manrope',
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
@@ -354,36 +372,29 @@ class _CheckInBody extends StatelessWidget {
 
           cantieriAsync.when(
             loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
-              ),
+              child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
             ),
             error: (e, _) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'Impossibile caricare i cantieri.',
-                style: GoogleFonts.manrope(
-                    fontSize: 13, color: context.colors.red),
+                style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.red),
               ),
             ),
             data: (cantieri) {
               // Prefer cantieri matching the ticket's customerId.
               final preferred = customerId != null
-                  ? cantieri
-                      .where((c) => c.customerId == customerId)
-                      .toList()
+                  ? cantieri.where((c) => c.customerId == customerId).toList()
                   : <CantieriData>[];
-              final others = cantieri
-                  .where((c) => !preferred.contains(c))
-                  .toList();
+              final others = cantieri.where((c) => !preferred.contains(c)).toList();
               final ordered = [...preferred, ...others];
 
               if (ordered.isEmpty) {
                 return const UnavailableState(
                   icon: LucideIcons.hardHat,
                   titolo: 'Selezione cantiere non disponibile',
-                  motivo: "L'elenco cantieri non è ancora sincronizzato su "
+                  motivo:
+                      "L'elenco cantieri non è ancora sincronizzato su "
                       'questo dispositivo: non è possibile scegliere un '
                       'cantiere né timbrare l\'ingresso finché questa '
                       'sincronizzazione non sarà collegata.',
@@ -402,56 +413,50 @@ class _CheckInBody extends StatelessWidget {
                     return InkWell(
                       onTap: () => onCantiereSelected(c),
                       borderRadius: i == 0
-                          ? const BorderRadius.vertical(
-                              top: Radius.circular(12))
+                          ? const BorderRadius.vertical(top: Radius.circular(12))
                           : (isLast
-                              ? const BorderRadius.vertical(
-                                  bottom: Radius.circular(12))
-                              : BorderRadius.zero),
+                                ? const BorderRadius.vertical(bottom: Radius.circular(12))
+                                : BorderRadius.zero),
                       child: Container(
-                        constraints:
-                            const BoxConstraints(minHeight: 56),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                        constraints: const BoxConstraints(minHeight: 56),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.YSoft
-                              : Colors.transparent,
+                          color: isSelected ? AppColors.YSoft : Colors.transparent,
                           border: isLast
                               ? null
                               : Border(
                                   bottom: BorderSide(
-                                      color: context.colors.borderMedium,
-                                      width: 0.5)),
+                                    color: context.colors.borderMedium,
+                                    width: 0.5,
+                                  ),
+                                ),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               LucideIcons.hardHat,
                               size: 18,
-                              color: isSelected
-                                  ? context.colors.ink
-                                  : context.colors.inkMuted,
+                              color: isSelected ? context.colors.ink : context.colors.inkMuted,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     c.name,
-                                    style: GoogleFonts.manrope(
+                                    style: TextStyle(
+                                      fontFamily: 'Manrope',
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                       color: context.colors.ink,
                                     ),
                                   ),
-                                  if (c.city != null &&
-                                      c.city!.isNotEmpty)
+                                  if (c.city != null && c.city!.isNotEmpty)
                                     Text(
                                       c.city!,
-                                      style: GoogleFonts.manrope(
+                                      style: TextStyle(
+                                        fontFamily: 'Manrope',
                                         fontSize: 12,
                                         color: context.colors.inkMuted,
                                       ),
@@ -460,11 +465,7 @@ class _CheckInBody extends StatelessWidget {
                               ),
                             ),
                             if (isSelected)
-                              Icon(
-                                LucideIcons.checkCircle2,
-                                size: 18,
-                                color: context.colors.ink,
-                              ),
+                              Icon(LucideIcons.checkCircle2, size: 18, color: context.colors.ink),
                           ],
                         ),
                       ),
@@ -490,8 +491,7 @@ class _CheckInBody extends StatelessWidget {
             label: 'Timbra ingresso cantiere',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
-            onPressed:
-                (isLoading || noCantieriAvailable) ? null : onStart,
+            onPressed: (isLoading || noCantieriAvailable) ? null : onStart,
             size: AppButtonSize.lg,
           ),
         ],
@@ -517,8 +517,7 @@ class _ActiveSessionBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateLabel =
-        DateFormat('dd/MM/yyyy', 'it').format(activeLog.workDate.toLocal());
+    final dateLabel = DateFormat('dd/MM/yyyy', 'it').format(activeLog.workDate.toLocal());
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
@@ -543,7 +542,8 @@ class _ActiveSessionBody extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       'Sessione cantiere attiva',
-                      style: GoogleFonts.manrope(
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: context.colors.green,
@@ -603,21 +603,18 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.redSoft,
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: context.colors.redSoft, borderRadius: AppRack.insetShape),
       child: Row(
         children: [
-          const Icon(LucideIcons.alertTriangle,
-              size: 16, color: Color(0xFFCC0000)),
+          Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 13,
-                color: const Color(0xFFCC0000),
+                color: context.colors.red,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -648,7 +645,8 @@ class _ErrorBody extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               message,
-              style: GoogleFonts.manrope(
+              style: TextStyle(
+                fontFamily: 'Manrope',
                 fontSize: 14,
                 color: context.colors.ink,
                 height: 1.5,
@@ -656,10 +654,7 @@ class _ErrorBody extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            AppButton.secondary(
-              label: 'Riprova',
-              onPressed: onRetry,
-            ),
+            AppButton.secondary(label: 'Riprova', onPressed: onRetry),
           ],
         ),
       ),

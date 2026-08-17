@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/error_message.dart';
 import '../../features/ticket/ticket_api_client.dart';
 import 'pending_ticket_repository.dart';
 import 'pending_ticket_state.dart';
@@ -39,9 +40,9 @@ class TicketCreationQueue {
     required PendingTicketRepository repo,
     required TicketApiClient apiClient,
     void Function()? onSubmitted,
-  })  : _repo = repo,
-        _apiClient = apiClient,
-        _onSubmitted = onSubmitted;
+  }) : _repo = repo,
+       _apiClient = apiClient,
+       _onSubmitted = onSubmitted;
 
   final PendingTicketRepository _repo;
   final TicketApiClient _apiClient;
@@ -77,9 +78,7 @@ class TicketCreationQueue {
       assignedUserId: assignedUserId,
       statusId: statusId,
       typeId: typeId,
-      state: isOnline
-          ? PendingTicketState.submitting
-          : PendingTicketState.pendingSync,
+      state: isOnline ? PendingTicketState.submitting : PendingTicketState.pendingSync,
     );
 
     if (!isOnline) {
@@ -124,11 +123,7 @@ class TicketCreationQueue {
       return TicketCreationOutcome.failed(id, 'Ticket locale non trovato');
     }
 
-    await _repo.updateState(
-      id: id,
-      state: PendingTicketState.submitting,
-      clearError: true,
-    );
+    await _repo.updateState(id: id, state: PendingTicketState.submitting, clearError: true);
 
     try {
       final serverId = await _apiClient.createTicket(
@@ -148,12 +143,12 @@ class TicketCreationQueue {
       return TicketCreationOutcome.submitted(id, serverId);
     } catch (e) {
       // NEVER delete on failure — keep the ticket for a manual retry.
-      await _repo.updateState(
-        id: id,
-        state: PendingTicketState.failed,
-        error: e.toString(),
-      );
-      return TicketCreationOutcome.failed(id, e.toString());
+      //
+      // The stored string is rendered verbatim on the ticket list ("Invio non riuscito: …"), so it
+      // has to be a sentence rather than an exception.
+      final reason = humanErrorMessage(e, azione: 'creare il ticket');
+      await _repo.updateState(id: id, state: PendingTicketState.failed, error: reason);
+      return TicketCreationOutcome.failed(id, reason);
     }
   }
 }
@@ -165,19 +160,12 @@ class TicketCreationQueue {
 enum _TicketCreationOutcomeType { queuedOffline, submitted, failed }
 
 class TicketCreationOutcome {
-  const TicketCreationOutcome._(
-    this.localId,
-    this._type, {
-    this.serverTicketId,
-    this.error,
-  });
+  const TicketCreationOutcome._(this.localId, this._type, {this.serverTicketId, this.error});
 
   factory TicketCreationOutcome.queuedOffline(String localId) =>
-      TicketCreationOutcome._(
-          localId, _TicketCreationOutcomeType.queuedOffline);
+      TicketCreationOutcome._(localId, _TicketCreationOutcomeType.queuedOffline);
 
-  factory TicketCreationOutcome.submitted(
-          String localId, String serverTicketId) =>
+  factory TicketCreationOutcome.submitted(String localId, String serverTicketId) =>
       TicketCreationOutcome._(
         localId,
         _TicketCreationOutcomeType.submitted,
@@ -185,19 +173,14 @@ class TicketCreationOutcome {
       );
 
   factory TicketCreationOutcome.failed(String localId, String error) =>
-      TicketCreationOutcome._(
-        localId,
-        _TicketCreationOutcomeType.failed,
-        error: error,
-      );
+      TicketCreationOutcome._(localId, _TicketCreationOutcomeType.failed, error: error);
 
   final String localId;
   final _TicketCreationOutcomeType _type;
   final String? serverTicketId;
   final String? error;
 
-  bool get isQueuedOffline =>
-      _type == _TicketCreationOutcomeType.queuedOffline;
+  bool get isQueuedOffline => _type == _TicketCreationOutcomeType.queuedOffline;
   bool get isSubmitted => _type == _TicketCreationOutcomeType.submitted;
   bool get isFailed => _type == _TicketCreationOutcomeType.failed;
 }

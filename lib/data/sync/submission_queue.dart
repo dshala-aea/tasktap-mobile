@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/utils/error_message.dart';
 import '../local/app_database.dart';
 import '../reports/draft_report_repository.dart';
 import '../reports/report_submit_api_client.dart';
@@ -30,11 +31,9 @@ export 'draft_submission_state.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class SubmissionQueue {
-  SubmissionQueue({
-    required DraftReportRepository repo,
-    required ReportSubmitApiClient apiClient,
-  })  : _repo = repo,
-        _apiClient = apiClient;
+  SubmissionQueue({required DraftReportRepository repo, required ReportSubmitApiClient apiClient})
+    : _repo = repo,
+      _apiClient = apiClient;
 
   final DraftReportRepository _repo;
   final ReportSubmitApiClient _apiClient;
@@ -87,8 +86,7 @@ class SubmissionQueue {
   Future<void> retry(String reportId) async {
     final draft = await _repo.getDraft(reportId);
     if (draft == null) return;
-    if (DraftSubmissionState.fromString(draft.submissionState) !=
-        DraftSubmissionState.failed) {
+    if (DraftSubmissionState.fromString(draft.submissionState) != DraftSubmissionState.failed) {
       return;
     }
     // Reuse the existing idempotency key so the server still deduplicates.
@@ -110,8 +108,7 @@ class SubmissionQueue {
         state: DraftSubmissionState.uploadingMedia,
       );
 
-      final pendingAllegati =
-          await _repo.getPendingAllegati(draft.id);
+      final pendingAllegati = await _repo.getPendingAllegati(draft.id);
 
       for (final allegato in pendingAllegati) {
         final uploaded = await _apiClient.uploadAttachment(
@@ -147,23 +144,16 @@ class SubmissionQueue {
       }
 
       // ── Step B: Build SubmitReportRequest ─────────────────────────────────
-      await _repo.updateSubmissionState(
-        reportId: draft.id,
-        state: DraftSubmissionState.submitting,
-      );
+      await _repo.updateSubmissionState(reportId: draft.id, state: DraftSubmissionState.submitting);
 
       final freshDraft = await _repo.getDraft(draft.id);
       if (freshDraft == null) return; // shouldn't happen
 
       final request = await _buildRequest(freshDraft);
-      final idempotencyKey =
-          freshDraft.idempotencyKey ?? const Uuid().v4();
+      final idempotencyKey = freshDraft.idempotencyKey ?? const Uuid().v4();
 
       // ── Step C: POST /api/reports/submit ──────────────────────────────────
-      await _apiClient.submitReport(
-        request: request,
-        idempotencyKey: idempotencyKey,
-      );
+      await _apiClient.submitReport(request: request, idempotencyKey: idempotencyKey);
 
       // ── Step D: Mark submitted ────────────────────────────────────────────
       await _repo.updateSubmissionState(
@@ -175,10 +165,16 @@ class SubmissionQueue {
       await _repo.markSubmitted(draft.id);
     } catch (e) {
       // NEVER delete the draft on failure — keep it for retry.
+      //
+      // Humanised here rather than at the point it is drawn, because this column is the *only*
+      // thing the Riepilogo step has to explain a failed send: it is read back long after the
+      // exception is gone, sometimes on a different day. It used to store `e.toString()`, so the
+      // subtitle under "Invio fallito" — the sentence a technician reads when a signed rapportino
+      // did not leave the phone — was a Dio stack.
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,
-        error: e.toString(),
+        error: humanErrorMessage(e, azione: 'inviare il rapportino'),
       );
     }
   }
@@ -196,8 +192,7 @@ class SubmissionQueue {
     }.whereType<String>().toSet();
 
     final photoIds = allegati
-        .where((a) =>
-            !signatureIds.contains(a.id) && !a.isPendingUpload)
+        .where((a) => !signatureIds.contains(a.id) && !a.isPendingUpload)
         .map((a) => a.id)
         .toList();
 
@@ -215,6 +210,7 @@ class SubmissionQueue {
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       customerSignoffText: draft.customerSignoffText,
       materialiNotRequired: draft.materialiNotRequired,
+      aiAssisted: draft.isAiAssisted,
       photoAllegatoIds: photoIds,
       staff: staff
           .map(
@@ -262,6 +258,5 @@ class SubmissionQueue {
 // ══════════════════════════════════════════════════════════════════════════════
 
 final submissionQueueProvider = Provider<SubmissionQueue>((ref) {
-  throw UnimplementedError(
-      'submissionQueueProvider must be overridden in ProviderScope');
+  throw UnimplementedError('submissionQueueProvider must be overridden in ProviderScope');
 });
