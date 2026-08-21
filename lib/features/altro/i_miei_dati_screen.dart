@@ -9,6 +9,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/gdpr/gdpr_api_client.dart';
 import '../../data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // I miei dati
@@ -87,7 +88,12 @@ class _Body extends ConsumerWidget {
     final identity = summary.identity;
 
     return ListView(
-      padding: EdgeInsets.fromLTRB(19, 8, 19, context.navClearance),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        context.navClearance,
+      ),
       children: [
         _Preamble(exportDate: summary.exportDate),
         const SizedBox(height: 20),
@@ -96,7 +102,7 @@ class _Body extends ConsumerWidget {
           StepLabel(title: 'La tua anagrafica'),
           const SizedBox(height: 8),
           AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
                 KeyVal(label: 'Nome', value: identity.fullName ?? '—'),
@@ -117,7 +123,7 @@ class _Body extends ConsumerWidget {
         StepLabel(title: 'Cosa è registrato su di te'),
         const SizedBox(height: 8),
         AppCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
           child: Column(
             children: [
               for (var i = 0; i < summary.categories.length; i++)
@@ -191,7 +197,7 @@ class _CategoryRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -266,8 +272,12 @@ class _ConsentBlock extends ConsumerWidget {
       loading: () => const AppCard(
         child: Center(
           child: Padding(
-            padding: EdgeInsets.all(12),
-            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            padding: EdgeInsets.all(AppSpacing.md),
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ),
         ),
       ),
@@ -287,7 +297,7 @@ class _ConsentBlock extends ConsumerWidget {
           );
         }
         return AppCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Column(
             children: [
               for (var i = 0; i < list.length; i++)
@@ -325,7 +335,7 @@ class _RightsBlock extends StatelessWidget {
     final c = context.colors;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.base),
       decoration: BoxDecoration(
         color: c.bg3,
         border: Border.all(color: c.borderLight),

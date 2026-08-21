@@ -10,6 +10,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// All materiali from Drift cache, alphabetical.
 ///
@@ -138,7 +139,12 @@ class _AdminMaterialeListBody extends ConsumerWidget {
           if (categories.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  AppSpacing.md,
+                ),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -165,7 +171,10 @@ class _AdminMaterialeListBody extends ConsumerWidget {
           if (materialiAsync.isLoading)
             const SliverToBoxAdapter(
               child: Center(
-                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xxxl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
             )
           else if (filtered.isEmpty)

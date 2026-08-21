@@ -12,6 +12,7 @@ import '../../data/entitlements/entitlement_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'notifiche_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AltroHubScreen
@@ -43,7 +44,9 @@ class AltroHubScreen extends ConsumerWidget {
             // ── Gestione section ───────────────────────────────────────────
             const SliverToBoxAdapter(child: SectionTitle(title: 'Gestione')),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 19),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.pagePadding,
+              ),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -52,7 +55,10 @@ class AltroHubScreen extends ConsumerWidget {
                   childAspectRatio: 1.4,
                 ),
                 delegate: SliverChildListDelegate(
-                  _buildGestioneTiles(context, ref.watch(cachedEntitlementProvider).valueOrNull),
+                  _buildGestioneTiles(
+                    context,
+                    ref.watch(cachedEntitlementProvider).valueOrNull,
+                  ),
                 ),
               ),
             ),
@@ -64,7 +70,9 @@ class AltroHubScreen extends ConsumerWidget {
             // ── Danger: Logout ─────────────────────────────────────────────
             SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
 
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -82,71 +90,75 @@ class AltroHubScreen extends ConsumerWidget {
   /// Keys are `ModuleKeys` from the backend (`src/TaskTapAPI.Core/Billing/ModuleKeys.cs`).
   /// Never gate on a key that is not in that file — a typo reads as "not entitled" and silently
   /// removes a screen.
-  List<Widget> _buildGestioneTiles(BuildContext context, Entitlement? entitlement) {
-    final tiles = <({IconData icon, String label, String module, VoidCallback onTap})>[
-      (
-        icon: LucideIcons.clipboardList,
-        label: 'Interventi',
-        module: 'interventi',
-        onTap: () => context.go(AppRoutes.ticket),
-      ),
-      (
-        icon: LucideIcons.fileText,
-        label: 'Rapportini',
-        module: 'rapportini',
-        onTap: () => context.go(AppRoutes.altroRapportini),
-      ),
-      (
-        icon: LucideIcons.users,
-        label: 'Clienti',
-        module: 'clienti',
-        onTap: () => context.push(AppRoutes.altroClienti),
-      ),
-      // Sedi are customer sites: the same always-on module, not one of its own.
-      (
-        icon: LucideIcons.mapPin,
-        label: 'Sedi',
-        module: 'clienti',
-        onTap: () => context.push('/altro/sedi'),
-      ),
-      (
-        icon: LucideIcons.hardHat,
-        label: 'Cantieri',
-        module: 'cantieri',
-        onTap: () => context.push('/altro/cantieri'),
-      ),
-      (
-        icon: LucideIcons.package,
-        label: 'Prodotti',
-        module: 'prodotti',
-        onTap: () => context.push('/altro/prodotti'),
-      ),
-      (
-        icon: LucideIcons.warehouse,
-        label: 'Magazzino',
-        module: 'magazzino',
-        onTap: () => context.push(AppRoutes.altroMagazzino),
-      ),
-      (
-        icon: LucideIcons.fileSignature,
-        label: 'Contratti',
-        module: 'contratti',
-        onTap: () => context.push('/altro/contratti'),
-      ),
-      // Squadre is crew management — the always-on `team` module.
-      (
-        icon: LucideIcons.users2,
-        label: 'Squadre',
-        module: 'team',
-        onTap: () => context.push('/altro/squadre'),
-      ),
-      (
-        icon: LucideIcons.calendarDays,
-        label: 'Pianificazioni',
-        module: 'pianificazione',
-        onTap: () => context.push('/altro/pianificazioni'),
-      ),
-    ];
+  List<Widget> _buildGestioneTiles(
+    BuildContext context,
+    Entitlement? entitlement,
+  ) {
+    final tiles =
+        <({IconData icon, String label, String module, VoidCallback onTap})>[
+          (
+            icon: LucideIcons.clipboardList,
+            label: 'Interventi',
+            module: 'interventi',
+            onTap: () => context.go(AppRoutes.ticket),
+          ),
+          (
+            icon: LucideIcons.fileText,
+            label: 'Rapportini',
+            module: 'rapportini',
+            onTap: () => context.go(AppRoutes.altroRapportini),
+          ),
+          (
+            icon: LucideIcons.users,
+            label: 'Clienti',
+            module: 'clienti',
+            onTap: () => context.push(AppRoutes.altroClienti),
+          ),
+          // Sedi are customer sites: the same always-on module, not one of its own.
+          (
+            icon: LucideIcons.mapPin,
+            label: 'Sedi',
+            module: 'clienti',
+            onTap: () => context.push('/altro/sedi'),
+          ),
+          (
+            icon: LucideIcons.hardHat,
+            label: 'Cantieri',
+            module: 'cantieri',
+            onTap: () => context.push('/altro/cantieri'),
+          ),
+          (
+            icon: LucideIcons.package,
+            label: 'Prodotti',
+            module: 'prodotti',
+            onTap: () => context.push('/altro/prodotti'),
+          ),
+          (
+            icon: LucideIcons.warehouse,
+            label: 'Magazzino',
+            module: 'magazzino',
+            onTap: () => context.push(AppRoutes.altroMagazzino),
+          ),
+          (
+            icon: LucideIcons.fileSignature,
+            label: 'Contratti',
+            module: 'contratti',
+            onTap: () => context.push('/altro/contratti'),
+          ),
+          // Squadre is crew management — the always-on `team` module.
+          (
+            icon: LucideIcons.users2,
+            label: 'Squadre',
+            module: 'team',
+            onTap: () => context.push('/altro/squadre'),
+          ),
+          (
+            icon: LucideIcons.calendarDays,
+            label: 'Pianificazioni',
+            module: 'pianificazione',
+            onTap: () => context.push('/altro/pianificazioni'),
+          ),
+        ];
 
     return [
       for (final t in tiles)
@@ -169,7 +181,7 @@ class _UserCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 19),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       // A RackCell, not a hand-rolled Container. This was the one card on the screen that bypassed
       // the shared primitive, and it did so by reintroducing exactly what the world refuses: a
       // rounded rectangle floating on a drop shadow. Depth here is the ledge, like everywhere else.
@@ -177,10 +189,13 @@ class _UserCard extends StatelessWidget {
         flush: false,
         background: AppColors.CHARCOAL,
         ledgeColor: AppColors.Y,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
-            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 52),
+            AppAvatar(
+              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
+              size: 52,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -236,7 +251,11 @@ class _UserCard extends StatelessWidget {
 /// It is now a labelled cell like every other container in the app. What distinguishes ten
 /// drawers in a real van is the label and the silhouette on it, which is exactly what is left.
 class _GestioneTile extends StatelessWidget {
-  const _GestioneTile({required this.icon, required this.label, required this.onTap});
+  const _GestioneTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -249,7 +268,12 @@ class _GestioneTile extends StatelessWidget {
       onTap: onTap,
       flush: false,
       minHeight: 84,
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -283,7 +307,7 @@ class _SistemaSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 19),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: Column(
         children: [
           // Notifiche — unread badge
@@ -302,7 +326,10 @@ class _SistemaSection extends ConsumerWidget {
           ),
           // Audit log
           ListRow(
-            leading: _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
+            leading: _sistemaTileIcon(
+              LucideIcons.clipboardCheck,
+              context.colors.green,
+            ),
             title: 'Audit log',
             subtitle: 'Cronologia attività',
             showDivider: true,
@@ -319,7 +346,10 @@ class _SistemaSection extends ConsumerWidget {
           // it is not a preference, it is the answer to "what do you know about me", and the
           // backend has served it since before this app shipped with nothing on the client asking.
           ListRow(
-            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.blue),
+            leading: _sistemaTileIcon(
+              LucideIcons.shieldCheck,
+              context.colors.blue,
+            ),
             title: 'I miei dati',
             subtitle: 'Cosa registra l\'azienda su di te',
             showDivider: true,
@@ -335,7 +365,10 @@ class _SistemaSection extends ConsumerWidget {
           ),
           // Ruoli e permessi
           ListRow(
-            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.amber),
+            leading: _sistemaTileIcon(
+              LucideIcons.shieldCheck,
+              context.colors.amber,
+            ),
             title: 'Ruoli e permessi',
             subtitle: 'Gestione accessi',
             showDivider: false,
@@ -357,7 +390,10 @@ class _SistemaSection extends ConsumerWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(color: color.withAlpha(26), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(
+        color: color.withAlpha(26),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Icon(icon, size: 18, color: color),
     );
   }
@@ -375,7 +411,12 @@ class _LogoutRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 24, 19, 0),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+        AppSpacing.pagePadding,
+        0,
+      ),
       child: ListRow(
         leading: Container(
           width: 36,
@@ -401,7 +442,10 @@ class _LogoutRow extends StatelessWidget {
         title: const Text('Esci dall\'account'),
         content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: context.colors.red),

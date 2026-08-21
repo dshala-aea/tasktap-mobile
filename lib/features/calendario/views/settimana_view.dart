@@ -10,6 +10,7 @@ import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Calendario → Settimana view: 7-column day grid for the selected week with
 /// compact event chips per day. Columns are scrollable horizontally; chips
@@ -45,7 +46,12 @@ class SettimanaView extends ConsumerWidget {
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: EdgeInsets.fromLTRB(8, 0, 8, context.navClearance),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        0,
+        AppSpacing.sm,
+        context.navClearance,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: days.map((day) {
@@ -64,7 +70,9 @@ class SettimanaView extends ConsumerWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
-                    color: isToday ? context.colors.surfaceInverse : Colors.transparent,
+                    color: isToday
+                        ? context.colors.surfaceInverse
+                        : Colors.transparent,
                     borderRadius: AppRack.insetShape,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -75,7 +83,9 @@ class SettimanaView extends ConsumerWidget {
                             fontFamily: 'Manrope',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isToday ? AppColors.Y : context.colors.inkMuted,
+                            color: isToday
+                                ? AppColors.Y
+                                : context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -86,7 +96,9 @@ class SettimanaView extends ConsumerWidget {
                             fontFamily: 'Sora',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: isToday ? context.colors.inkInverse : context.colors.ink,
+                            color: isToday
+                                ? context.colors.inkInverse
+                                : context.colors.ink,
                           ),
                         ),
                       ],
@@ -96,7 +108,10 @@ class SettimanaView extends ConsumerWidget {
                 const SizedBox(height: 6),
                 // Event chips
                 ...daySchedules.map(
-                  (s) => _WeekEventChip(schedule: s, onTap: () => onEventTap?.call(s)),
+                  (s) => _WeekEventChip(
+                    schedule: s,
+                    onTap: () => onEventTap?.call(s),
+                  ),
                 ),
                 if (daySchedules.isEmpty)
                   SizedBox(
@@ -104,7 +119,10 @@ class SettimanaView extends ConsumerWidget {
                     child: Center(
                       child: Text(
                         '–',
-                        style: TextStyle(color: context.colors.inkDisabled, fontSize: 12),
+                        style: TextStyle(
+                          color: context.colors.inkDisabled,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ),
@@ -136,7 +154,10 @@ class _WeekEventChip extends StatelessWidget {
         color: pair.background,
         borderRadius: AppRack.insetShape,
         border: Border.all(color: pair.foreground.withAlpha(51), width: 0.5),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 6,
+          vertical: AppSpacing.xs,
+        ),
         child: Text(
           schedule.title,
           maxLines: 2,

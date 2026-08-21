@@ -15,6 +15,7 @@ import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// The technician's day, in the order they need it.
 ///
@@ -65,7 +66,9 @@ class DashboardScreen extends ConsumerWidget {
                 // being between jobs, which is most of the morning. There is no information in
                 // it — the absence of rows already says it — and it was the first thing on the
                 // screen. Nothing running now costs nothing on screen.
-                child: trackers.isEmpty ? null : ActiveTrackerStrip(trackers: trackers),
+                child: trackers.isEmpty
+                    ? null
+                    : ActiveTrackerStrip(trackers: trackers),
               ),
             ),
 
@@ -100,7 +103,8 @@ class DashboardScreen extends ConsumerWidget {
             _ScheduleSliver(
               schedules: upcomingAsync,
               emptyTitle: 'Nessun intervento in programma',
-              emptyBody: 'I prossimi interventi appariranno qui dopo la sincronizzazione.',
+              emptyBody:
+                  'I prossimi interventi appariranno qui dopo la sincronizzazione.',
             ),
 
             // ── Start something ───────────────────────────────────────────────
@@ -110,7 +114,12 @@ class DashboardScreen extends ConsumerWidget {
             // Altro tab already is. A shortcut to a screen one tap away is not a shortcut.
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 20, 19, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.lg,
+                  AppSpacing.pagePadding,
+                  0,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -133,7 +142,9 @@ class DashboardScreen extends ConsumerWidget {
             ),
 
             // Bottom padding so the last card clears the floating bottom nav.
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -163,7 +174,9 @@ class _ScheduleSliver extends StatelessWidget {
       data: (list) => list.isEmpty
           ? SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 19),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.pagePadding,
+                ),
                 child: EmptyState(
                   icon: LucideIcons.calendarOff,
                   title: emptyTitle,
@@ -174,7 +187,12 @@ class _ScheduleSliver extends StatelessWidget {
           : SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, i) => Padding(
-                  padding: EdgeInsets.fromLTRB(19, i == 0 ? 0 : 8, 19, 8),
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    i == 0 ? 0 : 8,
+                    AppSpacing.pagePadding,
+                    AppSpacing.sm,
+                  ),
                   child: _UpcomingItem(schedule: list[i], showDate: showDate),
                 ),
                 childCount: list.length,
@@ -182,7 +200,10 @@ class _ScheduleSliver extends StatelessWidget {
             ),
       loading: () => const SliverToBoxAdapter(
         child: Center(
-          child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+          child: Padding(
+            padding: EdgeInsets.all(AppSpacing.xxl),
+            child: CircularProgressIndicator(),
+          ),
         ),
       ),
       // Was `SizedBox.shrink()`. A failed read of today's schedules therefore rendered as an
@@ -212,9 +233,14 @@ class _UpcomingItem extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
+    final location = ref
+        .watch(locationByIdProvider(schedule.locationId))
+        .valueOrNull;
     final customerName = location != null
-        ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
+        ? ref
+              .watch(customerByIdProvider(location.customerId))
+              .valueOrNull
+              ?.companyName
         : null;
 
     // Built only when it is going to be shown — today's rows never render a date, and formatting
@@ -234,7 +260,9 @@ class _UpcomingItem extends ConsumerWidget {
     // nowhere. A scheduled intervento opens its ticket where it has one; where it has none there
     // is nothing to open, so it renders as a plain cell and does not invite the tap at all.
     return AppCard(
-      onTap: ticketId != null ? () => context.push(AppRoutes.ticketDetailPath(ticketId)) : null,
+      onTap: ticketId != null
+          ? () => context.push(AppRoutes.ticketDetailPath(ticketId))
+          : null,
       child: Row(
         children: [
           Expanded(
@@ -292,7 +320,9 @@ class _UpcomingItem extends ConsumerWidget {
                   fontFamily: 'Manrope',
                   fontSize: showDate ? 11 : 15,
                   fontWeight: showDate ? FontWeight.w400 : FontWeight.w700,
-                  color: showDate ? context.colors.inkMuted : context.colors.ink,
+                  color: showDate
+                      ? context.colors.inkMuted
+                      : context.colors.ink,
                 ),
               ),
             ],

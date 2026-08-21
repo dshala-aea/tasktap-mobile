@@ -10,6 +10,7 @@ import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin customer list — shows all customers (active + inactive) with FAB to
 /// create new ones.  Tapping a row navigates to the detail/edit screen.
@@ -105,7 +106,12 @@ class _AdminCustomerListBody extends ConsumerWidget {
           // ── Filter toggle ──────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+              ),
               child: Row(
                 children: [
                   AppChip(
@@ -126,7 +132,10 @@ class _AdminCustomerListBody extends ConsumerWidget {
           if (customersAsync.isLoading)
             const SliverToBoxAdapter(
               child: Center(
-                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xxxl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
             )
           else if (filtered.isEmpty)

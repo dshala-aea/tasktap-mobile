@@ -13,6 +13,7 @@ import '../../data/local/app_database.dart';
 import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -164,13 +165,18 @@ class _RapportiniListBody extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: _RapportinoFilter.values.map((f) {
                   return Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
                     child: AppChip(
                       label: f.label,
                       active: filter == f,
@@ -185,7 +191,10 @@ class _RapportiniListBody extends ConsumerWidget {
         if (draftsAsync.isLoading)
           const SliverToBoxAdapter(
             child: Center(
-              child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xxxl),
+                child: CircularProgressIndicator(),
+              ),
             ),
           )
         else if (filtered.isEmpty)

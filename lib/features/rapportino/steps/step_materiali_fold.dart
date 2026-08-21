@@ -18,6 +18,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Materiali  (folds Controlli + Foto/Allegati as sub-sections)
@@ -41,11 +42,21 @@ class StepMaterialiFold extends ConsumerWidget {
     final photos = state.allegatoRows.where((a) => !a.isSignature).toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(19, 16, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.base,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
         // ── "Nessun materiale" toggle ──────────────────────────────────────
         AppCard(
-          padding: EdgeInsets.fromLTRB(16, 4, 16, context.navClearance),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.base,
+            AppSpacing.xs,
+            AppSpacing.base,
+            context.navClearance,
+          ),
           child: Row(
             children: [
               Expanded(
@@ -73,7 +84,7 @@ class StepMaterialiFold extends ConsumerWidget {
           const SizedBox(height: 8),
           if (state.materialeRows.isEmpty)
             Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               child: Text(
                 'Nessun materiale aggiunto.',
                 style: TextStyle(color: context.colors.inkMuted),
@@ -82,7 +93,7 @@ class StepMaterialiFold extends ConsumerWidget {
           else
             ...state.materialeRows.map(
               (row) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: _MaterialeQtyStepper(
                   row: row,
                   onQtyChanged: (qty) => notifier.updateMateriale(row.copyWith(quantity: qty)),
@@ -319,7 +330,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
       child: Row(
         children: [
           Icon(LucideIcons.package, size: 18, color: context.colors.inkMuted),
@@ -354,7 +365,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
                 onTap: row.quantity > 1 ? () => onQtyChanged(row.quantity - 1) : null,
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Text(
                   row.quantity.toStringAsFixed(
                     row.quantity == row.quantity.truncateToDouble() ? 0 : 1,
@@ -476,7 +487,7 @@ class _PhotoThumb extends StatelessWidget {
                 child: Center(
                   child: Container(
                     decoration: BoxDecoration(color: context.colors.red, shape: BoxShape.circle),
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(AppSpacing.xs),
                     child: const Icon(LucideIcons.x, color: Colors.white, size: 14),
                   ),
                 ),
@@ -514,7 +525,7 @@ class _ControlliChecklist extends ConsumerWidget {
     final ticket = ticketId;
     if (ticket == null || ticket.isEmpty) {
       return Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Text(
           'I controlli sono legati al ticket: questo rapportino non è '
           'collegato a nessun ticket, quindi non è previsto alcun controllo.',
@@ -527,11 +538,11 @@ class _ControlliChecklist extends ConsumerWidget {
 
     return controlsAsync.when(
       loading: () => const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.base),
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Text(
           e is TicketDetailOfflineException
               ? 'Controlli non disponibili offline: riprova quando torni online.'
@@ -543,7 +554,7 @@ class _ControlliChecklist extends ConsumerWidget {
         final flat = flattenTicketControls(groups);
         if (flat.isEmpty) {
           return Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Text(
               'Nessun controllo previsto per questo intervento.',
               style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
@@ -632,7 +643,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
     final existing = _findExisting(rows);
 
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -657,7 +668,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
               ),
               if (c.isRequired)
                 Padding(
-                  padding: EdgeInsets.only(left: 4),
+                  padding: EdgeInsets.only(left: AppSpacing.xs),
                   child: Text(
                     '*',
                     style: TextStyle(color: context.colors.red, fontWeight: FontWeight.bold),
@@ -667,7 +678,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
           ),
           if (c.description != null && c.description!.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              padding: const EdgeInsets.only(top: 2, bottom: AppSpacing.xs),
               child: Text(
                 c.description!,
                 style: TextStyle(color: context.colors.inkMuted, fontSize: 12),

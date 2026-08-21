@@ -11,6 +11,7 @@ import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ImpostazioniScreen
@@ -36,7 +37,9 @@ class ImpostazioniScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: ScreenHeader(title: 'Impostazioni', showBack: true)),
+            SliverToBoxAdapter(
+              child: ScreenHeader(title: 'Impostazioni', showBack: true),
+            ),
 
             // ── Profile card ───────────────────────────────────────────────
             SliverToBoxAdapter(
@@ -44,7 +47,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Notifiche ──────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Notifiche'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -57,14 +62,16 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Notifiche push',
                     subtitle: 'Ricevi avvisi in tempo reale',
                     value: settings.pushAbilitate,
-                    onChanged: (_) => _togglePush(context, settings.pushAbilitate, notifier),
+                    onChanged: (_) =>
+                        _togglePush(context, settings.pushAbilitate, notifier),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.clipboardList,
                     title: 'Interventi',
                     subtitle: 'Nuovi interventi assegnati',
                     value: settings.notificheInterventi,
-                    onChanged: (_) => notifier.toggle(key: 'notificheInterventi'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheInterventi'),
                     showDivider: false,
                   ),
                   _ToggleRow(
@@ -72,7 +79,8 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Rapportini',
                     subtitle: 'Aggiornamenti sui rapportini',
                     value: settings.notificheRapportini,
-                    onChanged: (_) => notifier.toggle(key: 'notificheRapportini'),
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheRapportini'),
                     showDivider: false,
                   ),
                 ],
@@ -80,7 +88,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── App ───────────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'App')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'App'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -111,7 +121,9 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Account ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Account')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Account'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -134,13 +146,17 @@ class ImpostazioniScreen extends ConsumerWidget {
             // of that is something the app can turn on. What it can do is say which part is
             // missing, so a technician who cannot find the microphone gets an answer instead of
             // filing a bug, and so a fleet can be checked without instrumenting a build.
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Dettatura')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Dettatura'),
+            ),
             const SliverToBoxAdapter(
               child: _SettingsGroup(children: [_DictationDiagnosticsRow()]),
             ),
 
             // ── Sistema ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Sistema'),
+            ),
             SliverToBoxAdapter(
               child: _SettingsGroup(children: [_LogoutSettingRow(ref: ref)]),
             ),
@@ -148,7 +164,12 @@ class ImpostazioniScreen extends ConsumerWidget {
             // ── Version footer ─────────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 32, 19, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.xxl,
+                  AppSpacing.pagePadding,
+                  0,
+                ),
                 child: Center(
                   child: appInfoAsync.when(
                     loading: () => const SizedBox.shrink(),
@@ -166,7 +187,9 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -197,7 +220,9 @@ class ImpostazioniScreen extends ConsumerWidget {
       // flipping a switch that cannot deliver anything.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Le notifiche non sono disponibili su questo dispositivo.'),
+          content: Text(
+            'Le notifiche non sono disponibili su questo dispositivo.',
+          ),
         ),
       );
       return;
@@ -282,7 +307,9 @@ Future<void> _toggleBiometrics(
 
   if (!ok) {
     messenger.showSnackBar(
-      const SnackBar(content: Text('Verifica non riuscita. Blocco biometrico non attivato.')),
+      const SnackBar(
+        content: Text('Verifica non riuscita. Blocco biometrico non attivato.'),
+      ),
     );
     return;
   }
@@ -303,11 +330,14 @@ class _ProfileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 19),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AppCard(
         child: Row(
           children: [
-            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 48),
+            AppAvatar(
+              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
+              size: 48,
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -357,7 +387,12 @@ class _SettingsSectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 20, 19, 8),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.lg,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
@@ -383,7 +418,7 @@ class _SettingsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 19),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AppCard(
         padding: EdgeInsets.zero,
         child: Column(children: children),
@@ -417,9 +452,14 @@ class _ToggleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: 10,
+      ),
       decoration: BoxDecoration(
-        border: showDivider ? Border(bottom: BorderSide(color: context.colors.borderLight)) : null,
+        border: showDivider
+            ? Border(bottom: BorderSide(color: context.colors.borderLight))
+            : null,
       ),
       child: Row(
         children: [
@@ -499,7 +539,10 @@ class _LogoutSettingRow extends StatelessWidget {
         title: const Text('Esci dall\'account'),
         content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: context.colors.red),
@@ -513,7 +556,6 @@ class _LogoutSettingRow extends StatelessWidget {
     }
   }
 }
-
 
 /// What this handset can and cannot do about dictation, item by item.
 ///
@@ -530,15 +572,24 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
     final capability = ref.watch(dictationCapabilityProvider);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.base,
+        AppSpacing.md,
+        AppSpacing.base,
+        14,
+      ),
       child: capability.when(
-        loading: () => const _DictationLine(label: 'Verifica in corso…', state: null),
-        error: (_, _) => const _DictationLine(label: 'Verifica non riuscita', state: false),
+        loading: () =>
+            const _DictationLine(label: 'Verifica in corso…', state: null),
+        error: (_, _) =>
+            const _DictationLine(label: 'Verifica non riuscita', state: false),
         data: (c) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              c.canDictate ? 'Dettatura disponibile' : 'Dettatura non disponibile',
+              c.canDictate
+                  ? 'Dettatura disponibile'
+                  : 'Dettatura non disponibile',
               style: TextStyle(
                 fontFamily: 'Manrope',
                 fontSize: 14,
@@ -547,9 +598,14 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            _DictationLine(label: 'Riconoscimento vocale', state: c.recognizerAvailable),
             _DictationLine(
-              label: c.italianLocaleId == null ? 'Italiano' : 'Italiano (${c.italianLocaleId})',
+              label: 'Riconoscimento vocale',
+              state: c.recognizerAvailable,
+            ),
+            _DictationLine(
+              label: c.italianLocaleId == null
+                  ? 'Italiano'
+                  : 'Italiano (${c.italianLocaleId})',
               state: c.italianAvailable,
             ),
             // The one that decides it. Everything else can be true and dictation still refused,
@@ -559,7 +615,10 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               label: 'Funziona offline (sul dispositivo)',
               state: c.onDeviceRecognitionAvailable,
             ),
-            _DictationLine(label: 'Microfono consentito', state: c.microphoneGranted),
+            _DictationLine(
+              label: 'Microfono consentito',
+              state: c.microphoneGranted,
+            ),
             if (!c.canDictate) ...[
               const SizedBox(height: 10),
               Text(
@@ -613,7 +672,11 @@ class _DictationLine extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
+              style: TextStyle(
+                fontFamily: 'Manrope',
+                fontSize: 12,
+                color: context.colors.inkMuted,
+              ),
             ),
           ),
         ],

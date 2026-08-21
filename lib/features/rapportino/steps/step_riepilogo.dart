@@ -20,6 +20,7 @@ import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 4 — Riepilogo
@@ -103,7 +104,12 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     final validation = state.validation;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(19, 16, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.base,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -120,7 +126,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           // fact stored two ways. Nobody can check a rapportino against a GUID, so the step that
           // exists to be checked could not be.
           AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
                 KeyVal(label: 'Titolo', value: state.title.isEmpty ? '—' : state.title),
@@ -269,7 +275,7 @@ class _ValidationPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.base),
       decoration: BoxDecoration(
         // A tint of the theme's own amber, not a fixed cream. The panel was #FFF8E1 while every
         // line of text inside it takes `context.colors.ink` — which is near-white in dark mode.
@@ -297,7 +303,7 @@ class _ValidationPanel extends StatelessWidget {
           const SizedBox(height: 8),
           for (final msg in validation.italianMessages)
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -338,7 +344,7 @@ class _StatusCard extends StatelessWidget {
     final border = color.withAlpha(80);
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.base),
       decoration: BoxDecoration(
         color: bg,
         border: Border.all(color: border),
@@ -401,7 +407,7 @@ class _SignatureBlock extends ConsumerWidget {
     final captured = localPath != null && allegatoId != null;
 
     return AppCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -567,7 +573,7 @@ class _SigDialogState extends State<_SigDialog> {
             ],
           ),
           Padding(
-            padding: EdgeInsets.all(12),
+            padding: EdgeInsets.all(AppSpacing.md),
             child: Text(
               'Firma nell\'area sottostante',
               style: TextStyle(color: context.colors.inkMuted),

@@ -122,13 +122,19 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
                 type: dto.type,
                 deliveryType: dto.deliveryType,
                 isRead: Value(dto.isRead),
-                readAt: Value(dto.readAt != null ? DateTime.tryParse(dto.readAt!) : null),
+                readAt: Value(
+                  dto.readAt != null ? DateTime.tryParse(dto.readAt!) : null,
+                ),
                 relatedEntityId: Value(dto.relatedEntityId),
                 relatedEntityType: Value(dto.relatedEntityType),
                 scheduledFor: Value(
-                  dto.scheduledFor != null ? DateTime.tryParse(dto.scheduledFor!) : null,
+                  dto.scheduledFor != null
+                      ? DateTime.tryParse(dto.scheduledFor!)
+                      : null,
                 ),
-                sentAt: Value(dto.sentAt != null ? DateTime.tryParse(dto.sentAt!) : null),
+                sentAt: Value(
+                  dto.sentAt != null ? DateTime.tryParse(dto.sentAt!) : null,
+                ),
                 isDelivered: Value(dto.isDelivered),
               ),
             );
@@ -144,8 +150,13 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
   /// Mark all notifications as read (local + backend).
   Future<void> segnaLette() async {
     // Update Drift.
-    await (_db.update(_db.appNotifications)..where((t) => t.isRead.equals(false))).write(
-      const AppNotificationsCompanion(isRead: Value(true), readAt: Value.absent()),
+    await (_db.update(
+      _db.appNotifications,
+    )..where((t) => t.isRead.equals(false))).write(
+      const AppNotificationsCompanion(
+        isRead: Value(true),
+        readAt: Value.absent(),
+      ),
     );
 
     // Update state.
@@ -162,8 +173,13 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
   /// Mark a single notification as read (local + backend).
   Future<void> segnaLetta(String id) async {
     // Update Drift.
-    await (_db.update(_db.appNotifications)..where((t) => t.id.equals(id))).write(
-      const AppNotificationsCompanion(isRead: Value(true), readAt: Value.absent()),
+    await (_db.update(
+      _db.appNotifications,
+    )..where((t) => t.id.equals(id))).write(
+      const AppNotificationsCompanion(
+        isRead: Value(true),
+        readAt: Value.absent(),
+      ),
     );
 
     // Update state.
@@ -179,11 +195,12 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
 }
 
 /// Provider for the notification list.
-final notificheProvider = StateNotifierProvider<NotificheNotifier, List<AppNotifica>>((ref) {
-  final db = ref.watch(appDatabaseProvider);
-  final dio = ref.watch(dioProvider);
-  return NotificheNotifier(db, dio);
-});
+final notificheProvider =
+    StateNotifierProvider<NotificheNotifier, List<AppNotifica>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      final dio = ref.watch(dioProvider);
+      return NotificheNotifier(db, dio);
+    });
 
 /// Computed count of unread notifications.
 final notificheUnreadCountProvider = Provider<int>((ref) {

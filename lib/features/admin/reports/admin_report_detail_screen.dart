@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin report detail — read-only with state transition actions.
 class AdminReportDetailScreen extends ConsumerWidget {
@@ -53,7 +54,12 @@ class AdminReportDetailScreen extends ConsumerWidget {
           // ── Status header ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+              ),
               child: Row(
                 children: [
                   StatusPill(stato: stato),
@@ -71,9 +77,14 @@ class AdminReportDetailScreen extends ConsumerWidget {
           // ── Info card ───────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+              ),
               child: AppCard(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                 child: Column(
                   children: [
                     KeyVal(label: 'Stato', value: stato),
@@ -112,7 +123,12 @@ class AdminReportDetailScreen extends ConsumerWidget {
           if (details.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  AppSpacing.base,
+                ),
                 child: AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,7 +145,12 @@ class AdminReportDetailScreen extends ConsumerWidget {
           if (technicianNotes.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  AppSpacing.base,
+                ),
                 child: AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,7 +166,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
           // ── State transition buttons ────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(19),
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
               child: _StateTransitionButtons(
                 stato: stato,
                 onTransition: (action) => _handleAction(context, ref, action),

@@ -15,6 +15,7 @@ import 'views/lista_view.dart';
 import 'views/mese_view.dart';
 import 'views/settimana_view.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Calendario tab — four view modes (Giorno / Settimana / Mese / Lista)
 /// wired to cached schedules in Drift.
@@ -49,7 +50,8 @@ class CalendarioScreen extends ConsumerWidget {
               ],
               selectedIndex: view.index,
               onSelected: (i) =>
-                  ref.read(calendarioViewProvider.notifier).state = CalendarioView.values[i],
+                  ref.read(calendarioViewProvider.notifier).state =
+                      CalendarioView.values[i],
             ),
 
             Divider(height: 1, color: context.colors.borderLight),
@@ -64,14 +66,16 @@ class CalendarioScreen extends ConsumerWidget {
             _PeriodBar(
               view: view,
               selectedDate: selectedDate,
-              onChanged: (d) => ref.read(selectedDateProvider.notifier).state = d,
+              onChanged: (d) =>
+                  ref.read(selectedDateProvider.notifier).state = d,
             ),
 
             // ── Week-day scroller strip ──────────────────────────────────────
             if (view != CalendarioView.mese && view != CalendarioView.lista)
               _WeekDayScroller(
                 selectedDate: selectedDate,
-                onDateSelected: (d) => ref.read(selectedDateProvider.notifier).state = d,
+                onDateSelected: (d) =>
+                    ref.read(selectedDateProvider.notifier).state = d,
               ),
 
             // ── Body ─────────────────────────────────────────────────────────
@@ -92,8 +96,10 @@ class CalendarioScreen extends ConsumerWidget {
                 child: _CalendarioBody(
                   view: view,
                   selectedDate: selectedDate,
-                  onSelectDate: (d) => ref.read(selectedDateProvider.notifier).state = d,
-                  onSwitchView: (v) => ref.read(calendarioViewProvider.notifier).state = v,
+                  onSelectDate: (d) =>
+                      ref.read(selectedDateProvider.notifier).state = d,
+                  onSwitchView: (v) =>
+                      ref.read(calendarioViewProvider.notifier).state = v,
                 ),
               ),
             ),
@@ -114,7 +120,11 @@ extension _Period on CalendarioView {
   /// Moves [from] by [delta] periods of this view's unit.
   DateTime step(DateTime from, int delta) => switch (this) {
     CalendarioView.giorno => DateTime(from.year, from.month, from.day + delta),
-    CalendarioView.settimana => DateTime(from.year, from.month, from.day + 7 * delta),
+    CalendarioView.settimana => DateTime(
+      from.year,
+      from.month,
+      from.day + 7 * delta,
+    ),
     // Clamped by DateTime itself: 31 January + 1 month lands in March if the day is kept, so the
     // day is dropped to 1 and the month view only ever needs the month anyway.
     CalendarioView.mese => DateTime(from.year, from.month + delta, 1),
@@ -149,7 +159,11 @@ extension _Period on CalendarioView {
 
 /// Names the period on screen and steps to the one either side of it.
 class _PeriodBar extends StatelessWidget {
-  const _PeriodBar({required this.view, required this.selectedDate, required this.onChanged});
+  const _PeriodBar({
+    required this.view,
+    required this.selectedDate,
+    required this.onChanged,
+  });
 
   final CalendarioView view;
   final DateTime selectedDate;
@@ -170,7 +184,8 @@ class _PeriodBar extends StatelessWidget {
       // Same Monday, not "within seven days" — a Friday and the following Tuesday are five days
       // apart and belong to different weeks.
       CalendarioView.settimana => _monday(selectedDate) == _monday(now),
-      CalendarioView.mese => selectedDate.year == now.year && selectedDate.month == now.month,
+      CalendarioView.mese =>
+        selectedDate.year == now.year && selectedDate.month == now.month,
       CalendarioView.lista => true,
     };
   }
@@ -181,7 +196,7 @@ class _PeriodBar extends StatelessWidget {
 
     return Container(
       color: context.colors.surface,
-      padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xs, 6, AppSpacing.sm, 6),
       child: Row(
         children: [
           if (navigable)
@@ -221,7 +236,7 @@ class _PeriodBar extends StatelessWidget {
               },
               style: TextButton.styleFrom(
                 minimumSize: const Size(44, 44),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
               ),
               child: const Text('Oggi'),
             ),
@@ -232,7 +247,11 @@ class _PeriodBar extends StatelessWidget {
 }
 
 class _StepButton extends StatelessWidget {
-  const _StepButton({required this.icon, required this.label, required this.onTap});
+  const _StepButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -253,7 +272,10 @@ class _StepButton extends StatelessWidget {
 // ── Week-day scroller strip ───────────────────────────────────────────────────
 
 class _WeekDayScroller extends ConsumerWidget {
-  const _WeekDayScroller({required this.selectedDate, required this.onDateSelected});
+  const _WeekDayScroller({
+    required this.selectedDate,
+    required this.onDateSelected,
+  });
 
   final DateTime selectedDate;
   final void Function(DateTime) onDateSelected;
@@ -261,7 +283,9 @@ class _WeekDayScroller extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Build 7 days centred on selectedDate's week (Mon-Sun).
-    final monday = selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
+    final monday = selectedDate.subtract(
+      Duration(days: selectedDate.weekday - 1),
+    );
     final days = List.generate(7, (i) => monday.add(Duration(days: i)));
 
     // Fetch schedules for the week to show event dots.
@@ -275,12 +299,19 @@ class _WeekDayScroller extends ConsumerWidget {
     final dayAbbr = DateFormat('EEE', 'it');
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
-    final selectedKey = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final selectedKey = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+    );
 
     return Container(
       height: 74,
       color: context.colors.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm,
+      ),
       child: Row(
         children: days.map((day) {
           final key = DateTime(day.year, day.month, day.day);
@@ -426,7 +457,11 @@ class _CalendarioBody extends ConsumerWidget {
 // ── Giorno body ───────────────────────────────────────────────────────────────
 
 class _GiornoBody extends ConsumerWidget {
-  const _GiornoBody({required this.selectedDate, this.onTapTicket, this.onTapSchedule});
+  const _GiornoBody({
+    required this.selectedDate,
+    this.onTapTicket,
+    this.onTapSchedule,
+  });
 
   final DateTime selectedDate;
   final void Function(String)? onTapTicket;
@@ -434,15 +469,23 @@ class _GiornoBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final start = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final start = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+    );
     final end = start.add(const Duration(days: 1));
     final range = DateRange(start: start, end: end);
     final async = ref.watch(schedulesInRangeProvider(range));
 
     return async.when(
-      data: (schedules) =>
-          GiornoView(schedules: schedules, onTapTicket: onTapTicket, onTapSchedule: onTapSchedule),
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      data: (schedules) => GiornoView(
+        schedules: schedules,
+        onTapTicket: onTapTicket,
+        onTapSchedule: onTapSchedule,
+      ),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -451,7 +494,11 @@ class _GiornoBody extends ConsumerWidget {
 // ── Settimana body ────────────────────────────────────────────────────────────
 
 class _SettimanaBody extends ConsumerWidget {
-  const _SettimanaBody({required this.selectedDate, this.onDayTap, this.onEventTap});
+  const _SettimanaBody({
+    required this.selectedDate,
+    this.onDayTap,
+    this.onEventTap,
+  });
 
   final DateTime selectedDate;
   final void Function(DateTime)? onDayTap;
@@ -459,7 +506,9 @@ class _SettimanaBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final monday = selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
+    final monday = selectedDate.subtract(
+      Duration(days: selectedDate.weekday - 1),
+    );
     final weekStart = DateTime(monday.year, monday.month, monday.day);
     final weekEnd = weekStart.add(const Duration(days: 7));
     final range = DateRange(start: weekStart, end: weekEnd);
@@ -472,7 +521,8 @@ class _SettimanaBody extends ConsumerWidget {
         onDayTap: onDayTap,
         onEventTap: onEventTap,
       ),
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -501,7 +551,8 @@ class _MeseBody extends ConsumerWidget {
         schedules: schedules,
         onDayTap: onDayTap,
       ),
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -524,8 +575,10 @@ class _ListaBody extends ConsumerWidget {
     final async = ref.watch(schedulesInRangeProvider(range));
 
     return async.when(
-      data: (schedules) => ListaView(schedules: schedules, onTapTicket: onTapTicket),
-      loading: () => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      data: (schedules) =>
+          ListaView(schedules: schedules, onTapTicket: onTapTicket),
+      loading: () =>
+          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
       error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
@@ -545,7 +598,12 @@ class _ScheduleInfoSheet extends StatelessWidget {
     final statusName = scheduleStatusName(schedule.statusId);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 16, 24, 16 + MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.base,
+        AppSpacing.xl,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

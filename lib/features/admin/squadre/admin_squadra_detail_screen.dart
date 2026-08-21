@@ -9,6 +9,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Fetches squadra detail with membri from backend API.
 final adminSquadraDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>?, String>(
@@ -100,7 +101,7 @@ class _SquadraDetailBody extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(19),
+            padding: const EdgeInsets.all(AppSpacing.pagePadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -114,7 +115,12 @@ class _SquadraDetailBody extends ConsumerWidget {
         // ── Membri section ─────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+            ),
             child: Text(
               'MEMBRI (${membri.length})',
               style: Theme.of(
@@ -126,7 +132,7 @@ class _SquadraDetailBody extends ConsumerWidget {
         if (membri.isEmpty)
           const SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.all(19),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               child: Text('Nessun membro nella squadra.'),
             ),
           )
@@ -202,7 +208,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -284,7 +290,12 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(19, 19, 19, MediaQuery.of(context).viewInsets.bottom + 19),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        MediaQuery.of(context).viewInsets.bottom + 19,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -9,6 +9,7 @@ import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// First hour shown in the day grid.
 const int _kStartHour = 7;
@@ -28,7 +29,12 @@ const double _kLabelWidth = 48.0;
 /// Tapping an event block with a ticketId triggers [onTapTicket]; otherwise
 /// [onTapSchedule] is called to show an info sheet.
 class GiornoView extends ConsumerWidget {
-  const GiornoView({super.key, required this.schedules, this.onTapTicket, this.onTapSchedule});
+  const GiornoView({
+    super.key,
+    required this.schedules,
+    this.onTapTicket,
+    this.onTapSchedule,
+  });
 
   final List<Schedule> schedules;
   final void Function(String ticketId)? onTapTicket;
@@ -39,7 +45,7 @@ class GiornoView extends ConsumerWidget {
     final totalHeight = (_kEndHour - _kStartHour) * _kHourHeight;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(0, 8, 0, context.navClearance),
+      padding: EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, context.navClearance),
       child: SizedBox(
         height: totalHeight + 8,
         child: Row(
@@ -57,7 +63,10 @@ class GiornoView extends ConsumerWidget {
                       child: Align(
                         alignment: Alignment.topRight,
                         child: Padding(
-                          padding: const EdgeInsets.only(right: 8, top: 4),
+                          padding: const EdgeInsets.only(
+                            right: AppSpacing.sm,
+                            top: AppSpacing.xs,
+                          ),
                           child: Text(
                             '${h.toString().padLeft(2, '0')}:00',
                             style: TextStyle(
@@ -86,7 +95,10 @@ class GiornoView extends ConsumerWidget {
                           height: _kHourHeight,
                           decoration: BoxDecoration(
                             border: Border(
-                              bottom: BorderSide(color: context.colors.borderLight, width: 1),
+                              bottom: BorderSide(
+                                color: context.colors.borderLight,
+                                width: 1,
+                              ),
                             ),
                           ),
                         ),
@@ -113,7 +125,11 @@ class GiornoView extends ConsumerWidget {
 }
 
 class _EventBlock extends StatelessWidget {
-  const _EventBlock({required this.schedule, this.onTapTicket, this.onTapSchedule});
+  const _EventBlock({
+    required this.schedule,
+    this.onTapTicket,
+    this.onTapSchedule,
+  });
 
   final Schedule schedule;
   final void Function(String ticketId)? onTapTicket;
@@ -123,8 +139,12 @@ class _EventBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final startMin = schedule.timeStartMinutes;
     final endMin = schedule.timeEndMinutes;
-    final clampedStart = startMin.clamp(_kStartHour * 60, _kEndHour * 60).toDouble();
-    final clampedEnd = endMin.clamp(_kStartHour * 60, _kEndHour * 60).toDouble();
+    final clampedStart = startMin
+        .clamp(_kStartHour * 60, _kEndHour * 60)
+        .toDouble();
+    final clampedEnd = endMin
+        .clamp(_kStartHour * 60, _kEndHour * 60)
+        .toDouble();
 
     final top = (clampedStart - _kStartHour * 60) / 60 * _kHourHeight;
     // 44dp floor, not 24: at 64dp/hour a half-hour job painted 32dp and a quarter-hour one
@@ -135,7 +155,10 @@ class _EventBlock extends StatelessWidget {
     // follows it. That overlap already existed here (nothing lays these out for collisions — they
     // are absolutely positioned by time in a plain Stack, so concurrent jobs stack today), and a
     // 12dp band at the bottom edge is a better failure than a target nothing can hit reliably.
-    final height = ((clampedEnd - clampedStart) / 60 * _kHourHeight).clamp(44.0, double.infinity);
+    final height = ((clampedEnd - clampedStart) / 60 * _kHourHeight).clamp(
+      44.0,
+      double.infinity,
+    );
 
     final statusName = scheduleStatusName(schedule.statusId);
     final pair = statusColor(statusName);
@@ -159,7 +182,10 @@ class _EventBlock extends StatelessWidget {
         color: pair.background,
         borderRadius: AppRack.insetShape,
         border: Border.all(color: pair.foreground.withAlpha(51), width: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -190,7 +216,11 @@ class _EventBlock extends StatelessWidget {
               ),
             ),
             if (schedule.ticketId != null && height > 52)
-              Icon(LucideIcons.link, size: 10, color: pair.foreground.withAlpha(153)),
+              Icon(
+                LucideIcons.link,
+                size: 10,
+                color: pair.foreground.withAlpha(153),
+              ),
           ],
         ),
       ),

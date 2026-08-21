@@ -15,6 +15,7 @@ import 'new_ticket_form_state.dart';
 import 'steps/step_riepilogo_ticket.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Form steps enum
@@ -200,7 +201,12 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
                 children: [
                   ScreenHeader(title: 'Nuovo ticket', showBack: true, dark: true),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.base,
+                      0,
+                      AppSpacing.base,
+                      AppSpacing.base,
+                    ),
                     child: AppStepper(steps: _kSteps, currentIndex: _stepIndex),
                   ),
                 ],
@@ -295,7 +301,10 @@ class _BottomNavBar extends StatelessWidget {
       top: false,
       child: Container(
         color: context.colors.surface,
-        padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
             if (!isFirst) ...[

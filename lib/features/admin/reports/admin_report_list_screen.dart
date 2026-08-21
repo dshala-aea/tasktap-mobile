@@ -10,6 +10,7 @@ import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/status_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Filter options for the admin report list.
 enum _ReportFilter { tutti, bozza, inviato, controllato, fatturato }
@@ -109,13 +110,18 @@ class _AdminReportListBody extends ConsumerWidget {
           // ── Filter chips ─────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+              ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: _ReportFilter.values.map((f) {
                     return Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
                       child: AppChip(
                         label: f.label,
                         active: filter == f,
@@ -131,7 +137,10 @@ class _AdminReportListBody extends ConsumerWidget {
           reportsAsync.when(
             loading: () => const SliverToBoxAdapter(
               child: Center(
-                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xxxl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
             ),
             error: (e, _) => SliverToBoxAdapter(child: Center(child: Text('Errore: $e'))),

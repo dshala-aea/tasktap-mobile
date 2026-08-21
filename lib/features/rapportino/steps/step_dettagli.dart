@@ -14,6 +14,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 1 — Dettagli
@@ -82,7 +83,12 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     final linkedCantiere = _findName(cantieri.map((c) => (c.id, c.name)), state.cantiereId);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(19, 16, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.base,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -308,7 +314,7 @@ class _GpsCapture extends ConsumerWidget {
     final hasGps = state.gpsLatitude != null && state.gpsLongitude != null;
 
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: Row(
         children: [
           Icon(
@@ -467,7 +473,7 @@ class _AiDraftButton extends ConsumerWidget {
     final exhausted = quota.valueOrNull?.exhausted ?? false;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: AppCard(
         child: Row(
           children: [

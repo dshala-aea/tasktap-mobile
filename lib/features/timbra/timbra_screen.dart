@@ -12,6 +12,7 @@ import '../../data/local/app_database.dart';
 import 'timbra_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TimbraScreen
@@ -97,7 +98,12 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
       // an iPhone SE.
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(24, 20, 24, context.navClearance),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.xl,
+            AppSpacing.lg,
+            AppSpacing.xl,
+            context.navClearance,
+          ),
           // Fixed when there is room, scrolling when there is not.
           //
           // The screen was one SingleChildScrollView, so the punch button — the only reason to
@@ -126,7 +132,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                 ),
                 if (punchState is AsyncError<void>)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.only(top: AppSpacing.sm),
                     child: Text(
                       'Errore: ${punchState.error}',
                       style: const TextStyle(color: Colors.redAccent, fontSize: 12),
@@ -393,7 +399,7 @@ class _PunchButton extends StatelessWidget {
         button,
         const SizedBox(height: 12),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
             style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
@@ -447,7 +453,7 @@ class _PauseButton extends StatelessWidget {
           color: Colors.white.withAlpha(13),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: accent.withAlpha(120)),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -483,7 +489,7 @@ class _PauseButton extends StatelessWidget {
         button,
         const SizedBox(height: 8),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
             style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
@@ -526,7 +532,7 @@ class _SessionsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white.withAlpha(25)),
       ),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -594,7 +600,7 @@ class _NoSessionsYet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
         child: Text(
           'Nessuna timbratura oggi',
           style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Manrope'),

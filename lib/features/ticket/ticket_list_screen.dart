@@ -13,6 +13,7 @@ import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Filter options for the ticket list.
 enum _TicketFilter { tutti, aperti, inCorso, inAttesa, completati }
@@ -115,7 +116,8 @@ class _TicketListBody extends ConsumerWidget {
     // Filter + search.
     final filtered = allTickets.where((t) {
       final statusName = statusMap[t.statusId]?.toLowerCase() ?? '';
-      final matchFilter = filter.statusMatch == null || statusName == filter.statusMatch;
+      final matchFilter =
+          filter.statusMatch == null || statusName == filter.statusMatch;
       final matchQuery =
           query.isEmpty ||
           t.title.toLowerCase().contains(query.toLowerCase()) ||
@@ -137,7 +139,9 @@ class _TicketListBody extends ConsumerWidget {
             ),
           ),
           if (pendingTickets.isNotEmpty)
-            SliverToBoxAdapter(child: _PendingTicketsSection(pendingTickets: pendingTickets)),
+            SliverToBoxAdapter(
+              child: _PendingTicketsSection(pendingTickets: pendingTickets),
+            ),
           SliverToBoxAdapter(
             child: AppSearchBar(
               controller: searchCtrl,
@@ -147,13 +151,18 @@ class _TicketListBody extends ConsumerWidget {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+              ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: _TicketFilter.values.map((f) {
                     return Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
                       child: AppChip(
                         label: f.label,
                         active: filter == f,
@@ -168,7 +177,10 @@ class _TicketListBody extends ConsumerWidget {
           if (ticketsAsync.isLoading)
             const SliverToBoxAdapter(
               child: Center(
-                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xxxl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
             )
           else if (filtered.isEmpty)
@@ -208,7 +220,12 @@ class _PendingTicketsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        0,
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -243,14 +260,16 @@ class _PendingTicketRow extends ConsumerWidget {
     final isFailed = state == PendingTicketState.failed;
 
     final String subtitle = switch (state) {
-      PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
+      PendingTicketState.pendingSync =>
+        'In attesa di connessione — verrà inviato automaticamente',
       PendingTicketState.submitting => 'Invio in corso…',
-      PendingTicketState.failed => 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+      PendingTicketState.failed =>
+        'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
       PendingTicketState.submitted => 'Inviato',
     };
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isFailed ? context.colors.redSoft : context.colors.bg3,
         borderRadius: BorderRadius.circular(10),
@@ -297,7 +316,8 @@ class _PendingTicketRow extends ConsumerWidget {
             AppButton(
               label: 'Riprova',
               size: AppButtonSize.sm,
-              onPressed: () => ref.read(ticketCreationQueueProvider).retry(ticket.id),
+              onPressed: () =>
+                  ref.read(ticketCreationQueueProvider).retry(ticket.id),
             ),
           ],
         ],
@@ -307,7 +327,11 @@ class _PendingTicketRow extends ConsumerWidget {
 }
 
 class _TicketRow extends ConsumerWidget {
-  const _TicketRow({required this.ticket, required this.statusName, required this.isLast});
+  const _TicketRow({
+    required this.ticket,
+    required this.statusName,
+    required this.isLast,
+  });
 
   final Ticket ticket;
   final String statusName;
@@ -319,7 +343,10 @@ class _TicketRow extends ConsumerWidget {
     // technician can match to anything. Where the ticket has no number the subtitle is dropped
     // rather than filled with the id, and the title carries the row on its own.
     final reference = ticketReference(ticket.numero);
-    final dateLabel = DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
+    final dateLabel = DateFormat(
+      'dd/MM/yy',
+      'it',
+    ).format(ticket.createdAt.toLocal());
 
     return ListRow(
       // The one ticket you are actually on gets the strap, the same yellow mark the running
@@ -329,8 +356,15 @@ class _TicketRow extends ConsumerWidget {
       leading: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(color: context.colors.bg3, borderRadius: AppRack.insetShape),
-        child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
+        decoration: BoxDecoration(
+          color: context.colors.bg3,
+          borderRadius: AppRack.insetShape,
+        ),
+        child: Icon(
+          LucideIcons.ticket,
+          size: 20,
+          color: context.colors.inkMuted,
+        ),
       ),
       title: ticket.title,
       subtitle: reference,
@@ -340,7 +374,10 @@ class _TicketRow extends ConsumerWidget {
         children: [
           if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
           const SizedBox(height: 2),
-          Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
+          Text(
+            dateLabel,
+            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
+          ),
         ],
       ),
       showDivider: !isLast,

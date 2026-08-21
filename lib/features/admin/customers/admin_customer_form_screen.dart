@@ -11,6 +11,7 @@ import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Single-step form for creating or editing a customer.
 ///
@@ -165,7 +166,12 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(19, 16, 19, context.navClearance),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.base,
+            AppSpacing.pagePadding,
+            context.navClearance,
+          ),
           children: [
             // ── Required ───────────────────────────────────────────────────
             AppTextField(

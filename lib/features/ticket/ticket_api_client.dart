@@ -29,7 +29,8 @@ class TicketApiClient {
       '/api/tickets',
       data: {
         'title': title,
-        if (description != null && description.isNotEmpty) 'description': description,
+        if (description != null && description.isNotEmpty)
+          'description': description,
         'customerId': customerId,
         'locationId': locationId,
         'assignedUserId': ?assignedUserId,
@@ -47,7 +48,11 @@ class TicketApiClient {
     // here threw on the cast, which is why the technician picker on ticket creation came up empty.
     final response = await _dio.get<Map<String, dynamic>>(
       '/api/users',
-      queryParameters: {'role': 'Technician', 'isActive': 'true', 'pageSize': 200},
+      queryParameters: {
+        'role': 'Technician',
+        'isActive': 'true',
+        'pageSize': 200,
+      },
     );
 
     return pagedItems(response.data);

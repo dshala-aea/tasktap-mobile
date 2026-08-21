@@ -11,6 +11,7 @@ import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
 import '../timbra/timbra_providers.dart';
 import 'active_trackers_provider.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// What is running, right now, with the controls to stop it.
 ///
@@ -131,7 +132,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+        padding: const EdgeInsets.fromLTRB(10, AppSpacing.sm, 6, AppSpacing.sm),
         child: Row(
           children: [
             Icon(_glyph(t.kind), size: 16, color: AppColors.onDarkMuted),
@@ -170,7 +171,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
             ),
             if (onBreak)
               Padding(
-                padding: const EdgeInsets.only(right: 4),
+                padding: const EdgeInsets.only(right: AppSpacing.xs),
                 child: Text(
                   'in pausa',
                   style: TextStyle(
@@ -183,7 +184,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
               ),
             if (_busy)
               const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: SizedBox(
                   width: 18,
                   height: 18,

@@ -8,6 +8,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 4 — Riepilogo
@@ -53,7 +54,12 @@ class StepRiepilogoTicket extends ConsumerWidget {
     final statusName = state.statusId != null ? statusMap[state.statusId] : null;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
         // ── Title ──────────────────────────────────────────────────────────
         if (state.title != null && state.title!.isNotEmpty) ...[
@@ -122,7 +128,7 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: AppSpacing.md),
       decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [

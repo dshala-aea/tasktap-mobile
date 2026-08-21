@@ -9,6 +9,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../clienti/clienti_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin customer detail — shows all fields + edit FAB.
 class AdminCustomerDetailScreen extends ConsumerWidget {
@@ -61,7 +62,7 @@ class _CustomerDetailBody extends StatelessWidget {
         SliverToBoxAdapter(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.only(bottom: AppSpacing.xl),
               child: AppAvatar(name: customer.companyName, size: 64),
             ),
           ),
@@ -69,10 +70,10 @@ class _CustomerDetailBody extends StatelessWidget {
         // ── Anagrafica card ──────────────────────────────────────────────
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 19),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AppCard(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.base),
                 child: Column(
                   children: [
                     _infoRow(context, 'Ragione sociale', customer.companyName),
@@ -103,10 +104,10 @@ class _CustomerDetailBody extends StatelessWidget {
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 19),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: AppCard(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.base),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -124,10 +125,10 @@ class _CustomerDetailBody extends StatelessWidget {
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 19),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AppCard(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.base),
                 child: Row(
                   children: [
                     Text(
@@ -149,7 +150,7 @@ class _CustomerDetailBody extends StatelessWidget {
 
   static Widget _infoRow(BuildContext ctx, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

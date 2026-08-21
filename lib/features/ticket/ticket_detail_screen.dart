@@ -18,6 +18,7 @@ import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'ticket_workflow_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 class TicketDetailScreen extends ConsumerStatefulWidget {
   const TicketDetailScreen({super.key, required this.ticketId});
@@ -161,7 +162,10 @@ class _TicketDetailBody extends ConsumerWidget {
     final statusName = statusMap[ticket.statusId] ?? '';
     final typeName = typeMap[ticket.typeId] ?? '';
     final reference = ticketReference(ticket.numero);
-    final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(ticket.createdAt.toLocal());
+    final dateLabel = DateFormat(
+      'dd/MM/yyyy HH:mm',
+      'it',
+    ).format(ticket.createdAt.toLocal());
     final closedLabel = ticket.closedAt != null
         ? DateFormat('dd/MM/yyyy', 'it').format(ticket.closedAt!.toLocal())
         : '—';
@@ -169,7 +173,8 @@ class _TicketDetailBody extends ConsumerWidget {
     final customerAsync = ref.watch(customerByIdProvider(ticket.customerId));
     final locationAsync = ref.watch(locationByIdProvider(ticket.locationId));
 
-    final customerName = customerAsync.valueOrNull?.companyName ?? ticket.customerId;
+    final customerName =
+        customerAsync.valueOrNull?.companyName ?? ticket.customerId;
     final locationName = locationAsync.valueOrNull?.name ?? ticket.locationId;
     // Was the raw `assignedUserId` — a GUID, rendered at a technician as the answer to "who has
     // this job". Resolved from the synced colleagues mirror, so it still reads offline; falls back
@@ -177,7 +182,8 @@ class _TicketDetailBody extends ConsumerWidget {
     final assignedId = ticket.assignedUserId;
     final tecnicoLabel = assignedId == null
         ? '—'
-        : (ref.watch(colleagueNameProvider(assignedId)).valueOrNull ?? assignedId);
+        : (ref.watch(colleagueNameProvider(assignedId)).valueOrNull ??
+              assignedId);
 
     return SafeArea(
       child: Column(
@@ -205,7 +211,8 @@ class _TicketDetailBody extends ConsumerWidget {
               HeaderIconBtn(
                 icon: LucideIcons.briefcase,
                 label: 'Scheda cliente',
-                onTap: () => context.push(AppRoutes.clientiDetail(ticket.customerId)),
+                onTap: () =>
+                    context.push(AppRoutes.clientiDetail(ticket.customerId)),
               ),
             ],
           ),
@@ -217,8 +224,17 @@ class _TicketDetailBody extends ConsumerWidget {
           // laying out; this row is already on screen and costs nothing to reuse. It is also where
           // they belong — changing a status is editing the thing the pill displays.
           Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-            child: _TicketStatusRow(ticket: ticket, statusName: statusName, typeName: typeName),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+            ),
+            child: _TicketStatusRow(
+              ticket: ticket,
+              statusName: statusName,
+              typeName: typeName,
+            ),
           ),
 
           Expanded(
@@ -234,7 +250,12 @@ class _TicketDetailBody extends ConsumerWidget {
                 // it reports state as much as it offers an action.
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      0,
+                      AppSpacing.pagePadding,
+                      AppSpacing.md,
+                    ),
                     child: _TicketTimerBar(ticketId: ticket.id),
                   ),
                 ),
@@ -249,9 +270,16 @@ class _TicketDetailBody extends ConsumerWidget {
                 // boundaries between them louder than the content.
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      0,
+                      AppSpacing.pagePadding,
+                      AppSpacing.base,
+                    ),
                     child: AppCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.base,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -267,9 +295,15 @@ class _TicketDetailBody extends ConsumerWidget {
                                 (ticket.technicianNotes?.isNotEmpty ?? false),
                           ),
                           if (ticket.description?.isNotEmpty ?? false)
-                            _Prose(title: 'Descrizione', body: ticket.description!),
+                            _Prose(
+                              title: 'Descrizione',
+                              body: ticket.description!,
+                            ),
                           if (ticket.technicianNotes?.isNotEmpty ?? false)
-                            _Prose(title: 'Note tecnico', body: ticket.technicianNotes!),
+                            _Prose(
+                              title: 'Note tecnico',
+                              body: ticket.technicianNotes!,
+                            ),
                           const SizedBox(height: 14),
                         ],
                       ),
@@ -297,7 +331,9 @@ class _TicketDetailBody extends ConsumerWidget {
                   child: _TabContent(tabIndex: tabIndex, ticketId: ticket.id),
                 ),
 
-                SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+                SliverPadding(
+                  padding: EdgeInsets.only(bottom: context.navClearance),
+                ),
               ],
             ),
           ),
@@ -312,7 +348,12 @@ class _TicketDetailBody extends ConsumerWidget {
           // one leading. "Assegna" is a dispatcher's action and "Cliente" is navigation; both moved
           // to the header, where the screen's secondary controls already live.
           Padding(
-            padding: const EdgeInsets.fromLTRB(19, 8, 19, 16),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+              AppSpacing.pagePadding,
+              AppSpacing.base,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -342,7 +383,11 @@ class _TicketDetailBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _createRapportino(BuildContext context, WidgetRef ref, Ticket ticket) async {
+  Future<void> _createRapportino(
+    BuildContext context,
+    WidgetRef ref,
+    Ticket ticket,
+  ) async {
     final id = await createLocalDraft(
       ref,
       title: 'Rapportino — ${ticket.title}',
@@ -354,9 +399,9 @@ class _TicketDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Accedi per creare un rapportino.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Accedi per creare un rapportino.')),
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
@@ -437,7 +482,10 @@ class _TabLoading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Center(
-      child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+      child: Padding(
+        padding: EdgeInsets.all(AppSpacing.xxl),
+        child: CircularProgressIndicator(),
+      ),
     );
   }
 }
@@ -466,9 +514,18 @@ class _TabError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 0, 19, 0),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        0,
+        AppSpacing.pagePadding,
+        0,
+      ),
       child: offline
-          ? UnavailableState(icon: LucideIcons.wifiOff, titolo: offlineTitle, motivo: offlineBody)
+          ? UnavailableState(
+              icon: LucideIcons.wifiOff,
+              titolo: offlineTitle,
+              motivo: offlineBody,
+            )
           : UnavailableState(icon: icon, titolo: errorTitle, motivo: errorBody),
     );
   }
@@ -480,8 +537,9 @@ String _formatBytes(int bytes) {
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
-String _formatQty(double qty) =>
-    qty == qty.truncateToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(1);
+String _formatQty(double qty) => qty == qty.truncateToDouble()
+    ? qty.toStringAsFixed(0)
+    : qty.toStringAsFixed(1);
 
 // ── Report tab ───────────────────────────────────────────────────────────────
 
@@ -504,7 +562,8 @@ class _ReportTab extends ConsumerWidget {
             'La lista dei rapportini di questo ticket richiede una '
             'connessione: riprova quando torni online.',
         errorTitle: 'Impossibile caricare i rapportini',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (reports) {
         if (reports.isEmpty) {
@@ -515,12 +574,24 @@ class _ReportTab extends ConsumerWidget {
           );
         }
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
           child: Column(
             children: reports.map((r) {
-              final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(r.createdAt.toLocal());
+              final dateLabel = DateFormat(
+                'dd/MM/yyyy HH:mm',
+                'it',
+              ).format(r.createdAt.toLocal());
               return ListRow(
-                leading: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
+                leading: Icon(
+                  LucideIcons.fileText,
+                  size: 20,
+                  color: context.colors.inkMuted,
+                ),
                 title: r.title.isNotEmpty ? r.title : 'Rapportino',
                 subtitle: dateLabel,
                 meta: StatusPill(stato: r.statoLabel, small: true),
@@ -554,7 +625,8 @@ class _ControlloTab extends ConsumerWidget {
         offlineBody:
             'Il checklist di questo ticket richiede una connessione: riprova quando torni online.',
         errorTitle: 'Impossibile caricare i controlli',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (groups) {
         final flat = flattenTicketControls(groups);
@@ -568,12 +640,17 @@ class _ControlloTab extends ConsumerWidget {
           );
         }
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
           child: Column(
             children: flat
                 .map(
                   (f) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                     child: _TicketControlStatusCard(flat: f),
                   ),
                 )
@@ -601,7 +678,10 @@ class _TicketControlStatusCard extends StatelessWidget {
     final valueLabel = _valueLabel(c);
 
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: 10,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -614,7 +694,10 @@ class _TicketControlStatusCard extends StatelessWidget {
                 if (flat.groupPath.isNotEmpty)
                   Text(
                     flat.groupPath,
-                    style: TextStyle(color: context.colors.inkMuted, fontSize: 11),
+                    style: TextStyle(
+                      color: context.colors.inkMuted,
+                      fontSize: 11,
+                    ),
                   ),
                 Text(
                   c.label,
@@ -629,7 +712,10 @@ class _TicketControlStatusCard extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       valueLabel,
-                      style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
+                      style: TextStyle(
+                        color: context.colors.inkMuted,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
               ],
@@ -678,7 +764,8 @@ class _AllegatiTab extends ConsumerWidget {
             'Gli allegati di questo ticket richiedono una connessione: riprova quando '
             'torni online.',
         errorTitle: 'Impossibile caricare gli allegati',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (attachments) {
         if (attachments.isEmpty) {
@@ -689,12 +776,24 @@ class _AllegatiTab extends ConsumerWidget {
           );
         }
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
           child: Column(
             children: attachments.map((a) {
-              final dateLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(a.createdAt.toLocal());
+              final dateLabel = DateFormat(
+                'dd/MM/yyyy HH:mm',
+                'it',
+              ).format(a.createdAt.toLocal());
               return ListRow(
-                leading: Icon(LucideIcons.paperclip, size: 20, color: context.colors.inkMuted),
+                leading: Icon(
+                  LucideIcons.paperclip,
+                  size: 20,
+                  color: context.colors.inkMuted,
+                ),
                 title: a.fileName,
                 subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
                 showDivider: a != attachments.last,
@@ -728,7 +827,8 @@ class _FabbisognoTab extends ConsumerWidget {
             'I materiali pianificati per questo ticket richiedono una connessione: '
             'riprova quando torni online.',
         errorTitle: 'Impossibile caricare il fabbisogno',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (materiali) {
         if (materiali.isEmpty) {
@@ -739,7 +839,12 @@ class _FabbisognoTab extends ConsumerWidget {
           );
         }
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
           child: Column(
             children: materiali.map((m) {
               final qtyLabel = m.unitaMisura != null
@@ -749,10 +854,14 @@ class _FabbisognoTab extends ConsumerWidget {
                 leading: Icon(
                   LucideIcons.package,
                   size: 20,
-                  color: m.disponibile ? context.colors.inkMuted : context.colors.red,
+                  color: m.disponibile
+                      ? context.colors.inkMuted
+                      : context.colors.red,
                 ),
                 title: m.nome,
-                subtitle: m.codice != null ? '${m.codice} · $qtyLabel' : qtyLabel,
+                subtitle: m.codice != null
+                    ? '${m.codice} · $qtyLabel'
+                    : qtyLabel,
                 meta: !m.disponibile
                     ? const AppChip(label: 'Non disponibile', active: false)
                     : null,
@@ -767,7 +876,11 @@ class _FabbisognoTab extends ConsumerWidget {
 }
 
 class _EmptyTab extends StatelessWidget {
-  const _EmptyTab({required this.icon, required this.label, required this.body});
+  const _EmptyTab({
+    required this.icon,
+    required this.label,
+    required this.body,
+  });
 
   final IconData icon;
   final String label;
@@ -776,7 +889,12 @@ class _EmptyTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 0, 19, 0),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        0,
+        AppSpacing.pagePadding,
+        0,
+      ),
       child: EmptyState(icon: icon, title: label, body: body),
     );
   }
@@ -793,7 +911,10 @@ class _PianificazioniTab extends ConsumerWidget {
 
     return schedulesAsync.when(
       loading: () => const Center(
-        child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.xxl),
+          child: CircularProgressIndicator(),
+        ),
       ),
       error: (e, _) => const _EmptyTab(
         icon: LucideIcons.calendar,
@@ -804,10 +925,16 @@ class _PianificazioniTab extends ConsumerWidget {
           ? const _EmptyTab(
               icon: LucideIcons.calendarOff,
               label: 'Nessuna pianificazione',
-              body: 'Le pianificazioni collegate a questo ticket appariranno qui.',
+              body:
+                  'Le pianificazioni collegate a questo ticket appariranno qui.',
             )
           : Padding(
-              padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+                AppSpacing.pagePadding,
+                0,
+              ),
               child: Column(
                 children: schedules.map((s) {
                   final dateLabel = DateFormat(
@@ -875,14 +1002,16 @@ class _AssignSheetState extends State<_AssignSheet> {
     try {
       await widget.api.assignTicket(widget.ticket.id, _selectedUserId);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Assegnazione aggiornata')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Assegnazione aggiornata')),
+        );
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Errore: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -892,12 +1021,20 @@ class _AssignSheetState extends State<_AssignSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(19, 19, 19, MediaQuery.of(context).viewInsets.bottom + 19),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        MediaQuery.of(context).viewInsets.bottom + 19,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Assegna tecnico', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Assegna tecnico',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 16),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
@@ -907,11 +1044,18 @@ class _AssignSheetState extends State<_AssignSheet> {
               child: DropdownButtonFormField<String>(
                 initialValue: _selectedUserId,
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('Non assegnato')),
+                  const DropdownMenuItem(
+                    value: null,
+                    child: Text('Non assegnato'),
+                  ),
                   ..._technicians.map(
                     (t) => DropdownMenuItem(
                       value: t['id'] as String,
-                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                      child: Text(
+                        t['displayName'] as String? ??
+                            t['email'] as String? ??
+                            '',
+                      ),
                     ),
                   ),
                 ],
@@ -968,9 +1112,9 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
       await ref.read(ticketWorklogsProvider(widget.ticketId).future);
     } on TicketWorkflowFailure catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: context.colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: context.colors.red),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1028,13 +1172,19 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
             ),
           ),
           if (_busy)
-            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
           else
             AppButton(
               label: isRunning ? 'Ferma' : 'Avvia',
               size: AppButtonSize.sm,
               fullWidth: false,
-              variant: isRunning ? AppButtonVariant.dark : AppButtonVariant.primary,
+              variant: isRunning
+                  ? AppButtonVariant.dark
+                  : AppButtonVariant.primary,
               onPressed: async.isLoading
                   ? null
                   : () => _run(() {
@@ -1072,7 +1222,11 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
 /// record, which is the one thing this app does not do. So self-assign asks for a sync and lets
 /// the server's answer land.
 class _TicketStatusRow extends ConsumerStatefulWidget {
-  const _TicketStatusRow({required this.ticket, required this.statusName, required this.typeName});
+  const _TicketStatusRow({
+    required this.ticket,
+    required this.statusName,
+    required this.typeName,
+  });
 
   final Ticket ticket;
   final String statusName;
@@ -1099,7 +1253,9 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await ref.read(ticketWorkflowApiClientProvider).selfAssign(widget.ticket.id);
+      await ref
+          .read(ticketWorkflowApiClientProvider)
+          .selfAssign(widget.ticket.id);
       _report('Ticket assegnato a te.', ok: true);
       // No local write — see the class doc. The sync brings back whatever id the server actually
       // recorded, and the Drift stream under this screen updates itself when it lands.
@@ -1121,8 +1277,13 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
 
       // Safe to mirror: this is the value the server just accepted, not a value we invented.
       final db = ref.read(appDatabaseProvider);
-      await (db.update(db.tickets)..where((t) => t.id.equals(widget.ticket.id))).write(
-        TicketsCompanion(statusId: Value(statusId), updatedAt: Value(DateTime.now().toUtc())),
+      await (db.update(
+        db.tickets,
+      )..where((t) => t.id.equals(widget.ticket.id))).write(
+        TicketsCompanion(
+          statusId: Value(statusId),
+          updatedAt: Value(DateTime.now().toUtc()),
+        ),
       );
 
       _report('Stato aggiornato: $label', ok: true);
@@ -1143,14 +1304,21 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
     final chosen = await showModalBottomSheet<MapEntry<int, String>>(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRack.cellRadius),
+        ),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(19, 16, 19, 8),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+              ),
               child: Row(
                 children: [
                   Expanded(
@@ -1218,7 +1386,11 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
         ],
         const Spacer(),
         if (_busy)
-          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
         else if (unassigned)
           AppButton(
             label: 'Prendi in carico',
@@ -1259,25 +1431,35 @@ class _OreTab extends ConsumerWidget {
             'Le ore registrate su questo ticket si leggono solo online: '
             'riprova quando torni in copertura.',
         errorTitle: 'Impossibile caricare le ore',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (entries) {
         if (entries.isEmpty) {
           return const _EmptyTab(
             icon: LucideIcons.clock,
             label: 'Nessuna ora registrata',
-            body: 'Avvia il timer o aggiungi le ore manualmente per registrarle su questo ticket.',
+            body:
+                'Avvia il timer o aggiungi le ore manualmente per registrarle su questo ticket.',
           );
         }
 
         // Only closed entries contribute. A running one has no duration yet, and counting it as
         // zero would quietly understate the total on exactly the ticket being worked.
         final closed = entries.where((e) => !e.isRunning);
-        final total = closed.fold<Duration>(Duration.zero, (a, e) => a + e.duration!);
+        final total = closed.fold<Duration>(
+          Duration.zero,
+          (a, e) => a + e.duration!,
+        );
         final running = entries.where((e) => e.isRunning).length;
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1341,7 +1523,10 @@ class _WorklogRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final dateLabel = DateFormat('EEE d MMM', 'it').format(entry.workDate.toLocal());
+    final dateLabel = DateFormat(
+      'EEE d MMM',
+      'it',
+    ).format(entry.workDate.toLocal());
     final span = entry.endTime == null
         ? '${_hhmm(entry.startTime)} → in corso'
         : '${_hhmm(entry.startTime)} – ${_hhmm(entry.endTime!)}';
@@ -1357,7 +1542,8 @@ class _WorklogRow extends StatelessWidget {
       subtitle: [
         span,
         if (entry.isManualEntry) 'inserimento manuale',
-        if (entry.description != null && entry.description!.isNotEmpty) entry.description!,
+        if (entry.description != null && entry.description!.isNotEmpty)
+          entry.description!,
       ].join(' · '),
       meta: Text(
         // An open entry shows a dash, not 0:00 — the same refusal to draw a stopped-looking clock
@@ -1412,7 +1598,8 @@ class _StoricoTab extends ConsumerWidget {
             'La cronologia delle modifiche si legge solo online: '
             'riprova quando torni in copertura.',
         errorTitle: 'Impossibile caricare lo storico',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (entries) {
         if (entries.isEmpty) {
@@ -1424,17 +1611,32 @@ class _StoricoTab extends ConsumerWidget {
         }
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 12, 19, 0),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
           child: Column(
             children: [
               for (final e in entries)
                 ListRow(
-                  leading: Icon(LucideIcons.history, size: 20, color: context.colors.inkMuted),
+                  leading: Icon(
+                    LucideIcons.history,
+                    size: 20,
+                    color: context.colors.inkMuted,
+                  ),
                   title: _fieldLabel(e.fieldName),
                   subtitle: _change(e, statusMap, typeMap),
                   meta: Text(
-                    DateFormat('dd/MM HH:mm', 'it').format(e.changedAt.toLocal()),
-                    style: TextStyle(fontSize: 11, color: context.colors.inkMuted),
+                    DateFormat(
+                      'dd/MM HH:mm',
+                      'it',
+                    ).format(e.changedAt.toLocal()),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.colors.inkMuted,
+                    ),
                   ),
                 ),
             ],

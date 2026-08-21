@@ -9,6 +9,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'clienti_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 class ClientiListScreen extends StatefulWidget {
   const ClientiListScreen({super.key});
@@ -84,7 +85,10 @@ class _ClientiListBody extends ConsumerWidget {
         if (customersAsync.isLoading)
           const SliverToBoxAdapter(
             child: Center(
-              child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xxxl),
+                child: CircularProgressIndicator(),
+              ),
             ),
           )
         else if (filtered.isEmpty)
@@ -99,7 +103,10 @@ class _ClientiListBody extends ConsumerWidget {
           SliverList(
             delegate: SliverChildBuilderDelegate((context, i) {
               final customer = filtered[i];
-              return _ClienteRow(customer: customer, isLast: i == filtered.length - 1);
+              return _ClienteRow(
+                customer: customer,
+                isLast: i == filtered.length - 1,
+              );
             }, childCount: filtered.length),
           ),
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
@@ -126,7 +133,11 @@ class _ClienteRow extends ConsumerWidget {
       leading: AppAvatar(name: customer.companyName, size: 40),
       title: customer.companyName,
       subtitle: subLabel,
-      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
+      meta: Icon(
+        LucideIcons.chevronRight,
+        size: 16,
+        color: context.colors.inkMuted,
+      ),
       showDivider: !isLast,
       onTap: () => context.push(AppRoutes.clientiDetail(customer.id)),
     );

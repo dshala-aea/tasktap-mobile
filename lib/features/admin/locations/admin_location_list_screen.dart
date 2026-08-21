@@ -11,6 +11,7 @@ import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// All locations from Drift cache, alphabetical.
 final adminLocationsProvider = StreamProvider.autoDispose<List<Location>>((ref) {
@@ -112,7 +113,12 @@ class _AdminLocationListBody extends ConsumerWidget {
           // ── Customer filter ──────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+              ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -139,7 +145,10 @@ class _AdminLocationListBody extends ConsumerWidget {
           if (locationsAsync.isLoading)
             const SliverToBoxAdapter(
               child: Center(
-                child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xxxl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
             )
           else if (filtered.isEmpty)

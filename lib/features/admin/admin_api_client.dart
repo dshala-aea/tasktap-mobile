@@ -37,11 +37,13 @@ class AdminApiClient {
         if (taxId != null && taxId.isNotEmpty) 'taxId': taxId,
         if (address != null && address.isNotEmpty) 'address': address,
         if (city != null && city.isNotEmpty) 'city': city,
-        if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
+        if (postalCode != null && postalCode.isNotEmpty)
+          'postalCode': postalCode,
         if (country != null && country.isNotEmpty) 'country': country,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (email != null && email.isNotEmpty) 'email': email,
-        if (contactPerson != null && contactPerson.isNotEmpty) 'contactPerson': contactPerson,
+        if (contactPerson != null && contactPerson.isNotEmpty)
+          'contactPerson': contactPerson,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
@@ -101,7 +103,8 @@ class AdminApiClient {
         'name': name,
         if (address != null && address.isNotEmpty) 'address': address,
         if (city != null && city.isNotEmpty) 'city': city,
-        if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
+        if (postalCode != null && postalCode.isNotEmpty)
+          'postalCode': postalCode,
         if (country != null && country.isNotEmpty) 'country': country,
         'latitude': ?latitude,
         'longitude': ?longitude,
@@ -163,7 +166,8 @@ class AdminApiClient {
         'name': name,
         if (address != null && address.isNotEmpty) 'address': address,
         if (city != null && city.isNotEmpty) 'city': city,
-        if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
+        if (postalCode != null && postalCode.isNotEmpty)
+          'postalCode': postalCode,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (startDate != null) 'startDate': startDate.toIso8601String(),
         if (endDate != null) 'endDate': endDate.toIso8601String(),
@@ -233,7 +237,8 @@ class AdminApiClient {
         'ticketId': ?ticketId,
         'allDay': allDay,
         if (title != null && title.isNotEmpty) 'title': title,
-        if (description != null && description.isNotEmpty) 'description': description,
+        if (description != null && description.isNotEmpty)
+          'description': description,
         'teamLeadId': ?teamLeadId,
         'staffIds': ?staffIds,
         'squadraId': ?squadraId,
@@ -258,7 +263,8 @@ class AdminApiClient {
     await _dio.put(
       '/api/schedules/$id',
       data: {
-        if (activityDate != null) 'activityDate': activityDate.toIso8601String(),
+        if (activityDate != null)
+          'activityDate': activityDate.toIso8601String(),
         if (timeStartMinutes != null)
           'timeStart':
               '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
@@ -285,7 +291,11 @@ class AdminApiClient {
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/users',
-      queryParameters: {'role': 'Technician', 'isActive': 'true', 'pageSize': 200},
+      queryParameters: {
+        'role': 'Technician',
+        'isActive': 'true',
+        'pageSize': 200,
+      },
     );
     return pagedItems(res.data);
   }
@@ -307,8 +317,10 @@ class AdminApiClient {
       data: {
         'code': code,
         'name': name,
-        if (description != null && description.isNotEmpty) 'description': description,
-        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty) 'unitOfMeasure': unitOfMeasure,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty)
+          'unitOfMeasure': unitOfMeasure,
         if (category != null && category.isNotEmpty) 'category': category,
         if (marca != null && marca.isNotEmpty) 'marca': marca,
         'purchasePrice': ?purchasePrice,
@@ -368,9 +380,12 @@ class AdminApiClient {
         'name': name,
         'customerId': customerId,
         'locationId': locationId,
-        if (description != null && description.isNotEmpty) 'description': description,
-        if (serialNumber != null && serialNumber.isNotEmpty) 'serialNumber': serialNumber,
-        if (warrantyExpiryDate != null) 'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        if (serialNumber != null && serialNumber.isNotEmpty)
+          'serialNumber': serialNumber,
+        if (warrantyExpiryDate != null)
+          'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
@@ -396,7 +411,8 @@ class AdminApiClient {
         'locationId': ?locationId,
         'description': ?description,
         'serialNumber': ?serialNumber,
-        if (warrantyExpiryDate != null) 'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
+        if (warrantyExpiryDate != null)
+          'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         'notes': ?notes,
         'isActive': ?isActive,
       },
@@ -429,7 +445,8 @@ class AdminApiClient {
         'name': name,
         'customerId': customerId,
         'startDate': startDate.toIso8601String(),
-        if (description != null && description.isNotEmpty) 'description': description,
+        if (description != null && description.isNotEmpty)
+          'description': description,
         'locationId': ?locationId,
         'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
@@ -499,7 +516,8 @@ class AdminApiClient {
       '/api/squadre',
       data: {
         'nome': nome,
-        if (descrizione != null && descrizione.isNotEmpty) 'descrizione': descrizione,
+        if (descrizione != null && descrizione.isNotEmpty)
+          'descrizione': descrizione,
         if (specializzazione != null && specializzazione.isNotEmpty)
           'specializzazione': specializzazione,
         if (coloreCalendario != null && coloreCalendario.isNotEmpty)
@@ -537,7 +555,10 @@ class AdminApiClient {
     required String userId,
     String ruolo = 'Membro',
   }) async {
-    await _dio.post('/api/squadre/$squadraId/membri', data: {'userId': userId, 'ruolo': ruolo});
+    await _dio.post(
+      '/api/squadre/$squadraId/membri',
+      data: {'userId': userId, 'ruolo': ruolo},
+    );
   }
 
   Future<void> removeSquadraMember(String squadraId, String userId) async {

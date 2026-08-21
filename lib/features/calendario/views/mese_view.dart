@@ -9,6 +9,7 @@ import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Calendario → Mese view: month calendar grid (weeks × 7). Each day cell
 /// shows event dots / count. Tapping a day selects it and switches to Giorno.
@@ -38,7 +39,11 @@ class MeseView extends ConsumerWidget {
     final grouped = groupSchedulesByDay(schedules);
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
-    final selectedKey = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final selectedKey = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+    );
 
     final monthStart = DateTime(month.year, month.month, 1);
     final monthEnd = DateTime(month.year, month.month + 1, 0);
@@ -68,7 +73,7 @@ class MeseView extends ConsumerWidget {
         // twice and drifted out of step the moment either one was changed.
         // Weekday header row
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           child: Row(
             children: weekdays
                 .map(
@@ -94,14 +99,15 @@ class MeseView extends ConsumerWidget {
         // Day cells
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
             child: Column(
               children: List.generate(weekCount, (row) {
                 return Expanded(
                   child: Row(
                     children: List.generate(7, (col) {
                       final idx = row * 7 + col;
-                      if (idx >= gridDays.length) return const Expanded(child: SizedBox());
+                      if (idx >= gridDays.length)
+                        return const Expanded(child: SizedBox());
                       final day = gridDays[idx];
                       final key = DateTime(day.year, day.month, day.day);
                       final inMonth = day.month == month.month;
@@ -140,7 +146,11 @@ class MeseView extends ConsumerWidget {
                                         : context.colors.inkDisabled,
                                   ),
                                 ),
-                                if (count > 0) _EventDots(count: count, isSelected: isSelected),
+                                if (count > 0)
+                                  _EventDots(
+                                    count: count,
+                                    isSelected: isSelected,
+                                  ),
                               ],
                             ),
                           ),

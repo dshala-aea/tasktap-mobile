@@ -11,6 +11,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin materiale form — create or edit.
 class AdminMaterialeFormScreen extends ConsumerStatefulWidget {
@@ -178,7 +179,12 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            context.navClearance,
+          ),
           children: [
             AppTextField(
               label: 'Codice *',

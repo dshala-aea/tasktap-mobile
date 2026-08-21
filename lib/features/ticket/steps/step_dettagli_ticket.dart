@@ -6,6 +6,7 @@ import '../../../core/widgets/app_text_field.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Dettagli Ticket
@@ -60,7 +61,12 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     final types = typesAsync.valueOrNull ?? {};
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
         // ── Title ──────────────────────────────────────────────────────────
         AppTextField(

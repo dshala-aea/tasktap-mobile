@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/widgets/widgets.dart';
 import 'notifiche_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -93,9 +94,13 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                     // A bare text action, so the splash is the only thing that confirms the
                     // press at all — the list it clears is below the fold on a full inbox.
                     AppTappable(
-                      onTap: () => ref.read(notificheProvider.notifier).segnaLette(),
+                      onTap: () =>
+                          ref.read(notificheProvider.notifier).segnaLette(),
                       borderRadius: BorderRadius.circular(6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.md,
+                      ),
                       child: Text(
                         'Segna tutte',
                         style: TextStyle(
@@ -113,13 +118,18 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
             // ── Filter chips ───────────────────────────────────────────────
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  AppSpacing.md,
+                ),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: _NotificaFilter.values.map((f) {
                       return Padding(
-                        padding: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.only(right: AppSpacing.sm),
                         child: AppChip(
                           label: f.label,
                           active: _filter == f,
@@ -160,7 +170,9 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                 }, childCount: filtered.length),
               ),
 
-            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            SliverPadding(
+              padding: EdgeInsets.only(bottom: context.navClearance),
+            ),
           ],
         ),
       ),
@@ -173,7 +185,11 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _NotificaRow extends StatelessWidget {
-  const _NotificaRow({required this.notifica, required this.isLast, required this.onTap});
+  const _NotificaRow({
+    required this.notifica,
+    required this.isLast,
+    required this.onTap,
+  });
 
   final AppNotifica notifica;
   final bool isLast;
@@ -214,7 +230,11 @@ class _NotificaRow extends StatelessWidget {
       subtitle: notifica.corpo,
       meta: Text(
         _formatTime(notifica.timestamp),
-        style: TextStyle(fontFamily: 'Manrope', fontSize: 10, color: context.colors.inkMuted),
+        style: TextStyle(
+          fontFamily: 'Manrope',
+          fontSize: 10,
+          color: context.colors.inkMuted,
+        ),
       ),
       showDivider: !isLast,
       onTap: onTap,

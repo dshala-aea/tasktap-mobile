@@ -25,9 +25,15 @@ class TicketWorkflowApiClient {
   final Dio _dio;
 
   /// PUT /api/Tickets/{id}/status
-  Future<void> updateStatus({required String ticketId, required int statusId}) async {
+  Future<void> updateStatus({
+    required String ticketId,
+    required int statusId,
+  }) async {
     await _run(
-      () => _dio.put<dynamic>('/api/Tickets/$ticketId/status', data: {'statusId': statusId}),
+      () => _dio.put<dynamic>(
+        '/api/Tickets/$ticketId/status',
+        data: {'statusId': statusId},
+      ),
       fallback: 'Impossibile aggiornare lo stato del ticket.',
     );
   }
@@ -44,7 +50,9 @@ class TicketWorkflowApiClient {
 
   /// GET /api/Tickets/{id}/history — the field-by-field audit trail, newest first.
   Future<List<TicketHistoryEntryDto>> fetchHistory(String ticketId) async {
-    final response = await _dio.get<List<dynamic>>('/api/Tickets/$ticketId/history');
+    final response = await _dio.get<List<dynamic>>(
+      '/api/Tickets/$ticketId/history',
+    );
     return (response.data ?? const [])
         .cast<Map<String, dynamic>>()
         .map(TicketHistoryEntryDto.fromJson)
@@ -53,7 +61,9 @@ class TicketWorkflowApiClient {
 
   /// GET /api/tickets/{ticketId}/worklogs — every entry booked against this ticket.
   Future<List<TicketWorkLogDto>> fetchWorklogs(String ticketId) async {
-    final response = await _dio.get<List<dynamic>>('/api/tickets/$ticketId/worklogs');
+    final response = await _dio.get<List<dynamic>>(
+      '/api/tickets/$ticketId/worklogs',
+    );
     return (response.data ?? const [])
         .cast<Map<String, dynamic>>()
         .map(TicketWorkLogDto.fromJson)
@@ -108,7 +118,10 @@ class TicketWorkflowApiClient {
 
   // ── Plumbing ───────────────────────────────────────────────────────────────
 
-  Future<void> _run(Future<Response<dynamic>> Function() call, {required String fallback}) async {
+  Future<void> _run(
+    Future<Response<dynamic>> Function() call, {
+    required String fallback,
+  }) async {
     try {
       await call();
     } on DioException catch (e) {
@@ -126,7 +139,9 @@ class TicketWorkflowApiClient {
   static String _italianFor(DioException e, String fallback) {
     final status = e.response?.statusCode;
     final body = e.response?.data;
-    final raw = body is String ? body : (body is Map ? body['message']?.toString() : null);
+    final raw = body is String
+        ? body
+        : (body is Map ? body['message']?.toString() : null);
 
     if (e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
@@ -225,18 +240,20 @@ class TicketWorkLogDto {
   /// dashboard hero used to make.
   Duration? get duration => endTime == null ? null : endTime! - startTime;
 
-  factory TicketWorkLogDto.fromJson(Map<String, dynamic> json) => TicketWorkLogDto(
-    id: json['id'] as String? ?? '',
-    ticketId: json['ticketId'] as String? ?? '',
-    userId: json['userId'] as String? ?? '',
-    workDate:
-        DateTime.tryParse(json['workDate'] as String? ?? '')?.toUtc() ?? DateTime.now().toUtc(),
-    startTime: _parseHms(json['startTime']),
-    endTime: json['endTime'] == null ? null : _parseHms(json['endTime']),
-    isManualEntry: json['isManualEntry'] as bool? ?? false,
-    description: json['description'] as String?,
-    approvalStatus: json['approvalStatus']?.toString(),
-  );
+  factory TicketWorkLogDto.fromJson(Map<String, dynamic> json) =>
+      TicketWorkLogDto(
+        id: json['id'] as String? ?? '',
+        ticketId: json['ticketId'] as String? ?? '',
+        userId: json['userId'] as String? ?? '',
+        workDate:
+            DateTime.tryParse(json['workDate'] as String? ?? '')?.toUtc() ??
+            DateTime.now().toUtc(),
+        startTime: _parseHms(json['startTime']),
+        endTime: json['endTime'] == null ? null : _parseHms(json['endTime']),
+        isManualEntry: json['isManualEntry'] as bool? ?? false,
+        description: json['description'] as String?,
+        approvalStatus: json['approvalStatus']?.toString(),
+      );
 }
 
 /// One field change on a ticket.
@@ -259,16 +276,18 @@ class TicketHistoryEntryDto {
   final String? oldValue;
   final String? newValue;
 
-  factory TicketHistoryEntryDto.fromJson(Map<String, dynamic> json) => TicketHistoryEntryDto(
-    id: json['id'] as String? ?? '',
-    ticketId: json['ticketId'] as String? ?? '',
-    fieldName: json['fieldName'] as String? ?? '',
-    changedByUserId: json['changedByUserId'] as String? ?? '',
-    changedAt:
-        DateTime.tryParse(json['changedAt'] as String? ?? '')?.toUtc() ?? DateTime.now().toUtc(),
-    oldValue: json['oldValue'] as String?,
-    newValue: json['newValue'] as String?,
-  );
+  factory TicketHistoryEntryDto.fromJson(Map<String, dynamic> json) =>
+      TicketHistoryEntryDto(
+        id: json['id'] as String? ?? '',
+        ticketId: json['ticketId'] as String? ?? '',
+        fieldName: json['fieldName'] as String? ?? '',
+        changedByUserId: json['changedByUserId'] as String? ?? '',
+        changedAt:
+            DateTime.tryParse(json['changedAt'] as String? ?? '')?.toUtc() ??
+            DateTime.now().toUtc(),
+        oldValue: json['oldValue'] as String?,
+        newValue: json['newValue'] as String?,
+      );
 }
 
 /// `TimeSpan` arrives as `HH:MM:SS`, and as `D.HH:MM:SS` once it passes 24 hours.
@@ -295,6 +314,8 @@ Duration _parseHms(Object? value) {
   return Duration(days: days, hours: h, minutes: m, seconds: s);
 }
 
-final ticketWorkflowApiClientProvider = Provider<TicketWorkflowApiClient>((ref) {
+final ticketWorkflowApiClientProvider = Provider<TicketWorkflowApiClient>((
+  ref,
+) {
   return TicketWorkflowApiClient(ref.watch(dioProvider));
 });

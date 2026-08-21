@@ -9,6 +9,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Single materiale by id from Drift cache.
 final adminMaterialeDetailProvider = StreamProvider.autoDispose.family<MaterialiData?, String>((
@@ -92,7 +93,12 @@ class _MaterialeDetailBody extends StatelessWidget {
         if (materiale.imageUrl != null)
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
@@ -113,14 +119,14 @@ class _MaterialeDetailBody extends StatelessWidget {
           ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(19),
+            padding: const EdgeInsets.all(AppSpacing.pagePadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!materiale.isActive)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    margin: const EdgeInsets.only(bottom: 16),
+                    margin: const EdgeInsets.only(bottom: AppSpacing.base),
                     decoration: BoxDecoration(
                       color: context.colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
@@ -177,7 +183,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

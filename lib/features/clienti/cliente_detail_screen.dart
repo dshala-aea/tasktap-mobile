@@ -11,6 +11,7 @@ import '../../data/clienti/cliente_overview_api_client.dart';
 import '../ticket/ticket_label.dart';
 import 'clienti_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 class ClienteDetailScreen extends ConsumerWidget {
   const ClienteDetailScreen({super.key, required this.customerId});
@@ -24,7 +25,8 @@ class ClienteDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: customerAsync.when(
-        loading: () => const SafeArea(child: Center(child: CircularProgressIndicator())),
+        loading: () =>
+            const SafeArea(child: Center(child: CircularProgressIndicator())),
         error: (e, _) => SafeArea(child: Center(child: Text('Errore: $e'))),
         data: (customer) {
           if (customer == null) {
@@ -80,7 +82,12 @@ class _ClienteDetailBody extends ConsumerWidget {
           // Avatar hero
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 20),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.lg,
+              ),
               child: Row(
                 children: [
                   AppAvatar(name: customer.companyName, size: 56),
@@ -117,28 +124,46 @@ class _ClienteDetailBody extends ConsumerWidget {
 
           // Counts and fiscal detail, from the server. Additive: everything below still renders
           // from the local mirror whether or not this resolves.
-          SliverToBoxAdapter(child: _ClienteOverviewSection(customerId: customer.id)),
+          SliverToBoxAdapter(
+            child: _ClienteOverviewSection(customerId: customer.id),
+          ),
 
           // Anagrafica KeyVal card
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+              ),
               child: AppCard(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.base,
+                ),
                 child: Column(
                   children: [
                     KeyVal(
                       label: 'P.IVA',
-                      value: customer.taxId?.isNotEmpty == true ? customer.taxId! : '—',
+                      value: customer.taxId?.isNotEmpty == true
+                          ? customer.taxId!
+                          : '—',
                     ),
-                    KeyVal(label: 'Indirizzo', value: addressParts.isNotEmpty ? addressParts : '—'),
+                    KeyVal(
+                      label: 'Indirizzo',
+                      value: addressParts.isNotEmpty ? addressParts : '—',
+                    ),
                     KeyVal(
                       label: 'Telefono',
-                      value: customer.phone?.isNotEmpty == true ? customer.phone! : '—',
+                      value: customer.phone?.isNotEmpty == true
+                          ? customer.phone!
+                          : '—',
                     ),
                     KeyVal(
                       label: 'Email',
-                      value: customer.email?.isNotEmpty == true ? customer.email! : '—',
+                      value: customer.email?.isNotEmpty == true
+                          ? customer.email!
+                          : '—',
                     ),
                     KeyVal(
                       label: 'Referente',
@@ -157,7 +182,12 @@ class _ClienteDetailBody extends ConsumerWidget {
           if (customer.notes != null && customer.notes!.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  AppSpacing.base,
+                ),
                 child: AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,13 +216,21 @@ class _ClienteDetailBody extends ConsumerWidget {
           if (ticketsAsync.isLoading)
             const SliverToBoxAdapter(
               child: Center(
-                child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
             )
           else if (tickets.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 0),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  0,
+                  AppSpacing.pagePadding,
+                  0,
+                ),
                 child: EmptyState(
                   icon: LucideIcons.ticket,
                   title: 'Nessun ticket',
@@ -205,9 +243,14 @@ class _ClienteDetailBody extends ConsumerWidget {
               delegate: SliverChildBuilderDelegate((context, i) {
                 final ticket = tickets[i];
                 final reference = ticketReference(ticket.numero);
-                final dateLabel = DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
+                final dateLabel = DateFormat(
+                  'dd/MM/yy',
+                  'it',
+                ).format(ticket.createdAt.toLocal());
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 19),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.pagePadding,
+                  ),
                   child: ListRow(
                     leading: Container(
                       width: 40,
@@ -216,13 +259,20 @@ class _ClienteDetailBody extends ConsumerWidget {
                         color: context.colors.bg3,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
+                      child: Icon(
+                        LucideIcons.ticket,
+                        size: 20,
+                        color: context.colors.inkMuted,
+                      ),
                     ),
                     title: ticket.title,
                     subtitle: reference,
                     meta: Text(
                       dateLabel,
-                      style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: context.colors.inkMuted,
+                      ),
                     ),
                     showDivider: false,
                     onTap: () => context.push('/ticket/${ticket.id}'),
@@ -263,11 +313,18 @@ class _ClienteOverviewSection extends ConsumerWidget {
       loading: () => const SizedBox.shrink(),
 
       error: (e, _) => Padding(
-        padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding,
+          0,
+          AppSpacing.pagePadding,
+          AppSpacing.base,
+        ),
         child: Row(
           children: [
             Icon(
-              e is ClienteOverviewOfflineException ? LucideIcons.cloudOff : LucideIcons.alertCircle,
+              e is ClienteOverviewOfflineException
+                  ? LucideIcons.cloudOff
+                  : LucideIcons.alertCircle,
               size: 14,
               color: c.inkMuted,
             ),
@@ -277,7 +334,11 @@ class _ClienteOverviewSection extends ConsumerWidget {
                 e is ClienteOverviewOfflineException
                     ? 'Dati fiscali e conteggi non disponibili offline.'
                     : 'Dati fiscali e conteggi non caricati.',
-                style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: c.inkMuted),
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  color: c.inkMuted,
+                ),
               ),
             ),
           ],
@@ -294,7 +355,12 @@ class _ClienteOverviewSection extends ConsumerWidget {
         ].where((r) => r.$2 != null && r.$2!.isNotEmpty).toList();
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            0,
+            AppSpacing.pagePadding,
+            AppSpacing.base,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -304,7 +370,10 @@ class _ClienteOverviewSection extends ConsumerWidget {
                   items: [
                     StatItem(label: 'Sedi attive', value: '${o.sediAttive}'),
                     StatItem(label: 'Contratti', value: '${o.contratti}'),
-                    StatItem(label: 'Interventi', value: '${o.interventiTotali}'),
+                    StatItem(
+                      label: 'Interventi',
+                      value: '${o.interventiTotali}',
+                    ),
                     StatItem(label: 'Aperti', value: '${o.interventiAperti}'),
                   ],
                 ),
@@ -312,7 +381,9 @@ class _ClienteOverviewSection extends ConsumerWidget {
               if (fiscal.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.base,
+                  ),
                   child: Column(
                     children: [
                       for (var i = 0; i < fiscal.length; i++)

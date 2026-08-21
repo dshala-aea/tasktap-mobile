@@ -12,6 +12,7 @@ import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 2 — Ore
@@ -36,13 +37,18 @@ class StepOre extends ConsumerWidget {
       children: [
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(19, 16, 19, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.base,
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+            ),
             children: [
               StepLabel(title: 'Tecnici / Ore lavorate'),
               const SizedBox(height: 12),
               if (state.staffRows.isEmpty)
                 Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
                   child: Center(
                     child: Text(
                       'Nessun tecnico aggiunto.\nPremi il pulsante per aggiungere.',
@@ -54,7 +60,7 @@ class StepOre extends ConsumerWidget {
               else
                 ...state.staffRows.map(
                   (row) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
                     child: _StaffTile(
                       row: row,
                       onUpdate: (updated) => notifier.updateStaff(updated),
@@ -116,7 +122,7 @@ class StepOre extends ConsumerWidget {
               constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
               child: colleagues.when(
                 loading: () => const Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: EdgeInsets.all(AppSpacing.xxl),
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (_, _) =>
@@ -146,7 +152,12 @@ class StepOre extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Padding(
-                        padding: EdgeInsets.fromLTRB(20, 4, 20, 12),
+                        padding: EdgeInsets.fromLTRB(
+                          AppSpacing.lg,
+                          AppSpacing.xs,
+                          AppSpacing.lg,
+                          AppSpacing.md,
+                        ),
                         child: Text(
                           'Chi ha lavorato con te?',
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -205,7 +216,12 @@ class _StaffPickerMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.sm,
+        AppSpacing.xl,
+        AppSpacing.xxl,
+      ),
       child: Text(
         text,
         style: TextStyle(fontSize: 16, height: 1.4, color: context.colors.inkFaint),
@@ -260,7 +276,7 @@ class _StaffTileState extends State<_StaffTile> {
     final row = widget.row;
 
     return AppCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -458,7 +474,7 @@ class _TotalOreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.CHARCOAL,
         borderRadius: AppRack.freeShape,

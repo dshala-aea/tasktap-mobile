@@ -11,6 +11,7 @@ import 'steps/step_materiali_fold.dart';
 import 'steps/step_ore.dart';
 import 'steps/step_riepilogo.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoFormScreen
@@ -86,7 +87,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
         actions: [
           // Autosave indicator
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: editorState.isSaving
                 ? const SizedBox(
                     width: 18,
@@ -106,7 +107,12 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           // a numbered disc, was most of the first viewport spent on chrome.
           Container(
             color: AppColors.CHARCOAL,
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+            ),
             child: AppStepper(
               steps: _kSteps,
               currentIndex: _stepIndex,
@@ -166,7 +172,10 @@ class _BottomNavBar extends StatelessWidget {
       top: false,
       child: Container(
         color: context.colors.surface,
-        padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
             if (!isFirst) ...[

@@ -15,6 +15,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/steps/step_assegnazione.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin schedule form — create or edit.
 class AdminScheduleFormScreen extends ConsumerStatefulWidget {
@@ -193,7 +194,12 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            context.navClearance,
+          ),
           children: [
             AppTextField(label: 'Titolo', controller: _titleCtrl),
             const SizedBox(height: 16),

@@ -10,6 +10,7 @@ import '../../data/local/app_database.dart';
 import 'rapportino_list_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoViewScreen — read-only view for submitted rapportini (D3b).
@@ -108,14 +109,22 @@ class _RapportinoViewBody extends ConsumerWidget {
                 // ── Header card: StatusPill + date + KeyVal metadata ──────────
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(19, 8, 19, 16),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      AppSpacing.sm,
+                      AppSpacing.pagePadding,
+                      AppSpacing.base,
+                    ),
                     child: AppCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.only(top: 12, bottom: 8),
+                            padding: const EdgeInsets.only(
+                              top: AppSpacing.md,
+                              bottom: AppSpacing.sm,
+                            ),
                             child: Row(
                               children: [
                                 StatusPill(stato: statusLabel),
@@ -149,7 +158,12 @@ class _RapportinoViewBody extends ConsumerWidget {
                 if (draft.details != null && draft.details!.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
                       child: AppCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,14 +189,22 @@ class _RapportinoViewBody extends ConsumerWidget {
                 if (materiali.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
                       child: AppCard(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.only(top: 12, bottom: 4),
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.md,
+                                bottom: AppSpacing.xs,
+                              ),
                               child: SectionTitle(title: 'Materiali'),
                             ),
                             ...materiali.map((m) {
@@ -227,7 +249,12 @@ class _RapportinoViewBody extends ConsumerWidget {
                 if (draft.customerSignatureAllegatoId != null)
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(19, 0, 19, 16),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
                       child: AppCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,7 +283,12 @@ class _RapportinoViewBody extends ConsumerWidget {
                 // nobody has set.
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(19, 0, 19, 24),
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      0,
+                      AppSpacing.pagePadding,
+                      AppSpacing.xl,
+                    ),
                     child: AppButton(
                       label: 'Scarica PDF',
                       icon: const Icon(LucideIcons.download, size: 16),

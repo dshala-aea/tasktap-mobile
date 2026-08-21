@@ -14,6 +14,7 @@ import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin cantiere form — create or edit.
 class AdminCantiereFormScreen extends ConsumerStatefulWidget {
@@ -204,7 +205,12 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(19, 19, 19, context.navClearance),
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            AppSpacing.pagePadding,
+            context.navClearance,
+          ),
           children: [
             AppTextField(
               label: 'Nome *',

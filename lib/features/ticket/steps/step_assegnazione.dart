@@ -9,6 +9,7 @@ import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Assegnazione
@@ -39,7 +40,12 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
     final techsAsync = ref.watch(techniciansProvider);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
         Text(
           'Assegnazione',
@@ -69,11 +75,11 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
         // ── Technician list ────────────────────────────────────────────────
         techsAsync.when(
           loading: () => const Padding(
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (err, _) => Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Column(
               children: [
                 Icon(LucideIcons.cloudOff, size: 32, color: context.colors.inkMuted),
@@ -89,7 +95,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
           data: (techs) {
             if (techs.isEmpty) {
               return Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(
                   'Nessun tecnico disponibile.',
                   style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
@@ -106,7 +112,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                 if (name.isEmpty) return const SizedBox.shrink();
 
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: _AssignmentOption(
                     label: name,
                     isSelected: widget.state.assignedUserId == id,
@@ -143,7 +149,7 @@ class _AssignmentOption extends StatelessWidget {
         color: isSelected ? AppColors.Y : context.colors.borderStrong,
         width: isSelected ? 2 : 1,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
       child: Row(
         children: [
           Icon(

@@ -27,7 +27,9 @@ const int _kStatusInProgress = 2;
 const int _kStatusCompleted = 5;
 
 /// Today's schedules with statusId == 2 (In corso).
-final inProgressSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
+final inProgressSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   final today = DateTime.now().toUtc();
   final start = DateTime.utc(today.year, today.month, today.day);
@@ -44,22 +46,25 @@ final inProgressSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
 });
 
 /// Today's schedules with statusId == 5 (Completato).
-final completedTodaySchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
-  final db = ref.watch(appDatabaseProvider);
-  final today = DateTime.now().toUtc();
-  final start = DateTime.utc(today.year, today.month, today.day);
-  final end = start.add(const Duration(days: 1));
-  return (db.select(db.schedules)..where(
-        (s) =>
-            s.activityDate.isBiggerOrEqualValue(start) &
-            s.activityDate.isSmallerThanValue(end) &
-            s.statusId.equals(_kStatusCompleted),
-      ))
-      .watch();
-});
+final completedTodaySchedulesProvider =
+    StreamProvider.autoDispose<List<Schedule>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      final today = DateTime.now().toUtc();
+      final start = DateTime.utc(today.year, today.month, today.day);
+      final end = start.add(const Duration(days: 1));
+      return (db.select(db.schedules)..where(
+            (s) =>
+                s.activityDate.isBiggerOrEqualValue(start) &
+                s.activityDate.isSmallerThanValue(end) &
+                s.statusId.equals(_kStatusCompleted),
+          ))
+          .watch();
+    });
 
 /// Schedules in [today+1 day, today+8 days) — next 7 days, excluding today.
-final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
+final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   final today = DateTime.now().toUtc();
   final base = DateTime.utc(today.year, today.month, today.day);
@@ -68,7 +73,8 @@ final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((re
   return (db.select(db.schedules)
         ..where(
           (s) =>
-              s.activityDate.isBiggerOrEqualValue(start) & s.activityDate.isSmallerThanValue(end),
+              s.activityDate.isBiggerOrEqualValue(start) &
+              s.activityDate.isSmallerThanValue(end),
         )
         ..orderBy([
           (s) => OrderingTerm.asc(s.activityDate),
@@ -82,7 +88,8 @@ final upcomingSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((re
 final dashboardStatsProvider = Provider.autoDispose<DashboardStats>((ref) {
   final today = ref.watch(todaySchedulesProvider).valueOrNull ?? [];
   final inProgress = ref.watch(inProgressSchedulesProvider).valueOrNull ?? [];
-  final completed = ref.watch(completedTodaySchedulesProvider).valueOrNull ?? [];
+  final completed =
+      ref.watch(completedTodaySchedulesProvider).valueOrNull ?? [];
   final upcoming = ref.watch(upcomingSchedulesProvider).valueOrNull ?? [];
   return DashboardStats(
     todayCount: today.length,

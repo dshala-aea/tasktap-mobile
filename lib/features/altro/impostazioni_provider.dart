@@ -79,7 +79,8 @@ class ImpostazioniState {
       syncOffline: syncOffline ?? this.syncOffline,
       geoLocazione: geoLocazione ?? this.geoLocazione,
       temaScuro: temaScuro ?? this.temaScuro,
-      autenticazioneBiometrica: autenticazioneBiometrica ?? this.autenticazioneBiometrica,
+      autenticazioneBiometrica:
+          autenticazioneBiometrica ?? this.autenticazioneBiometrica,
     );
   }
 }
@@ -89,7 +90,8 @@ class ImpostazioniState {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
-  ImpostazioniNotifier(this._authRepo, this._api) : super(const ImpostazioniState()) {
+  ImpostazioniNotifier(this._authRepo, this._api)
+    : super(const ImpostazioniState()) {
     _loadFromPrefs()
         .then((_) => _reconcilePushWithOs())
         .then((_) => unawaited(reconcileWithServer()));
@@ -113,7 +115,8 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       syncOffline: prefs.getBool(_kSyncOffline) ?? true,
       geoLocazione: prefs.getBool(_kGeoLocazione) ?? true,
       temaScuro: prefs.getBool(_kTemaScuro) ?? false,
-      autenticazioneBiometrica: prefs.getBool(_kAutenticazioneBiometrica) ?? false,
+      autenticazioneBiometrica:
+          prefs.getBool(_kAutenticazioneBiometrica) ?? false,
     );
   }
 
@@ -145,8 +148,12 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   void toggle({required String key}) {
     state = switch (key) {
       'pushAbilitate' => state.copyWith(pushAbilitate: !state.pushAbilitate),
-      'notificheInterventi' => state.copyWith(notificheInterventi: !state.notificheInterventi),
-      'notificheRapportini' => state.copyWith(notificheRapportini: !state.notificheRapportini),
+      'notificheInterventi' => state.copyWith(
+        notificheInterventi: !state.notificheInterventi,
+      ),
+      'notificheRapportini' => state.copyWith(
+        notificheRapportini: !state.notificheRapportini,
+      ),
       'syncOffline' => state.copyWith(syncOffline: !state.syncOffline),
       'geoLocazione' => state.copyWith(geoLocazione: !state.geoLocazione),
       'temaScuro' => state.copyWith(temaScuro: !state.temaScuro),
@@ -177,7 +184,9 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   /// The three toggles that have a server field. The other four are device settings with no
   /// server counterpart, and sending them anywhere would be inventing a contract.
   static bool _isServerBacked(String key) =>
-      key == 'pushAbilitate' || key == 'notificheInterventi' || key == 'notificheRapportini';
+      key == 'pushAbilitate' ||
+      key == 'notificheInterventi' ||
+      key == 'notificheRapportini';
 
   /// Send the three server-backed toggles, marking them pending until the server confirms.
   ///
@@ -289,9 +298,10 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 // Provider
 // ══════════════════════════════════════════════════════════════════════════════
 
-final impostazioniProvider = StateNotifierProvider<ImpostazioniNotifier, ImpostazioniState>(
-  (ref) => ImpostazioniNotifier(
-    ref.watch(authRepositoryProvider),
-    ref.watch(notificationSettingsApiClientProvider),
-  ),
-);
+final impostazioniProvider =
+    StateNotifierProvider<ImpostazioniNotifier, ImpostazioniState>(
+      (ref) => ImpostazioniNotifier(
+        ref.watch(authRepositoryProvider),
+        ref.watch(notificationSettingsApiClientProvider),
+      ),
+    );

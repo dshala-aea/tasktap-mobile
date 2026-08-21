@@ -10,6 +10,7 @@ import '../../../data/local/app_database.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Calendario → Lista view: schedules grouped by day (date section headers)
 /// as ListRows (title, time range, StatusPill, location), soonest first.
@@ -45,7 +46,10 @@ class ListaView extends ConsumerWidget {
       }
     }
 
-    return ListView(padding: const EdgeInsets.only(bottom: 32), children: children);
+    return ListView(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      children: children,
+    );
   }
 }
 
@@ -59,7 +63,12 @@ class _DateHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = formatter.format(date);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 20, 19, 6),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.lg,
+        AppSpacing.pagePadding,
+        6,
+      ),
       child: Text(
         _capitalize(label),
         style: TextStyle(
@@ -73,7 +82,8 @@ class _DateHeader extends StatelessWidget {
     );
   }
 
-  static String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+  static String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
 class _ScheduleListRow extends StatelessWidget {
@@ -93,7 +103,10 @@ class _ScheduleListRow extends StatelessWidget {
       leading: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(color: statusPair.background, borderRadius: AppRack.insetShape),
+        decoration: BoxDecoration(
+          color: statusPair.background,
+          borderRadius: AppRack.insetShape,
+        ),
         child: Icon(LucideIcons.clock, size: 18, color: statusPair.foreground),
       ),
       title: schedule.title,

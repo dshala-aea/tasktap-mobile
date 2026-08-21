@@ -36,6 +36,7 @@ import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
@@ -329,14 +330,22 @@ class _CheckInBody extends StatelessWidget {
     final noCantieriAvailable = cantieriValue != null && cantieriValue.isEmpty;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xxl,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Context banner (linked ticket)
           if (ticketId != null) ...[
             AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.base,
+                vertical: AppSpacing.md,
+              ),
               child: Row(
                 children: [
                   Icon(LucideIcons.link, size: 16, color: context.colors.blue),
@@ -373,10 +382,13 @@ class _CheckInBody extends StatelessWidget {
 
           cantieriAsync.when(
             loading: () => const Center(
-              child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: CircularProgressIndicator(),
+              ),
             ),
             error: (e, _) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
               child: Text(
                 'Impossibile caricare i cantieri.',
                 style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.red),
@@ -420,7 +432,10 @@ class _CheckInBody extends StatelessWidget {
                                 : BorderRadius.zero),
                       child: Container(
                         constraints: const BoxConstraints(minHeight: 56),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.base,
+                          vertical: AppSpacing.md,
+                        ),
                         decoration: BoxDecoration(
                           color: isSelected ? AppColors.YSoft : Colors.transparent,
                           border: isLast
@@ -530,7 +545,12 @@ class _ActiveSessionBody extends ConsumerWidget {
         : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 32),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xxl,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -606,7 +626,7 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(color: context.colors.redSoft, borderRadius: AppRack.insetShape),
       child: Row(
         children: [
@@ -641,7 +661,7 @@ class _ErrorBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

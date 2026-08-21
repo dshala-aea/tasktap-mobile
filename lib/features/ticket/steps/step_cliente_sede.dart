@@ -7,6 +7,7 @@ import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 1 — Cliente + Sede
@@ -42,7 +43,12 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
     final selectedLocation = locations.where((l) => l.id == widget.state.locationId).firstOrNull;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
         // ── Customer ──────────────────────────────────────────────────────
         _SectionLabel(text: 'Cliente *'),
@@ -118,7 +124,7 @@ class _CustomerSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,7 +153,7 @@ class _LocationSummary extends StatelessWidget {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +197,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Row(
         children: [
           Text('$label: ', style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted)),

@@ -9,6 +9,7 @@ import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
 import 'magazzino_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Magazzino: the catalogue, current stock, and recent movements.
 ///
@@ -95,16 +96,22 @@ class _MagazzinoBody extends ConsumerWidget {
   final ValueChanged<bool> onSottoScortaChanged;
   final ValueChanged<String> onCategoryChanged;
 
-  static final _priceFormat = NumberFormat.currency(locale: 'it', symbol: '€', decimalDigits: 2);
+  static final _priceFormat = NumberFormat.currency(
+    locale: 'it',
+    symbol: '€',
+    decimalDigits: 2,
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return CustomScrollView(
       slivers: [
-        SliverToBoxAdapter(child: ScreenHeader(title: 'Magazzino', showBack: true)),
+        SliverToBoxAdapter(
+          child: ScreenHeader(title: 'Magazzino', showBack: true),
+        ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
             child: AppTabs(
               tabs: const [
                 AppTab(label: 'Articoli'),
@@ -156,24 +163,30 @@ class _MagazzinoBody extends ConsumerWidget {
       if (categories.isNotEmpty)
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
                     child: AppChip(
                       label: 'Tutti',
                       active: activeCategory == null,
                       onTap: () {
-                        if (activeCategory != null) onCategoryChanged(activeCategory!);
+                        if (activeCategory != null)
+                          onCategoryChanged(activeCategory!);
                       },
                     ),
                   ),
                   ...categories.map(
                     (cat) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
                       child: AppChip(
                         label: cat,
                         active: activeCategory == cat,
@@ -212,7 +225,10 @@ class _MagazzinoBody extends ConsumerWidget {
       else
         SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _MaterialeRow(materiale: filtered[i], priceFormat: _priceFormat),
+            (context, i) => _MaterialeRow(
+              materiale: filtered[i],
+              priceFormat: _priceFormat,
+            ),
             childCount: filtered.length,
           ),
         ),
@@ -224,14 +240,22 @@ class _MagazzinoBody extends ConsumerWidget {
   List<Widget> _giacenzeSlivers(BuildContext context, WidgetRef ref) {
     final async = ref.watch(
       giacenzeProvider(
-        GiacenzeQuery(q: query.isEmpty ? null : query, soloSottoScorta: soloSottoScorta),
+        GiacenzeQuery(
+          q: query.isEmpty ? null : query,
+          soloSottoScorta: soloSottoScorta,
+        ),
       ),
     );
 
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            0,
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+          ),
           child: Row(
             children: [
               AppChip(
@@ -265,8 +289,12 @@ class _MagazzinoBody extends ConsumerWidget {
         data: (page) => page.elementi.isEmpty
             ? SliverToBoxAdapter(
                 child: EmptyState(
-                  icon: soloSottoScorta ? LucideIcons.checkCircle : LucideIcons.searchX,
-                  title: soloSottoScorta ? 'Nessuna scorta sotto minimo' : 'Nessuna giacenza',
+                  icon: soloSottoScorta
+                      ? LucideIcons.checkCircle
+                      : LucideIcons.searchX,
+                  title: soloSottoScorta
+                      ? 'Nessuna scorta sotto minimo'
+                      : 'Nessuna giacenza',
                   body: soloSottoScorta
                       ? 'Tutti i materiali sono sopra la soglia minima.'
                       : 'Nessuna giacenza corrisponde alla ricerca.',
@@ -294,7 +322,8 @@ class _MagazzinoBody extends ConsumerWidget {
           child: UnavailableState(
             icon: LucideIcons.wifiOff,
             titolo: 'Movimenti non disponibili',
-            motivo: 'Lo storico movimenti si legge solo online. Riprova quando hai segnale.',
+            motivo:
+                'Lo storico movimenti si legge solo online. Riprova quando hai segnale.',
           ),
         ),
         data: (page) => page.elementi.isEmpty
@@ -321,7 +350,10 @@ class _Spinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Center(
-    child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()),
+    child: Padding(
+      padding: EdgeInsets.all(AppSpacing.xxxl),
+      child: CircularProgressIndicator(),
+    ),
   );
 }
 
@@ -337,16 +369,21 @@ class _MaterialeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final codeMarca = [
       materiale.code,
-      if (materiale.marca != null && materiale.marca!.isNotEmpty) materiale.marca,
+      if (materiale.marca != null && materiale.marca!.isNotEmpty)
+        materiale.marca,
     ].join(' · ');
 
     final subParts = [
-      if (materiale.unitOfMeasure != null && materiale.unitOfMeasure!.isNotEmpty)
+      if (materiale.unitOfMeasure != null &&
+          materiale.unitOfMeasure!.isNotEmpty)
         materiale.unitOfMeasure!,
-      if (materiale.category != null && materiale.category!.isNotEmpty) materiale.category!,
+      if (materiale.category != null && materiale.category!.isNotEmpty)
+        materiale.category!,
     ].join(' · ');
 
-    final priceLabel = materiale.salePrice != null ? priceFormat.format(materiale.salePrice) : null;
+    final priceLabel = materiale.salePrice != null
+        ? priceFormat.format(materiale.salePrice)
+        : null;
 
     return ListRow(
       leading: _Tile(icon: LucideIcons.package),
@@ -386,13 +423,16 @@ class _GiacenzaRow extends StatelessWidget {
       // here would cost it the meaning it has everywhere else.
       ledgeColor: giacenza.sottoScorta ? c.red : null,
       leading: _Tile(
-        icon: giacenza.sottoScorta ? LucideIcons.alertTriangle : LucideIcons.package,
+        icon: giacenza.sottoScorta
+            ? LucideIcons.alertTriangle
+            : LucideIcons.package,
         tint: giacenza.sottoScorta ? c.red : null,
       ),
       title: giacenza.materialeNome ?? giacenza.materialeId,
       subtitle: [
         if (giacenza.magazzinoNome != null) giacenza.magazzinoNome!,
-        if (giacenza.stockMinimo != null) 'min ${giacenza.stockMinimo!.toStringAsFixed(0)}',
+        if (giacenza.stockMinimo != null)
+          'min ${giacenza.stockMinimo!.toStringAsFixed(0)}',
       ].join(' · '),
       meta: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -410,7 +450,11 @@ class _GiacenzaRow extends StatelessWidget {
           if (giacenza.sottoScorta)
             Text(
               'sotto scorta',
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.red),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: c.red,
+              ),
             ),
         ],
       ),
@@ -459,7 +503,11 @@ class _MovimentoRow extends StatelessWidget {
         children: [
           Text(
             qtyLabel,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: c.ink,
+            ),
           ),
           Text(
             _dateFormat.format(movimento.data.toLocal()),
