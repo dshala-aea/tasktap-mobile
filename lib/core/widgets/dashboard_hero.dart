@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Dashboard hero header.
 ///
@@ -44,66 +45,81 @@ class DashboardHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            // Constants, not palette tokens: this hero is dark under both themes, so a token
-            // that flips would turn it white in dark mode — the one place the flip is wrong.
-            colors: [AppColors.CHARCOAL, AppColors.DARK],
-          ),
-        ),
+    return Container(
+      // Outside the clip: a shadow clipped to its own casting box never shows. Purely decorative
+      // — the hero is already unambiguously bounded by its solid dark fill against the page
+      // background behind it, so this costs nothing legible in direct sun, matching the Figma
+      // reference's soft shadow under the same panel.
+      decoration: BoxDecoration(boxShadow: context.colors.shadow),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
         child: DecoratedBox(
-          decoration: BoxDecoration(color: Colors.black.withAlpha(115)), // 0.45
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: minHeight ?? 0),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 12, 19, 19),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                greeting,
-                                style: TextStyle(
-                                  fontFamily: 'Manrope',
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.WHITE,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              // Constants, not palette tokens: this hero is dark under both themes, so a token
+              // that flips would turn it white in dark mode — the one place the flip is wrong.
+              colors: [AppColors.CHARCOAL, AppColors.DARK],
+            ),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withAlpha(115),
+            ), // 0.45
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minHeight ?? 0),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(19, 12, 19, 19),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  greeting,
+                                  style: TextStyle(
+                                    fontFamily: 'Manrope',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.WHITE,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                userName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontFamily: 'Sora',
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.Y,
+                                const SizedBox(height: 4),
+                                Text(
+                                  userName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'Sora',
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.Y,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        for (final action in actions) ...[const SizedBox(width: 6), action],
+                          for (final action in actions) ...[
+                            const SizedBox(width: 6),
+                            action,
+                          ],
+                        ],
+                      ),
+                      if (child != null) ...[
+                        const SizedBox(height: 20),
+                        child!,
                       ],
-                    ),
-                    if (child != null) ...[const SizedBox(height: 20), child!],
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

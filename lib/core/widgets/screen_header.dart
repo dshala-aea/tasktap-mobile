@@ -46,7 +46,7 @@ class HeaderIconBtn extends StatelessWidget {
       // relationship Material's own IconButton has between its ink and its glyph.
       child: AppTappable(
         onTap: onTap,
-        borderRadius: AppRack.insetShape,
+        borderRadius: glass ? BorderRadius.circular(22) : AppRack.insetShape,
         child: SizedBox(
           width: 44,
           height: 44,
@@ -58,17 +58,29 @@ class HeaderIconBtn extends StatelessWidget {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: glass ? Colors.white.withAlpha(46) : context.colors.bg3,
-                    // A machined square, not a moulded disc. This one change re-skins every
-                    // header action in the app — back, bell, profile, search, filter — across
-                    // twenty-nine screens, because they all come through here.
-                    borderRadius: AppRack.insetShape,
+                    color: glass
+                        ? Colors.white.withAlpha(46)
+                        : context.colors.bg3,
+                    // A machined square, not a moulded disc — except in glass mode. Glass marks a
+                    // dark/hero-style surface (the dashboard hero, and `ScreenHeader(dark: true)`'s
+                    // back chevron); the Figma reference draws that pairing as a round glass disc.
+                    // This is a shape exception scoped to glass surfaces specifically, not a
+                    // reversal of the machined language the other light-header screens keep.
+                    borderRadius: glass
+                        ? BorderRadius.circular(19)
+                        : AppRack.insetShape,
                     border: Border.all(
-                      color: glass ? Colors.white.withAlpha(128) : context.colors.borderMedium,
+                      color: glass
+                          ? Colors.white.withAlpha(128)
+                          : context.colors.borderMedium,
                       width: glass ? 0.5 : 1,
                     ),
                   ),
-                  child: Icon(icon, size: 17, color: glass ? AppColors.WHITE : context.colors.ink),
+                  child: Icon(
+                    icon,
+                    size: 17,
+                    color: glass ? AppColors.WHITE : context.colors.ink,
+                  ),
                 ),
                 if (showDot)
                   Positioned(
@@ -80,7 +92,10 @@ class HeaderIconBtn extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: context.colors.red,
                         shape: BoxShape.circle,
-                        border: Border.all(color: context.colors.bg3, width: 1.5),
+                        border: Border.all(
+                          color: context.colors.bg3,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
@@ -138,7 +153,9 @@ class ScreenHeader extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: dark ? Colors.white.withAlpha(38) : context.colors.borderMedium,
+            color: dark
+                ? Colors.white.withAlpha(38)
+                : context.colors.borderMedium,
           ),
         ),
       ),
@@ -180,7 +197,9 @@ class ScreenHeader extends StatelessWidget {
                       fontFamily: 'Manrope',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
-                      color: dark ? AppColors.WHITE.withAlpha(179) : context.colors.inkMuted,
+                      color: dark
+                          ? AppColors.WHITE.withAlpha(179)
+                          : context.colors.inkMuted,
                     ),
                   ),
               ],

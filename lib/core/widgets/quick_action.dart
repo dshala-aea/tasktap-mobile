@@ -10,7 +10,12 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// QuickAction(icon: LucideIcons.plus, label: 'Nuovo', onTap: () {});
 /// ```
 class QuickAction extends StatelessWidget {
-  const QuickAction({super.key, required this.icon, required this.label, this.onTap});
+  const QuickAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    this.onTap,
+  });
 
   final IconData icon;
   final String label;
@@ -32,7 +37,15 @@ class QuickAction extends StatelessWidget {
               Container(
                 width: 50,
                 height: 50,
-                decoration: const BoxDecoration(color: AppColors.Y, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: AppColors.Y,
+                  shape: BoxShape.circle,
+                  // Decorative, not structural: the circle is already fully defined by its solid
+                  // yellow fill against the page background, so losing the shadow outdoors costs
+                  // nothing legible — this is polish, matching the Figma reference's own soft
+                  // shadow on the same element.
+                  boxShadow: context.colors.shadow,
+                ),
                 child: Icon(icon, size: 20, color: context.colors.ink),
               ),
               const SizedBox(height: 6),
