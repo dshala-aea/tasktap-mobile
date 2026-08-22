@@ -9853,7 +9853,7 @@
         "tags": [
           "Sync"
         ],
-        "summary": "Returns the authenticated technician\u0027s schedules for the next 7 days plus linked\nreference data (customers, locations, tickets) and their own draft reports.\nThis is the mobile-first endpoint \u2014 strictly user-scoped for offline use.\nSupports delta re-sync via the since parameter.",
+        "summary": "Returns the authenticated technician\u0027s schedules for the next 7 days plus linked\nreference data (customers, locations, tickets) and their own draft reports.\nThis is the mobile-first endpoint \u2014 strictly user-scoped for offline use, EXCEPT for\ncustomers/tickets/locations when the caller holds Office/Admin/SuperUser: those roles get\nthe full tenant book, matching what the same account sees on the web app. Mobile\u0027s admin\nscreens (Clienti, Ticket lists) read exclusively from the local cache this endpoint fills \u2014\nthere is no separate REST call for them \u2014 so an office/admin account with the technician-only\nscope silently saw a fraction of the tenant\u0027s data, with no error.\nSupports delta re-sync via the since parameter.",
         "parameters": [
           {
             "name": "since",
@@ -9867,7 +9867,7 @@
         ],
         "responses": {
           "200": {
-            "description": "User-scoped sync payload.",
+            "description": "User-scoped (or, for office/admin, tenant-scoped) sync payload.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -17897,7 +17897,7 @@
             "description": "The tenant\u0027s ticket type lookup list (TipologiaIntervento).\nReturned in full on every sync (no UpdatedAt column \u2014 no delta filter).\nUsed by the mobile app to map a ticket\u0027s \u0060TypeId\u0060 int to a human name."
           }
         },
-        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
+        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
       "MonthlyGridCell": {
         "required": [
