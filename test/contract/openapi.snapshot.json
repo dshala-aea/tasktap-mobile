@@ -2024,6 +2024,13 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "stato",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -6571,6 +6578,13 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "categoria",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -11653,7 +11667,7 @@
           "Users"
         ],
         "summary": "Returns the QR code token used for reverse-scan kiosk clock-in\n(string? User.QrCodeToken).",
-        "description": "This is a credential, not ordinary profile data \u2014 it is deliberately excluded from\nUser\u0027s normal JSON shape (\u0060[JsonIgnore]\u0060 on the entity property), so\nTask\u0026lt;IActionResult\u0026gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null)/Task\u0026lt;IActionResult\u0026gt; UsersController.GetById(Guid id)/Task\u0026lt;IActionResult\u0026gt; UsersController.GetCurrentUser() never carry it.\nThis is the ONLY endpoint that returns it, and only to the owning user or a tenant Admin \u2014\nanyone else gets ForbidResult (403). Existence of the target user is not\nhidden behind a 404 here (unlike the tenant-isolation FK guards elsewhere in this\ncodebase): the caller already reached this route with a real, in-tenant user id (e.g. from\na team member list they can already see), so this is an authorization decision, not a\ncross-tenant existence leak.",
+        "description": "This is a credential, not ordinary profile data \u2014 it is deliberately excluded from\nUser\u0027s normal JSON shape (\u0060[JsonIgnore]\u0060 on the entity property), so\nTask\u0026lt;IActionResult\u0026gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task\u0026lt;IActionResult\u0026gt; UsersController.GetById(Guid id, CancellationToken ct)/Task\u0026lt;IActionResult\u0026gt; UsersController.GetCurrentUser() never carry it.\nThis is the ONLY endpoint that returns it, and only to the owning user or a tenant Admin \u2014\nanyone else gets ForbidResult (403). Existence of the target user is not\nhidden behind a 404 here (unlike the tenant-isolation FK guards elsewhere in this\ncodebase): the caller already reached this route with a real, in-tenant user id (e.g. from\na team member list they can already see), so this is an authorization decision, not a\ncross-tenant existence leak.",
         "parameters": [
           {
             "name": "id",
@@ -14122,6 +14136,39 @@
           "isActive": {
             "type": "boolean"
           },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free-text lifecycle status (e.g. \u0022aperta\u0022, \u0022in corso\u0022, \u0022chiusa\u0022). No enum \u2014\n            matches the free-text convention already used for Materiale.Category/Tipo elsewhere."
+          },
+          "dataApertura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date the commessa was opened.",
+            "format": "date-time"
+          },
+          "dataChiusura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date the commessa was closed. Null while open.",
+            "format": "date-time"
+          },
+          "importo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Contract value in EUR.",
+            "format": "double"
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -14511,7 +14558,11 @@
           "descrizione",
           "externalId",
           "customerId",
-          "note"
+          "note",
+          "stato",
+          "dataApertura",
+          "dataChiusura",
+          "importo"
         ],
         "type": "object",
         "properties": {
@@ -14542,6 +14593,35 @@
               "null",
               "string"
             ]
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dataApertura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "dataChiusura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "importo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -15196,6 +15276,42 @@
               "string"
             ],
             "description": "Legacy gestionale id (W6b Task 8). Default camelCase (\u0022externalId\u0022) \u2014 no override needed."
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "um": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prezzoAcquisto": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "prezzoVendita": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -18878,6 +18994,47 @@
             ],
             "description": "Legacy gestionale id (legacy \u0060idGestionale\u0060), for cross-referencing assets imported\nfrom the legacy ERP. Nullable and deliberately NOT unique \u2014 the legacy system used\n\u00600\u0060 as a \u0022no link\u0022 sentinel, so many assets legitimately carry no external id.\nFollows string? Commessa.ExternalId exactly. Any import boundary must map a legacy\n\u00600\u0060/\u0060\u00220\u0022\u0060/\u0060\u0022\u0022\u0060 to \u0060null\u0060 via\nLegacyExternalIdMapper before assigning this\nproperty."
           },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Internal code / SKU for this asset. Wire name \u0022codice\u0022. Not unique \u2014 unlike\n            Materiale\u0027s Code, an asset code is informational, not a catalog key."
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Logical grouping / equipment family (free text). Wire name \u0022categoria\u0022."
+          },
+          "um": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Unit of measure (e.g. pz, kg, mt). Wire name \u0022um\u0022."
+          },
+          "prezzoAcquisto": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Purchase/cost price in EUR. Wire name \u0022prezzoAcquisto\u0022.",
+            "format": "double"
+          },
+          "prezzoVendita": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Customer-facing sale price in EUR. Wire name \u0022prezzoVendita\u0022.",
+            "format": "double"
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -22056,7 +22213,11 @@
           "externalId",
           "customerId",
           "note",
-          "isActive"
+          "isActive",
+          "stato",
+          "dataApertura",
+          "dataChiusura",
+          "importo"
         ],
         "type": "object",
         "properties": {
@@ -22096,6 +22257,35 @@
               "null",
               "boolean"
             ]
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dataApertura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "dataChiusura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "importo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -22791,6 +22981,42 @@
               "string"
             ],
             "description": "Legacy gestionale id (W6b Task 8). Null = not provided, leaves the existing value untouched."
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "um": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prezzoAcquisto": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "prezzoVendita": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -23913,6 +24139,29 @@
           "isActive": {
             "type": "boolean",
             "description": "Indicates whether the user is active."
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "            Squadra (team) id this user currently belongs to \u2014 W7 gap closure, same treatment as\n            Guid? Squadra.CapSquadraId: NOT a persisted column (EF-\u0060Ignore()\u0060d in\n            \u0060ApplicationDbContext\u0060). The data lives on SquadraMembro;\n            \u0060UsersController\u0060 populates this from a single batched query over\n            \u0060SquadraMembers\u0060 when listing/reading users, avoiding N\u002B1. A user with no active\n            squadra membership, or belonging to more than one, is left null here \u2014 team assignment\n            in this codebase is modelled as at-most-one-active-membership by convention, but\n            SquadraMembro itself does not enforce that, so ambiguous cases surface as\n            \u0022no team shown\u0022 rather than guessing.\n            \u26A0 Being EF-Ignore()d, this is not queryable \u2014 it cannot appear in a\nWHERE or ORDER BY. Same limitation as Guid? Squadra.CapSquadraId.",
+            "format": "uuid"
+          },
+          "squadraNome": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Squadra display name, populated alongside Guid? User.SquadraId."
+          },
+          "lastAccessAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "UTC timestamp of this user\u0027s most recent authenticated request \u2014 a persisted column,\nunlike Guid? User.SquadraId. Written best-effort (fire-and-forget, logged not thrown)\nby \u0060DatabaseClaimsTransformation.LoadAsync\u0060 on identity-cache miss, i.e. at most once\nper \u003Csee cref=\u0022!:TaskTapAPI.Api.Authorization.DatabaseClaimsTransformation.CacheTtl\u0022 /\u003E\n(60s) per user \u2014 same best-effort-update pattern as\nDateTime? CustomerPortalUser.LastLoginAt in \u0060CustomerPortalController\u0060. Null\nmeans the user has never made an authenticated request since this column was added.",
+            "format": "date-time"
           },
           "roles": {
             "type": "array",
