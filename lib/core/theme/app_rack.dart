@@ -16,13 +16,19 @@ import 'package:flutter/widgets.dart';
 /// 3. **Absence is drawn.** An empty slot is a cut silhouette ([silhouetteDash]), not whitespace.
 ///    A technician reading their own rack sees the missing tool; so does this app.
 ///
-/// ## Why the corner language is tighter than the old one
+/// ## Why the corner language softened back up
 ///
-/// The incumbent spec drew 12–14dp radii — the rounded-card idiom every field-service app ships.
-/// A drawer front is machined, not moulded. [cellRadius] is 6, and the rail edge of a cell is
-/// square ([cellRadiusFlush]) because it is butted against the extrusion. The pinned floating pill
-/// nav keeps its own large radius: it is the load strap across the bottom of the load bay, a
-/// different object with a different geometry, and it is a brand commitment besides.
+/// [cellRadius] was 6 for a while — a "machined, not moulded" rejection of the 12–14dp
+/// rounded-card idiom the original Figma spec drew. The rule that mattered was never the radius:
+/// it was replacing the drop shadow with the ledge, because a shadow disappears in direct sun and
+/// a solid bar does not. Radius carries no sunlight risk either way, so on deliberate revision
+/// [cellRadius] moved back toward that Figma number — 12, not 14, since a cell rounds only three
+/// corners (the fourth butts the rail) and a full 14 reads odd with one corner still square. The
+/// rail edge stays square ([cellRadiusFlush]) — that one *is* structural, not a style choice: a
+/// drawer front is still butted against the extrusion, whatever its other three corners look like.
+/// The pinned floating pill nav keeps its own large radius regardless: it is the load strap across
+/// the bottom of the load bay, a different object with a different geometry, and it is a brand
+/// commitment besides.
 abstract final class AppRack {
   // ── The rail ──────────────────────────────────────────────────────────────
 
@@ -64,14 +70,18 @@ abstract final class AppRack {
   /// second tap.
   static const double cellMinHeight = 64;
 
-  /// Corner radius of a cell on its three free edges.
-  static const double cellRadius = 6;
+  /// Corner radius of a cell on its three free edges. See the class doc for why this is 12, not
+  /// the tighter 6 it briefly was.
+  static const double cellRadius = 12;
 
-  /// Corner radius on the rail edge. Square — the cell is butted against the extrusion.
+  /// Corner radius on the rail edge. Square — the cell is butted against the extrusion. Structural,
+  /// not a style knob: does not move when [cellRadius] does.
   static const double cellRadiusFlush = 0;
 
-  /// Radius of a compartment *inside* a cell (a material line, an hour tile, a photo thumb).
-  static const double insetRadius = 4;
+  /// Radius of a compartment *inside* a cell (a material line, an hour tile, a photo thumb — also
+  /// what `AppChip`'s filter pills use). Scales with [cellRadius]: half of it, so a compartment
+  /// always reads as nested inside its cell rather than competing with the cell's own corner.
+  static const double insetRadius = cellRadius / 1.5;
 
   /// Standard shape for a cell attached to the rail.
   static const BorderRadius cellShape = BorderRadius.only(
