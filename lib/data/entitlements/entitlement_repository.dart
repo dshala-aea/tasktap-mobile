@@ -1,6 +1,8 @@
 // dart format width=100
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
+
 import '../local/app_database.dart';
 
 /// What the tenant is entitled to, as last confirmed by the server.
@@ -10,6 +12,7 @@ class Entitlement {
     required this.capabilities,
     required this.seatType,
     required this.fetchedAt,
+    this.subscriptionStatus,
   });
 
   /// Granted module keys — `rapportini`, `magazzino`, and so on.
@@ -24,7 +27,15 @@ class Entitlement {
   /// When the server last confirmed this. For display only — never used to expire the row.
   final DateTime fetchedAt;
 
+  /// `Trialing` / `Active` / `PastDue` / `GracePeriod` / `Suspended` / `Canceled`. Null when never
+  /// fetched (pre-migration row, or the server omitted it) — treat as unknown, never as active.
+  final String? subscriptionStatus;
+
   bool get isFieldSeat => seatType == 'field';
+
+  /// Suspended/canceled: reads still work (EntitlementMiddleware only gates writes), but every
+  /// write 403s. The app must say so rather than let each write fail unexplained.
+  bool get isSuspended => subscriptionStatus == 'Suspended' || subscriptionStatus == 'Canceled';
 }
 
 /// The always-on modules. Enforced true in code on the server too (`ModuleKeys.AlwaysOn`), so a
@@ -86,6 +97,7 @@ class EntitlementRepository {
       capabilities: _decode(row.capabilitiesJson),
       seatType: row.seatType,
       fetchedAt: row.fetchedAt,
+      subscriptionStatus: row.subscriptionStatus,
     );
   }
 
@@ -95,6 +107,7 @@ class EntitlementRepository {
     required List<String> capabilities,
     required String seatType,
     required DateTime fetchedAt,
+    String? subscriptionStatus,
   }) async {
     await _db
         .into(_db.entitlements)
@@ -105,6 +118,7 @@ class EntitlementRepository {
             capabilitiesJson: jsonEncode(capabilities),
             seatType: seatType,
             fetchedAt: fetchedAt,
+            subscriptionStatus: Value(subscriptionStatus),
           ),
         );
   }

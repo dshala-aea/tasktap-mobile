@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -20,20 +21,43 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // or clearing the form. Text fields already keep their contents (nothing
 // clears them on failure), so refusing to even attempt offline is what
 // turns a confusing generic Dio error into an honest, actionable message.
+//
+// Also checks subscription state, for the same reason: a suspended tenant's
+// writes 403 server-side (EntitlementMiddleware gates writes, not reads — see
+// SuspendedBanner, which warns proactively; this is the reactive half for the
+// moment someone actually presses save). Checked after connectivity, since an
+// offline device may be showing a stale cached entitlement — "you're offline"
+// is the truer answer when both are true.
 // ══════════════════════════════════════════════════════════════════════════════
 
 bool ensureOnlineOrWarn(BuildContext context, WidgetRef ref) {
   final isOnline = ref.read(isOnlineProvider);
-  if (isOnline) return true;
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(
-        'Sei offline: impossibile salvare in questo momento. '
-        'I dati inseriti restano nel modulo: riprova quando torni online.',
+  if (!isOnline) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Sei offline: impossibile salvare in questo momento. '
+          'I dati inseriti restano nel modulo: riprova quando torni online.',
+        ),
+        backgroundColor: context.colors.red,
       ),
-      backgroundColor: context.colors.red,
-    ),
-  );
-  return false;
+    );
+    return false;
+  }
+
+  final entitlement = ref.read(cachedEntitlementProvider).value;
+  if (entitlement != null && entitlement.isSuspended) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Abbonamento non attivo: impossibile salvare finché non viene riattivato. '
+          'I dati inseriti restano nel modulo.',
+        ),
+        backgroundColor: context.colors.red,
+      ),
+    );
+    return false;
+  }
+
+  return true;
 }

@@ -235,6 +235,11 @@ class Entitlements extends Table {
   /// When this was last confirmed by the server. Shown to the user, never used to expire the row.
   DateTimeColumn get fetchedAt => dateTime()();
 
+  /// `Trialing` / `Active` / `PastDue` / `GracePeriod` / `Suspended` / `Canceled` — mirrors the
+  /// server's `SubscriptionStatusEnum`. Nullable only for rows written before this column existed;
+  /// treated as unknown, not as active, everywhere it is read.
+  TextColumn get subscriptionStatus => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -584,7 +589,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration {
@@ -657,6 +662,12 @@ class AppDatabase extends _$AppDatabase {
           // GUID fragment. `syncCursorGeneration` is bumped alongside this for that reason. A new
           // column on a delta-synced table always needs both.
           await m.addColumn(tickets, tickets.numero);
+        }
+        if (from < 13) {
+          // Suspended/canceled tenants keep read access but every write 403s — the app must be
+          // able to say why instead of showing an unexplained failure, so subscription status is
+          // now cached alongside the rest of the entitlement.
+          await m.addColumn(entitlements, entitlements.subscriptionStatus);
         }
       },
     );

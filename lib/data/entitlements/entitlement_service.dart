@@ -37,6 +37,8 @@ class EntitlementService {
     final features = _stringList(body['features']);
     final capabilities = _stringList(body['capabilities']);
     final seatType = body['seatType'];
+    final subscription = body['subscription'];
+    final subscriptionStatus = subscription is Map ? subscription['status'] as String? : null;
 
     // `features` always carries at least the always-on modules when the server answers properly,
     // so an empty list means we did not get what we asked for.
@@ -49,6 +51,7 @@ class EntitlementService {
       capabilities: capabilities,
       seatType: seatType,
       fetchedAt: DateTime.now().toUtc(),
+      subscriptionStatus: subscriptionStatus,
     );
 
     return true;
