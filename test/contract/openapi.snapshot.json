@@ -6784,6 +6784,148 @@
         }
       }
     },
+    "/api/ProdottoAssistenza/{id}/matricole": {
+      "get": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Matricola"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Matricola"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Matricola"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMatricolaRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMatricolaRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMatricolaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ProdottoAssistenza/{id}/matricole/{matricolaId}": {
+      "delete": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "matricolaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/public/branding/{tenantSlug}": {
       "get": {
         "tags": [
@@ -13286,6 +13428,24 @@
           }
         }
       },
+      "AddMatricolaRequest": {
+        "required": [
+          "numero",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "numero": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "AddSquadraMembroRequest": {
         "required": [
           "userId",
@@ -17515,6 +17675,51 @@
             }
           }
         }
+      },
+      "Matricola": {
+        "type": "object",
+        "properties": {
+          "prodottoAssistenzaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "One serial number belonging to a ProdottoAssistenza. Replaces the old\nscalar \u0060ProdottoAssistenza.SerialNumber\u0060 field with a real 1:N \u2014 an asset can carry\nmore than one serial (e.g. a compressor unit \u002B its control board), which the scalar\nfield could not represent. ClickUp: Matricole 1:N sub-resource."
       },
       "MatrixEntry": {
         "required": [
