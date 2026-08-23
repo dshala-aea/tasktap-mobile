@@ -127,7 +127,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                             ),
                             child: Row(
                               children: [
-                                StatusPill(stato: statusLabel),
+                                StatusPill(stato: statusLabel, outlined: true),
                                 const SizedBox(width: 8),
                                 Text(
                                   dateLabel,

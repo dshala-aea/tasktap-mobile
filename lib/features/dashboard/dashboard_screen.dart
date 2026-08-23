@@ -43,8 +43,9 @@ class DashboardScreen extends ConsumerWidget {
         child: CustomScrollView(
           slivers: [
             // ── Hero ──────────────────────────────────────────────────────────
-            // TEMP: cantiere-safety-signage proving-ground comp, swapped in for live approval.
-            // Revert to DashboardHero(...) below if this direction is not approved.
+            // Cantiere safety-signage direction, approved after proving on Dashboard, Ticket
+            // detail and the Rapportino wizard. Replaced the old gradient DashboardHero, now
+            // dead code (removed along with the ActiveJobCard glass card it alone depended on).
             SliverToBoxAdapter(
               child: IdPlateHeroComp(
                 userName: userName,

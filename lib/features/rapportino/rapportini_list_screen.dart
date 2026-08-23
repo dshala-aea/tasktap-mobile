@@ -295,7 +295,7 @@ class _RapportinoRow extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          StatusPill(stato: statusLabel, small: true),
+          StatusPill(stato: statusLabel, small: true, outlined: true),
           const SizedBox(height: 2),
           Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
         ],

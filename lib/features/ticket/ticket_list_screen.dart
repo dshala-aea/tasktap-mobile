@@ -372,7 +372,7 @@ class _TicketRow extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
+          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true, outlined: true),
           const SizedBox(height: 2),
           Text(
             dateLabel,

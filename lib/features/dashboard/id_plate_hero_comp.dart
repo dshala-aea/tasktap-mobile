@@ -4,13 +4,14 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// PROVING-GROUND COMP — cantiere safety-signage direction, dashboard hero only.
+/// The dashboard hero — cantiere safety-signage direction, approved.
 ///
-/// Not wired to replace [DashboardHero] yet. A flat "ID plate" band standing in for the soft
-/// gradient hero: no shadow, no gradient, a stamped identity plate a technician reads once and
-/// knows exactly where they stand — who, when, how much is left. Yellow appears exactly once,
-/// on the count that still needs doing; everything else is white-on-near-black. That scarcity is
-/// the whole bet this comp is testing — see PRODUCT.md discussion before promoting this further.
+/// A flat "ID plate" band, not a soft gradient hero: no shadow, no gradient, a stamped identity
+/// plate a technician reads once and knows exactly where they stand — who, when, how much is
+/// left. Yellow appears exactly once, on the count that still needs doing; everything else is
+/// white-on-near-black. Proven against a real empty state and a real live-tracker state on
+/// device before being approved to replace the old DashboardHero/ActiveJobCard pair, which this
+/// superseded and which no longer exist in the tree.
 class IdPlateHeroComp extends StatelessWidget {
   const IdPlateHeroComp({
     super.key,
