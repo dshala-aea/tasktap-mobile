@@ -70,8 +70,24 @@ class _TrackerRow extends ConsumerStatefulWidget {
   ConsumerState<_TrackerRow> createState() => _TrackerRowState();
 }
 
-class _TrackerRowState extends ConsumerState<_TrackerRow> {
+class _TrackerRowState extends ConsumerState<_TrackerRow> with SingleTickerProviderStateMixin {
   bool _busy = false;
+
+  // A running tracker is not an alert — it is the ordinary state of most of a shift, which is
+  // exactly why it must not borrow yellow: painted yellow for eight hours a day, the color would
+  // stop meaning "needs you" the first time someone clocks in. A pulsing dot is the signage
+  // world's own answer for "live" (an equipment indicator lamp), so it carries the meaning yellow
+  // used to carry here without spending yellow to do it.
+  late final _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
@@ -125,16 +141,27 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(28),
-        borderRadius: AppRack.freeShape,
-        border: Border(
-          left: BorderSide(color: AppColors.Y, width: AppRack.strapWidth),
-        ),
+        border: Border(top: BorderSide(color: AppColors.WHITE.withAlpha(40))),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, AppSpacing.sm, 6, AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(
           children: [
+            // The live indicator — an equipment lamp, not a status pill. Green, deliberately not
+            // yellow: this world's own convention reserves yellow for "needs you" and green for
+            // "running normally," the same pairing on the machines this audience already reads —
+            // conflating the two would spend the one color this whole direction depends on.
+            AnimatedBuilder(
+              animation: _pulse,
+              builder: (context, _) => Opacity(
+                opacity: 0.35 + (_pulse.value * 0.65),
+                child: const DecoratedBox(
+                  decoration: BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
+                  child: SizedBox(width: 8, height: 8),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
             Icon(_glyph(t.kind), size: 16, color: AppColors.onDarkMuted),
             const SizedBox(width: 8),
             Expanded(

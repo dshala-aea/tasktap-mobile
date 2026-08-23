@@ -14,6 +14,7 @@ import '../../presentation/providers/schedule_providers.dart';
 import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
+import 'id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -42,9 +43,13 @@ class DashboardScreen extends ConsumerWidget {
         child: CustomScrollView(
           slivers: [
             // ── Hero ──────────────────────────────────────────────────────────
+            // TEMP: cantiere-safety-signage proving-ground comp, swapped in for live approval.
+            // Revert to DashboardHero(...) below if this direction is not approved.
             SliverToBoxAdapter(
-              child: DashboardHero(
+              child: IdPlateHeroComp(
                 userName: userName,
+                todayCount: stats.todayCount,
+                completedCount: stats.completedCount,
                 actions: [
                   HeaderIconBtn(
                     icon: LucideIcons.bell,

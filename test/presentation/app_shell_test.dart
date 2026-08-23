@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -50,10 +51,13 @@ Widget _buildAuthenticatedApp(MockAuthRepository repo, AppDatabase db, MockDio m
 }
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
     // Suppress the "multiple AppDatabase instances" Drift warning in tests.
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     registerFallbackValue(RequestOptions(path: '/'));
+    // The dashboard's ID-plate hero formats today's date in Italian; without this, mounting the
+    // real app tree throws LocaleDataException the moment it builds.
+    await initializeDateFormatting('it', null);
   });
 
   late MockAuthRepository repo;

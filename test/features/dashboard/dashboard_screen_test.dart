@@ -6,8 +6,10 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -33,9 +35,10 @@ Widget _buildDashboard({required AppDatabase db, required MockAuthRepository rep
 }
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     registerFallbackValue(RequestOptions(path: '/'));
+    await initializeDateFormatting('it', null);
   });
 
   late AppDatabase db;
@@ -75,23 +78,25 @@ void main() {
   group('DashboardScreen', () {
     testWidgets('renders hero with user email when no displayName', (tester) async {
       await pumpDashboard(tester);
-      expect(find.text('mario@tasktap.io'), findsOneWidget);
-      expect(find.text('Bentornato'), findsOneWidget);
+      // ID-plate hero: the name is the plate's identity line — uppercased, no separate greeting
+      // text. "mario@tasktap.io" becomes "MARIO@TASKTAP.IO" on the plate.
+      expect(find.text('MARIO@TASKTAP.IO'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('the hero is a header when nothing is running, not a panel', (tester) async {
+    testWidgets('the hero is a compact plate, not a tall panel', (tester) async {
       // minHeight was 430 unconditionally: with no clock running that is most of a phone screen
       // given to an empty gradient with a name at the top, and the day's work starting below the
-      // fold. The band's height should say whether it is holding anything.
+      // fold. The ID plate always shows its readout row (job count, even at zero), but stays a
+      // compact stamped band, not a near-full-screen hero.
       await pumpDashboard(tester);
 
-      final heroHeight = tester.getSize(find.byType(DashboardHero)).height;
+      final heroHeight = tester.getSize(find.byType(IdPlateHeroComp)).height;
       expect(
         heroHeight,
-        lessThan(220),
-        reason: 'an empty hero should be the greeting and no more',
+        lessThan(260),
+        reason: 'the plate should stay a compact identity band, not a tall panel',
       );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
