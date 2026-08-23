@@ -148,13 +148,10 @@ class _RapportiniListBody extends ConsumerWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Rapportini',
-            subtitle: '${allDrafts.length} totali',
-            actions: [
-              HeaderIconBtn(icon: LucideIcons.filter, label: 'Filtra rapportini', onTap: () {}),
-            ],
-          ),
+          // The filter chips below already do the filtering — this used to carry a second,
+          // dead filter icon (`onTap: () {}`) doing nothing beside them. Same fix as the ticket
+          // list: a control that looks tappable and isn't teaches distrust of the one that works.
+          child: ScreenHeader(title: 'Rapportini', subtitle: '${allDrafts.length} totali'),
         ),
         SliverToBoxAdapter(
           child: AppSearchBar(
@@ -246,10 +243,12 @@ class _RapportinoRow extends ConsumerWidget {
       'it',
     ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
-    // Short id for display
-    final shortId = draft.id.length > 8 ? draft.id.substring(0, 8) : draft.id;
-
-    // Subtitle: tecnico count · ore · materiali count
+    // Subtitle: tecnico count · ore · materiali count.
+    //
+    // Used to lead with `#$shortId` — eight hex characters of the draft's own row id, the same
+    // "identifier a human cannot recognise" bug already fixed on the ticket list. A rapportino
+    // has no `numero` synced locally (unlike a ticket), so there is nothing real to show in its
+    // place; the title and this summary carry the row on their own, same as a numberless ticket.
     final subParts = <String>[
       if (staffCount > 0) '$staffCount tecnico',
       oreLabel,
@@ -258,6 +257,10 @@ class _RapportinoRow extends ConsumerWidget {
     final subtitle = subParts.join(' · ');
 
     return ListRow(
+      // The draft you are still filling in gets the strap — the same yellow mark the running
+      // timbratura and the in-corso ticket carry — because a Bozza is the ongoing work on this
+      // list; a submitted report is done and reads as settled instead.
+      strapped: !isSubmitted,
       leading: Stack(
         children: [
           Container(
@@ -287,7 +290,7 @@ class _RapportinoRow extends ConsumerWidget {
         ],
       ),
       title: draft.title,
-      subtitle: '#$shortId · $subtitle',
+      subtitle: subtitle,
       meta: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         mainAxisSize: MainAxisSize.min,

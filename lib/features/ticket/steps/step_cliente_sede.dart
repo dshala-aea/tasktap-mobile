@@ -1,8 +1,10 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/rack.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
@@ -76,10 +78,18 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           validator: (v) => v == null ? 'Campo obbligatorio' : null,
         ),
 
-        if (selectedCustomer != null) ...[
-          const SizedBox(height: 12),
-          _CustomerSummary(customer: selectedCustomer),
-        ],
+        const SizedBox(height: 12),
+        // Rule 3 of the rack grammar: an empty slot is drawn, not left blank. Before a customer
+        // is picked this is what the step has to say — the field above is the only content, and
+        // the gap down to "Avanti" used to read as unfinished rather than "not filled in yet".
+        if (selectedCustomer != null)
+          _CustomerSummary(customer: selectedCustomer)
+        else
+          const ShadowBoard(
+            label: 'Cliente non ancora selezionato',
+            icon: LucideIcons.briefcase,
+            height: 72,
+          ),
 
         // ── Location ──────────────────────────────────────────────────────
         const SizedBox(height: 24),
@@ -104,10 +114,15 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           validator: (v) => v == null ? 'Campo obbligatorio' : null,
         ),
 
-        if (selectedLocation != null) ...[
-          const SizedBox(height: 12),
-          _LocationSummary(location: selectedLocation),
-        ],
+        const SizedBox(height: 12),
+        if (selectedLocation != null)
+          _LocationSummary(location: selectedLocation)
+        else if (widget.state.customerId != null)
+          const ShadowBoard(
+            label: 'Sede non ancora selezionata',
+            icon: LucideIcons.mapPin,
+            height: 72,
+          ),
       ],
     );
   }
