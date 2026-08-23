@@ -161,7 +161,6 @@ class _AdminCantiereRow extends StatelessWidget {
       ),
       title: cantiere.name,
       subtitle: cityLabel,
-      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: () => context.push('/altro/cantieri/${cantiere.id}'),
     );

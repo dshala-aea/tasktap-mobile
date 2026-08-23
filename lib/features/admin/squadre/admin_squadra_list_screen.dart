@@ -155,7 +155,6 @@ class _SquadraRow extends StatelessWidget {
       ),
       title: nome,
       subtitle: specializzazione.isNotEmpty ? specializzazione : '—',
-      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: onTap,
     );

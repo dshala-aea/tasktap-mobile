@@ -154,7 +154,7 @@ class _ContractRow extends StatelessWidget {
       ),
       title: name,
       subtitle: customerName,
-      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
+      meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
       showDivider: !isLast,
       onTap: onTap,
     );

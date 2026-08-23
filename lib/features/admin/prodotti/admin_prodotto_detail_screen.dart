@@ -25,6 +25,7 @@ class AdminProdottoDetailScreen extends StatelessWidget {
     final warrantyLabel = warrantyDate != null
         ? DateFormat('dd/MM/yyyy').format(DateTime.parse(warrantyDate))
         : '—';
+    final isActive = prodotto['isActive'] as bool? ?? true;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -54,6 +55,18 @@ class AdminProdottoDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                 child: Column(
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
+                      child: Row(
+                        children: [
+                          StatusPill(
+                            stato: isActive ? 'Attivo' : 'Inattivo',
+                            outlined: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 1, color: context.colors.borderLight),
                     KeyVal(label: 'Nome', value: name),
                     KeyVal(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
                     KeyVal(

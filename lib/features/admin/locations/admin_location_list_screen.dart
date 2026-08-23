@@ -205,7 +205,6 @@ class _AdminLocationRow extends StatelessWidget {
       ),
       title: location.name,
       subtitle: '$customerName · $cityLabel',
-      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
       showDivider: !isLast,
       onTap: () => context.push('/altro/sedi/${location.id}'),
     );

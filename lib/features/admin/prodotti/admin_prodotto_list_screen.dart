@@ -157,7 +157,10 @@ class _ProdottoRow extends StatelessWidget {
       ),
       title: name,
       subtitle: customerName,
-      meta: Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
+      // Only when inactive: an active product is the ordinary state of every row on this list,
+      // and printing "Attivo" on all of them would be the pill making the same noise the yellow
+      // strap grammar refuses to make — it should mark the row that differs, not every row.
+      meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
       showDivider: !isLast,
       onTap: onTap,
     );

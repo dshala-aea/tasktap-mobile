@@ -34,6 +34,7 @@ class AdminContractDetailScreen extends StatelessWidget {
         : 'Nessuna data fine';
     final priceLabel = price != null ? '€${price.toStringAsFixed(2)}' : '—';
     final freqLabel = '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
+    final isActive = contract['isActive'] as bool? ?? true;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -60,6 +61,18 @@ class AdminContractDetailScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                 child: Column(
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
+                      child: Row(
+                        children: [
+                          StatusPill(
+                            stato: isActive ? 'Attivo' : 'Inattivo',
+                            outlined: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, thickness: 1, color: context.colors.borderLight),
                     KeyVal(label: 'Nome', value: name),
                     KeyVal(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
                     KeyVal(label: 'Data inizio', value: startLabel),
