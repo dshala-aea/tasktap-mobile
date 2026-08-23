@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/screen_header.dart';
 import '../../data/local/app_database.dart';
 import 'timbra_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
@@ -21,6 +22,8 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Dark clock-in / clock-out screen.
 ///
 /// Layout:
+///   - `ScreenHeader(dark: true)` — "Timbra", no back (root tab), no actions (nothing on this
+///     screen is a notification or a profile setting, so none are offered)
 ///   - Date label (uppercase, Manrope 13 muted)
 ///   - Live clock (Sora 72 thin, yellow, ticking every second)
 ///   - Circular punch button (radial yellow gradient)
@@ -88,104 +91,123 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
 
     return Scaffold(
       backgroundColor: AppColors.punchGround,
-      // The whole screen used to be one SingleChildScrollView, so the punch button — the only
-      // reason to open this screen — could be scrolled off it, and on a small phone it started
-      // that way: roughly 500dp of clock and gaps sat above the session list before anything
-      // scrolled. A clock-in control you have to go looking for is the wrong control.
-      //
-      // The controls are fixed now and only the list of today's sessions scrolls, inside its own
-      // box. Gaps came down with it — 40dp twice, and a 180dp disc, on a surface that has to fit
-      // an iPhone SE.
+      // The screen had zero top framing — the dark Column ran straight from the status bar into
+      // the date label, the one root tab with no anchor at all. `ScreenHeader` is the same
+      // primitive every other screen hangs its top edge on; its `dark` variant already exists for
+      // exactly a fixed-dark ground (see `new_ticket_form_screen.dart`), so this is adoption, not
+      // invention. No back chevron — root tab — and no bell/profile actions bolted on: nothing on
+      // this screen is notifications or account settings, and a control with no honest
+      // destination is worse than no control (see the dashboard's former `onTap: () {}` pair).
       body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.lg,
-            AppSpacing.xl,
-            context.navClearance,
-          ),
-          // Fixed when there is room, scrolling when there is not.
-          //
-          // The screen was one SingleChildScrollView, so the punch button — the only reason to
-          // open it — could be scrolled off, and on a small phone it started that way. Pinning
-          // everything instead is the other failure: the controls take about 400dp, so on a 600dp
-          // viewport the session list is squeezed to a few pixels and shows nothing.
-          //
-          // So: measure. Above the threshold the controls hold still and only the sessions move,
-          // which is what a technician glancing at the screen needs. Below it the page scrolls as
-          // a whole, because a crushed list is worse than a scroll.
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
-              final content = <Widget>[
-                _DateLabel(now: _now),
-                const SizedBox(height: 6),
-                _LiveClock(now: _now, pulseAnim: _pulseAnim),
-                const SizedBox(height: 28),
-                _PunchButton(
-                  shiftState: shiftState,
-                  isLoading: punchState is AsyncLoading,
-                  guard: ref.watch(punchGuardProvider),
-                  onTap: () {
-                    ref.read(punchNotifierProvider.notifier).punch(shiftState);
+        child: Column(
+          children: [
+            const ScreenHeader(title: 'Timbra', dark: true),
+            Expanded(
+              // The whole screen used to be one SingleChildScrollView, so the punch button — the
+              // only reason to open this screen — could be scrolled off it, and on a small phone
+              // it started that way: roughly 500dp of clock and gaps sat above the session list
+              // before anything scrolled. A clock-in control you have to go looking for is the
+              // wrong control.
+              //
+              // The controls are fixed now and only the list of today's sessions scrolls, inside
+              // its own box. Gaps came down with it — 40dp twice, and a 180dp disc, on a surface
+              // that has to fit an iPhone SE.
+              child: Padding(
+                // pagePadding (19), not a bespoke 24: this is the same horizontal grid the header
+                // above just drew a line across, and the one every rack screen in the app reads
+                // its rail from.
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.lg,
+                  AppSpacing.pagePadding,
+                  context.navClearance,
+                ),
+                // Fixed when there is room, scrolling when there is not.
+                //
+                // The screen was one SingleChildScrollView, so the punch button — the only reason
+                // to open it — could be scrolled off, and on a small phone it started that way.
+                // Pinning everything instead is the other failure: the controls take about 400dp,
+                // so on a 600dp viewport the session list is squeezed to a few pixels and shows
+                // nothing.
+                //
+                // So: measure. Above the threshold the controls hold still and only the sessions
+                // move, which is what a technician glancing at the screen needs. Below it the
+                // page scrolls as a whole, because a crushed list is worse than a scroll.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
+                    final content = <Widget>[
+                      _DateLabel(now: _now),
+                      const SizedBox(height: 6),
+                      _LiveClock(now: _now, pulseAnim: _pulseAnim),
+                      const SizedBox(height: 28),
+                      _PunchButton(
+                        shiftState: shiftState,
+                        isLoading: punchState is AsyncLoading,
+                        guard: ref.watch(punchGuardProvider),
+                        onTap: () {
+                          ref.read(punchNotifierProvider.notifier).punch(shiftState);
+                        },
+                      ),
+                      if (punchState is AsyncError<void>)
+                        Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.sm),
+                          child: Text(
+                            'Errore durante la timbratura. Riprova.',
+                            style: TextStyle(color: context.colors.red, fontSize: 12),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      if (shiftState.isOnShift) ...[
+                        const SizedBox(height: 12),
+                        _PauseButton(
+                          shiftState: shiftState,
+                          isLoading: punchState is AsyncLoading,
+                          guard: ref.watch(pauseGuardProvider),
+                          onTap: () {
+                            ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                    ];
+
+                    final sessions = sessionsAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (e, _) => Text(
+                        'Errore sessioni: $e',
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                      ),
+                      data: (list) => _SessionsCard(
+                        sessions: list,
+                        total: total,
+                        now: _now,
+                        hasPendingSync: ref.watch(hasPendingSyncProvider),
+                        fillHeight: fits,
+                      ),
+                    );
+
+                    if (!fits) {
+                      return SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [...content, sessions],
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ...content,
+                        Expanded(child: sessions),
+                      ],
+                    );
                   },
                 ),
-                if (punchState is AsyncError<void>)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.sm),
-                    child: Text(
-                      'Errore durante la timbratura. Riprova.',
-                      style: TextStyle(color: context.colors.red, fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                if (shiftState.isOnShift) ...[
-                  const SizedBox(height: 12),
-                  _PauseButton(
-                    shiftState: shiftState,
-                    isLoading: punchState is AsyncLoading,
-                    guard: ref.watch(pauseGuardProvider),
-                    onTap: () {
-                      ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
-                    },
-                  ),
-                ],
-                const SizedBox(height: 20),
-              ];
-
-              final sessions = sessionsAsync.when(
-                loading: () => const SizedBox.shrink(),
-                error: (e, _) => Text(
-                  'Errore sessioni: $e',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                ),
-                data: (list) => _SessionsCard(
-                  sessions: list,
-                  total: total,
-                  now: _now,
-                  hasPendingSync: ref.watch(hasPendingSyncProvider),
-                  fillHeight: fits,
-                ),
-              );
-
-              if (!fits) {
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [...content, sessions],
-                  ),
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  ...content,
-                  Expanded(child: sessions),
-                ],
-              );
-            },
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -257,7 +279,7 @@ class _LiveClock extends StatelessWidget {
       child: ScaleTransition(
         scale: pulseAnim,
         // Scales down rather than overflowing. At 72px "HH:mm:ss" wants 327dp, which is wider
-        // than a 360dp phone once the screen's 24dp gutters are taken off — the clock was
+        // than a 360dp phone once the screen's horizontal gutters are taken off — the clock was
         // overflowing on every common Android width and clipping on the narrow ones. scaleDown
         // never enlarges, so on a normal phone this is exactly the size it was.
         child: FittedBox(

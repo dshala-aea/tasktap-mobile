@@ -106,8 +106,9 @@ class MeseView extends ConsumerWidget {
                   child: Row(
                     children: List.generate(7, (col) {
                       final idx = row * 7 + col;
-                      if (idx >= gridDays.length)
+                      if (idx >= gridDays.length) {
                         return const Expanded(child: SizedBox());
+                      }
                       final day = gridDays[idx];
                       final key = DateTime(day.year, day.month, day.day);
                       final inMonth = day.month == month.month;
