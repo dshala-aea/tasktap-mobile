@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -93,11 +94,12 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
         // This reads the local mirror, so a failure here is the device's database, not the network.
         // It used to render `Errore: $e` — a Drift exception, full width, as the entire screen.
         // There is nothing a technician can do about it except back out, so say that.
-        error: (e, _) => SafeArea(
-          child: Column(
-            children: [
-              ScreenHeader(title: 'Ticket', showBack: true),
-              const Expanded(
+        error: (e, _) => Column(
+          children: [
+            _TicketDetailHeader(title: 'Ticket'),
+            const Expanded(
+              child: SafeArea(
+                top: false,
                 child: UnavailableState(
                   titolo: 'Ticket non leggibile',
                   motivo:
@@ -105,22 +107,23 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
                       'continua, sincronizza dalla Dashboard.',
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
         data: (ticket) {
           if (ticket == null) {
-            return SafeArea(
-              child: Column(
-                children: [
-                  ScreenHeader(title: 'Ticket', showBack: true),
-                  EmptyState(
+            return Column(
+              children: [
+                _TicketDetailHeader(title: 'Ticket'),
+                SafeArea(
+                  top: false,
+                  child: EmptyState(
                     icon: LucideIcons.xCircle,
                     title: 'Ticket non trovato',
                     body: 'Il ticket richiesto non è disponibile in cache.',
                   ),
-                ],
-              ),
+                ),
+              ],
             );
           }
           return _TicketDetailBody(
@@ -133,6 +136,35 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             scrollController: _scrollController,
           );
         },
+      ),
+    );
+  }
+}
+
+/// The dark CHARCOAL plate every Operational surface (Timbra, the wizards) already carries —
+/// Ticket detail was the one screen in that family still wearing the light Browsing header.
+/// Local to this file rather than a change to [ScreenHeader] itself: only this screen needed it,
+/// and [ScreenHeader]'s `dark` flag already covers the rest (see `new_ticket_form_screen.dart`).
+class _TicketDetailHeader extends StatelessWidget {
+  const _TicketDetailHeader({required this.title, this.subtitle, this.actions = const []});
+
+  final String title;
+  final String? subtitle;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.CHARCOAL,
+      child: SafeArea(
+        bottom: false,
+        child: ScreenHeader(
+          title: title,
+          subtitle: subtitle,
+          showBack: true,
+          dark: true,
+          actions: actions,
+        ),
       ),
     );
   }
@@ -186,6 +218,7 @@ class _TicketDetailBody extends ConsumerWidget {
               assignedId);
 
     return SafeArea(
+      top: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -198,19 +231,28 @@ class _TicketDetailBody extends ConsumerWidget {
           //
           // Where the ticket has no number the subtitle is simply absent. Nothing is invented and
           // the id never comes back.
-          ScreenHeader(
+          //
+          // Ticket is an Operational surface (same family as Timbra and the rapportino/ticket
+          // wizards, which already carry the dark CHARCOAL plate) — this used to be the one
+          // Operational screen still wearing the light Browsing-surface header. Only the header
+          // gets the dark plate; the body below stays light. A long, dense detail page with many
+          // KeyVal rows reads better at high contrast outdoors than it would crammed onto a dark
+          // ground, and nothing below this line changes — the bottom action stack has twice been
+          // squeezed until something under it stopped laying out, so it is not touched here.
+          _TicketDetailHeader(
             title: ticket.title,
             subtitle: reference,
-            showBack: true,
             actions: [
               HeaderIconBtn(
                 icon: LucideIcons.userCheck,
                 label: 'Assegna',
+                glass: true,
                 onTap: () => _showAssignSheet(context, ref, ticket),
               ),
               HeaderIconBtn(
                 icon: LucideIcons.briefcase,
                 label: 'Scheda cliente',
+                glass: true,
                 onTap: () =>
                     context.push(AppRoutes.clientiDetail(ticket.customerId)),
               ),
