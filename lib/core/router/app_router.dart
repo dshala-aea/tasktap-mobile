@@ -176,6 +176,10 @@ GoRouter buildRouter(WidgetRef ref) {
                 routes: [
                   GoRoute(
                     path: ':id',
+                    // Full-screen, no persistent bottom nav: a dense multi-tab detail screen
+                    // needs the vertical space the shell's floating pill nav would otherwise
+                    // eat permanently. See parentNavigatorKey on every form/detail route below.
+                    parentNavigatorKey: rootNavigatorKey,
                     builder: (context, state) =>
                         TicketDetailScreen(ticketId: state.pathParameters['id']!),
                   ),
@@ -214,11 +218,13 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'editor/:reportId',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             RapportinoFormScreen(reportId: state.pathParameters['reportId']!),
                       ),
                       GoRoute(
                         path: 'view/:reportId',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             RapportinoViewScreen(reportId: state.pathParameters['reportId']!),
                       ),
@@ -240,15 +246,18 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminCustomerFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             AdminCustomerDetailScreen(customerId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
                                 AdminCustomerFormScreen(customerId: state.pathParameters['id']!),
                           ),
@@ -262,15 +271,18 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminCantiereFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             AdminCantiereDetailScreen(cantiereId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
                                 AdminCantiereFormScreen(cantiereId: state.pathParameters['id']),
                           ),
@@ -284,15 +296,18 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuova',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminLocationFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             AdminLocationDetailScreen(locationId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
                                 AdminLocationFormScreen(locationId: state.pathParameters['id']),
                           ),
@@ -306,15 +321,18 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuova',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminScheduleFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             AdminScheduleDetailScreen(scheduleId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
                                 AdminScheduleFormScreen(scheduleId: state.pathParameters['id']),
                           ),
@@ -328,15 +346,18 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminMaterialeFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) =>
                             AdminMaterialeDetailScreen(materialeId: state.pathParameters['id']!),
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
                                 AdminMaterialeFormScreen(materialeId: state.pathParameters['id']),
                           ),
@@ -350,10 +371,12 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminProdottoFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final prodotto = state.extra as Map<String, dynamic>?;
                           return AdminProdottoDetailScreen(prodotto: prodotto ?? {});
@@ -361,6 +384,7 @@ GoRouter buildRouter(WidgetRef ref) {
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) {
                               final prodotto = state.extra as Map<String, dynamic>?;
                               return AdminProdottoFormScreen(prodotto: prodotto);
@@ -376,10 +400,12 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminContractFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final contract = state.extra as Map<String, dynamic>?;
                           return AdminContractDetailScreen(contract: contract ?? {});
@@ -387,6 +413,7 @@ GoRouter buildRouter(WidgetRef ref) {
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) {
                               final contract = state.extra as Map<String, dynamic>?;
                               return AdminContractFormScreen(contract: contract);
@@ -402,10 +429,12 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => const AdminSquadraFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final squadra = state.extra as Map<String, dynamic>?;
                           return AdminSquadraDetailScreen(squadra: squadra ?? {});
@@ -413,6 +442,7 @@ GoRouter buildRouter(WidgetRef ref) {
                         routes: [
                           GoRoute(
                             path: 'modifica',
+                            parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) {
                               final squadra = state.extra as Map<String, dynamic>?;
                               return AdminSquadraFormScreen(squadra: squadra);
@@ -428,6 +458,7 @@ GoRouter buildRouter(WidgetRef ref) {
                     routes: [
                       GoRoute(
                         path: ':id',
+                        parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final report = state.extra as Map<String, dynamic>?;
                           return AdminReportDetailScreen(report: report ?? {});
