@@ -149,7 +149,7 @@ class _SquadraRow extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           color: _parseColor(context, colore).withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppRack.insetShape,
         ),
         child: Icon(LucideIcons.users, size: 20, color: _parseColor(context, colore)),
       ),

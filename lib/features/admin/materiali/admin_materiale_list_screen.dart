@@ -222,11 +222,11 @@ class _AdminMaterialeRow extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppRack.insetShape,
         ),
         child: materiale.imageUrl != null
             ? ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRack.insetShape,
                 child: Image.network(
                   materiale.imageUrl!,
                   fit: BoxFit.cover,

@@ -46,7 +46,14 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
             ErrorState(onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId))),
         data: (schedule) {
           if (schedule == null) {
-            return const Center(child: Text('Pianificazione non trovata'));
+            return const UnavailableState(
+              icon: LucideIcons.calendarDays,
+              titolo: 'Pianificazione non disponibile',
+              motivo:
+                  "L'elenco pianificazioni non è ancora sincronizzato sul "
+                  'dispositivo, quindi questa pianificazione non può essere '
+                  'letta dalla cache locale anche se esiste sul server.',
+            );
           }
           return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
         },
@@ -74,33 +81,25 @@ class _ScheduleDetailBody extends StatelessWidget {
             title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
             subtitle: dateLabel,
             showBack: true,
-            actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
-                onSelected: (v) {
-                  if (v == 'edit') {
-                    context.push('/altro/pianificazioni/$scheduleId/modifica');
-                  }
-                },
-              ),
-            ],
           ),
         ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _InfoRow(label: 'Titolo', value: schedule.title.isNotEmpty ? schedule.title : '—'),
-                _InfoRow(label: 'Data', value: dateLabel),
-                _InfoRow(label: 'Orario', value: timeLabel),
-                _InfoRow(
-                  label: 'Note',
-                  value: schedule.description.isNotEmpty ? schedule.description : '—',
-                ),
-              ],
+            child: AppCard(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+              child: Column(
+                children: [
+                  KeyVal(label: 'Titolo', value: schedule.title.isNotEmpty ? schedule.title : '—'),
+                  KeyVal(label: 'Data', value: dateLabel),
+                  KeyVal(label: 'Orario', value: timeLabel),
+                  KeyVal(
+                    label: 'Note',
+                    value: schedule.description.isNotEmpty ? schedule.description : '—',
+                    showDivider: false,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -114,35 +113,5 @@ class _ScheduleDetailBody extends StatelessWidget {
     final h = minutes ~/ 60;
     final m = minutes % 60;
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
-          ),
-        ],
-      ),
-    );
   }
 }

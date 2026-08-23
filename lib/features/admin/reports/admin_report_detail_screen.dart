@@ -33,22 +33,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: ScreenHeaderBar(
-        title: title,
-        showBack: true,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(LucideIcons.moreVertical, size: 20),
-            itemBuilder: (_) => [
-              if (stato == 'Inviato')
-                const PopupMenuItem(value: 'controlla', child: Text('Segna come controllato')),
-              if (stato == 'Controllato')
-                const PopupMenuItem(value: 'fattura', child: Text('Segna come fatturato')),
-            ],
-            onSelected: (v) => _handleAction(context, ref, v),
-          ),
-        ],
-      ),
+      appBar: ScreenHeaderBar(title: title, showBack: true),
       body: CustomScrollView(
         slivers: [
           // ── Status header ───────────────────────────────────────────

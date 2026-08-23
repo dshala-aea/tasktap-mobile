@@ -39,6 +39,18 @@ class _ClientiListScreenState extends State<ClientiListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
+      // The only entry point to `/altro/clienti/nuovo` in the whole app: that route has
+      // resolved to a working AdminCustomerFormScreen since before this pass, but nothing
+      // rendered a control that pushed it — the FAB that did lived on AdminCustomerListScreen,
+      // a second, unrouted "Clienti" list screen that this shell never builds. An office user
+      // reaching Clienti from the Altro hub had no way to add a customer from the phone at all.
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        child: AppFab(
+          tooltip: 'Nuovo cliente',
+          onPressed: () => context.push('/altro/clienti/nuovo'),
+        ),
+      ),
     );
   }
 }

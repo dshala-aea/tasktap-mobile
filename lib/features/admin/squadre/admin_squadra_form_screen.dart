@@ -94,7 +94,10 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEditing ? 'Squadra aggiornata' : 'Squadra creata')),
+          SnackBar(
+            content: Text(_isEditing ? 'Squadra aggiornata' : 'Squadra creata'),
+            backgroundColor: context.colors.green,
+          ),
         );
         context.pop(true);
       }
@@ -119,18 +122,6 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
       appBar: ScreenHeaderBar(
         title: _isEditing ? 'Modifica squadra' : 'Nuova squadra',
         showBack: true,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
       ),
       body: Form(
         key: _formKey,
@@ -163,6 +154,13 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
             const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
+            const SizedBox(height: 32),
+
+            AppButton(
+              label: _isEditing ? 'Salva modifiche' : 'Crea squadra',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
+            ),
           ],
         ),
       ),

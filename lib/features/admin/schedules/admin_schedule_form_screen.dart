@@ -14,6 +14,7 @@ import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/steps/step_assegnazione.dart';
 import '../admin_api_client.dart';
+import '../admin_widgets.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -151,6 +152,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(_isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata'),
+            backgroundColor: context.colors.green,
           ),
         );
         context.pop(true);
@@ -183,18 +185,6 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       appBar: ScreenHeaderBar(
         title: _isEditing ? 'Modifica pianificazione' : 'Nuova pianificazione',
         showBack: true,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
       ),
       body: Form(
         key: _formKey,
@@ -210,40 +200,33 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
             const SizedBox(height: 16),
 
             // ── Date picker ──────────────────────────────────────────────
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Data'),
-              subtitle: Text(dateLabel),
-              trailing: const Icon(LucideIcons.calendar),
-              onTap: _pickDate,
-            ),
-            const Divider(),
+            AdminDateField(label: 'Data', value: dateLabel, onTap: _pickDate),
+            const SizedBox(height: 16),
 
             // ── Time pickers ─────────────────────────────────────────────
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Inizio'),
-                    subtitle: Text(_startTime.format(context)),
-                    trailing: const Icon(LucideIcons.clock),
+                  child: AdminDateField(
+                    label: 'Inizio',
+                    value: _startTime.format(context),
+                    icon: LucideIcons.clock,
                     onTap: _pickStartTime,
                   ),
                 ),
+                const SizedBox(width: 16),
                 Expanded(
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Fine'),
-                    subtitle: Text(_endTime.format(context)),
-                    trailing: const Icon(LucideIcons.clock),
+                  child: AdminDateField(
+                    label: 'Fine',
+                    value: _endTime.format(context),
+                    icon: LucideIcons.clock,
                     onTap: _pickEndTime,
                   ),
                 ),
               ],
             ),
-            const Divider(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
             // ── Technician selector ──────────────────────────────────────
             AppFieldShell(
@@ -281,6 +264,13 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
             const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
+            const SizedBox(height: 32),
+
+            AppButton(
+              label: _isEditing ? 'Salva modifiche' : 'Crea pianificazione',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
+            ),
           ],
         ),
       ),

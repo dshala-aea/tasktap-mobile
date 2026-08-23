@@ -56,21 +56,19 @@ class AdminContractDetailScreen extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _InfoRow(label: 'Nome', value: name),
-                  _InfoRow(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
-                  _InfoRow(label: 'Data inizio', value: startLabel),
-                  _InfoRow(label: 'Data fine', value: endLabel),
-                  _InfoRow(label: 'Frequenza', value: freqLabel),
-                  _InfoRow(label: 'Prezzo', value: priceLabel),
-                  _InfoRow(
-                    label: 'Note',
-                    value: notes.isNotEmpty ? notes : '—',
-                    showDivider: false,
-                  ),
-                ],
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                child: Column(
+                  children: [
+                    KeyVal(label: 'Nome', value: name),
+                    KeyVal(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
+                    KeyVal(label: 'Data inizio', value: startLabel),
+                    KeyVal(label: 'Data fine', value: endLabel),
+                    KeyVal(label: 'Frequenza', value: freqLabel),
+                    KeyVal(label: 'Prezzo', value: priceLabel),
+                    KeyVal(label: 'Note', value: notes.isNotEmpty ? notes : '—', showDivider: false),
+                  ],
+                ),
               ),
             ),
           ),
@@ -87,35 +85,4 @@ class AdminContractDetailScreen extends StatelessWidget {
     2 => 'anni',
     _ => 'mesi',
   };
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.showDivider = true});
-
-  final String label;
-  final String value;
-  final bool showDivider;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
-          ),
-        ],
-      ),
-    );
-  }
 }

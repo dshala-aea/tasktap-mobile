@@ -6,13 +6,13 @@ import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import '../admin_widgets.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -145,7 +145,10 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEditing ? 'Cantiere aggiornato' : 'Cantiere creato')),
+          SnackBar(
+            content: Text(_isEditing ? 'Cantiere aggiornato' : 'Cantiere creato'),
+            backgroundColor: context.colors.green,
+          ),
         );
         context.pop(true);
       }
@@ -194,18 +197,6 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
       appBar: ScreenHeaderBar(
         title: _isEditing ? 'Modifica cantiere' : 'Nuovo cantiere',
         showBack: true,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
       ),
       body: Form(
         key: _formKey,
@@ -255,26 +246,36 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
             ),
             const SizedBox(height: 16),
 
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Data inizio'),
-              subtitle: Text(startLabel),
-              trailing: const Icon(LucideIcons.calendar),
-              onTap: _pickStartDate,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: AdminDateField(
+                    label: 'Data inizio',
+                    value: startLabel,
+                    onTap: _pickStartDate,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: AdminDateField(
+                    label: 'Data fine',
+                    value: endLabel,
+                    onTap: _pickEndDate,
+                  ),
+                ),
+              ],
             ),
-            const Divider(),
-
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Data fine'),
-              subtitle: Text(endLabel),
-              trailing: const Icon(LucideIcons.calendar),
-              onTap: _pickEndDate,
-            ),
-            const Divider(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+            const SizedBox(height: 32),
+
+            AppButton(
+              label: _isEditing ? 'Salva modifiche' : 'Crea cantiere',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
+            ),
           ],
         ),
       ),

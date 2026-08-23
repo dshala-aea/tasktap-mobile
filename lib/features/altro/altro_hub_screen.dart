@@ -392,7 +392,7 @@ class _SistemaSection extends ConsumerWidget {
       height: 36,
       decoration: BoxDecoration(
         color: color.withAlpha(26),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppRack.insetShape,
       ),
       child: Icon(icon, size: 18, color: color),
     );

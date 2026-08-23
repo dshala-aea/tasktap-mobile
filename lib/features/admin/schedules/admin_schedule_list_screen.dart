@@ -152,7 +152,7 @@ class _AdminScheduleRow extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppRack.insetShape,
         ),
         child: Icon(LucideIcons.calendarDays, size: 20, color: context.colors.inkMuted),
       ),

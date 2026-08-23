@@ -45,7 +45,14 @@ class AdminLocationDetailScreen extends ConsumerWidget {
             ErrorState(onRetry: () => ref.invalidate(adminLocationDetailProvider(locationId))),
         data: (location) {
           if (location == null) {
-            return const Center(child: Text('Sede non trovata'));
+            return const UnavailableState(
+              icon: LucideIcons.mapPin,
+              titolo: 'Sede non disponibile',
+              motivo:
+                  "L'elenco sedi non è ancora sincronizzato sul "
+                  'dispositivo, quindi questa sede non può essere '
+                  'letta dalla cache locale anche se esiste sul server.',
+            );
           }
           return _LocationDetailBody(location: location, locationId: locationId);
         },
@@ -65,75 +72,33 @@ class _LocationDetailBody extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: location.name,
-            subtitle: location.city ?? '',
-            showBack: true,
-            actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
-                onSelected: (v) {
-                  if (v == 'edit') {
-                    context.push('/altro/sedi/$locationId/modifica');
-                  }
-                },
-              ),
-            ],
-          ),
+          child: ScreenHeader(title: location.name, subtitle: location.city ?? '', showBack: true),
         ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _InfoRow(label: 'Nome', value: location.name),
-                _InfoRow(label: 'Città', value: location.city ?? '—'),
-                _InfoRow(label: 'Indirizzo', value: location.address ?? '—'),
-                _InfoRow(label: 'CAP', value: location.postalCode ?? '—'),
-                _InfoRow(label: 'Telefono', value: location.phone ?? '—'),
-                _InfoRow(
-                  label: 'Note',
-                  value: location.notes?.isNotEmpty == true ? location.notes! : '—',
-                ),
-              ],
+            child: AppCard(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+              child: Column(
+                children: [
+                  KeyVal(label: 'Nome', value: location.name),
+                  KeyVal(label: 'Città', value: location.city ?? '—'),
+                  KeyVal(label: 'Indirizzo', value: location.address ?? '—'),
+                  KeyVal(label: 'CAP', value: location.postalCode ?? '—'),
+                  KeyVal(label: 'Telefono', value: location.phone ?? '—'),
+                  KeyVal(
+                    label: 'Note',
+                    value: location.notes?.isNotEmpty == true ? location.notes! : '—',
+                    showDivider: false,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
 
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
-          ),
-        ],
-      ),
     );
   }
 }

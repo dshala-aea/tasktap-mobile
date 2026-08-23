@@ -6,7 +6,6 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
@@ -164,7 +163,6 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
       appBar: ScreenHeaderBar(
         title: widget.isEditMode ? 'Modifica cliente' : 'Nuovo cliente',
         showBack: true,
-        backgroundColor: AppColors.CHARCOAL,
       ),
       body: Form(
         key: _formKey,
@@ -188,7 +186,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             const SizedBox(height: 24),
 
             // ── Contact ────────────────────────────────────────────────────
-            _sectionLabel(context, 'Contatto'),
+            const StepLabel(title: 'Contatto'),
             const SizedBox(height: 12),
             AppTextField(label: 'Referente', controller: _contactPersonCtrl),
             const SizedBox(height: 16),
@@ -206,7 +204,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             const SizedBox(height: 24),
 
             // ── Address ────────────────────────────────────────────────────
-            _sectionLabel(context, 'Indirizzo'),
+            const StepLabel(title: 'Indirizzo'),
             const SizedBox(height: 12),
             AppTextField(label: 'Indirizzo', controller: _addressCtrl),
             const SizedBox(height: 16),
@@ -230,7 +228,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             const SizedBox(height: 24),
 
             // ── Notes ──────────────────────────────────────────────────────
-            _sectionLabel(context, 'Note'),
+            const StepLabel(title: 'Note'),
             const SizedBox(height: 12),
             AppTextField.multiline(label: 'Note', controller: _notesCtrl, maxLines: 4),
             const SizedBox(height: 32),
@@ -243,18 +241,6 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  static Widget _sectionLabel(BuildContext context, String text) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontFamily: 'Sora',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: context.colors.ink,
       ),
     );
   }

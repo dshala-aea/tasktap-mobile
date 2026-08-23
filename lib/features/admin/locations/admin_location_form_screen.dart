@@ -114,9 +114,12 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_isEditing ? 'Sede aggiornata' : 'Sede creata')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_isEditing ? 'Sede aggiornata' : 'Sede creata'),
+            backgroundColor: context.colors.green,
+          ),
+        );
         context.pop(true);
       }
     } catch (e) {
@@ -143,18 +146,6 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
       appBar: ScreenHeaderBar(
         title: _isEditing ? 'Modifica sede' : 'Nuova sede',
         showBack: true,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
       ),
       body: Form(
         key: _formKey,
@@ -200,6 +191,13 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
             const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+            const SizedBox(height: 32),
+
+            AppButton(
+              label: _isEditing ? 'Salva modifiche' : 'Crea sede',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
+            ),
           ],
         ),
       ),

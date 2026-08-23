@@ -88,83 +88,78 @@ class _SquadraDetailBody extends ConsumerWidget {
             title: nome,
             subtitle: spec.isNotEmpty ? spec : '',
             showBack: true,
+            // The FAB on this screen is "Aggiungi membro" — a different action on different data
+            // (membership, not the squadra's own fields) — so unlike the other admin detail
+            // screens, this header action is not a duplicate of the FAB and stays.
             actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
-                onSelected: (v) {
-                  if (v == 'edit') {
-                    context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra);
-                  }
-                },
+              HeaderIconBtn(
+                icon: LucideIcons.pencil,
+                label: 'Modifica squadra',
+                onTap: () => context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra),
               ),
             ],
           ),
         ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (descrizione.isNotEmpty) _InfoRow(label: 'Descrizione', value: descrizione),
-                _InfoRow(label: 'Specializzazione', value: spec.isNotEmpty ? spec : '—'),
-                if (note.isNotEmpty) _InfoRow(label: 'Note', value: note),
-              ],
-            ),
-          ),
-        ),
-        // ── Membri section ─────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              0,
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-            ),
-            child: Text(
-              'MEMBRI (${membri.length})',
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-            ),
-          ),
-        ),
-        if (membri.isEmpty)
-          const SliverToBoxAdapter(
+        if (descrizione.isNotEmpty || spec.isNotEmpty || note.isNotEmpty)
+          SliverToBoxAdapter(
             child: Padding(
-              padding: EdgeInsets.all(AppSpacing.pagePadding),
-              child: Text('Nessun membro nella squadra.'),
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                child: Column(
+                  children: [
+                    if (descrizione.isNotEmpty) KeyVal(label: 'Descrizione', value: descrizione),
+                    KeyVal(
+                      label: 'Specializzazione',
+                      value: spec.isNotEmpty ? spec : '—',
+                      showDivider: note.isNotEmpty,
+                    ),
+                    if (note.isNotEmpty) KeyVal(label: 'Note', value: note, showDivider: false),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        // ── Membri section ─────────────────────────────────────────────
+        SliverToBoxAdapter(child: SectionTitle(title: 'Membri', trailing: '${membri.length}')),
+        if (membri.isEmpty)
+          SliverToBoxAdapter(
+            child: EmptyState(
+              icon: LucideIcons.users,
+              title: 'Nessun membro',
+              body: 'Aggiungi un tecnico con il pulsante +.',
             ),
           )
         else
-          SliverList(
-            delegate: SliverChildBuilderDelegate((context, i) {
-              final membro = membri[i];
-              final userId = membro['userId'] as String? ?? '';
-              final ruolo = membro['ruolo'] as String? ?? 'Membro';
-              // A crew member was listed by `userId.substring(0, 8)` — a person, named at their
-              // own colleagues with eight characters of a GUID. `/api/squadre/{id}` returns raw
-              // SquadraMember rows and carries no name, so the name comes from the colleagues
-              // mirror the app already syncs for the rapportino staff picker.
-              //
-              // That substring was also a crash: `userId` defaults to '' when the key is missing,
-              // and `''.substring(0, 8)` throws RangeError, taking the whole list with it.
-              final nome = userId.isEmpty
-                  ? null
-                  : ref.watch(colleagueNameProvider(userId)).valueOrNull;
-              return ListRow(
-                leading: const CircleAvatar(radius: 18, child: Icon(LucideIcons.user, size: 18)),
-                title: nome ?? 'Membro non sincronizzato',
-                subtitle: ruolo,
-                meta: IconButton(
-                  icon: const Icon(LucideIcons.userMinus, size: 18),
-                  onPressed: () => _removeMember(context, userId),
-                ),
-                showDivider: i < membri.length - 1,
-              );
-            }, childCount: membri.length),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final membro = membri[i];
+                final userId = membro['userId'] as String? ?? '';
+                final ruolo = membro['ruolo'] as String? ?? 'Membro';
+                // A crew member was listed by `userId.substring(0, 8)` — a person, named at their
+                // own colleagues with eight characters of a GUID. `/api/squadre/{id}` returns raw
+                // SquadraMember rows and carries no name, so the name comes from the colleagues
+                // mirror the app already syncs for the rapportino staff picker.
+                //
+                // That substring was also a crash: `userId` defaults to '' when the key is missing,
+                // and `''.substring(0, 8)` throws RangeError, taking the whole list with it.
+                final nome = userId.isEmpty
+                    ? null
+                    : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                return ListRow(
+                  leading: AppAvatar(name: nome ?? '?', size: 36),
+                  title: nome ?? 'Membro non sincronizzato',
+                  subtitle: ruolo,
+                  meta: IconButton(
+                    icon: const Icon(LucideIcons.userMinus, size: 18),
+                    onPressed: () => _removeMember(context, userId),
+                  ),
+                  showDivider: i < membri.length - 1,
+                );
+              }, childCount: membri.length),
+            ),
           ),
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
@@ -203,36 +198,6 @@ class _SquadraDetailBody extends ConsumerWidget {
         }
       }
     }
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
-          ),
-        ],
-      ),
-    );
   }
 }
 

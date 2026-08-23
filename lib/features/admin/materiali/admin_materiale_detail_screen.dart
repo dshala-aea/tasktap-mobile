@@ -73,22 +73,7 @@ class _MaterialeDetailBody extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: materiale.name,
-            subtitle: materiale.code,
-            showBack: true,
-            actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
-                onSelected: (v) {
-                  if (v == 'edit') {
-                    context.push('/altro/magazzino/${materiale.id}/modifica');
-                  }
-                },
-              ),
-            ],
-          ),
+          child: ScreenHeader(title: materiale.name, subtitle: materiale.code, showBack: true),
         ),
         // ── Image ──────────────────────────────────────────────────────
         if (materiale.imageUrl != null)
@@ -101,7 +86,7 @@ class _MaterialeDetailBody extends StatelessWidget {
                 AppSpacing.base,
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppRack.freeShape,
                 child: Image.network(
                   materiale.imageUrl!,
                   height: 180,
@@ -130,7 +115,7 @@ class _MaterialeDetailBody extends StatelessWidget {
                     margin: const EdgeInsets.only(bottom: AppSpacing.base),
                     decoration: BoxDecoration(
                       color: context.colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: AppRack.insetShape,
                     ),
                     child: Text(
                       'INATTIVO',
@@ -141,28 +126,44 @@ class _MaterialeDetailBody extends StatelessWidget {
                       ),
                     ),
                   ),
-                _InfoRow(label: 'Codice', value: materiale.code),
-                _InfoRow(label: 'Nome', value: materiale.name),
-                _InfoRow(
-                  label: 'Descrizione',
-                  value: materiale.description?.isNotEmpty == true ? materiale.description! : '—',
+                AppCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    children: [
+                      KeyVal(label: 'Codice', value: materiale.code),
+                      KeyVal(label: 'Nome', value: materiale.name),
+                      KeyVal(label: 'Unità di misura', value: materiale.unitOfMeasure ?? '—'),
+                      KeyVal(label: 'Categoria', value: materiale.category ?? '—'),
+                      KeyVal(label: 'Marca', value: materiale.marca ?? '—'),
+                      KeyVal(
+                        label: 'Prezzo acquisto',
+                        value: materiale.purchasePrice != null
+                            ? '€${materiale.purchasePrice!.toStringAsFixed(2)}'
+                            : '—',
+                      ),
+                      KeyVal(
+                        label: 'Prezzo vendita',
+                        value: materiale.salePrice != null
+                            ? '€${materiale.salePrice!.toStringAsFixed(2)}'
+                            : '—',
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
                 ),
-                _InfoRow(label: 'Unità di misura', value: materiale.unitOfMeasure ?? '—'),
-                _InfoRow(label: 'Categoria', value: materiale.category ?? '—'),
-                _InfoRow(label: 'Marca', value: materiale.marca ?? '—'),
-                _InfoRow(
-                  label: 'Prezzo acquisto',
-                  value: materiale.purchasePrice != null
-                      ? '€${materiale.purchasePrice!.toStringAsFixed(2)}'
-                      : '—',
-                ),
-                _InfoRow(
-                  label: 'Prezzo vendita',
-                  value: materiale.salePrice != null
-                      ? '€${materiale.salePrice!.toStringAsFixed(2)}'
-                      : '—',
-                  showDivider: false,
-                ),
+                if (materiale.description?.isNotEmpty == true) ...[
+                  const SizedBox(height: AppSpacing.base),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle(title: 'Descrizione'),
+                        const SizedBox(height: 4),
+                        Text(materiale.description!, style: Theme.of(context).textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -170,37 +171,6 @@ class _MaterialeDetailBody extends StatelessWidget {
 
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.showDivider = true});
-
-  final String label;
-  final String value;
-  final bool showDivider;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
-          ),
-        ],
-      ),
     );
   }
 }

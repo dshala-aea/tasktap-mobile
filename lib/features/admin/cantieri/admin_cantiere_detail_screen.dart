@@ -82,76 +82,34 @@ class _CantiereDetailBody extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: cantiere.name,
-            subtitle: cantiere.city ?? '',
-            showBack: true,
-            actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [const PopupMenuItem(value: 'edit', child: Text('Modifica'))],
-                onSelected: (v) {
-                  if (v == 'edit') {
-                    context.push('/altro/cantieri/$cantiereId/modifica');
-                  }
-                },
-              ),
-            ],
-          ),
+          child: ScreenHeader(title: cantiere.name, subtitle: cantiere.city ?? '', showBack: true),
         ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _InfoRow(label: 'Nome', value: cantiere.name),
-                _InfoRow(label: 'Città', value: cantiere.city ?? '—'),
-                _InfoRow(label: 'Indirizzo', value: cantiere.address ?? '—'),
-                _InfoRow(label: 'CAP', value: cantiere.postalCode ?? '—'),
-                _InfoRow(label: 'Inizio', value: startLabel),
-                _InfoRow(label: 'Fine', value: endLabel),
-                _InfoRow(
-                  label: 'Note',
-                  value: cantiere.notes?.isNotEmpty == true ? cantiere.notes! : '—',
-                ),
-              ],
+            child: AppCard(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+              child: Column(
+                children: [
+                  KeyVal(label: 'Nome', value: cantiere.name),
+                  KeyVal(label: 'Città', value: cantiere.city ?? '—'),
+                  KeyVal(label: 'Indirizzo', value: cantiere.address ?? '—'),
+                  KeyVal(label: 'CAP', value: cantiere.postalCode ?? '—'),
+                  KeyVal(label: 'Inizio', value: startLabel),
+                  KeyVal(label: 'Fine', value: endLabel),
+                  KeyVal(
+                    label: 'Note',
+                    value: cantiere.notes?.isNotEmpty == true ? cantiere.notes! : '—',
+                    showDivider: false,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
 
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: context.colors.inkMuted, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: context.colors.ink),
-          ),
-        ],
-      ),
     );
   }
 }

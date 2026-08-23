@@ -7,12 +7,12 @@ import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import '../admin_widgets.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -128,7 +128,10 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEditing ? 'Prodotto aggiornato' : 'Prodotto creato')),
+          SnackBar(
+            content: Text(_isEditing ? 'Prodotto aggiornato' : 'Prodotto creato'),
+            backgroundColor: context.colors.green,
+          ),
         );
         context.pop(true);
       }
@@ -162,18 +165,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
       appBar: ScreenHeaderBar(
         title: _isEditing ? 'Modifica prodotto' : 'Nuovo prodotto',
         showBack: true,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
       ),
       body: Form(
         key: _formKey,
@@ -224,17 +215,21 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
             AppTextField(label: 'Numero di serie', controller: _serialNumberCtrl),
             const SizedBox(height: 16),
 
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Scadenza garanzia'),
-              subtitle: Text(warrantyLabel),
-              trailing: const Icon(LucideIcons.calendar),
+            AdminDateField(
+              label: 'Scadenza garanzia',
+              value: warrantyLabel,
               onTap: _pickWarrantyDate,
             ),
-            const Divider(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+            const SizedBox(height: 32),
+
+            AppButton(
+              label: _isEditing ? 'Salva modifiche' : 'Crea prodotto',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
+            ),
           ],
         ),
       ),

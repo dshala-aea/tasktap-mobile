@@ -151,7 +151,7 @@ class _ProdottoRow extends StatelessWidget {
         height: 40,
         decoration: BoxDecoration(
           color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: AppRack.insetShape,
         ),
         child: Icon(LucideIcons.wrench, size: 20, color: context.colors.inkMuted),
       ),

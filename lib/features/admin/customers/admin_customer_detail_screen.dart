@@ -39,7 +39,14 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
             ErrorState(onRetry: () => ref.invalidate(customerDetailProvider(customerId))),
         data: (customer) {
           if (customer == null) {
-            return const Center(child: Text('Cliente non trovato'));
+            return const UnavailableState(
+              icon: LucideIcons.users,
+              titolo: 'Cliente non disponibile',
+              motivo:
+                  "L'elenco clienti non è ancora sincronizzato sul "
+                  'dispositivo, quindi questo cliente non può essere '
+                  'letto dalla cache locale anche se esiste sul server.',
+            );
           }
           return _CustomerDetailBody(customer: customer);
         },
@@ -73,29 +80,32 @@ class _CustomerDetailBody extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AppCard(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.base),
-                child: Column(
-                  children: [
-                    _infoRow(context, 'Ragione sociale', customer.companyName),
-                    if (customer.taxId != null && customer.taxId!.isNotEmpty)
-                      _infoRow(context, 'P.IVA', customer.taxId!),
-                    if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
-                      _infoRow(context, 'Referente', customer.contactPerson!),
-                    if (customer.phone != null && customer.phone!.isNotEmpty)
-                      _infoRow(context, 'Telefono', customer.phone!),
-                    if (customer.email != null && customer.email!.isNotEmpty)
-                      _infoRow(context, 'Email', customer.email!),
-                    if (customer.address != null && customer.address!.isNotEmpty)
-                      _infoRow(context, 'Indirizzo', customer.address!),
-                    if (customer.city != null && customer.city!.isNotEmpty)
-                      _infoRow(context, 'Città', customer.city!),
-                    if (customer.postalCode != null && customer.postalCode!.isNotEmpty)
-                      _infoRow(context, 'CAP', customer.postalCode!),
-                    if (customer.country != null && customer.country!.isNotEmpty)
-                      _infoRow(context, 'Paese', customer.country!),
-                  ],
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+              child: Column(
+                children: [
+                  KeyVal(label: 'Ragione sociale', value: customer.companyName),
+                  if (customer.taxId != null && customer.taxId!.isNotEmpty)
+                    KeyVal(label: 'P.IVA', value: customer.taxId!),
+                  if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
+                    KeyVal(label: 'Referente', value: customer.contactPerson!),
+                  if (customer.phone != null && customer.phone!.isNotEmpty)
+                    KeyVal(label: 'Telefono', value: customer.phone!),
+                  if (customer.email != null && customer.email!.isNotEmpty)
+                    KeyVal(label: 'Email', value: customer.email!),
+                  if (customer.address != null && customer.address!.isNotEmpty)
+                    KeyVal(label: 'Indirizzo', value: customer.address!),
+                  if (customer.city != null && customer.city!.isNotEmpty)
+                    KeyVal(label: 'Città', value: customer.city!),
+                  if (customer.postalCode != null && customer.postalCode!.isNotEmpty)
+                    KeyVal(label: 'CAP', value: customer.postalCode!),
+                  KeyVal(
+                    label: 'Paese',
+                    value: customer.country != null && customer.country!.isNotEmpty
+                        ? customer.country!
+                        : '—',
+                    showDivider: false,
+                  ),
+                ],
               ),
             ),
           ),
@@ -107,16 +117,13 @@ class _CustomerDetailBody extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: AppCard(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.base),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Note', style: AppTextStyles.titleMedium),
-                      const SizedBox(height: 8),
-                      Text(customer.notes!, style: AppTextStyles.bodyMedium),
-                    ],
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SectionTitle(title: 'Note'),
+                    const SizedBox(height: 4),
+                    Text(customer.notes!, style: AppTextStyles.bodyMedium),
+                  ],
                 ),
               ),
             ),
@@ -128,40 +135,21 @@ class _CustomerDetailBody extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AppCard(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.base),
-                child: Row(
-                  children: [
-                    Text(
-                      'Stato',
-                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
-                    ),
-                    const Spacer(),
-                    StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo'),
-                  ],
-                ),
+              child: Row(
+                children: [
+                  Text(
+                    'Stato',
+                    style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
+                  ),
+                  const Spacer(),
+                  StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo'),
+                ],
               ),
             ),
           ),
         ),
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
-    );
-  }
-
-  static Widget _infoRow(BuildContext ctx, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(label, style: AppTextStyles.bodySmall.copyWith(color: ctx.colors.inkMuted)),
-          ),
-          Expanded(child: Text(value, style: AppTextStyles.bodyMedium)),
-        ],
-      ),
     );
   }
 }

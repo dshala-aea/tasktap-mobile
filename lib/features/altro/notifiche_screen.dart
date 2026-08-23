@@ -206,7 +206,7 @@ class _NotificaRow extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               color: context.colors.blue.withAlpha(26),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: AppRack.insetShape,
             ),
             child: Icon(LucideIcons.bell, size: 20, color: context.colors.blue),
           ),

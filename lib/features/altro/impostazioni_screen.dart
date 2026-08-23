@@ -468,7 +468,7 @@ class _ToggleRow extends StatelessWidget {
             height: 34,
             decoration: BoxDecoration(
               color: context.colors.bg3,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: AppRack.insetShape,
             ),
             child: Icon(icon, size: 17, color: context.colors.inkFaint),
           ),
@@ -521,7 +521,7 @@ class _LogoutSettingRow extends StatelessWidget {
         height: 34,
         decoration: BoxDecoration(
           color: context.colors.redSoft,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppRack.insetShape,
         ),
         child: Icon(LucideIcons.logOut, size: 17, color: context.colors.red),
       ),

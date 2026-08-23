@@ -129,7 +129,10 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEditing ? 'Materiale aggiornato' : 'Materiale creato')),
+          SnackBar(
+            content: Text(_isEditing ? 'Materiale aggiornato' : 'Materiale creato'),
+            backgroundColor: context.colors.green,
+          ),
         );
         context.pop(true);
       }
@@ -168,18 +171,6 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       appBar: ScreenHeaderBar(
         title: _isEditing ? 'Modifica materiale' : 'Nuovo materiale',
         showBack: true,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
       ),
       body: Form(
         key: _formKey,
@@ -246,6 +237,13 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 32),
+
+            AppButton(
+              label: _isEditing ? 'Salva modifiche' : 'Crea materiale',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
             ),
           ],
         ),
