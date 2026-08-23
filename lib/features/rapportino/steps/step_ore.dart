@@ -478,7 +478,6 @@ class _TotalOreCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.CHARCOAL,
         borderRadius: AppRack.freeShape,
-        boxShadow: context.colors.shadow,
       ),
       child: Row(
         children: [

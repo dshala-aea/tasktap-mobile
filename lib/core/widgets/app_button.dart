@@ -160,11 +160,14 @@ class AppButton extends StatelessWidget {
     AppButtonVariant.danger => const Color(0xFFB80000),
   };
 
-  List<BoxShadow> _shadows(BuildContext context) => switch (variant) {
-    AppButtonVariant.primary => context.colors.shadow,
-    AppButtonVariant.dark => context.colors.shadow,
-    _ => const [],
-  };
+  // No shadow on primary/dark, deliberately. This button sits in normal page flow, not as a
+  // floating overlay (compare AppFab, which stays shadowed because it genuinely floats above
+  // content) — and every modern reference this session's design research checked (Linear, Vercel,
+  // Stripe, Notion) reserves box-shadow for transient overlays, never a static in-flow control.
+  // A soft shadow is also invisible outdoors in direct sun, which this app cannot afford to rely
+  // on: the yellow fill and the ink-on-yellow contrast already carry the button with no shadow
+  // needed at all.
+  List<BoxShadow> _shadows(BuildContext context) => const [];
 
   @override
   Widget build(BuildContext context) {
