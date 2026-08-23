@@ -605,7 +605,7 @@ class _ReportTab extends ConsumerWidget {
                 ),
                 title: r.title.isNotEmpty ? r.title : 'Rapportino',
                 subtitle: dateLabel,
-                meta: StatusPill(stato: r.statoLabel, small: true),
+                meta: StatusPill(stato: r.statoLabel, small: true, outlined: true),
                 showDivider: r != reports.last,
               );
             }).toList(),
@@ -1387,7 +1387,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  StatusPill(stato: widget.statusName),
+                  StatusPill(stato: widget.statusName, outlined: true),
                   const SizedBox(width: 4),
                   Icon(LucideIcons.chevronRight, size: 14, color: c.inkMuted),
                 ],

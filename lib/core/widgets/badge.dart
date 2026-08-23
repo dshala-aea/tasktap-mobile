@@ -14,12 +14,24 @@ import 'package:tasktap_mobile/core/theme/app_rack.dart';
 /// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: context.colors.ink);
 /// ```
 class AppBadge extends StatelessWidget {
-  const AppBadge({super.key, required this.label, this.small = false, this.bgColor, this.fgColor});
+  const AppBadge({
+    super.key,
+    required this.label,
+    this.small = false,
+    this.bgColor,
+    this.fgColor,
+    this.outlined = false,
+  });
 
   final String label;
   final bool small;
   final Color? bgColor;
   final Color? fgColor;
+
+  /// A rule-bordered flat badge instead of a filled pill — a stamped placard label, not a soft
+  /// SaaS status chip. [fgColor] becomes the border and text; the fill stays the page's own
+  /// surface, since a signage world reads status from an outline and a word, not a color fill.
+  final bool outlined;
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +43,8 @@ class AppBadge extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: bg,
+        color: outlined ? Colors.transparent : bg,
+        border: outlined ? Border.all(color: fg, width: 1.5) : null,
         // 3, not 9. A badge is ink printed on the label card, and printed marks on a machined
         // label are not lozenges. At this size the difference is small and it is the difference
         // between the app looking drawn and looking specified.
@@ -44,9 +57,9 @@ class AppBadge extends StatelessWidget {
           style: TextStyle(
             fontFamily: 'Manrope',
             fontSize: fontSize,
-            fontWeight: FontWeight.w500,
+            fontWeight: outlined ? FontWeight.w700 : FontWeight.w500,
             color: fg,
-            letterSpacing: 0.1,
+            letterSpacing: outlined ? 0.4 : 0.1,
           ),
         ),
       ),
