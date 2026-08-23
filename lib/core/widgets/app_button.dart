@@ -195,11 +195,22 @@ class AppButton extends StatelessWidget {
             child: icon!,
           ),
           SizedBox(width: _hPad * 0.4),
-          Text(label, style: textStyle),
+          // Flexible, not a bare Text: an icon plus a two-word label ("Timbra cantiere") in a
+          // half-width Expanded slot overflowed its render box with no wrap boundary — a real
+          // RenderFlex overflow on a real device, not a hypothetical one. Ellipsis over a second
+          // line: this Row has no height budget for a wrapped label.
+          Flexible(
+            child: Text(
+              label,
+              style: textStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       );
     } else {
-      content = Text(label, style: textStyle);
+      content = Text(label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
     }
 
     final bgDisabled = _bg(context) == Colors.transparent
