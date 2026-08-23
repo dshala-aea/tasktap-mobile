@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'app_tappable.dart';
 
 /// Key–value display row / column.
 ///
@@ -10,9 +12,14 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 ///
 /// Vertical variant: label above value (value fontSize 14).
 ///
+/// Pass [onTap] to make the row navigate somewhere the value names (e.g. the customer this
+/// ticket is for) — draws a chevron so the row reads as a control, not just a fact, the same
+/// distinction the status pill already makes for itself elsewhere on ticket detail.
+///
 /// ```dart
 /// KeyVal(label: 'Cliente', value: 'Rossi S.r.l.');
 /// KeyVal(label: 'Data', value: '15/06/2026', vertical: true);
+/// KeyVal(label: 'Cliente', value: 'Rossi S.r.l.', onTap: () => context.push(...));
 /// ```
 class KeyVal extends StatelessWidget {
   const KeyVal({
@@ -21,12 +28,14 @@ class KeyVal extends StatelessWidget {
     required this.value,
     this.vertical = false,
     this.showDivider = true,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final bool vertical;
   final bool showDivider;
+  final VoidCallback? onTap;
 
   static TextStyle _labelStyle(BuildContext context) => TextStyle(
     fontFamily: 'Manrope',
@@ -50,7 +59,7 @@ class KeyVal extends StatelessWidget {
   }
 
   Widget _horizontal(BuildContext context) {
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
@@ -69,8 +78,19 @@ class KeyVal extends StatelessWidget {
               ),
             ),
           ),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+          ],
         ],
       ),
+    );
+
+    if (onTap == null) return row;
+    return AppTappable(
+      onTap: onTap,
+      semanticLabel: '$label: $value. Tocca per aprire.',
+      child: row,
     );
   }
 

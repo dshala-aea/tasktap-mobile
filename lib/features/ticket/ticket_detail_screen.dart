@@ -249,13 +249,6 @@ class _TicketDetailBody extends ConsumerWidget {
                 glass: true,
                 onTap: () => _showAssignSheet(context, ref, ticket),
               ),
-              HeaderIconBtn(
-                icon: LucideIcons.briefcase,
-                label: 'Scheda cliente',
-                glass: true,
-                onTap: () =>
-                    context.push(AppRoutes.clientiDetail(ticket.customerId)),
-              ),
             ],
           ),
 
@@ -325,7 +318,12 @@ class _TicketDetailBody extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          KeyVal(label: 'Cliente', value: customerName),
+                          KeyVal(
+                            label: 'Cliente',
+                            value: customerName,
+                            onTap: () =>
+                                context.push(AppRoutes.clientiDetail(ticket.customerId)),
+                          ),
                           KeyVal(label: 'Sede', value: locationName),
                           KeyVal(label: 'Tecnico', value: tecnicoLabel),
                           KeyVal(label: 'Data', value: dateLabel),

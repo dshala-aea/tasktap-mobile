@@ -312,14 +312,23 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('assegna and the customer sheet moved to the header', (tester) async {
+    testWidgets('assegna stays in the header; customer nav lives on the Cliente row', (
+      tester,
+    ) async {
       // Reachable, not prominent: a dispatcher action and a navigation link do not belong in the
-      // same weight as the two things the person on site came here to do.
+      // same weight as the two things the person on site came here to do. "Scheda cliente" used
+      // to be a second header icon whose only job was "go look at this customer" — the customer's
+      // name is already sitting right there in the fact card, so that row is the tap target now
+      // instead of a disconnected briefcase glyph, and the header carries one action, not two.
       await seedBase(db);
       await pump(tester);
 
       expect(find.bySemanticsLabel('Assegna'), findsOneWidget);
-      expect(find.bySemanticsLabel('Scheda cliente'), findsOneWidget);
+      expect(find.bySemanticsLabel('Scheda cliente'), findsNothing);
+      expect(
+        find.ancestor(of: find.text('ACME Srl'), matching: find.byType(AppTappable)),
+        findsOneWidget,
+      );
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
