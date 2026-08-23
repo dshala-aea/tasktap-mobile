@@ -9,8 +9,9 @@ import 'app_text_styles.dart';
 
 /// Builds the TaskTap [ThemeData] for one [Brightness].
 ///
-/// Brand yellow Y `#FFF10E` is primary in both themes — it is the brand, and it reads on either
-/// ground. Everything else comes from [AppPalette], which is also attached as a theme extension so
+/// Brand accent Y (safety orange, `#FF5A1F`) is primary in both themes — it is the brand, and it
+/// reads on either ground. Everything else comes from [AppPalette], which is also attached as a
+/// theme extension so
 /// widgets can reach tokens the Material [ColorScheme] has no slot for (four background steps,
 /// three border weights, the card shadow).
 ///

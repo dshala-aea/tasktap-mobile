@@ -5,23 +5,35 @@ import 'package:flutter/material.dart';
 /// Token names (Y, DARK, BG1, etc.) are intentional — they match DESIGN-SPEC.md verbatim.
 abstract final class AppColors {
   // ── Brand ────────────────────────────────────────────────────────────────
+  //
+  // Recolored 2026-08-23 for the Cassetta world (see PRODUCT.md Brand Commitments):
+  // safety orange replaces the old brand yellow. Token names kept as-is — Y/YDark/YSoft are
+  // used at ~120 call sites as "the one accent", and repointing what they resolve to carries the
+  // whole app's yellow-scarcity discipline over to the new hue without touching those call sites.
 
-  /// Y — brand yellow #FFF10E.
-  static const Color Y = Color(0xFFFFF10E);
+  /// Y — safety orange #FF7A2E. The one accent: primary action, attention-required, selected.
+  ///
+  /// A more saturated `#FF5A1F` measured first but only cleared 3.88:1 against [brandOn]
+  /// (`DARK`, #363636) — under the 4.5:1 AA floor this app holds itself to (see PRODUCT.md
+  /// Accessibility & Inclusion). `#FF7A2E` clears 4.65:1 with the same dark ink and still reads
+  /// unmistakably as safety orange, not amber (compare [AMBER] #FFB200 — distinct hue, not this).
+  static const Color Y = Color(0xFFFF7A2E);
 
-  /// YDark — darker yellow #E6D900.
-  static const Color YDark = Color(0xFFE6D900);
+  /// YDark — darker orange, for pressed/gradient-adjacent states.
+  static const Color YDark = Color(0xFFD9600F);
 
-  /// YSoft — translucent yellow rgba(255,241,14,0.20).
-  static const Color YSoft = Color(0x33FFF10E);
+  /// YSoft — translucent orange rgba(255,122,46,0.20).
+  static const Color YSoft = Color(0x33FF7A2E);
 
   // ── Ink ─────────────────────────────────────────────────────────────────
 
   /// DARK #363636.
   static const Color DARK = Color(0xFF363636);
 
-  /// CHARCOAL #292929.
-  static const Color CHARCOAL = Color(0xFF292929);
+  /// CHARCOAL — the case shell. Was a neutral #292929; nudged warmer to #2B2A24 for the Cassetta
+  /// world (gunmetal-black tool case, not a neutral studio black) at matching luminance — 0.0230
+  /// vs the original 0.0222, so every existing contrast relationship against this token holds.
+  static const Color CHARCOAL = Color(0xFF2B2A24);
 
   /// FG2 rgb(112,112,112).
   static const Color FG2 = Color(0xFF707070);

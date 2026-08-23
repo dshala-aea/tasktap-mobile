@@ -110,18 +110,44 @@ the two riskiest possible upgrades before a pilot.
 
 ## Brand Commitments
 
-Binding, stated by the user:
+Superseded 2026-08-23: the user reopened every prior commitment below
+(color, typefaces, nav pattern included) and ran a fresh Impeccable
+new-work round. Three directions were built as real HTML prototypes on
+identical content and compared side by side; the user chose the
+assigned-by-roll direction.
 
-- **Brand yellow `#FFF10E`** stays the identity color.
-- **Sora** (display) and **Manrope** (text) stay the typefaces.
-- **Lucide** stays the single icon family.
-- The **floating pill bottom navigation** and its 5-tab information
-  architecture stay.
+**Chosen world: Cassetta** (shadow-foam tool case). Seed key `cce7d144`,
+assigned index 4 of a 7-candidate list derived from an Italian field
+technician's own world (cassetta attrezzi, libretto di manutenzione,
+quadro elettrico, cartellino orario, bolla a ricalco, cantiere signage,
+targhetta). Two challengers were dealt and lost on audience-identification
+or product-clarity: `signals-instruments-darkroom-safelight-bay` and
+`digital-design-canon-warm-consumer-app-surface`.
+
+- **THESIS:** the app is your case — every module a labeled, tool-shaped
+  compartment. An empty dashed silhouette means "still needed"; a filled
+  slot means "accounted for." Nothing hides in a plain list.
+- **OWN-WORLD:** gunmetal case shell, foam-gray compartment lining, safety
+  orange reserved strictly for what needs attention or action (replaces
+  the old yellow-scarcity rule with the same discipline, new hue), bone
+  label-plate cream for stencil text. Industrial condensed/stencil-styled
+  headers (uppercase, tracked), clean sans for body and data, tabular
+  numerals for timers and counts.
+- **NAVIGATION:** the bottom nav is reimagined as the case's own latch
+  row — labeled compartment tabs, not the old floating pill. The pill nav
+  commitment is retired.
+- **Lucide** stays the icon family (industrial line-icon character fits
+  the world; no reason to replace it).
 - The product name is **TaskTap**. UI copy is Italian.
 
-Everything else about the current visual expression — surfaces, depth,
-density, motion, component vocabulary — the user has explicitly released for
-rework.
+Working prototype (built as the decision artifact, not yet the Flutter
+implementation): `/mnt/d/AEA/Sviluppi/TaskTap/mobile` scratch prototypes,
+published — see chat history 2026-08-23 for the three compared directions
+and the artifact URLs.
+
+Everything not fixed above (exact radii, spacing scale, motion timings,
+per-screen composition) is resolved during the Flutter build, following
+this world.
 
 ## Evidence on Hand
 

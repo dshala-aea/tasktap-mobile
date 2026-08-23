@@ -109,8 +109,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color red;
   final Color redSoft;
 
-  /// What sits on the brand yellow. Yellow does not flip — it is the brand — so this stays dark
-  /// in both themes. Light text on `#FFF10E` would be unreadable.
+  /// What sits on the brand accent. The accent does not flip — it is the brand — so this stays
+  /// dark in both themes. Light text on the safety-orange fill would be unreadable.
   final Color brandOn;
 
   // ── Rack materials ────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ void main() {
       expect(theme, isA<ThemeData>());
     });
 
-    testWidgets('primary color is brand yellow Y #FFF10E', (tester) async {
+    testWidgets('primary color is brand accent Y', (tester) async {
       final theme = buildAppTheme();
       expect(theme.colorScheme.primary, equals(AppColors.Y));
     });
@@ -181,8 +181,8 @@ void main() {
   });
 
   group('AppColors', () {
-    test('brand yellow Y is #FFF10E', () {
-      expect(AppColors.Y, equals(const Color(0xFFFFF10E)));
+    test('brand accent Y is safety orange #FF7A2E', () {
+      expect(AppColors.Y, equals(const Color(0xFFFF7A2E)));
     });
 
     test('brand alias equals Y', () {

@@ -23,12 +23,17 @@ class AppBottomNavItem {
   final String label;
 }
 
-/// Floating-pill bottom navigation.
+/// Floating latch-row bottom navigation — the case's own row of compartment latches.
 ///
-/// Spec: white floating pill, 23 px radius, 0.5 px BL border, SH shadow,
-/// 19 px horizontal margin, 18 px bottom. 5 tabs (Dashboard / Ticket / Timbra /
-/// Calendario / Altro). Active tab: yellow bg, 19 px radius, icon (18, DARK) +
-/// Sora 600/12 label. Inactive: icon only (DIS). 200 ms transition.
+/// This replaced a white floating pill with a 23 px radius and a fully-rounded active sub-pill —
+/// recoloring that shape orange still reads as "the old pill, repainted," not a latch. A latch is
+/// squared off, not round: the bar itself is machined at 10 px (not 23), each tab is a near-square
+/// compartment at 6 px (not 19, which was pill-rounded enough to disappear into the bar), and the
+/// active one shows a small tick engaged above it — the physical detail of a case latch actually
+/// clicking down, not just a colour change. Case-shell (permanently dark, like the punch-clock
+/// screens) ground, safety-orange active fill. Inactive tabs are icon-only in `onDarkMuted` — a
+/// fixed dark surface needs the fixed-ink tokens, not the flipping ones (see
+/// `AppColors.onDark`/`onDarkMuted` doc comment).
 ///
 /// ```dart
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
@@ -60,13 +65,13 @@ class AppBottomNav extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: context.colors.surface,
-            borderRadius: BorderRadius.circular(23),
-            border: Border.all(color: context.colors.borderLight, width: 0.5),
+            color: AppColors.CHARCOAL,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withAlpha(20), width: 0.5),
             boxShadow: context.colors.shadow,
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -109,54 +114,75 @@ class _NavTab extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          // The rack's own drawer movement, and it stops when the OS says stop. Both platforms
-          // require this: "Remove animations" on Android and Reduce Motion on iOS both surface as
-          // MediaQuery.disableAnimations, and a nav bar that keeps sliding through it is the
-          // single most noticeable place to ignore the setting.
-          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
-          curve: AppRack.slideOut,
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: EdgeInsets.symmetric(horizontal: active ? 16 : 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: active ? AppColors.Y : Colors.transparent,
-            borderRadius: BorderRadius.circular(19),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                item.icon,
-                size: 18,
-                // Inactive tabs were `inkDisabled` — #B4B4B4, which measures 1.9:1 on the white
-                // pill. These are the app's five primary destinations, they are icon-only when
-                // inactive, and a technician navigates by them one-handed in direct sun. 1.9:1
-                // is not a low-emphasis treatment there, it is an invisible one. `inkMuted`
-                // clears the 4.5:1 floor at 5.3:1 and still reads as clearly unselected against
-                // the yellow pill.
-                color: active ? context.colors.brandOn : context.colors.inkMuted,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The tick a latch shows when it's actually engaged, not just a colour swap. Space
+            // reserved either way so the row below never shifts when a tab (de)activates.
+            AnimatedContainer(
+              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
+              curve: AppRack.slideOut,
+              width: 16,
+              height: 3,
+              margin: const EdgeInsets.only(bottom: 5),
+              decoration: BoxDecoration(
+                color: active ? AppColors.Y : Colors.transparent,
+                borderRadius: BorderRadius.circular(2),
               ),
-              if (active) ...[
-                const SizedBox(width: 8),
-                // The label is what gives when space runs out — an icon nobody can read is worse
-                // than a word that ends in an ellipsis, and the icon is what marks the tab.
-                Flexible(
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.brandOn,
-                    ),
+            ),
+            AnimatedContainer(
+              // The rack's own drawer movement, and it stops when the OS says stop. Both platforms
+              // require this: "Remove animations" on Android and Reduce Motion on iOS both surface
+              // as MediaQuery.disableAnimations, and a nav bar that keeps sliding through it is the
+              // single most noticeable place to ignore the setting.
+              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
+              curve: AppRack.slideOut,
+              constraints: const BoxConstraints(minHeight: 40),
+              padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: active ? AppColors.Y : Colors.transparent,
+                // 6, not the near-pill 19 this used to carry — a latch is machined square, not
+                // rounded into a pill. Matches AppRack.insetShape's own "compartment inside a
+                // compartment" radius rather than inventing a fourth radius for the app.
+                borderRadius: BorderRadius.circular(AppRack.insetRadius),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    item.icon,
+                    size: 18,
+                    // The bar is CHARCOAL now, permanently dark regardless of app theme (see the
+                    // punch-clock screens' own reasoning) — a flipping token like `inkMuted` is
+                    // tuned against a light ground and goes near-invisible here. `onDarkMuted` is
+                    // white at 75%, built for exactly this surface, and still clears AA against
+                    // CHARCOAL.
+                    color: active ? context.colors.brandOn : AppColors.onDarkMuted,
                   ),
-                ),
-              ],
-            ],
-          ),
+                  if (active) ...[
+                    const SizedBox(width: 8),
+                    // The label is what gives when space runs out — an icon nobody can read is
+                    // worse than a word that ends in an ellipsis, and the icon is what marks the
+                    // tab.
+                    Flexible(
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Sora',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.brandOn,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
