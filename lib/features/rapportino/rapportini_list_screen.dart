@@ -257,9 +257,10 @@ class _RapportinoRow extends ConsumerWidget {
     final subtitle = subParts.join(' · ');
 
     return ListRow(
-      // The draft you are still filling in gets the strap — the same yellow mark the running
-      // timbratura and the in-corso ticket carry — because a Bozza is the ongoing work on this
-      // list; a submitted report is done and reads as settled instead.
+      // The draft you are still filling in gets the accent strap — still-needs-finishing, the
+      // same selected/priority mark the in-corso ticket carries (not the live-timer green pulse,
+      // which is a different state — see active_tracker_strip.dart). A submitted report is done
+      // and reads as settled instead.
       strapped: !isSubmitted,
       leading: Stack(
         children: [

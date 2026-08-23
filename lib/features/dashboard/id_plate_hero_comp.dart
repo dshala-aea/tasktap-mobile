@@ -8,7 +8,7 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///
 /// A flat "ID plate" band, not a soft gradient hero: no shadow, no gradient, a stamped identity
 /// plate a technician reads once and knows exactly where they stand — who, when, how much is
-/// left. Yellow appears exactly once, on the count that still needs doing; everything else is
+/// left. The accent appears exactly once, on the count that still needs doing; everything else is
 /// white-on-near-black. Proven against a real empty state and a real live-tracker state on
 /// device before being approved to replace the old DashboardHero/ActiveJobCard pair, which this
 /// superseded and which no longer exist in the tree.
@@ -81,7 +81,7 @@ class IdPlateHeroComp extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               // The plate's readout line — a stamped ID plate, not a stat-grid card. One rule
-              // above and below, numerals doing the talking, yellow only where it's earned.
+              // above and below, numerals doing the talking, the accent only where it's earned.
               DecoratedBox(
                 decoration: BoxDecoration(
                   border: Border.symmetric(

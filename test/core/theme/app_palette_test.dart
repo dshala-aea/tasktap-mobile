@@ -328,6 +328,12 @@ void main() {
       // exist precisely because reaching for a flipping token there is the bug: see the contrast
       // group below, which pins why `inkMuted` cannot be used on CHARCOAL.
       'onDark', 'onDarkMuted',
+      // LiveDot's pulsing "running" indicator — an equipment lamp, not themed UI chrome. A green
+      // signal light does not change hue when a phone's dark-mode setting does, and this dot
+      // appears on both a fixed-dark surface (the dashboard's active-tracker strip) and a
+      // flipping one (a ticket's own timer bar), so a single theme-independent green is the one
+      // value correct in both places — see LiveDot's own doc comment.
+      'GREEN',
     };
 
     final offenders = <String>[];

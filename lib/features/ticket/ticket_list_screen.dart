@@ -349,9 +349,11 @@ class _TicketRow extends ConsumerWidget {
     ).format(ticket.createdAt.toLocal());
 
     return ListRow(
-      // The one ticket you are actually on gets the strap, the same yellow mark the running
-      // timbratura carries on the dashboard. Scanning a list of thirty for "which one am I on"
-      // is the single most common thing a technician does on this screen.
+      // The one ticket you are actually on gets the accent strap. This is a *selected/priority*
+      // mark, not the live-timer one — a running clock pulses green instead (see
+      // active_tracker_strip.dart) precisely so it doesn't spend the accent for eight hours a
+      // day. Scanning a list of thirty for "which one am I on" is the single most common thing a
+      // technician does on this screen.
       strapped: statusName.toLowerCase() == 'in corso',
       leading: Container(
         width: 40,

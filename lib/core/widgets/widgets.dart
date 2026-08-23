@@ -15,6 +15,7 @@ export 'empty_state.dart';
 export 'error_state.dart';
 export 'key_val.dart';
 export 'list_row.dart';
+export 'live_dot.dart';
 export 'lookup_field.dart';
 export 'permission_purpose_sheet.dart';
 export 'quick_action.dart';

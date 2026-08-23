@@ -1100,9 +1100,10 @@ class _AssignSheetState extends State<_AssignSheet> {
 /// call site, so a technician could open a ticket and read every detail of it while having no way
 /// to book a minute of the work against it.
 ///
-/// The bar takes the rack's strap when a clock is running: the same yellow mark the dashboard puts
-/// on a live tracker and the ticket list puts on the in-corso row. A technician who has left a
-/// timer going overnight should see the same signal wherever they land.
+/// The bar shows a pulsing green [LiveDot] when a clock is running — the same equipment-lamp mark
+/// the dashboard's active-tracker strip uses, not the accent strap (that means selected/priority,
+/// not live; see LiveDot's own doc comment). A technician who has left a timer going overnight
+/// should see the same signal wherever they land.
 class _TicketTimerBar extends ConsumerStatefulWidget {
   const _TicketTimerBar({required this.ticketId});
 
@@ -1162,9 +1163,9 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     final isRunning = running != null;
 
     return AppCard(
-      strapped: isRunning,
       child: Row(
         children: [
+          if (isRunning) ...[const LiveDot(), const SizedBox(width: 10)],
           Icon(
             isRunning ? LucideIcons.timer : LucideIcons.clock,
             size: 18,

@@ -88,13 +88,25 @@ void main() {
     String ticketId = 'ticket-1',
     Dio? dio,
     bool isOnline = false,
+    // False for a fixture with an open (still-running) worklog entry: that renders a LiveDot,
+    // whose pulse repeats forever and never lets pumpAndSettle's frame-quiescence check succeed —
+    // it would otherwise hang until the 10-minute timeout. A handful of bounded pumps gives every
+    // async provider chain the same room to resolve without waiting for an animation that, by
+    // design, never stops.
+    bool settle = true,
   }) async {
     await tester.pumpWidget(
       _buildDetail(db: db, repo: repo, ticketId: ticketId, dio: dio, isOnline: isOnline),
     );
     await tester.pump();
     authStream.add(fakeUser);
-    await tester.pumpAndSettle(const Duration(seconds: 2));
+    if (settle) {
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+    } else {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+    }
   }
 
   Future<void> seedBase(AppDatabase db) async {
@@ -633,13 +645,25 @@ void main() {
   /// Ore and Storico are the sixth and seventh tabs. At the 800dp width `tapTab` uses, the strip
   /// scrolls horizontally and a tap on the right-most labels lands on whatever is under them, so
   /// these two groups widen the surface enough for all seven to be laid out at once.
-  Future<void> tapWideTab(WidgetTester tester, String label) async {
+  Future<void> tapWideTab(WidgetTester tester, String label, {bool settle = true}) async {
     await tester.binding.setSurfaceSize(const Size(1400, 1200));
     await tester.pump();
     await tester.ensureVisible(find.text(label));
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
     await tester.tap(find.text(label));
-    await tester.pumpAndSettle();
+    // See `pump`'s own `settle` doc comment — a running worklog mounts a LiveDot whose pulse never
+    // lets pumpAndSettle's quiescence check succeed.
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 300));
+      }
+    }
   }
 
   group('TicketDetailScreen — Ore tab (index 5)', () {
@@ -683,8 +707,8 @@ void main() {
         },
       ]);
 
-      await pump(tester, dio: dio, isOnline: true);
-      await tapWideTab(tester, 'Ore');
+      await pump(tester, dio: dio, isOnline: true, settle: false);
+      await tapWideTab(tester, 'Ore', settle: false);
 
       // 2:30 + 1:00 from the two closed entries. Deliberately a sum no single row also shows, so
       // the assertion cannot pass by matching a row's own duration.
