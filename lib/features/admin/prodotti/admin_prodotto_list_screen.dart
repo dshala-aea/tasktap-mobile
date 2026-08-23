@@ -31,7 +31,8 @@ class AdminProdottoListScreen extends ConsumerWidget {
       body: SafeArea(
         child: prodottiAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Errore: $e')),
+          error: (e, _) =>
+              ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider)),
           data: (prodotti) => _ProdottoListBody(prodotti: prodotti),
         ),
       ),

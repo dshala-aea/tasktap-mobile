@@ -201,7 +201,12 @@ class AdminReportDetailScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Impossibile salvare. Riprova.'),
+            backgroundColor: context.colors.red,
+          ),
+        );
       }
     }
   }

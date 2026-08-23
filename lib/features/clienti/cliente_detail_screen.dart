@@ -27,7 +27,9 @@ class ClienteDetailScreen extends ConsumerWidget {
       body: customerAsync.when(
         loading: () =>
             const SafeArea(child: Center(child: CircularProgressIndicator())),
-        error: (e, _) => SafeArea(child: Center(child: Text('Errore: $e'))),
+        error: (e, _) => SafeArea(
+          child: ErrorState(onRetry: () => ref.invalidate(customerDetailProvider(customerId))),
+        ),
         data: (customer) {
           if (customer == null) {
             return SafeArea(

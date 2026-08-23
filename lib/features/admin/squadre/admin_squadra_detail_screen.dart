@@ -41,7 +41,9 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
       ),
       body: detailAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        error: (e, _) => ErrorState(
+          onRetry: () => ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String)),
+        ),
         data: (detail) {
           final data = detail ?? squadra;
           final membri = (data['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -192,7 +194,12 @@ class _SquadraDetailBody extends ConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Impossibile salvare. Riprova.'),
+              backgroundColor: context.colors.red,
+            ),
+          );
         }
       }
     }
@@ -280,7 +287,12 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Impossibile salvare. Riprova.'),
+            backgroundColor: context.colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

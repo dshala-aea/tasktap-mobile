@@ -35,7 +35,8 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
       ),
       body: customerAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        error: (e, _) =>
+            ErrorState(onRetry: () => ref.invalidate(customerDetailProvider(customerId))),
         data: (customer) {
           if (customer == null) {
             return const Center(child: Text('Cliente non trovato'));

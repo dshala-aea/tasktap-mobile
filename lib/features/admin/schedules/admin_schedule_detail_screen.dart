@@ -42,7 +42,8 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
       ),
       body: scheduleAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        error: (e, _) =>
+            ErrorState(onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId))),
         data: (schedule) {
           if (schedule == null) {
             return const Center(child: Text('Pianificazione non trovata'));

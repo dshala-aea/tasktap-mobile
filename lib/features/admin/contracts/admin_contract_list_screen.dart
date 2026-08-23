@@ -29,7 +29,7 @@ class AdminContractListScreen extends ConsumerWidget {
       body: SafeArea(
         child: contractsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Errore: $e')),
+          error: (e, _) => ErrorState(onRetry: () => ref.invalidate(adminContractsProvider)),
           data: (contracts) => _ContractListBody(contracts: contracts),
         ),
       ),

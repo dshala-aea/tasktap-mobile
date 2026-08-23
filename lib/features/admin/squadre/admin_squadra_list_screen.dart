@@ -28,7 +28,7 @@ class AdminSquadraListScreen extends ConsumerWidget {
       body: SafeArea(
         child: squadreAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Errore: $e')),
+          error: (e, _) => ErrorState(onRetry: () => ref.invalidate(adminSquadreProvider)),
           data: (squadre) => _SquadraListBody(squadre: squadre),
         ),
       ),

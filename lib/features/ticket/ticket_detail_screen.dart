@@ -1009,9 +1009,12 @@ class _AssignSheetState extends State<_AssignSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Errore: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Impossibile salvare. Riprova.'),
+            backgroundColor: context.colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

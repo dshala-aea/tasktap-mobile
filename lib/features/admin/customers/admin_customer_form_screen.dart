@@ -147,7 +147,10 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Errore: $e'), backgroundColor: context.colors.red));
+        ).showSnackBar(SnackBar(
+            content: const Text('Impossibile salvare. Riprova.'),
+            backgroundColor: context.colors.red,
+          ));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

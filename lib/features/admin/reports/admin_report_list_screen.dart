@@ -143,7 +143,9 @@ class _AdminReportListBody extends ConsumerWidget {
                 ),
               ),
             ),
-            error: (e, _) => SliverToBoxAdapter(child: Center(child: Text('Errore: $e'))),
+            error: (e, _) => SliverToBoxAdapter(
+              child: ErrorState(onRetry: () => ref.invalidate(adminReportsProvider(statoFilter))),
+            ),
             data: (reports) {
               // Client-side query filter
               final filtered = reports.where((r) {

@@ -134,8 +134,8 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                   Padding(
                     padding: const EdgeInsets.only(top: AppSpacing.sm),
                     child: Text(
-                      'Errore: ${punchState.error}',
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                      'Errore durante la timbratura. Riprova.',
+                      style: TextStyle(color: context.colors.red, fontSize: 12),
                       textAlign: TextAlign.center,
                     ),
                   ),

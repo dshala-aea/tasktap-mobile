@@ -13,6 +13,7 @@ export 'badge.dart';
 export 'bottom_nav.dart';
 export 'dashboard_hero.dart';
 export 'empty_state.dart';
+export 'error_state.dart';
 export 'key_val.dart';
 export 'list_row.dart';
 export 'lookup_field.dart';

@@ -44,7 +44,8 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
       ),
       body: materialeAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        error: (e, _) =>
+            ErrorState(onRetry: () => ref.invalidate(adminMaterialeDetailProvider(materialeId))),
         data: (materiale) {
           if (materiale == null) {
             return const UnavailableState(

@@ -41,7 +41,8 @@ class AdminLocationDetailScreen extends ConsumerWidget {
       ),
       body: locationAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        error: (e, _) =>
+            ErrorState(onRetry: () => ref.invalidate(adminLocationDetailProvider(locationId))),
         data: (location) {
           if (location == null) {
             return const Center(child: Text('Sede non trovata'));

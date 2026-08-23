@@ -45,7 +45,8 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
       ),
       body: cantiereAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
+        error: (e, _) =>
+            ErrorState(onRetry: () => ref.invalidate(adminCantiereDetailProvider(cantiereId))),
         data: (cantiere) {
           if (cantiere == null) {
             return const UnavailableState(
