@@ -14,6 +14,7 @@ import 'core/notifications/notification_service.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/suspended_banner.dart';
 import 'presentation/providers/auth_providers.dart';
 import 'features/altro/impostazioni_provider.dart';
 
@@ -180,8 +181,20 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       routerConfig: _router,
       // Inside MaterialApp via `builder`, not around it: the lock needs the theme and the
       // Directionality, and wrapping outside would also cover the navigator the router owns.
-      builder: (context, child) =>
-          BiometricLock(enabled: biometricLock, child: child ?? const SizedBox.shrink()),
+      //
+      // The suspended banner lives here rather than in HomeShell so it covers every route the
+      // router owns — including pushed forms like "Nuovo ticket" — not just the 5 tab branches.
+      // A technician who is mid-wizard on a suspended tenant must see the same warning a
+      // dashboard visit would have shown, not discover the block only when the final submit 403s.
+      builder: (context, child) => BiometricLock(
+        enabled: biometricLock,
+        child: Column(
+          children: [
+            SafeArea(bottom: false, child: const SuspendedBanner()),
+            Expanded(child: child ?? const SizedBox.shrink()),
+          ],
+        ),
+      ),
     );
   }
 }

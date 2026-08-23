@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_rack.dart';
-import '../../../core/widgets/suspended_banner.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/entitlements/entitlement_providers.dart';
@@ -83,12 +82,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // forty-two screens, so the world read as "ledged cards" everywhere else — and the rail is
       // the mark that makes a column of cells a rack. It costs no layout: it paints inside the
       // 19dp gutter every screen already indents by (see AppRack.railColumn).
-      body: Column(
-        children: [
-          const SuspendedBanner(),
-          Expanded(child: Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell)),
-        ],
-      ),
+      //
+      // SuspendedBanner used to live here; it now lives in MaterialApp's `builder` (main.dart) so
+      // it covers pushed routes too, not just the 5 tab branches.
+      body: Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell),
       // Extend body behind the floating pill so the hero/content scrolls under it.
       extendBody: true,
       bottomNavigationBar: AppBottomNav(
