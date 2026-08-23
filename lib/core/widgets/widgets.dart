@@ -1,4 +1,5 @@
 export 'active_job_card.dart';
+export 'app_accordion.dart';
 export 'app_button.dart';
 export 'app_card.dart';
 export 'app_fab.dart';

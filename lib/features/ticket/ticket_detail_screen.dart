@@ -31,8 +31,6 @@ class TicketDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
-  int _tabIndex = 0;
-
   /// Owned here rather than by the body, which is rebuilt on every ticket change.
   final _scrollController = ScrollController();
 
@@ -42,43 +40,22 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     super.dispose();
   }
 
-  /// Switch tab, and show the new one from its start.
-  ///
-  /// Only needed because the strip is pinned. Before, it scrolled away with the page, so the only
-  /// way to reach it was to scroll back to the top — which meant every switch happened from the
-  /// top and landed there. Pinned, the strip is reachable from the bottom of a long Ore list, and
-  /// without this a technician switching to Allegati would land in the middle of the photos with
-  /// nothing indicating they were not at the beginning.
-  ///
-  /// Returning to the top rather than to the strip's own resting position is deliberate: it needs
-  /// no geometry, it cannot land wrong, and it is the same view as opening the ticket fresh. The
-  /// cost is re-scrolling past the fact card, which is four rows.
-  void _selectTab(int index) {
-    if (index == _tabIndex) return;
-    setState(() => _tabIndex = index);
-    if (!_scrollController.hasClients || _scrollController.offset == 0) return;
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-    );
-  }
-
   /// Ordered by who is holding the phone.
   ///
-  /// Four tabs fit a phone; there are seven. The old order put Pianificazioni third and
-  /// Fabbisogno fifth — both office concerns — so the technician's Allegati and Ore were pushed
-  /// past the edge of the strip while two tabs they rarely open sat in the visible window. None
-  /// of them is removed: Pianificazioni, Fabbisogno and Storico are still there, one drag away,
-  /// and the strip now fades at its ends so it is visibly a strip.
-  static const _tabs = [
-    AppTab(label: 'Report'),
-    AppTab(label: 'Controllo'),
-    AppTab(label: 'Allegati'),
-    AppTab(label: 'Ore'),
-    AppTab(label: 'Pianificazioni'),
-    AppTab(label: 'Fabbisogno'),
-    AppTab(label: 'Storico'),
+  /// This used to be a pinned horizontal strip — four tabs fit a phone, there are seven, so three
+  /// sat past the visible edge on every ticket. It is an accordion now (see AppAccordion): every
+  /// section name is on screen at once, in this order, and opening one does not require finding it
+  /// in a scrolling strip first. The order survives from the tab era for the same reason it was
+  /// chosen then — Report/Controllo/Allegati/Ore is the technician's own path through a ticket;
+  /// Pianificazioni, Fabbisogno and Storico are office/lookup concerns and sit lower, not removed.
+  static const _sectionLabels = [
+    'Report',
+    'Controllo',
+    'Allegati',
+    'Ore',
+    'Pianificazioni',
+    'Fabbisogno',
+    'Storico',
   ];
 
   @override
@@ -130,9 +107,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
             ticket: ticket,
             statusMap: statusMap,
             typeMap: typeMap,
-            tabIndex: _tabIndex,
-            onTabSelected: _selectTab,
-            tabs: _tabs,
+            sectionLabels: _sectionLabels,
             scrollController: _scrollController,
           );
         },
@@ -175,18 +150,14 @@ class _TicketDetailBody extends ConsumerWidget {
     required this.ticket,
     required this.statusMap,
     required this.typeMap,
-    required this.tabIndex,
-    required this.onTabSelected,
-    required this.tabs,
+    required this.sectionLabels,
     required this.scrollController,
   });
 
   final Ticket ticket;
   final Map<int, String> statusMap;
   final Map<int, String> typeMap;
-  final int tabIndex;
-  final ValueChanged<int> onTabSelected;
-  final List<AppTab> tabs;
+  final List<String> sectionLabels;
   final ScrollController scrollController;
 
   @override
@@ -351,24 +322,30 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
                 ),
 
-                // Tabs — pinned, so the control that switches them is reachable from anywhere in
-                // the content below.
-                //
-                // This was a `SliverToBoxAdapter`, so the strip scrolled away with the timer and
-                // the fact card above it. Reading a tab meant scrolling past all of that, and
-                // switching tab then meant scrolling back up to find the strip, choosing one, and
-                // scrolling down again — on every switch. With seven tabs that round trip *is* the
-                // screen, which is why it read as "too many tabs" when the count was not the
-                // problem.
-                SliverPinnedTabs(
-                  tabs: tabs,
-                  selectedIndex: tabIndex,
-                  onSelected: onTabSelected,
-                ),
-
-                // Tab content
+                // Sections — an accordion, not a tab strip. See AppAccordion's own doc for why:
+                // seven tabs do not fit a phone width, and every section name being on screen at
+                // once beats a strip a technician has to scroll to find. Each item's builder is
+                // only invoked while its section is open, so a closed section's provider is never
+                // read — the same laziness the old tab switch gave for free.
                 SliverToBoxAdapter(
-                  child: _TabContent(tabIndex: tabIndex, ticketId: ticket.id),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      0,
+                      AppSpacing.pagePadding,
+                      AppSpacing.base,
+                    ),
+                    child: AppAccordion(
+                      items: [
+                        for (final label in sectionLabels)
+                          AppAccordionItem(
+                            label: label,
+                            builder: (context) =>
+                                _sectionContent(label, ticket.id),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
 
                 SliverPadding(
@@ -378,35 +355,35 @@ class _TicketDetailBody extends ConsumerWidget {
             ),
           ),
 
-          // Bottom actions
+          // Bottom actions — one primary, state-driven.
           //
-          // Two rows of two equal buttons — Assegna / Cliente / Crea rapportino / Timbra cantiere —
-          // held about 130dp of permanent chrome above the nav bar on every ticket, and gave four
-          // controls the same weight, so none of them led.
-          //
-          // What a technician does on a ticket is start the work and write it up. Those two stay,
-          // one leading. "Assegna" is a dispatcher's action and "Cliente" is navigation; both moved
-          // to the header, where the screen's secondary controls already live.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-              AppSpacing.pagePadding,
-              AppSpacing.base,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: AppButton(
+          // Used to be two equal-weight buttons on every ticket regardless of state. An
+          // unassigned ticket isn't yours to start work on yet — "Prendi in carico" already leads
+          // the status row above, so the bar stays empty rather than repeating that control in a
+          // second place. Once assigned, "Crea rapportino" is what a technician does on a ticket
+          // (see the status-row comment); "Timbra cantiere" is real and still one tap away, but
+          // demoted to a smaller secondary control underneath rather than sharing equal billing.
+          if (ticket.assignedUserId != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+              ),
+              child: Column(
+                children: [
+                  AppButton(
                     label: 'Crea rapportino',
+                    fullWidth: true,
                     onPressed: () => _createRapportino(context, ref, ticket),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: AppButton.dark(
+                  const SizedBox(height: 8),
+                  AppButton.secondary(
                     label: 'Timbra cantiere',
                     icon: const Icon(LucideIcons.mapPin),
+                    size: AppButtonSize.sm,
+                    fullWidth: true,
                     onPressed: () => context.push(
                       AppRoutes.cantiereTimbraPath(
                         ticketId: ticket.id,
@@ -414,10 +391,11 @@ class _TicketDetailBody extends ConsumerWidget {
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
+                ],
+              ),
+            )
+          else
+            const SizedBox.shrink(),
         ],
       ),
     );
@@ -494,26 +472,19 @@ class _Prose extends StatelessWidget {
   }
 }
 
-class _TabContent extends ConsumerWidget {
-  const _TabContent({required this.tabIndex, required this.ticketId});
-
-  final int tabIndex;
-  final String ticketId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return switch (tabIndex) {
-      0 => _ReportTab(ticketId: ticketId),
-      1 => _ControlloTab(ticketId: ticketId),
-      2 => _AllegatiTab(ticketId: ticketId),
-      3 => _OreTab(ticketId: ticketId),
-      4 => _PianificazioniTab(ticketId: ticketId),
-      5 => _FabbisognoTab(ticketId: ticketId),
-      6 => _StoricoTab(ticketId: ticketId),
-      _ => const SizedBox.shrink(),
-    };
-  }
-}
+/// Maps an accordion section's label to its content widget. A switch on the label, not an index,
+/// so the section list and its content can never drift apart by position — the label in
+/// `_sectionLabels` is also the key here.
+Widget _sectionContent(String label, String ticketId) => switch (label) {
+  'Report' => _ReportTab(ticketId: ticketId),
+  'Controllo' => _ControlloTab(ticketId: ticketId),
+  'Allegati' => _AllegatiTab(ticketId: ticketId),
+  'Ore' => _OreTab(ticketId: ticketId),
+  'Pianificazioni' => _PianificazioniTab(ticketId: ticketId),
+  'Fabbisogno' => _FabbisognoTab(ticketId: ticketId),
+  'Storico' => _StoricoTab(ticketId: ticketId),
+  _ => const SizedBox.shrink(),
+};
 
 /// Centered spinner used by every fetch-on-demand tab while loading.
 class _TabLoading extends StatelessWidget {

@@ -175,20 +175,22 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders AppTabs with all seven tabs', (tester) async {
+    testWidgets('renders an AppAccordion with all seven section labels', (tester) async {
       await seedBase(db);
       // A taller surface, for the same reason the Pianificazioni test below already uses one: the
-      // tab strip lives well down a CustomScrollView, slivers build lazily, and on the default
-      // 600dp test window it sits below the fold. It fell off when the timer bar was added at the
-      // top of the content, exactly as it did when the Timbra cantiere button was added before
-      // that. The assertion is that the screen renders five tabs, not that they fit in 600dp.
+      // accordion lives well down a CustomScrollView, slivers build lazily, and on the default
+      // 600dp test window it sits below the fold. The assertion is that the screen renders seven
+      // section labels, not that they fit in 600dp.
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await pump(tester);
 
-      expect(find.byType(AppTabs), findsOneWidget);
+      expect(find.byType(AppAccordion), findsOneWidget);
       expect(find.text('Report'), findsOneWidget);
+      expect(find.text('Controllo'), findsOneWidget);
+      expect(find.text('Allegati'), findsOneWidget);
       expect(find.text('Pianificazioni'), findsOneWidget);
       expect(find.text('Ore'), findsOneWidget);
+      expect(find.text('Fabbisogno'), findsOneWidget);
       expect(find.text('Storico'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -350,6 +352,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pump();
     await tester.ensureVisible(find.text(label));
+    await tester.pumpAndSettle();
     await tester.tap(find.text(label));
     await tester.pumpAndSettle();
   }
