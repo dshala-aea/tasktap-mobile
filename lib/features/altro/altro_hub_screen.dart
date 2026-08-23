@@ -185,10 +185,18 @@ class _UserCard extends StatelessWidget {
       // A RackCell, not a hand-rolled Container. This was the one card on the screen that bypassed
       // the shared primitive, and it did so by reintroducing exactly what the world refuses: a
       // rounded rectangle floating on a drop shadow. Depth here is the ledge, like everywhere else.
+      //
+      // ledgeColor is explicit rather than the theme default: this card is a fixed CHARCOAL plate
+      // regardless of light/dark mode, and the default ledge token is tuned for the bone label card
+      // it usually sits on — on a fixed dark ground it would read close to invisible, the same
+      // problem active_tracker_strip's own border already solved with translucent white. Not
+      // yellow: that means attention-required or selected, and this static identity plate is
+      // neither — same reasoning as the dashboard hero's own DA FARE readout staying white when
+      // nothing is outstanding.
       child: RackCell(
         flush: false,
         background: AppColors.CHARCOAL,
-        ledgeColor: AppColors.Y,
+        ledgeColor: Colors.white.withAlpha(60),
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [

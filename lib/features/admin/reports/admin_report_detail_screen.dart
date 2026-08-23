@@ -47,7 +47,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
               ),
               child: Row(
                 children: [
-                  StatusPill(stato: stato),
+                  StatusPill(stato: stato, outlined: true),
                   const Spacer(),
                   Text(
                     dateLabel,

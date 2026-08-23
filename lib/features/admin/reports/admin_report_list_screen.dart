@@ -211,7 +211,7 @@ class _AdminReportRow extends StatelessWidget {
       leading: _StatoIcon(stato: stato),
       title: title,
       subtitle: dateLabel,
-      meta: StatusPill(stato: stato),
+      meta: StatusPill(stato: stato, small: true, outlined: true),
       showDivider: !isLast,
       onTap: () => context.push('/altro/rapportini-admin/${report['id']}', extra: report),
     );

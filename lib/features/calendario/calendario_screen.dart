@@ -632,7 +632,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              StatusPill(stato: statusName),
+              StatusPill(stato: statusName, outlined: true),
               const SizedBox(width: 12),
               Icon(LucideIcons.clock, size: 14, color: context.colors.inkMuted),
               const SizedBox(width: 4),

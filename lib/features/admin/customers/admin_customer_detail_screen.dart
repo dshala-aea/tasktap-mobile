@@ -142,7 +142,7 @@ class _CustomerDetailBody extends StatelessWidget {
                     style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
                   ),
                   const Spacer(),
-                  StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo'),
+                  StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo', outlined: true),
                 ],
               ),
             ),

@@ -111,7 +111,7 @@ class _ScheduleListRow extends StatelessWidget {
       ),
       title: schedule.title,
       subtitle: timeRange,
-      meta: StatusPill(stato: statusName, small: true),
+      meta: StatusPill(stato: statusName, small: true, outlined: true),
       onTap: schedule.ticketId != null && onTapTicket != null
           ? () => onTapTicket!(schedule.ticketId!)
           : null,

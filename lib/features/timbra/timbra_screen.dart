@@ -334,18 +334,11 @@ class _PunchButton extends StatelessWidget {
     final icon = isOnShift ? LucideIcons.square : LucideIcons.play;
     final blocked = guard.blocked;
 
-    // Radial gradient: yellow centre → dark rim (or red-ish when ending)
-    final gradient = isOnShift
-        ? const RadialGradient(
-            center: Alignment(0, -0.3),
-            radius: 0.85,
-            colors: [AppColors.stopLight, AppColors.stopDark],
-          )
-        : const RadialGradient(
-            center: Alignment(0, -0.3),
-            radius: 0.85,
-            colors: [AppColors.Y, AppColors.YDark],
-          );
+    // Flat fill, not the gradient+glow disc this used to be: every other control in the app is a
+    // solid fill with no shadow (see AppButton._shadows — a soft shadow disappears outdoors, and a
+    // gradient is banned everywhere else in the app's own token language), and the one control a
+    // technician looks at hardest in direct sun cannot be the one exception to that.
+    final fill = isOnShift ? AppColors.stopLight : AppColors.Y;
 
     // Dimmed and inert rather than hidden: a button that disappears leaves the user with no
     // idea what happened, and the reason is printed underneath so it is readable without a
@@ -370,17 +363,7 @@ class _PunchButton extends StatelessWidget {
             // being a sliver.
             width: 156,
             height: 156,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: gradient,
-              boxShadow: [
-                BoxShadow(
-                  color: isOnShift ? AppColors.stopDark.withAlpha(100) : AppColors.Y.withAlpha(80),
-                  blurRadius: 32,
-                  spreadRadius: 4,
-                ),
-              ],
-            ),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: fill),
             child: isLoading
                 ? const Center(
                     child: SizedBox(
