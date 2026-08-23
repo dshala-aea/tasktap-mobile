@@ -37,14 +37,11 @@ class QuickAction extends StatelessWidget {
               Container(
                 width: 50,
                 height: 50,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: AppColors.Y,
                   shape: BoxShape.circle,
-                  // Decorative, not structural: the circle is already fully defined by its solid
-                  // yellow fill against the page background, so losing the shadow outdoors costs
-                  // nothing legible — this is polish, matching the Figma reference's own soft
-                  // shadow on the same element.
-                  boxShadow: context.colors.shadow,
+                  // No shadow, same rule as AppButton: a static in-flow control, not an overlay,
+                  // and a soft shadow is invisible outdoors — see app_button.dart's _shadows().
                 ),
                 child: Icon(icon, size: 20, color: context.colors.ink),
               ),
