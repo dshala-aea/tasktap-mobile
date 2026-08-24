@@ -68,7 +68,10 @@ Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(
-      home: Scaffold(body: StepMaterialiFold(reportId: _reportId)),
+      // StepMaterialiFold no longer bounds its own height — it now sits inside the compartment
+      // sheet's ambient SingleChildScrollView (see openCompartmentSheet), so tests host it the
+      // same way rather than a bare, height-bounded Scaffold body.
+      home: Scaffold(body: SingleChildScrollView(child: StepMaterialiFold(reportId: _reportId))),
     ),
   );
 }

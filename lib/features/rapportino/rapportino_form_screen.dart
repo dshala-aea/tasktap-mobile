@@ -5,6 +5,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_rack.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -16,70 +17,36 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoFormScreen
 //
-// 4-step rapportino editor (Dettagli / Ore / Materiali / Riepilogo).
-// Reuses the M4/M5 reportEditorProvider backbone unchanged.
-// The old 7-step RapportinoEditorScreen is superseded by this screen.
+// A checklist of four compartments (Dettagli / Ore / Materiali / Riepilogo), not a stepper —
+// see _openStep's own doc comment for why this replaced the sequential wizard. Reuses the M4/M5
+// reportEditorProvider backbone unchanged, and each step widget unchanged: the same
+// StepDettagli/StepOre/StepMaterialiFold/StepRiepilogo the stepper rendered inline now render
+// inside a bottom sheet instead.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// The 4 UI steps exposed by the new form (separate from the legacy
-/// RapportinoStep enum which is still used by the notifier internally).
-enum _FormStep { dettagli, ore, materiali, riepilogo }
-
-const _kSteps = [
-  StepperStep(label: 'Dettagli'),
-  StepperStep(label: 'Ore'),
-  StepperStep(label: 'Materiali'),
-  StepperStep(label: 'Riepilogo'),
-];
-
-class RapportinoFormScreen extends ConsumerStatefulWidget {
+class RapportinoFormScreen extends ConsumerWidget {
   const RapportinoFormScreen({super.key, required this.reportId});
 
   final String reportId;
 
   @override
-  ConsumerState<RapportinoFormScreen> createState() => _RapportinoFormScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final editorState = ref.watch(reportEditorProvider(reportId));
+    final subtitle = editorState.title.isEmpty ? null : editorState.title;
 
-class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
-  _FormStep _step = _FormStep.dettagli;
-
-  int get _stepIndex => _FormStep.values.indexOf(_step);
-  bool get _isFirst => _step == _FormStep.dettagli;
-  bool get _isLast => _step == _FormStep.riepilogo;
-
-  void _goNext() {
-    final values = _FormStep.values;
-    final idx = values.indexOf(_step);
-    if (idx < values.length - 1) {
-      setState(() => _step = values[idx + 1]);
-    }
-  }
-
-  void _goBack() {
-    final values = _FormStep.values;
-    final idx = values.indexOf(_step);
-    if (idx > 0) {
-      setState(() => _step = values[idx - 1]);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final editorState = ref.watch(reportEditorProvider(widget.reportId));
-
-    // The subtitle used to read "Ticket: 3f2a1c8e-…" — the raw id, in the most prominent piece of
-    // secondary text on the screen. What it is linked to is now named properly at the top of
-    // Dettagli, where the name is resolvable; repeating it here as a GUID was worse than silence.
-    // From Ore onwards it carries the rapportino's own title instead, so the header answers "which
-    // one am I in" once the field that names it has scrolled out of reach.
-    final subtitle = _isFirst || editorState.title.isEmpty ? null : editorState.title;
+    final dettagliDone = editorState.title.isNotEmpty;
+    final oreDone = editorState.staffRows.isNotEmpty;
+    final materialiDone = editorState.materialeRows.isNotEmpty || editorState.materialiNotRequired;
+    // A proxy for "ready to submit," not "submitted" — both signatures are the last thing
+    // Riepilogo asks for before Invia unlocks, and reading the real submission state would mean
+    // a second provider just to draw a checkmark. Good enough: it tells the truth about whether
+    // there is still something to do in here.
+    final riepilogoDone =
+        editorState.customerSignatureAllegatoId != null &&
+        editorState.technicianSignatureAllegatoId != null;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      // The last AppBar in the app. Its hand-rolled title Column also carried a fifth instance of
-      // the fixed-dark bug: the subtitle took `inkMuted`, which measures 1.9:1 on CHARCOAL in
-      // light mode. ScreenHeader's own dark variant renders both lines correctly.
       appBar: ScreenHeaderBar(
         title: 'Rapportino',
         subtitle: subtitle,
@@ -98,114 +65,106 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // ── Stepper ────────────────────────────────────────────────────────
-          //
-          // The bar names the step, so the header does not have to: two dark bands stacked under
-          // each other, one saying "Rapportino" and the other repeating "Dettagli" in 10px under
-          // a numbered disc, was most of the first viewport spent on chrome.
-          Container(
-            color: AppColors.CHARCOAL,
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              0,
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-            ),
-            child: AppStepper(
-              steps: _kSteps,
-              currentIndex: _stepIndex,
-              // Jump straight back to a step already filled in. Correcting the cliente from the
-              // summary used to mean pressing Indietro three times.
-              onStepSelected: (i) => setState(() => _step = _FormStep.values[i]),
-            ),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.lg,
+            AppSpacing.pagePadding,
+            context.navClearance,
           ),
-
-          // ── Step content ───────────────────────────────────────────────────
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              switchInCurve: Curves.easeInOut,
-              switchOutCurve: Curves.easeInOut,
-              child: _buildStep(key: ValueKey(_step)),
-            ),
+          child: GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.5,
+            children: [
+              _StepTile(
+                icon: LucideIcons.fileText,
+                label: 'Dettagli',
+                done: dettagliDone,
+                onTap: () => openCompartmentSheet(
+                  context,
+                  label: 'Dettagli',
+                  content: StepDettagli(reportId: reportId),
+                ),
+              ),
+              _StepTile(
+                icon: LucideIcons.clock,
+                label: 'Ore',
+                done: oreDone,
+                onTap: () => openCompartmentSheet(
+                  context,
+                  label: 'Ore',
+                  content: StepOre(reportId: reportId),
+                ),
+              ),
+              _StepTile(
+                icon: LucideIcons.package,
+                label: 'Materiali',
+                done: materialiDone,
+                onTap: () => openCompartmentSheet(
+                  context,
+                  label: 'Materiali',
+                  content: StepMaterialiFold(reportId: reportId),
+                ),
+              ),
+              _StepTile(
+                icon: LucideIcons.send,
+                label: 'Riepilogo',
+                done: riepilogoDone,
+                onTap: () => openCompartmentSheet(
+                  context,
+                  label: 'Riepilogo',
+                  content: StepRiepilogo(reportId: reportId),
+                ),
+              ),
+            ],
           ),
-
-          // ── Sticky bottom navigation bar ───────────────────────────────────
-          _BottomNavBar(isFirst: _isFirst, isLast: _isLast, onBack: _goBack, onNext: _goNext),
-        ],
+        ),
       ),
     );
-  }
-
-  Widget _buildStep({required Key key}) {
-    return switch (_step) {
-      _FormStep.dettagli => StepDettagli(key: key, reportId: widget.reportId),
-      _FormStep.ore => StepOre(key: key, reportId: widget.reportId),
-      _FormStep.materiali => StepMaterialiFold(key: key, reportId: widget.reportId),
-      _FormStep.riepilogo => StepRiepilogo(key: key, reportId: widget.reportId),
-    };
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// _BottomNavBar
+// _StepTile — CompartmentTile plus a completion mark
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar({
-    required this.isFirst,
-    required this.isLast,
-    required this.onBack,
-    required this.onNext,
+/// A [CompartmentTile] with a filled/hollow completion dot — the "what's left" read a stepper's
+/// numbered discs used to give for free. No forced order and no discs to number, so this is the
+/// one piece of state the grid still needs to carry per tile.
+class _StepTile extends StatelessWidget {
+  const _StepTile({
+    required this.icon,
+    required this.label,
+    required this.done,
+    required this.onTap,
   });
 
-  final bool isFirst;
-  final bool isLast;
-  final VoidCallback onBack;
-  final VoidCallback onNext;
+  final IconData icon;
+  final String label;
+  final bool done;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        color: context.colors.surface,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.pagePadding,
-          vertical: AppSpacing.md,
+    return Stack(
+      children: [
+        CompartmentTile(icon: icon, label: label, onTap: onTap),
+        Positioned(
+          top: 10,
+          right: 10,
+          child: Icon(
+            done ? LucideIcons.checkCircle2 : LucideIcons.circle,
+            size: 16,
+            color: done ? context.colors.green : context.colors.borderMedium,
+          ),
         ),
-        child: Row(
-          children: [
-            if (!isFirst) ...[
-              // Full width only while it is sharing the bar with Avanti. On Riepilogo the real
-              // action is Invia, sitting just above; a full-width secondary button underneath it
-              // was the largest control on the screen and pointed backwards.
-              if (isLast)
-                AppButton.secondary(
-                  label: 'Indietro',
-                  onPressed: onBack,
-                  size: AppButtonSize.lg,
-                  fullWidth: false,
-                )
-              else
-                Expanded(
-                  child: AppButton.secondary(
-                    label: 'Indietro',
-                    onPressed: onBack,
-                    size: AppButtonSize.lg,
-                  ),
-                ),
-              if (!isLast) const SizedBox(width: 12),
-            ],
-            if (!isLast)
-              Expanded(
-                child: AppButton(label: 'Avanti', onPressed: onNext, size: AppButtonSize.lg),
-              ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 }

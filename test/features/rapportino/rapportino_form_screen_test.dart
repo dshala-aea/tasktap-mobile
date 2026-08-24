@@ -1,14 +1,13 @@
 // dart format width=100
 // test/features/rapportino/rapportino_form_screen_test.dart
 //
-// Widget tests for the 4-step rapportino form (D3b).
+// Widget tests for the rapportino checklist (Dettagli/Ore/Materiali/Riepilogo tiles + sheets).
 //
 // Covers:
-//   1. All 4 steps render without errors.
-//   2. "Avanti" navigates forward through steps.
-//   3. "Indietro" navigates backward.
-//   4. Validate blocks submit on step 4 when firma is missing.
-//   5. Submit calls the queue (fake realSubmissionQueueProvider).
+//   1. All 4 tiles render.
+//   2. Each tile opens its step's content in a bottom sheet.
+//   3. Submit blocks when validation not satisfied.
+//   4. Submit calls the queue when the draft is valid.
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -60,6 +59,11 @@ Widget _buildForm({required AppDatabase db, required String reportId, Submission
   );
 }
 
+Future<void> _openTile(WidgetTester tester, String label) async {
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -74,73 +78,55 @@ void main() {
 
   const reportId = 'draft-test-1';
 
-  group('RapportinoFormScreen — step rendering', () {
-    testWidgets('step 1 (Dettagli) renders titolo field', (tester) async {
+  group('RapportinoFormScreen — checklist tiles', () {
+    testWidgets('renders all four tiles', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
+
+      expect(find.text('Dettagli'), findsOneWidget);
+      expect(find.text('Ore'), findsOneWidget);
+      expect(find.text('Materiali'), findsOneWidget);
+      expect(find.text('Riepilogo'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Dettagli tile opens a sheet with the titolo field', (tester) async {
+      await _seedDraft(db, reportId);
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
+      await tester.pumpAndSettle();
+
+      await _openTile(tester, 'Dettagli');
 
       // Field labels are static text above the field now, not Material floating labels inside
       // it, and a required marker is a coloured span — so this is rich text.
       expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
-      // Avanti button visible on step 1
-      expect(find.text('Avanti'), findsOneWidget);
-      // Indietro NOT visible on step 1
-      expect(find.text('Indietro'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Avanti navigates from step 1 to step 2', (tester) async {
+    testWidgets('Ore tile opens a sheet with staff-related content', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
+      await _openTile(tester, 'Ore');
 
-      // Step 2 shows staff-related text
-      expect(find.text('Aggiungi tecnico'), findsOneWidget);
-      // Indietro now visible
-      expect(find.text('Indietro'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
-
-    testWidgets('Indietro navigates from step 2 back to step 1', (tester) async {
-      await _seedDraft(db, reportId);
-      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
-      await tester.pumpAndSettle();
-
-      // Go to step 2
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
       expect(find.text('Aggiungi tecnico'), findsOneWidget);
 
-      // Go back
-      await tester.tap(find.text('Indietro'));
-      await tester.pumpAndSettle();
-
-      // Back on step 1
-      expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
-      expect(find.text('Indietro'), findsNothing);
-
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('step 3 (Materiali) renders Aggiungi materiale button', (tester) async {
+    testWidgets('Materiali tile opens a sheet with Aggiungi materiale button', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // Navigate to step 3
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
+      await _openTile(tester, 'Materiali');
 
       expect(find.text('Aggiungi materiale'), findsOneWidget);
 
@@ -148,23 +134,19 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('step 4 (Riepilogo) renders firma blocks + validation panel', (tester) async {
+    testWidgets('Riepilogo tile opens a sheet with firma blocks + validation panel', (
+      tester,
+    ) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // Navigate to step 4
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-      }
+      await _openTile(tester, 'Riepilogo');
 
       // Invia button present but disabled (missing sigs)
       expect(find.text('Invia rapportino'), findsOneWidget);
       // Validation messages visible
       expect(find.text('Da completare prima dell\'invio:'), findsOneWidget);
-      // No Avanti on last step
-      expect(find.text('Avanti'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -180,15 +162,13 @@ void main() {
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId, fakeQueue: fakeQueue));
       await tester.pumpAndSettle();
 
-      // Navigate to step 4
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-      }
+      await _openTile(tester, 'Riepilogo');
 
       // Tap "Invia rapportino" — should be no-op because validation fails
       final inviaBtn = find.text('Invia rapportino');
       expect(inviaBtn, findsOneWidget);
+      await tester.ensureVisible(inviaBtn);
+      await tester.pumpAndSettle();
       await tester.tap(inviaBtn);
       await tester.pumpAndSettle();
 
@@ -278,11 +258,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Navigate to step 4
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-      }
+      await _openTile(tester, 'Riepilogo');
 
       // Invia button present + enabled
       final inviaBtn = find.text('Invia rapportino');

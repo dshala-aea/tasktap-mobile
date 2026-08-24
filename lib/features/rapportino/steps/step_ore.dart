@@ -33,63 +33,63 @@ class StepOre extends ConsumerWidget {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final totalOre = state.staffRows.fold<double>(0, (sum, r) => sum + r.effectiveHours);
 
-    return Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.base,
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-            ),
-            children: [
-              StepLabel(title: 'Tecnici / Ore lavorate'),
-              const SizedBox(height: 12),
-              if (state.staffRows.isEmpty)
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
-                  child: Center(
-                    child: Text(
-                      'Nessun tecnico aggiunto.\nPremi il pulsante per aggiungere.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: context.colors.inkMuted, fontSize: 15),
-                    ),
-                  ),
-                )
-              else
-                ...state.staffRows.map(
-                  (row) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: _StaffTile(
-                      row: row,
-                      onUpdate: (updated) => notifier.updateStaff(updated),
-                      onRemove: () => notifier.removeStaff(row.id),
-                      onStartTimer: () => notifier.startTimer(row.id),
-                      onStopTimer: () => notifier.stopTimer(row.id),
-                    ),
-                  ),
-                ),
-
-              // Add staff button
-              OutlinedButton.icon(
-                onPressed: () => _showAddStaffDialog(context, ref),
-                icon: const Icon(LucideIcons.userPlus),
-                label: const Text('Aggiungi tecnico'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    // A Column, not a ListView: this sits inside the compartment sheet's own ambient
+    // SingleChildScrollView now, not a screen-height-bounded Expanded body — an inner scrollable
+    // here would fight the outer one for an unbounded height and crash on layout.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.base,
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StepLabel(title: 'Tecnici / Ore lavorate'),
+          const SizedBox(height: 12),
+          if (state.staffRows.isEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+              child: Center(
+                child: Text(
+                  'Nessun tecnico aggiunto.\nPremi il pulsante per aggiungere.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.colors.inkMuted, fontSize: 15),
                 ),
               ),
-              const SizedBox(height: 20),
+            )
+          else
+            ...state.staffRows.map(
+              (row) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: _StaffTile(
+                  row: row,
+                  onUpdate: (updated) => notifier.updateStaff(updated),
+                  onRemove: () => notifier.removeStaff(row.id),
+                  onStartTimer: () => notifier.startTimer(row.id),
+                  onStopTimer: () => notifier.stopTimer(row.id),
+                ),
+              ),
+            ),
 
-              // ── Totale ore dark card ───────────────────────────────────────
-              _TotalOreCard(totalOre: totalOre, staffCount: state.staffRows.length),
-              const SizedBox(height: 8),
-            ],
+          // Add staff button
+          OutlinedButton.icon(
+            onPressed: () => _showAddStaffDialog(context, ref),
+            icon: const Icon(LucideIcons.userPlus),
+            label: const Text('Aggiungi tecnico'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 20),
+
+          // ── Totale ore dark card ───────────────────────────────────────
+          _TotalOreCard(totalOre: totalOre, staffCount: state.staffRows.length),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
@@ -475,10 +475,7 @@ class _TotalOreCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: AppColors.CHARCOAL,
-        borderRadius: AppRack.freeShape,
-      ),
+      decoration: BoxDecoration(color: AppColors.CHARCOAL, borderRadius: AppRack.freeShape),
       child: Row(
         children: [
           Column(

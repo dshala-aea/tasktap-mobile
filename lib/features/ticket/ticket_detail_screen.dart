@@ -327,7 +327,7 @@ class _TicketDetailBody extends ConsumerWidget {
                           CompartmentTile(
                             icon: _sectionIcon(label),
                             label: label,
-                            onTap: () => _openSection(
+                            onTap: () => openCompartmentSheet(
                               context,
                               label: label,
                               content: label == 'Dettagli'
@@ -499,88 +499,6 @@ IconData _sectionIcon(String label) => switch (label) {
   'Storico' => LucideIcons.history,
   _ => LucideIcons.circle,
 };
-
-/// Opens a compartment's content as a bottom sheet over the ticket, rather than growing the
-/// ticket screen in place — see `_sectionLabels`' own doc comment for why. Scrollable and
-/// height-capped: every section widget here was built to sit inside an ambient scroll view (the
-/// accordion's, before this), not to bound its own height, so this supplies both.
-void _openSection(BuildContext context, {required String label, required Widget content}) {
-  showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (ctx) => DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.92,
-      expand: false,
-      builder: (ctx, scrollController) => Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 10, bottom: 4),
-            child: _SheetHandle(),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: ctx.colors.ink,
-                    ),
-                  ),
-                ),
-                HeaderIconBtn(
-                  icon: LucideIcons.x,
-                  label: 'Chiudi',
-                  onTap: () => Navigator.of(ctx).pop(),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, thickness: 1, color: ctx.colors.borderLight),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: scrollController,
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-              child: content,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-class _SheetHandle extends StatelessWidget {
-  const _SheetHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 36,
-        height: 4,
-        decoration: BoxDecoration(
-          color: context.colors.borderMedium,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ),
-    );
-  }
-}
 
 /// The Dettagli compartment: what used to sit above the fold on every ticket, now read on demand.
 class _DettagliSheet extends StatelessWidget {

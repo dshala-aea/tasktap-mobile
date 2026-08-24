@@ -41,136 +41,144 @@ class StepMaterialiFold extends ConsumerWidget {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final photos = state.allegatoRows.where((a) => !a.isSignature).toList();
 
-    return ListView(
+    // A Column, not a ListView: this sits inside the compartment sheet's own ambient
+    // SingleChildScrollView now, not a screen-height-bounded Expanded body — an inner scrollable
+    // here would fight the outer one for an unbounded height and crash on layout.
+    return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
         AppSpacing.base,
         AppSpacing.pagePadding,
         AppSpacing.xl,
       ),
-      children: [
-        // ── "Nessun materiale" toggle ──────────────────────────────────────
-        AppCard(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.base,
-            AppSpacing.xs,
-            AppSpacing.base,
-            context.navClearance,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── "Nessun materiale" toggle ──────────────────────────────────────
+          AppCard(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.base,
+              AppSpacing.xs,
+              AppSpacing.base,
+              context.navClearance,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Nessun materiale utilizzato',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: context.colors.ink,
+                    ),
+                  ),
+                ),
+                AppToggle(
+                  value: state.materialiNotRequired,
+                  onChanged: (v) => notifier.setMaterialiNotRequired(v),
+                ),
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              Expanded(
+          const SizedBox(height: 16),
+
+          if (!state.materialiNotRequired) ...[
+            // ── Materiali list ──────────────────────────────────────────────
+            StepLabel(title: 'Materiali (${state.materialeRows.length})'),
+            const SizedBox(height: 8),
+            if (state.materialeRows.isEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                 child: Text(
-                  'Nessun materiale utilizzato',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: context.colors.ink,
+                  'Nessun materiale aggiunto.',
+                  style: TextStyle(color: context.colors.inkMuted),
+                ),
+              )
+            else
+              ...state.materialeRows.map(
+                (row) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: _MaterialeQtyStepper(
+                    row: row,
+                    onQtyChanged: (qty) => notifier.updateMateriale(row.copyWith(quantity: qty)),
+                    onRemove: () => notifier.removeMateriale(row.id),
                   ),
                 ),
               ),
-              AppToggle(
-                value: state.materialiNotRequired,
-                onChanged: (v) => notifier.setMaterialiNotRequired(v),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _showAddMaterialeDialog(context, ref),
+              icon: const Icon(LucideIcons.plusSquare),
+              label: const Text('Aggiungi materiale'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 52),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // ── Controlli sub-section ──────────────────────────────────────────
+          // The checklist for this intervention, resolved server-side from the
+          // ticket's maintenance-template version (ADR-0012) — not a free-text
+          // "type an ID" box. See _ControlliChecklist.
+          StepLabel(title: 'Controlli'),
+          const SizedBox(height: 8),
+          _ControlliChecklist(reportId: reportId, ticketId: state.ticketId),
+          const SizedBox(height: 24),
+
+          // ── Foto / Allegati sub-section ────────────────────────────────────
+          StepLabel(title: 'Foto / Allegati (${photos.length})'),
+          const SizedBox(height: 8),
+          if (photos.isNotEmpty) ...[
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: photos.length,
+              itemBuilder: (ctx, i) => _PhotoThumb(
+                row: photos[i],
+                onRemove: () => notifier.removeAllegato(photos[i].id),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _pickImage(context, ref, ImageSource.gallery),
+                  icon: const Icon(LucideIcons.image),
+                  label: const Text('Galleria'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 52),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _pickImage(context, ref, ImageSource.camera),
+                  icon: const Icon(LucideIcons.camera),
+                  label: const Text('Fotocamera'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    foregroundColor: context.colors.brandOn,
+                    minimumSize: const Size(0, 52),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 16),
-
-        if (!state.materialiNotRequired) ...[
-          // ── Materiali list ──────────────────────────────────────────────
-          StepLabel(title: 'Materiali (${state.materialeRows.length})'),
-          const SizedBox(height: 8),
-          if (state.materialeRows.isEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-              child: Text(
-                'Nessun materiale aggiunto.',
-                style: TextStyle(color: context.colors.inkMuted),
-              ),
-            )
-          else
-            ...state.materialeRows.map(
-              (row) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: _MaterialeQtyStepper(
-                  row: row,
-                  onQtyChanged: (qty) => notifier.updateMateriale(row.copyWith(quantity: qty)),
-                  onRemove: () => notifier.removeMateriale(row.id),
-                ),
-              ),
-            ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () => _showAddMaterialeDialog(context, ref),
-            icon: const Icon(LucideIcons.plusSquare),
-            label: const Text('Aggiungi materiale'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-          const SizedBox(height: 24),
         ],
-
-        // ── Controlli sub-section ──────────────────────────────────────────
-        // The checklist for this intervention, resolved server-side from the
-        // ticket's maintenance-template version (ADR-0012) — not a free-text
-        // "type an ID" box. See _ControlliChecklist.
-        StepLabel(title: 'Controlli'),
-        const SizedBox(height: 8),
-        _ControlliChecklist(reportId: reportId, ticketId: state.ticketId),
-        const SizedBox(height: 24),
-
-        // ── Foto / Allegati sub-section ────────────────────────────────────
-        StepLabel(title: 'Foto / Allegati (${photos.length})'),
-        const SizedBox(height: 8),
-        if (photos.isNotEmpty) ...[
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: photos.length,
-            itemBuilder: (ctx, i) =>
-                _PhotoThumb(row: photos[i], onRemove: () => notifier.removeAllegato(photos[i].id)),
-          ),
-          const SizedBox(height: 12),
-        ],
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _pickImage(context, ref, ImageSource.gallery),
-                icon: const Icon(LucideIcons.image),
-                label: const Text('Galleria'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => _pickImage(context, ref, ImageSource.camera),
-                icon: const Icon(LucideIcons.camera),
-                label: const Text('Fotocamera'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brand,
-                  foregroundColor: context.colors.brandOn,
-                  minimumSize: const Size(0, 52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
