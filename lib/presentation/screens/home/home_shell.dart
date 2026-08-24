@@ -10,6 +10,9 @@ import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/tickets/ticket_creation_queue_watcher.dart';
+import '../../../data/timbratura/cantiere_timbra_sync_watcher.dart';
+import '../../../data/timbratura/cantiere_work_log_reconcile_watcher.dart';
+import '../../../data/timbratura/cantiere_work_log_reconciler.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 import '../../../data/timbratura/work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/work_log_reconciler.dart';
@@ -24,11 +27,16 @@ import '../../../data/timbratura/work_log_reconciler.dart';
 /// - On app foreground resume: calls [SyncNotifier.performSync].
 ///
 /// Worklog reconciliation triggers (see work_log_reconciler.dart for why this exists — in short,
-/// the same account clocking out on the web must not leave mobile showing "on shift" forever):
-/// - On first mount and on reconnect: see [initWorkLogReconcileWatcher].
-/// - On app foreground resume: reconciles immediately.
+/// the same account clocking out on the web must not leave mobile showing "on shift" forever).
+/// [CantiereWorkLogReconciler] gets the identical treatment for the cantiere (worksite) session:
+/// - On first mount and on reconnect: see [initWorkLogReconcileWatcher] /
+///   [initCantiereWorkLogReconcileWatcher].
+/// - On app foreground resume: both reconcile immediately.
 /// - Every 60s while foregrounded: matches the dashboard's activeTrackersProvider poll cadence.
 ///   Cancelled while backgrounded — this is a foreground fallback, not a background service.
+///
+/// Cantiere timbra also gets the personal-timbra offline push treatment: [initTimbraSyncWatcher] /
+/// [initCantiereTimbraSyncWatcher] push locally-queued punches as soon as connectivity allows.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.navigationShell});
 
@@ -49,6 +57,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncProvider.notifier).performSync();
       initTimbraSyncWatcher(ref);
+      // Offline-first cantiere (worksite) timbratura — same push-on-reconnect pattern as
+      // personal attendance. See cantiere_timbra_sync_service.dart.
+      initCantiereTimbraSyncWatcher(ref);
       // Offline-created tickets are queued locally (see
       // features/ticket/new_ticket_form_screen.dart); this flushes the
       // ones that are safe to auto-retry as soon as connectivity returns.
@@ -66,6 +77,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // Corrects local "on shift" state when the same account clocked out elsewhere (web).
       // See work_log_reconciler.dart.
       initWorkLogReconcileWatcher(ref);
+      // Same correction, for the cantiere (worksite) session. See
+      // cantiere_work_log_reconciler.dart.
+      initCantiereWorkLogReconcileWatcher(ref);
       _startReconcilePoll();
     });
   }
@@ -82,6 +96,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     _reconcilePoll?.cancel();
     _reconcilePoll = Timer.periodic(const Duration(seconds: 60), (_) {
       ref.read(workLogReconcilerProvider).reconcile();
+      ref.read(cantiereWorkLogReconcilerProvider).reconcile();
     });
   }
 
@@ -91,6 +106,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     if (state == AppLifecycleState.resumed) {
       ref.read(syncProvider.notifier).performSync();
       ref.read(workLogReconcilerProvider).reconcile();
+      ref.read(cantiereWorkLogReconcilerProvider).reconcile();
       _startReconcilePoll();
     } else {
       // Backgrounded (paused/inactive/hidden): stop the foreground fallback poll. This is

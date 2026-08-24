@@ -27,18 +27,26 @@ import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart';
 /// Fake LocationService that always returns a fixed coord.
 class _FakeLocationService extends ILocationService {
   @override
-  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654, lng: 9.1859);
+  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654, lng: 9.1859, accuracy: 10.0);
 }
 
 /// Fake CantiereWorklogApiClient — no network calls.
 class _FakeApiClient extends CantiereWorklogApiClient {
-  _FakeApiClient({this.activeLog, this.endShouldThrow = false}) : super(Dio());
+  _FakeApiClient({
+    this.activeLog,
+    this.endShouldThrow = false,
+    this.startShouldThrow = false,
+  }) : super(Dio());
 
   final CantiereWorkLogDto? activeLog;
   final bool endShouldThrow;
+  final bool startShouldThrow;
 
   /// Captures the [StartCantiereRequest] passed to startCantiere.
   final List<StartCantiereRequest> startedRequests = [];
+
+  /// Captures batch-upsert calls the offline-fallback path makes.
+  final List<List<CantiereMobileSessionDto>> upsertCalls = [];
 
   bool endCalled = false;
 
@@ -47,6 +55,12 @@ class _FakeApiClient extends CantiereWorklogApiClient {
 
   @override
   Future<void> startCantiere(StartCantiereRequest request) async {
+    if (startShouldThrow) {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/api/cantiereworklog/start'),
+        type: DioExceptionType.connectionError,
+      );
+    }
     startedRequests.add(request);
   }
 
@@ -59,6 +73,24 @@ class _FakeApiClient extends CantiereWorklogApiClient {
       );
     }
     endCalled = true;
+  }
+
+  @override
+  Future<List<CantiereMobileSessionResult>> upsertSessions(
+    List<CantiereMobileSessionDto> sessions,
+  ) async {
+    upsertCalls.add(List.of(sessions));
+    return sessions
+        .map(
+          (s) => CantiereMobileSessionResult(
+            clientId: s.clientId,
+            cantiereWorkLogId: 'wl-${s.clientId}',
+            startTime: s.startTime,
+            endTime: s.endTime,
+            isActive: s.endTime == null,
+          ),
+        )
+        .toList();
   }
 }
 
@@ -193,12 +225,16 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('shows empty state when no cantieri in cache', (tester) async {
+    testWidgets('shows an honest empty state when no cantieri in cache', (tester) async {
+      // B1 fix: this used to claim the sync was "not yet connected" — misleading once
+      // SyncService actually populates db.cantieri on every app session (see cantieriProvider's
+      // own doc comment). The empty case is now just "nothing synced for this tenant yet".
       final api = _FakeApiClient();
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      expect(find.text('Selezione cantiere non disponibile'), findsOneWidget);
+      expect(find.text('Nessun cantiere disponibile'), findsOneWidget);
+      expect(find.textContaining('non è ancora sincronizzato'), findsNothing);
       await _teardown(tester);
     });
 
@@ -357,18 +393,87 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('shows Italian connection error when end call fails', (tester) async {
-      final api = _FakeApiClient(activeLog: _activeLog(), endShouldThrow: true);
-      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'offline (connection error) clock-out queues locally instead of failing outright',
+      (tester) async {
+        // Item B2: this used to be online-only and show a blocking connection error. It now
+        // falls back to the local Drift queue — the technician's "I left the site" is recorded
+        // durably even with no signal, and CantiereTimbraSyncService pushes it once reconnected.
+        final api = _FakeApiClient(activeLog: _activeLog(), endShouldThrow: true);
+        await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+        await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Timbra uscita cantiere'));
-      await tester.tap(find.text('Timbra uscita cantiere'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.ensureVisible(find.text('Timbra uscita cantiere'));
+        await tester.tap(find.text('Timbra uscita cantiere'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Connessione richiesta per la timbratura cantiere.'), findsOneWidget);
-      await _teardown(tester);
-    });
+        expect(find.text('Connessione richiesta per la timbratura cantiere.'), findsNothing);
+        expect(
+          find.text('Uscita registrata offline: verrà inviata al ritorno della connessione.'),
+          findsOneWidget,
+        );
+
+        final events = await (db.select(db.cantierePunches)).get();
+        expect(events.where((e) => e.eventType == 'uscita'), hasLength(1));
+
+        await _teardown(tester);
+      },
+    );
+  });
+
+  // ── Offline check-in (item B2) ────────────────────────────────────────────
+
+  group('offline check-in', () {
+    testWidgets(
+      'connection error on startCantiere queues locally and switches to the active session body',
+      (tester) async {
+        await db
+            .into(db.cantieri)
+            .insert(
+              CantieriCompanion.insert(
+                id: 'cant-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                name: 'Cantiere Via Roma',
+              ),
+            );
+
+        final api = _FakeApiClient(startShouldThrow: true);
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, ticketId: 'tick-1', customerId: 'cust-1'),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Cantiere Via Roma'));
+        await tester.tap(find.text('Cantiere Via Roma'));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Timbra ingresso cantiere'));
+        await tester.tap(find.text('Timbra ingresso cantiere'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+
+        // No online request ever landed, and the screen did not show a blocking error — it
+        // switched straight to "on site" from the local queue.
+        expect(api.startedRequests, isEmpty);
+        expect(find.text('Sessione cantiere attiva'), findsOneWidget);
+
+        final events = await (db.select(db.cantierePunches)).get();
+        expect(events, hasLength(1));
+        expect(events.single.eventType, 'ingresso');
+        expect(events.single.cantiereId, 'cant-1');
+        // The queued event's own background sync (fire-and-forget, via
+        // CantiereTimbraSyncService) races the rest of this test — the fake API client answers
+        // that push successfully, so by the time `pumpAndSettle` above has flushed every pending
+        // microtask, the event is already marked synced. The point of this test is that the
+        // *screen* never blocked on reachability, not that the queue stays pending forever.
+        expect(events.single.isPendingSync, isFalse);
+        expect(api.upsertCalls, isNotEmpty);
+
+        await _teardown(tester);
+      },
+    );
   });
 }

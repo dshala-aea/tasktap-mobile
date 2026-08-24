@@ -78,6 +78,7 @@ class TimbraSyncService {
               // event from before this capture existed); simple timbra keeps working either way.
               latitude: i.latitude,
               longitude: i.longitude,
+              gpsAccuracyMeters: i.gpsAccuracyMeters,
             ),
           )
           .toList();

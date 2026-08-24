@@ -334,6 +334,25 @@ void main() {
         ),
       );
     });
+
+    contractTest('the cantiere mobile session upsert matches the server', () {
+      final client = CantiereWorklogApiClient(dio);
+      return capture(
+        () => client.upsertSessions([
+          CantiereMobileSessionDto(
+            clientId: _id(14),
+            cantiereId: _id(15),
+            customerId: _id(16),
+            ticketId: _id(17),
+            description: 'lavoro in corso',
+            startTime: DateTime.utc(2026, 8, 16, 7),
+            endTime: DateTime.utc(2026, 8, 16, 16),
+            latitude: 45.4642,
+            longitude: 9.19,
+          ),
+        ]),
+      );
+    });
   });
 
   group('ticket', () {

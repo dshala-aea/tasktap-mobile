@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/row_icon_tile.dart';
 import '../../core/widgets/screen_header.dart';
 import '../../data/local/app_database.dart';
 import 'timbra_providers.dart';
@@ -240,6 +241,14 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
 /// Below this the controls alone would leave the session list unreadable, so the page scrolls.
 const double _kFixedLayoutMinHeight = 640;
 
+/// `RowIconTile`'s fill for [_SessionRow], on this screen only.
+///
+/// CHARCOAL (`#2B2A24`) blended toward white by ~18% — still a fixed value under both themes
+/// (this screen is permanently dark, see `AppColors.punchGround`'s own doc comment), just light
+/// enough to read as a raised compartment against `punchGround` (`#1A1A1A`) instead of nearly
+/// disappearing into it the way the unmodified case-shell colour would on a ground that dark.
+const Color _kSessionTileFill = Color(0xFF48473C);
+
 // ══════════════════════════════════════════════════════════════════════════════
 // _DateLabel
 // ══════════════════════════════════════════════════════════════════════════════
@@ -447,6 +456,12 @@ class _PunchButton extends StatelessWidget {
 ///
 /// Deliberately understated next to [_PunchButton]: starting/ending the shift is the
 /// primary action, pause/resume is a secondary one that happens mid-shift.
+///
+/// `borderRadius: 24` (a true pill, not `AppRack.cellRadius`) was checked against the rest of the
+/// app for an established pill token: `AppRack` documents rail/cell/inset radii but no pill —
+/// the only other fully-rounded control in the app is `step_materiali_fold.dart`'s fold controls,
+/// which use this same 24/22 pair. No formal token exists yet, so this stays the documented,
+/// still-consistent one-off it already was rather than inventing a new app-wide constant here.
 class _PauseButton extends StatelessWidget {
   const _PauseButton({
     required this.shiftState,
@@ -642,8 +657,12 @@ class _SessionsCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(13), // ~5% white — translucent card
-        borderRadius: BorderRadius.circular(16),
+        // CHARCOAL, not an ad hoc ~5% white glass — this is the same case-shell material the
+        // `ScreenHeader(dark: true)` plate above it is already painted in, so the card reads as
+        // another panel riveted into the same case rather than a translucent overlay with no
+        // material of its own. `AppRack.freeShape`: a standalone panel, not a cell on a rail.
+        color: AppColors.CHARCOAL,
+        borderRadius: AppRack.freeShape,
         border: Border.all(color: Colors.white.withAlpha(25)),
       ),
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -786,11 +805,20 @@ class _SessionRow extends StatelessWidget {
     final color = _color(context, session.eventType);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(_icon(session.eventType), size: 16, color: color),
-          const SizedBox(width: 10),
+          // Every other list row in the app cuts its leading icon into a RowIconTile case-shell
+          // square; this was the one bare Icon left. Default CHARCOAL would nearly vanish against
+          // this screen's own punchGround (both are near-black), so a lighter blend is used
+          // instead — still a fixed value, not a theme-flipping token, per this screen's
+          // permanently-dark-surface rule.
+          RowIconTile(
+            size: 32,
+            color: _kSessionTileFill,
+            child: Icon(_icon(session.eventType), size: 16, color: color),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               _label(session.eventType),

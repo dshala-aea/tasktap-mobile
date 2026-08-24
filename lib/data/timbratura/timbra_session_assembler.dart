@@ -27,6 +27,7 @@ class WorkInterval {
     this.endTime,
     this.latitude,
     this.longitude,
+    this.gpsAccuracyMeters,
   });
 
   /// Stable identifier derived from the opening event's id.
@@ -44,10 +45,14 @@ class WorkInterval {
   final double? latitude;
   final double? longitude;
 
+  /// Device-reported GPS accuracy radius (meters) captured alongside [latitude]/[longitude] on
+  /// the opening event. Same "opener only" rule as the coordinates themselves.
+  final double? gpsAccuracyMeters;
+
   @override
   String toString() =>
       'WorkInterval(clientId: $clientId, start: $startTime, end: $endTime, '
-      'lat: $latitude, lng: $longitude)';
+      'lat: $latitude, lng: $longitude, accuracy: $gpsAccuracyMeters)';
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -68,6 +73,7 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
   DateTime? openStart;
   double? openLatitude;
   double? openLongitude;
+  double? openAccuracy;
 
   for (final s in sessions) {
     final t = s.eventTime; // stored as UTC by the repo
@@ -84,6 +90,7 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
               endTime: t,
               latitude: openLatitude,
               longitude: openLongitude,
+              gpsAccuracyMeters: openAccuracy,
             ),
           );
         }
@@ -91,6 +98,7 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
         openStart = t;
         openLatitude = s.latitude;
         openLongitude = s.longitude;
+        openAccuracy = s.gpsAccuracyMeters;
 
       case 'fine':
       case 'pausa':
@@ -102,12 +110,14 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
               endTime: t,
               latitude: openLatitude,
               longitude: openLongitude,
+              gpsAccuracyMeters: openAccuracy,
             ),
           );
           openClientId = null;
           openStart = null;
           openLatitude = null;
           openLongitude = null;
+          openAccuracy = null;
         }
       // else: close event with no open interval — ignore
 
@@ -126,6 +136,7 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
         endTime: null,
         latitude: openLatitude,
         longitude: openLongitude,
+        gpsAccuracyMeters: openAccuracy,
       ),
     );
   }

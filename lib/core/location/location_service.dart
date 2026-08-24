@@ -13,8 +13,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
-/// Result record: latitude + longitude.
-typedef GpsCoords = ({double lat, double lng});
+/// Result record: latitude + longitude + the device-reported accuracy radius (meters, null when
+/// the device didn't report one).
+typedef GpsCoords = ({double lat, double lng, double? accuracy});
 
 /// Contract for obtaining the device's current GPS position.
 abstract class ILocationService {
@@ -83,7 +84,7 @@ class LocationService extends ILocationService {
           timeLimit: Duration(seconds: 10),
         ),
       );
-      return (lat: pos.latitude, lng: pos.longitude);
+      return (lat: pos.latitude, lng: pos.longitude, accuracy: pos.accuracy);
     } catch (_) {
       // Any platform exception or timeout → gracefully return null.
       return null;

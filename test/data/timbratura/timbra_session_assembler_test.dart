@@ -20,6 +20,7 @@ WorkSession _ws(
   DateTime time, {
   double? latitude,
   double? longitude,
+  double? gpsAccuracyMeters,
 }) => WorkSession(
   id: id,
   eventType: type,
@@ -27,6 +28,7 @@ WorkSession _ws(
   isPendingSync: true,
   latitude: latitude,
   longitude: longitude,
+  gpsAccuracyMeters: gpsAccuracyMeters,
 );
 
 void main() {
@@ -177,6 +179,26 @@ void main() {
         expect(intervals[0].latitude, 45.0);
         expect(intervals[1].latitude, 45.5);
         expect(intervals[1].longitude, 9.5);
+      });
+    });
+
+    // ── GPS accuracy (item 10c) ────────────────────────────────────────────────
+    //
+    // Same "opener only" carry-through as latitude/longitude — see WorkInterval.gpsAccuracyMeters.
+
+    group('GPS accuracy (opener event only)', () {
+      test('ingresso with accuracy → interval carries it', () {
+        final t = DateTime.utc(2026, 6, 23, 8);
+        final intervals = assembleIntervals([
+          _ws('id-1', 'ingresso', t, latitude: 45.4654, longitude: 9.1859, gpsAccuracyMeters: 12.0),
+        ]);
+        expect(intervals[0].gpsAccuracyMeters, 12.0);
+      });
+
+      test('ingresso with no accuracy reported → interval accuracy is null', () {
+        final t = DateTime.utc(2026, 6, 23, 8);
+        final intervals = assembleIntervals([_ws('id-1', 'ingresso', t)]);
+        expect(intervals[0].gpsAccuracyMeters, isNull);
       });
     });
   });

@@ -19,6 +19,85 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 
+// ── Mobile batch upsert DTOs (offline-first) ────────────────────────────────
+//
+// Mirrors MobileSessionDto/upsertSessions in worklog_api_client.dart, hitting the cantiere
+// module's own idempotent batch endpoint (CantiereWorkLogController.MobileSessions). Field names
+// match CantiereMobileSessionDto (backend) verbatim — see test/contract/openapi.snapshot.json's
+// CantiereMobileSessionDto schema, which is what request_body_contract_test.dart checks this
+// against. Deliberately narrower than [StartCantiereRequest]: the backend's batch DTO does not
+// (yet) carry workOrderNumber/equipmentUsed/teamSize/weatherConditions/safetyNotes, so those rich
+// fields only reach the server via the online start/end path; see cantiere_timbra_screen.dart's
+// online-first-with-local-fallback comment for how the two paths are reconciled.
+
+/// One cantiere punch as the device recorded it, ready for the batch upsert.
+class CantiereMobileSessionDto {
+  const CantiereMobileSessionDto({
+    required this.clientId,
+    required this.cantiereId,
+    required this.customerId,
+    this.ticketId,
+    this.description,
+    required this.startTime,
+    this.endTime,
+    this.latitude,
+    this.longitude,
+    this.workLogType = 0, // 0 = Site (default)
+  });
+
+  final String clientId;
+  final String cantiereId;
+  final String customerId;
+  final String? ticketId;
+  final String? description;
+  final DateTime startTime; // UTC
+  final DateTime? endTime; // UTC, null if active
+  final double? latitude;
+  final double? longitude;
+
+  /// CantiereWorkLogTypeEnum: Site=0, Travel=1, Setup=2.
+  final int workLogType;
+
+  Map<String, dynamic> toJson() => {
+    'clientId': clientId,
+    'cantiereId': cantiereId,
+    'customerId': customerId,
+    if (ticketId != null) 'ticketId': ticketId,
+    if (description != null) 'description': description,
+    'startTime': startTime.toUtc().toIso8601String(),
+    'endTime': endTime?.toUtc().toIso8601String(),
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
+    'workLogType': workLogType,
+  };
+}
+
+/// What the server holds for one punch after the upsert.
+class CantiereMobileSessionResult {
+  const CantiereMobileSessionResult({
+    required this.clientId,
+    required this.cantiereWorkLogId,
+    required this.startTime,
+    this.endTime,
+    required this.isActive,
+  });
+
+  final String clientId;
+  final String cantiereWorkLogId;
+  final DateTime startTime;
+  final DateTime? endTime;
+  final bool isActive;
+
+  factory CantiereMobileSessionResult.fromJson(Map<String, dynamic> json) =>
+      CantiereMobileSessionResult(
+        clientId: json['clientId'] as String,
+        cantiereWorkLogId: json['cantiereWorkLogId'] as String,
+        startTime: DateTime.parse(json['startTime'] as String),
+        endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+        isActive: json['isActive'] as bool? ?? false,
+      );
+}
+
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 /// Mirrors StartCantiereWorkLogRequest (backend).
@@ -156,6 +235,27 @@ class CantiereWorklogApiClient {
   /// Throws [DioException] on error (404 = no active session).
   Future<void> endCantiere([EndCantiereRequest? request]) async {
     await _dio.post<dynamic>('/api/cantiereworklog/end', data: request?.toJson() ?? {});
+  }
+
+  /// POST /api/cantiereworklog/mobile/sessions
+  ///
+  /// Idempotent batch upsert: the server matches on (tenant, user, clientId) and updates the row
+  /// (e.g. fills endTime) without creating duplicates — see CantiereWorkLogController.MobileSessions.
+  /// The offline counterpart to [startCantiere]/[endCantiere]; used by CantiereTimbraSyncService to
+  /// push punches recorded while offline. Throws [DioException] on network / server error.
+  Future<List<CantiereMobileSessionResult>> upsertSessions(
+    List<CantiereMobileSessionDto> sessions,
+  ) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/cantiereworklog/mobile/sessions',
+      data: {'sessions': sessions.map((s) => s.toJson()).toList()},
+    );
+
+    final data = response.data;
+    if (data == null) throw StateError('Risposta vuota da upsertSessions');
+
+    final list = data['sessions'] as List<dynamic>? ?? [];
+    return list.cast<Map<String, dynamic>>().map(CantiereMobileSessionResult.fromJson).toList();
   }
 
   /// GET /api/cantiereworklog

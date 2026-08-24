@@ -23,6 +23,7 @@ class MobileSessionDto {
     this.endTime,
     this.latitude,
     this.longitude,
+    this.gpsAccuracyMeters,
   });
 
   final String clientId;
@@ -31,12 +32,17 @@ class MobileSessionDto {
   final double? latitude; // null for simple timbra
   final double? longitude; // null for simple timbra
 
+  /// Device-reported GPS accuracy radius, in meters, at the moment [latitude]/[longitude] were
+  /// captured. Capture-only, mirrors `WorkLog.GpsAccuracyMeters` server-side.
+  final double? gpsAccuracyMeters;
+
   Map<String, dynamic> toJson() => {
     'clientId': clientId,
     'startTime': startTime.toUtc().toIso8601String(),
     'endTime': endTime?.toUtc().toIso8601String(),
     'latitude': latitude,
     'longitude': longitude,
+    'gpsAccuracyMeters': gpsAccuracyMeters,
   };
 }
 
@@ -200,8 +206,11 @@ class WorklogApiClient {
   /// GET /api/WorkLog/today
   ///
   /// The server's own view of the day, including which actions it will accept right now and
-  /// why it will refuse the others. Distinct from [getToday], which returns the raw entries
-  /// the sync path reconciles against.
+  /// why it will refuse the others. Distinct from [getToday], which hits a separate endpoint
+  /// (`GET mobile/today`, `WorkLogController.MobileToday`) and returns the raw per-session
+  /// WorkLog entries for the day (id, clientId, start/end, tipoOra) with no aggregate status or
+  /// available actions. Reconciliation (`WorkLogReconciler`) and sync (`TimbraSyncService`) both
+  /// use this method, not [getToday] — [getToday] has no call site in the app today.
   ///
   /// Throws [DioException] on network / server error — including offline, which is a normal
   /// state here and not an error the user should see.

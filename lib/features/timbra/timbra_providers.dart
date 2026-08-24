@@ -294,6 +294,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
           eventType: _kIngresso,
           latitude: coords?.lat,
           longitude: coords?.lng,
+          gpsAccuracyMeters: coords?.accuracy,
         );
       } else {
         // End shift
@@ -320,6 +321,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
           eventType: _kRipresa,
           latitude: coords?.lat,
           longitude: coords?.lng,
+          gpsAccuracyMeters: coords?.accuracy,
         );
       } else {
         await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kPausa);

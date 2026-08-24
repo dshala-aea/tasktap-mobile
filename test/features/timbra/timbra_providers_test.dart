@@ -38,6 +38,7 @@ class _StubRepo implements IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   }) async {}
   @override
   Stream<List<WorkSession>> watchTodaySessions() => const Stream.empty();
@@ -600,7 +601,7 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
           locationServiceProvider.overrideWithValue(
-            const _FakeLocationService((lat: 45.4654, lng: 9.1859)),
+            const _FakeLocationService((lat: 45.4654, lng: 9.1859, accuracy: 8.0)),
           ),
         ],
       );
@@ -611,6 +612,7 @@ void main() {
       expect(sessions.single.eventType, 'ingresso');
       expect(sessions.single.latitude, 45.4654);
       expect(sessions.single.longitude, 9.1859);
+      expect(sessions.single.gpsAccuracyMeters, 8.0);
     });
 
     test('punch-out (fine) never carries a position, even when one is available', () async {
@@ -619,7 +621,7 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
           locationServiceProvider.overrideWithValue(
-            const _FakeLocationService((lat: 45.4654, lng: 9.1859)),
+            const _FakeLocationService((lat: 45.4654, lng: 9.1859, accuracy: 8.0)),
           ),
         ],
       );
@@ -677,7 +679,7 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
           locationServiceProvider.overrideWithValue(
-            const _FakeLocationService((lat: 45.5, lng: 9.5)),
+            const _FakeLocationService((lat: 45.5, lng: 9.5, accuracy: 6.0)),
           ),
         ],
       );

@@ -13,7 +13,8 @@ class _FakeLocationServiceReturnsCoords extends ILocationService {
   const _FakeLocationServiceReturnsCoords();
 
   @override
-  Future<GpsCoords?> getCurrentPosition() async => (lat: 45.4654219, lng: 9.1859243);
+  Future<GpsCoords?> getCurrentPosition() async =>
+      (lat: 45.4654219, lng: 9.1859243, accuracy: 12.5);
 }
 
 class _FakeLocationServiceReturnsNull extends ILocationService {
@@ -42,6 +43,7 @@ void main() {
       expect(result, isNotNull);
       expect(result!.lat, closeTo(45.465, 0.01));
       expect(result.lng, closeTo(9.185, 0.01));
+      expect(result.accuracy, 12.5);
     });
 
     test('returns null when location unavailable', () async {
@@ -66,10 +68,16 @@ void main() {
       expect(result, isNull);
     });
 
-    test('GpsCoords record exposes lat and lng fields', () {
-      const coords = (lat: 10.0, lng: 20.0);
+    test('GpsCoords record exposes lat, lng and accuracy fields', () {
+      const GpsCoords coords = (lat: 10.0, lng: 20.0, accuracy: 5.0);
       expect(coords.lat, 10.0);
       expect(coords.lng, 20.0);
+      expect(coords.accuracy, 5.0);
+    });
+
+    test('GpsCoords accuracy is null when the device reports none', () {
+      const GpsCoords coords = (lat: 10.0, lng: 20.0, accuracy: null);
+      expect(coords.accuracy, isNull);
     });
   });
 }

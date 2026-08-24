@@ -32,6 +32,7 @@ abstract interface class IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   });
 
   /// Stream of today's events in chronological order.
@@ -67,6 +68,7 @@ class WorkSessionRepository implements IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   }) async {
     await _db.into(_db.workSessions).insert(
       WorkSessionsCompanion.insert(
@@ -75,6 +77,7 @@ class WorkSessionRepository implements IWorkSessionRepository {
         eventType: eventType,
         latitude: Value(latitude),
         longitude: Value(longitude),
+        gpsAccuracyMeters: Value(gpsAccuracyMeters),
       ),
     );
   }

@@ -133,6 +133,84 @@ void main() {
     });
   });
 
+  group('upsertSessions', () {
+    test('sends clientId/cantiereId/customerId/startTime and omits null optional fields',
+        () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantiereworklog/mobile/sessions',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            _okResponse({'sessions': <dynamic>[]}, '/api/cantiereworklog/mobile/sessions'),
+      );
+
+      await client.upsertSessions([
+        CantiereMobileSessionDto(
+          clientId: 'client-1',
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          startTime: DateTime.utc(2026, 8, 16, 7),
+        ),
+      ]);
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantiereworklog/mobile/sessions',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured;
+
+      final body = captured.first as Map<String, dynamic>;
+      final sessions = body['sessions'] as List<dynamic>;
+      expect(sessions, hasLength(1));
+      final session = sessions.first as Map<String, dynamic>;
+      expect(session['clientId'], 'client-1');
+      expect(session['cantiereId'], 'cant-1');
+      expect(session['customerId'], 'cust-1');
+      expect(session.containsKey('ticketId'), isFalse);
+      expect(session.containsKey('description'), isFalse);
+      expect(session['endTime'], isNull);
+    });
+
+    test('parses the response into CantiereMobileSessionResult', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantiereworklog/mobile/sessions',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'sessions': [
+            {
+              'clientId': 'client-1',
+              'cantiereWorkLogId': 'wl-1',
+              'startTime': '2026-08-16T07:00:00Z',
+              'endTime': '2026-08-16T16:00:00Z',
+              'isActive': false,
+            },
+          ],
+        }, '/api/cantiereworklog/mobile/sessions'),
+      );
+
+      final result = await client.upsertSessions([
+        CantiereMobileSessionDto(
+          clientId: 'client-1',
+          cantiereId: 'cant-1',
+          customerId: 'cust-1',
+          startTime: DateTime.utc(2026, 8, 16, 7),
+          endTime: DateTime.utc(2026, 8, 16, 16),
+        ),
+      ]);
+
+      expect(result, hasLength(1));
+      expect(result.first.clientId, 'client-1');
+      expect(result.first.cantiereWorkLogId, 'wl-1');
+      expect(result.first.isActive, isFalse);
+    });
+  });
+
   group('getActive', () {
     test('returns only logs with null endTime', () async {
       final paginatedResponse = {

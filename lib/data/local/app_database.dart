@@ -430,6 +430,11 @@ class WorkSessions extends Table {
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
 
+  /// Device-reported GPS accuracy radius, in meters, at the moment latitude/longitude were
+  /// captured. Capture-only, mirrors `WorkLog.GpsAccuracyMeters` server-side — null whenever no
+  /// position was captured or the device didn't report an accuracy value.
+  RealColumn get gpsAccuracyMeters => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -462,11 +467,21 @@ class CantierePunches extends Table {
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
 
+  /// Free-text work description, carried through to `CantiereMobileSessionDto.description` on
+  /// sync — the one rich field the offline batch endpoint accepts (see
+  /// `CantiereWorkLogController.MobileSessions`). Set on 'ingresso'; null on 'uscita'.
+  TextColumn get description => text().nullable()();
+
   /// True while not yet synced to the backend.
   BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
 
   /// Human-readable error message from the last failed sync attempt (null when ok).
   TextColumn get syncError => text().nullable()();
+
+  /// Reconciliation marker — mirrors `WorkSessions.notes` (`reconciledOrphanMarker`). Set by
+  /// `CantiereWorkLogReconciler` on an 'ingresso' the server has already closed elsewhere, so
+  /// `CantiereTimbraSyncService` never resends it. See cantiere_work_log_reconciler.dart.
+  TextColumn get notes => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -614,7 +629,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration {
@@ -711,6 +726,16 @@ class AppDatabase extends _$AppDatabase {
           // for free (permission already granted). See `WorkSessions.latitude`/`longitude`.
           await m.addColumn(workSessions, workSessions.latitude);
           await m.addColumn(workSessions, workSessions.longitude);
+        }
+        if (from < 17) {
+          // Cantiere timbra goes offline-first (see cantiere_timbra_sync_service.dart /
+          // cantiere_work_log_reconciler.dart): `description` carries the one rich field the
+          // offline batch endpoint accepts, `notes` mirrors `WorkSessions.notes`'s
+          // reconciliation marker. Device-reported GPS accuracy was captured and discarded on
+          // every punch; `WorkSessions.gpsAccuracyMeters` stops throwing it away.
+          await m.addColumn(cantierePunches, cantierePunches.description);
+          await m.addColumn(cantierePunches, cantierePunches.notes);
+          await m.addColumn(workSessions, workSessions.gpsAccuracyMeters);
         }
       },
     );

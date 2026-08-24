@@ -191,6 +191,7 @@ class _StubRepoForSync implements IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   }) async {}
   @override
   Stream<List<WorkSession>> watchTodaySessions() => const Stream.empty();

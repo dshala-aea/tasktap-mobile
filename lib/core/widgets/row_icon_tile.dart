@@ -24,6 +24,7 @@ class RowIconTile extends StatelessWidget {
     this.size = 40,
     this.iconSize = 20,
     this.radius,
+    this.color = AppColors.CHARCOAL,
   }) : assert(icon != null || child != null, 'RowIconTile needs an icon or a child');
 
   final IconData? icon;
@@ -38,13 +39,19 @@ class RowIconTile extends StatelessWidget {
   /// every other nested tile in the app uses.
   final double? radius;
 
+  /// Fill colour of the tile. Defaults to the case-shell CHARCOAL every list row in the app reads
+  /// against a light card. A screen whose own ground is already dark (Timbra's `punchGround`)
+  /// needs a lighter fill instead — CHARCOAL on top of a near-black ground reads as almost no
+  /// tile at all, which is the opposite of "cut into the case."
+  final Color color;
+
   @override
   Widget build(BuildContext context) {
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.CHARCOAL,
+        color: color,
         borderRadius: BorderRadius.circular(radius ?? AppRack.insetRadius),
       ),
       child:

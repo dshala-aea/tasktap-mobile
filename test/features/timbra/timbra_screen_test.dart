@@ -29,6 +29,7 @@ abstract class _StubRepo implements IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   }) async {}
 
   @override

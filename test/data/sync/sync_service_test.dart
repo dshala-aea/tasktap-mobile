@@ -17,6 +17,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart' show cantieriProvider;
 import 'package:tasktap_mobile/presentation/providers/schedule_providers.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -908,6 +909,48 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.first.name, 'Cantiere Via Roma');
       expect(rows.first.status, 0, reason: 'Active maps to 0');
+    });
+
+    /// Closes the loop end-to-end: CantiereTimbraScreen's own `cantieriProvider` (not just the
+    /// raw Drift table) reflects a normal sync — proving the cantiere clock-in picker is
+    /// populated after a normal app session rather than permanently empty. See
+    /// cantiere_timbra_screen.dart's `cantieriProvider` doc comment.
+    test('cantieriProvider (the clock-in picker\'s own data source) reflects a normal sync', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          cantieri: [
+            {
+              'id': 'can-1',
+              'tenantId': 'ten-1',
+              'createdAt': '2026-06-01T00:00:00Z',
+              'updatedAt': null,
+              'name': 'Cantiere Via Roma',
+              'address': null,
+              'city': 'Milano',
+              'postalCode': null,
+              'notes': null,
+              'startDate': null,
+              'endDate': null,
+              'status': 'Active',
+              'customerId': 'cli-1',
+              'commessaId': null,
+            },
+          ],
+        ),
+      );
+
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(container.dispose);
+
+      // Before a sync has ever run, a fresh device's picker is genuinely empty.
+      expect(await container.read(cantieriProvider.future), isEmpty);
+
+      await svc.sync();
+
+      final cantieri = await container.read(cantieriProvider.future);
+      expect(cantieri, hasLength(1));
+      expect(cantieri.first.name, 'Cantiere Via Roma');
     });
 
     /// A re-sync must not duplicate the catalogue — it runs on every reconnect.

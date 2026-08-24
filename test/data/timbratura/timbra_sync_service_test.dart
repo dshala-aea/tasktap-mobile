@@ -35,6 +35,7 @@ class _FakeRepo implements IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   }) async {}
 
   @override
@@ -87,8 +88,20 @@ class _FakeApiClient extends WorklogApiClient {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-WorkSession _ws(String id, String type, DateTime time, {String? notes}) =>
-    WorkSession(id: id, eventType: type, eventTime: time, notes: notes, isPendingSync: true);
+WorkSession _ws(
+  String id,
+  String type,
+  DateTime time, {
+  String? notes,
+  double? gpsAccuracyMeters,
+}) => WorkSession(
+  id: id,
+  eventType: type,
+  eventTime: time,
+  notes: notes,
+  isPendingSync: true,
+  gpsAccuracyMeters: gpsAccuracyMeters,
+);
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -142,6 +155,18 @@ void main() {
 
       // All three event ids should be marked synced
       expect(repo.markedSynced, containsAll(['id-1', 'id-2', 'id-3']));
+    });
+
+    test('gpsAccuracyMeters is forwarded to the DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final sessions = [_ws('id-1', 'ingresso', t1, gpsAccuracyMeters: 15.5)];
+      final repo = _FakeRepo(sessions);
+      final api = _FakeApiClient();
+      final svc = TimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls[0][0].gpsAccuracyMeters, 15.5);
     });
 
     test('active interval has null endTime in DTO', () async {

@@ -42,6 +42,7 @@ class _FakeRepo implements IWorkSessionRepository {
     required String eventType,
     double? latitude,
     double? longitude,
+    double? gpsAccuracyMeters,
   }) async {
     sessions.add(WorkSession(id: id, eventTime: eventTime, eventType: eventType, isPendingSync: true));
   }
