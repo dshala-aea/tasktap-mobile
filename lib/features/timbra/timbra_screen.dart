@@ -86,6 +86,10 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
     final sessionsAsync = ref.watch(todaySessionsProvider);
     final punchState = ref.watch(punchNotifierProvider);
     final total = ref.watch(totalWorkedTodayProvider);
+    // Only shown when the server actually offers it (see submitGuardProvider's own doc comment
+    // for why "server unreachable" cannot mean "show it anyway" the way it does for punch/pause).
+    final submitAction = ref.watch(giornataProvider).valueOrNull?.action('Submit');
+    final submitState = ref.watch(submitDayNotifierProvider);
 
     _updatePulse(shiftState.isOnShift);
 
@@ -168,6 +172,25 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                             ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
                           },
                         ),
+                      ],
+                      if (submitAction != null) ...[
+                        const SizedBox(height: 12),
+                        _SubmitButton(
+                          isLoading: submitState is AsyncLoading,
+                          guard: ref.watch(submitGuardProvider),
+                          onTap: () {
+                            ref.read(submitDayNotifierProvider.notifier).submit();
+                          },
+                        ),
+                        if (submitState is AsyncError<void>)
+                          Padding(
+                            padding: const EdgeInsets.only(top: AppSpacing.sm),
+                            child: Text(
+                              'Impossibile inviare le ore. Riprova.',
+                              style: TextStyle(color: context.colors.red, fontSize: 12),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
                       ],
                       const SizedBox(height: 20),
                     ];
@@ -470,6 +493,92 @@ class _PauseButton extends StatelessWidget {
                 )
               else
                 Icon(icon, size: 16, color: accent),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: accent,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!blocked || guard.reason == null) return button;
+
+    return Column(
+      children: [
+        button,
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+          child: Text(
+            guard.reason!,
+            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: AppColors.onDarkMuted),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _SubmitButton
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// "Invia le ore" — sends the day's finished hours for approval.
+///
+/// Same visual weight and guard-driven disabled/reason treatment as [_PauseButton]; shown only
+/// when the caller has already confirmed the server offers `Submit` (see the `submitAction` null
+/// check at this widget's call site) — a control offering something the server never mentioned
+/// would fail on tap for reasons the technician cannot see coming.
+class _SubmitButton extends StatelessWidget {
+  const _SubmitButton({
+    required this.isLoading,
+    required this.onTap,
+    this.guard = TimbraGuard.allowed,
+  });
+
+  final bool isLoading;
+  final VoidCallback onTap;
+  final TimbraGuard guard;
+
+  @override
+  Widget build(BuildContext context) {
+    const label = 'INVIA ORE';
+    final blocked = guard.blocked;
+    final accent = context.colors.green;
+
+    final button = Semantics(
+      button: true,
+      enabled: !blocked,
+      label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
+      child: Opacity(
+        opacity: blocked ? 0.4 : 1,
+        child: AppTappable(
+          onTap: isLoading || blocked ? null : onTap,
+          color: Colors.white.withAlpha(13),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: accent.withAlpha(120)),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isLoading)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                )
+              else
+                Icon(LucideIcons.send, size: 16, color: accent),
               const SizedBox(width: 8),
               Text(
                 label,

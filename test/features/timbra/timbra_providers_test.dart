@@ -14,6 +14,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
@@ -35,6 +36,8 @@ class _StubRepo implements IWorkSessionRepository {
     required String id,
     required DateTime eventTime,
     required String eventType,
+    double? latitude,
+    double? longitude,
   }) async {}
   @override
   Stream<List<WorkSession>> watchTodaySessions() => const Stream.empty();
@@ -44,6 +47,8 @@ class _StubRepo implements IWorkSessionRepository {
   Future<void> markSynced(List<String> ids) async {}
   @override
   Future<void> clearToday() async {}
+  @override
+  Future<void> markReconciledOrphan(String id) async {}
 }
 
 class _NoopApiClient extends WorklogApiClient {
@@ -56,6 +61,31 @@ class _NoopApiClient extends WorklogApiClient {
 
 TimbraSyncService _noopSyncService() =>
     TimbraSyncService(repo: _StubRepo(), apiClient: _NoopApiClient());
+
+/// Fake location service returning a fixed coordinate, never prompting — same shape as
+/// cantiere_timbra_screen_test.dart's `_FakeLocationService`.
+class _FakeLocationService extends ILocationService {
+  const _FakeLocationService(this._coords);
+  final GpsCoords? _coords;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => _coords;
+}
+
+/// Fake location service that would prompt for permission — PunchNotifier must never call
+/// getCurrentPosition() when this is true (see `_captureGpsSilently`'s own doc comment on why
+/// simple timbra must never interrupt a punch with a permission dialog).
+class _WouldPromptLocationService extends ILocationService {
+  const _WouldPromptLocationService();
+
+  @override
+  Future<bool> willPromptForPermission() async => true;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async {
+    throw StateError('must not be called when willPromptForPermission() is true');
+  }
+}
 
 // ── deriveShiftState unit tests ───────────────────────────────────────────────
 
@@ -399,4 +429,294 @@ void main() {
       expect(guard.reason, contains('pausa'));
     });
   });
+
+  // ── submitGuardProvider / SubmitDayNotifier ──────────────────────────────────
+  //
+  // Backend `POST /api/worklog/today/submit` exists and GiornataDto already advertises a
+  // `Submit` action; nothing on mobile called it before this. submitGuardProvider mirrors
+  // pauseGuardProvider's forwarding contract (resolveGuard itself is exhaustively covered in
+  // timbra_guard_test.dart); SubmitDayNotifier is the thing that actually calls the endpoint.
+
+  group('submitGuardProvider', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = _makeDb();
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    test('blocks with the server reason when already submitted', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          giornataProvider.overrideWith(
+            (ref) async => GiornataDto(
+              status: 'ClockedOut',
+              workedMinutes: 480,
+              breakMinutes: 0,
+              isPayrollLocked: false,
+              actions: [
+                const GiornataActionDto(
+                  action: 'Submit',
+                  enabled: false,
+                  reasonCode: 'already_submitted',
+                  reason: 'Le ore di oggi sono già state inviate.',
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+      final guard = await container
+          .read(giornataProvider.future)
+          .then((_) => container.read(submitGuardProvider));
+
+      expect(guard.blocked, isTrue);
+      expect(guard.reason, contains('inviate'));
+    });
+
+    test('allows Submit when the server offers it enabled', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          giornataProvider.overrideWith(
+            (ref) async => GiornataDto(
+              status: 'ClockedOut',
+              workedMinutes: 480,
+              breakMinutes: 0,
+              isPayrollLocked: false,
+              actions: const [GiornataActionDto(action: 'Submit', enabled: true)],
+            ),
+          ),
+        ],
+      );
+
+      final guard = await container
+          .read(giornataProvider.future)
+          .then((_) => container.read(submitGuardProvider));
+
+      expect(guard.blocked, isFalse);
+    });
+  });
+
+  group('SubmitDayNotifier', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = _makeDb();
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    test('submit() calls submitToday and refreshes giornataProvider', () async {
+      var submitCalls = 0;
+      var giornataReads = 0;
+
+      final fakeClient = _SubmitCountingApiClient(onSubmit: () => submitCalls++);
+
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          worklogApiClientProvider.overrideWithValue(fakeClient),
+          giornataProvider.overrideWith((ref) async {
+            giornataReads++;
+            return GiornataDto(
+              status: 'ClockedOut',
+              workedMinutes: 480,
+              breakMinutes: 0,
+              isPayrollLocked: false,
+              actions: const [GiornataActionDto(action: 'Submit', enabled: true)],
+            );
+          }),
+        ],
+      );
+
+      // Establish the provider so invalidate() has something to refresh.
+      await container.read(giornataProvider.future);
+      expect(giornataReads, 1);
+
+      await container.read(submitDayNotifierProvider.notifier).submit();
+
+      expect(submitCalls, 1);
+      expect(container.read(submitDayNotifierProvider), isA<AsyncData<void>>());
+      // invalidate() alone doesn't force a rebuild until the provider is read again.
+      await container.read(giornataProvider.future);
+      expect(giornataReads, 2);
+    });
+
+    test('submit() surfaces a network failure as AsyncError, not a thrown exception', () async {
+      final fakeClient = _FailingSubmitApiClient();
+
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          worklogApiClientProvider.overrideWithValue(fakeClient),
+          giornataProvider.overrideWith((ref) async => null),
+        ],
+      );
+
+      await container.read(submitDayNotifierProvider.notifier).submit();
+
+      expect(container.read(submitDayNotifierProvider), isA<AsyncError<void>>());
+    });
+  });
+
+  // ── PunchNotifier GPS capture (item 10b) ─────────────────────────────────────
+  //
+  // GPS on simple attendance punch used to be hardcoded to null in TimbraSyncService, even
+  // though a position was often available for free. PunchNotifier now captures it, silently and
+  // best-effort, for interval-opening events (ingresso/ripresa) only.
+
+  group('PunchNotifier GPS capture', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = _makeDb();
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    test('punch-in (ingresso) persists the captured position', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          locationServiceProvider.overrideWithValue(
+            const _FakeLocationService((lat: 45.4654, lng: 9.1859)),
+          ),
+        ],
+      );
+
+      await container.read(punchNotifierProvider.notifier).punch(const TimbraState());
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      expect(sessions.single.eventType, 'ingresso');
+      expect(sessions.single.latitude, 45.4654);
+      expect(sessions.single.longitude, 9.1859);
+    });
+
+    test('punch-out (fine) never carries a position, even when one is available', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          locationServiceProvider.overrideWithValue(
+            const _FakeLocationService((lat: 45.4654, lng: 9.1859)),
+          ),
+        ],
+      );
+
+      final notifier = container.read(punchNotifierProvider.notifier);
+      await notifier.punch(const TimbraState());
+      await notifier.punch(const TimbraState(isOnShift: true));
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      final fine = sessions.firstWhere((s) => s.eventType == 'fine');
+      expect(fine.latitude, isNull);
+      expect(fine.longitude, isNull);
+    });
+
+    test('no position available (GPS off/denied) → event persists with null coordinates, punch '
+        'still succeeds', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          locationServiceProvider.overrideWithValue(const _FakeLocationService(null)),
+        ],
+      );
+
+      await container.read(punchNotifierProvider.notifier).punch(const TimbraState());
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      expect(sessions.single.eventType, 'ingresso');
+      expect(sessions.single.latitude, isNull);
+      expect(container.read(punchNotifierProvider), isA<AsyncData<void>>());
+    });
+
+    test('never prompts for permission — skips capture instead of asking', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          locationServiceProvider.overrideWithValue(const _WouldPromptLocationService()),
+        ],
+      );
+
+      // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching this
+      // line without throwing is the assertion that _captureGpsSilently short-circuited on
+      // willPromptForPermission() instead of prompting.
+      await container.read(punchNotifierProvider.notifier).punch(const TimbraState());
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      expect(sessions.single.latitude, isNull);
+      expect(container.read(punchNotifierProvider), isA<AsyncData<void>>());
+    });
+
+    test('ripresa (resume) also captures a position, like ingresso', () async {
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          locationServiceProvider.overrideWithValue(
+            const _FakeLocationService((lat: 45.5, lng: 9.5)),
+          ),
+        ],
+      );
+
+      final notifier = container.read(punchNotifierProvider.notifier);
+      await notifier.punch(const TimbraState()); // ingresso
+      await notifier.togglePause(const TimbraState(isOnShift: true)); // pausa
+      await notifier.togglePause(const TimbraState(isOnShift: true, isOnPause: true)); // ripresa
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      final ripresa = sessions.firstWhere((s) => s.eventType == 'ripresa');
+      expect(ripresa.latitude, 45.5);
+      expect(ripresa.longitude, 9.5);
+    });
+  });
+}
+
+class _SubmitCountingApiClient extends WorklogApiClient {
+  _SubmitCountingApiClient({required this.onSubmit}) : super(Dio());
+  final void Function() onSubmit;
+
+  @override
+  Future<GiornataDto> submitToday() async {
+    onSubmit();
+    return const GiornataDto(
+      status: 'ClockedOut',
+      workedMinutes: 480,
+      breakMinutes: 0,
+      isPayrollLocked: false,
+      actions: [],
+    );
+  }
+}
+
+class _FailingSubmitApiClient extends WorklogApiClient {
+  _FailingSubmitApiClient() : super(Dio());
+
+  @override
+  Future<GiornataDto> submitToday() async {
+    throw DioException(requestOptions: RequestOptions(path: '/api/worklog/today/submit'));
+  }
 }

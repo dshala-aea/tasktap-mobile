@@ -66,6 +66,7 @@ class TicketCreationQueue {
     String? assignedUserId,
     required int statusId,
     required int typeId,
+    String priorita = 'Media',
     required bool isOnline,
   }) async {
     final id = const Uuid().v4();
@@ -78,6 +79,7 @@ class TicketCreationQueue {
       assignedUserId: assignedUserId,
       statusId: statusId,
       typeId: typeId,
+      priorita: priorita,
       state: isOnline ? PendingTicketState.submitting : PendingTicketState.pendingSync,
     );
 
@@ -134,6 +136,7 @@ class TicketCreationQueue {
         assignedUserId: t.assignedUserId,
         statusId: t.statusId,
         typeId: t.typeId,
+        priorita: t.priorita,
         // The local row id, unchanged across every attempt — that is the whole
         // point. A new one per attempt would deduplicate nothing.
         clientId: t.id,

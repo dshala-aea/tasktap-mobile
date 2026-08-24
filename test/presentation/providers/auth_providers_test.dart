@@ -190,6 +190,33 @@ void main() {
 
       verify(() => repo.signOut()).called(1);
     });
+
+    // Regression: logout used to never unregister this device's FCM token, so a signed-out
+    // device kept receiving push for an account it was no longer signed in on. The fix reads
+    // `currentUser?.accessToken` and calls `NotificationService.instance.unregisterDeviceToken`
+    // BEFORE `repo.signOut()` runs (the token is gone the moment sign-out completes) — but that
+    // call is guarded on `NotificationService.isAvailable`, which is false in every widget/unit
+    // test (Firebase is never initialized here; see the identical guard/precedent this mirrors in
+    // impostazioni_screen_test.dart, "tapping push toggle... does not crash"). So the assertion
+    // this test can make is exactly that one: with a logged-in user (a real, non-empty access
+    // token — the thing that would reach the vulnerable `NotificationService.instance` line if
+    // the guard didn't hold), signOut() still completes and still calls repo.signOut(), rather
+    // than throwing `[core/no-app]` out of the FCM unregister step.
+    test(
+      'signOut does not crash and still signs out when a real access token is present '
+      '(Firebase unavailable in test — the isAvailable guard is what is under test)',
+      () async {
+        when(() => repo.currentUser).thenReturn(_fakeUser(token: 'real-token'));
+        when(() => repo.signOut()).thenAnswer((_) async {});
+
+        final container = _makeContainer(repo);
+        addTearDown(container.dispose);
+
+        await container.read(loginProvider.notifier).signOut();
+
+        verify(() => repo.signOut()).called(1);
+      },
+    );
   });
 
   // ── Router redirect logic ──────────────────────────────────────────────

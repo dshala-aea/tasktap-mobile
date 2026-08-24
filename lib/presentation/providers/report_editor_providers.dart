@@ -293,6 +293,7 @@ class ReportEditorState {
     ticketId: ticketId,
     customerId: customerId,
     details: details.isEmpty ? null : details,
+    metadataJson: null, // not consulted by validateDraft
     insertedUserId: insertedUserId,
     locationId: locationId ?? '',
     startedAt: null,
@@ -743,7 +744,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       scheduleId: Value(state.scheduleId),
       ticketId: Value(state.ticketId),
       customerId: Value(state.customerId),
-      details: Value(_buildDetailsJson()),
+      // The technician's actual typed description — NOT the GPS/free-text metadata blob. These
+      // used to collide in this same column (see `metadataJson` doc comment on
+      // DraftReports): every autosave overwrote whatever the technician had typed with a JSON
+      // blob that never included it, and that blob is what reached the backend/customer PDF as
+      // "Descrizione". `details` and `metadataJson` are independent columns now.
+      details: Value(state.details.isEmpty ? null : state.details),
+      metadataJson: Value(_buildMetadataJson()),
       insertedUserId: Value(state.insertedUserId),
       locationId: Value(state.locationId ?? ''),
       materialiNotRequired: Value(state.materialiNotRequired),
@@ -755,9 +762,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     );
   }
 
-  /// Pack free-text / GPS fields into the `details` JSON column so they survive
-  /// round-trips without requiring extra schema columns.
-  String? _buildDetailsJson() {
+  /// Pack free-text / GPS fields into the `metadataJson` column so they survive round-trips.
+  ///
+  /// Was packed into `details` — the same column the technician's typed description lives in
+  /// (see `setDetails`) — which meant every autosave clobbered the typed text with this blob and
+  /// the two never coexisted. `metadataJson` is its own column now (schema v14); this no longer
+  /// touches `details` at all.
+  String? _buildMetadataJson() {
     final parts = <String>[];
     if (state.customerFreeText?.isNotEmpty ?? false) {
       parts.add('"customerFreeText":"${state.customerFreeText}"');

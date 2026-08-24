@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -64,14 +67,54 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
   }
 }
 
-class _CantiereDetailBody extends StatelessWidget {
+/// Delete confirmation dialog + API call — mirrors `_deleteCustomer` in
+/// admin_customer_detail_screen.dart (no shared confirm-dialog widget exists yet in this app).
+Future<void> _deleteCantiere(BuildContext context, WidgetRef ref, String cantiereId) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Eliminare il cantiere?'),
+      content: const Text(
+        "L'eliminazione è definitiva. Interventi e log collegati non saranno più raggiungibili "
+        'da qui.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  try {
+    await ref.read(adminApiClientProvider).deleteCantiere(cantiereId);
+    unawaited(ref.read(syncProvider.notifier).performSync());
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cantiere eliminato')));
+      context.pop(true);
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Impossibile eliminare. Riprova.'),
+          backgroundColor: context.colors.red,
+        ),
+      );
+    }
+  }
+}
+
+class _CantiereDetailBody extends ConsumerWidget {
   const _CantiereDetailBody({required this.cantiere, required this.cantiereId});
 
   final CantieriData cantiere;
   final String cantiereId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final startLabel = cantiere.startDate != null
         ? DateFormat('dd/MM/yyyy').format(cantiere.startDate!.toLocal())
         : '—';
@@ -82,7 +125,19 @@ class _CantiereDetailBody extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(title: cantiere.name, subtitle: cantiere.city ?? '', showBack: true),
+          child: ScreenHeader(
+            title: cantiere.name,
+            subtitle: cantiere.city ?? '',
+            showBack: true,
+            actions: [
+              HeaderIconBtn(
+                icon: LucideIcons.trash2,
+                label: 'Elimina cantiere',
+                glass: true,
+                onTap: () => _deleteCantiere(context, ref, cantiereId),
+              ),
+            ],
+          ),
         ),
         SliverToBoxAdapter(
           child: Padding(

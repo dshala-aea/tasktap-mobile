@@ -278,6 +278,16 @@ class DraftReports extends Table {
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
   TextColumn get details => text().nullable()();
+
+  /// GPS/free-text fallback metadata (customerFreeText, locationFreeText, ticketFreeText,
+  /// cantiereFreeText, workAddress, gpsLatitude, gpsLongitude) packed as a JSON string.
+  ///
+  /// Deliberately a separate column from [details]: the editor's autosave used to pack this same
+  /// metadata directly into [details], silently overwriting the technician's actual typed
+  /// description on every keystroke before it ever reached the backend or the customer-facing
+  /// PDF. See ReportEditorNotifier._buildMetadataJson in report_editor_providers.dart.
+  TextColumn get metadataJson => text().nullable()();
+
   TextColumn get insertedUserId => text()();
   TextColumn get locationId => text()();
   DateTimeColumn get startedAt => dateTime().nullable()();
@@ -411,6 +421,15 @@ class WorkSessions extends Table {
   /// True while not yet synced to the backend.
   BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
 
+  /// GPS position captured at punch time, for `ingresso`/`ripresa` (interval-opening) events —
+  /// null for `fine`/`pausa` and whenever the technician has GPS off or permission was never
+  /// granted. Simple timbra still works with no position at all (see cantiere_timbra_screen's own
+  /// copy: "La timbratura normale... funziona senza GPS"); this only stops the app from silently
+  /// discarding a position it could have captured for free instead of ever sending it. Mirrors the
+  /// single "GPS latitude/longitude at punch time" pair `MobileSessionDto` accepts server-side.
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -543,6 +562,12 @@ class PendingTickets extends Table {
   IntColumn get statusId => integer()();
   IntColumn get typeId => integer()();
 
+  /// TicketPriorityEnum: Bassa | Media | Alta | Urgente. Sent on the wire as `priorita`
+  /// (backend's `[JsonPropertyName("priorita")]`, string-serialized — see TicketPriorityEnum.cs).
+  /// Defaults to "Media" to match the backend's own default when a mobile-created ticket predates
+  /// this column or the picker is left untouched.
+  TextColumn get priorita => text().withDefault(const Constant('Media'))();
+
   /// pendingSync | submitting | submitted | failed
   TextColumn get state => text().withDefault(const Constant('pendingSync'))();
 
@@ -589,7 +614,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration {
@@ -668,6 +693,24 @@ class AppDatabase extends _$AppDatabase {
           // able to say why instead of showing an unexplained failure, so subscription status is
           // now cached alongside the rest of the entitlement.
           await m.addColumn(entitlements, entitlements.subscriptionStatus);
+        }
+        if (from < 14) {
+          // Rapportino autosave was packing GPS/free-text metadata into `details` — the same
+          // column that holds the technician's actual typed description — silently overwriting
+          // it on every keystroke. Splitting metadata into its own column stops the collision;
+          // see the doc comment on `DraftReports.metadataJson`.
+          await m.addColumn(draftReports, draftReports.metadataJson);
+        }
+        if (from < 15) {
+          // The mobile ticket creation form had no priority field at all — every ticket created
+          // from a phone landed at the backend's implicit default with no way to say otherwise.
+          await m.addColumn(pendingTickets, pendingTickets.priorita);
+        }
+        if (from < 16) {
+          // Simple attendance punch always sent GPS as null even when a position was available
+          // for free (permission already granted). See `WorkSessions.latitude`/`longitude`.
+          await m.addColumn(workSessions, workSessions.latitude);
+          await m.addColumn(workSessions, workSessions.longitude);
         }
       },
     );

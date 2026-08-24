@@ -26,6 +26,7 @@ class PendingTicketRepository {
     String? assignedUserId,
     required int statusId,
     required int typeId,
+    String priorita = 'Media',
     required PendingTicketState state,
   }) async {
     await _db
@@ -41,6 +42,7 @@ class PendingTicketRepository {
             assignedUserId: Value(assignedUserId),
             statusId: statusId,
             typeId: typeId,
+            priorita: Value(priorita),
             state: Value(state.toPersistedString()),
           ),
         );

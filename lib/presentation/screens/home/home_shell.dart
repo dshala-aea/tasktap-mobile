@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,8 @@ import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
+import '../../../data/timbratura/work_log_reconcile_watcher.dart';
+import '../../../data/timbratura/work_log_reconciler.dart';
 
 /// The main app shell with the 5-tab floating-pill bottom navigation.
 ///
@@ -18,6 +22,13 @@ import '../../../data/timbratura/timbra_sync_watcher.dart';
 /// Sync triggers:
 /// - On first mount (post-login): calls [SyncNotifier.performSync].
 /// - On app foreground resume: calls [SyncNotifier.performSync].
+///
+/// Worklog reconciliation triggers (see work_log_reconciler.dart for why this exists — in short,
+/// the same account clocking out on the web must not leave mobile showing "on shift" forever):
+/// - On first mount and on reconnect: see [initWorkLogReconcileWatcher].
+/// - On app foreground resume: reconciles immediately.
+/// - Every 60s while foregrounded: matches the dashboard's activeTrackersProvider poll cadence.
+///   Cancelled while backgrounded — this is a foreground fallback, not a background service.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.navigationShell});
 
@@ -28,6 +39,8 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
+  Timer? _reconcilePoll;
+
   @override
   void initState() {
     super.initState();
@@ -50,20 +63,39 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // permanently empty and the Altro hub offered every office module to every technician
       // regardless. The server refused them on arrival, which is the wrong place to find out.
       initEntitlementRefreshWatcher(ref);
+      // Corrects local "on shift" state when the same account clocked out elsewhere (web).
+      // See work_log_reconciler.dart.
+      initWorkLogReconcileWatcher(ref);
+      _startReconcilePoll();
     });
   }
 
   @override
   void dispose() {
+    _reconcilePoll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  /// Called when the app is brought back to foreground.
+  /// Starts (or restarts) the 60s foreground reconciliation poll.
+  void _startReconcilePoll() {
+    _reconcilePoll?.cancel();
+    _reconcilePoll = Timer.periodic(const Duration(seconds: 60), (_) {
+      ref.read(workLogReconcilerProvider).reconcile();
+    });
+  }
+
+  /// Called on every app lifecycle transition.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(syncProvider.notifier).performSync();
+      ref.read(workLogReconcilerProvider).reconcile();
+      _startReconcilePoll();
+    } else {
+      // Backgrounded (paused/inactive/hidden): stop the foreground fallback poll. This is
+      // deliberately not a background service — reconciliation resumes on the next foreground.
+      _reconcilePoll?.cancel();
     }
   }
 

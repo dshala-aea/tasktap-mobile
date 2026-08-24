@@ -45,8 +45,17 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String)),
         ),
         data: (detail) {
-          final data = detail ?? squadra;
-          final membri = (data['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+          // GET /api/squadre/{id} wraps the squadra's own fields under a "squadra" key
+          // (backend record SquadraDetailResponse(Squadra Squadra, List<SquadraMembro> Membri) —
+          // see SquadraDetailResponse.cs), with "membri" as the sibling key holding the member
+          // list. Reading squadra fields off the un-unwrapped envelope left nome/descrizione/
+          // specializzazione/note (and capSquadraNome, added below) blank on every real fetch;
+          // only "membri" happened to work because it is genuinely top-level.
+          //
+          // The `?? squadra` fallback is the flat row the list screen already has in hand
+          // (`extra: squadra` in admin_squadra_list_screen.dart) — no such wrapper there.
+          final data = (detail?['squadra'] as Map<String, dynamic>?) ?? squadra;
+          final membri = (detail?['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
           return _SquadraDetailBody(squadra: data, membri: membri);
         },
       ),
@@ -80,6 +89,9 @@ class _SquadraDetailBody extends ConsumerWidget {
     final descrizione = squadra['descrizione'] as String? ?? '';
     final spec = squadra['specializzazione'] as String? ?? '';
     final note = squadra['note'] as String? ?? '';
+    // Derived on every /api/squadre/{id} response (PopulateCapiSquadraAsync in
+    // SquadreController) — never read on mobile before.
+    final capoNome = squadra['capSquadraNome'] as String?;
 
     return CustomScrollView(
       slivers: [
@@ -101,7 +113,10 @@ class _SquadraDetailBody extends ConsumerWidget {
             ],
           ),
         ),
-        if (descrizione.isNotEmpty || spec.isNotEmpty || note.isNotEmpty)
+        if (descrizione.isNotEmpty ||
+            spec.isNotEmpty ||
+            note.isNotEmpty ||
+            (capoNome?.isNotEmpty ?? false))
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.pagePadding),
@@ -113,6 +128,11 @@ class _SquadraDetailBody extends ConsumerWidget {
                     KeyVal(
                       label: 'Specializzazione',
                       value: spec.isNotEmpty ? spec : '—',
+                      showDivider: true,
+                    ),
+                    KeyVal(
+                      label: 'Capo squadra',
+                      value: capoNome?.isNotEmpty == true ? capoNome! : '—',
                       showDivider: note.isNotEmpty,
                     ),
                     if (note.isNotEmpty) KeyVal(label: 'Note', value: note, showDivider: false),
@@ -138,7 +158,10 @@ class _SquadraDetailBody extends ConsumerWidget {
               delegate: SliverChildBuilderDelegate((context, i) {
                 final membro = membri[i];
                 final userId = membro['userId'] as String? ?? '';
-                final ruolo = membro['ruolo'] as String? ?? 'Membro';
+                // Backend `SquadraRuoloEnum` has no JsonStringEnumConverter — the wire value is a
+                // bare int (Membro=0, Capo=1), never a string. See SquadraRuolo in
+                // admin_api_client.dart.
+                final ruolo = SquadraRuolo.label(membro['ruolo']);
                 // A crew member was listed by `userId.substring(0, 8)` — a person, named at their
                 // own colleagues with eight characters of a GUID. `/api/squadre/{id}` returns raw
                 // SquadraMember rows and carries no name, so the name comes from the colleagues
@@ -215,7 +238,7 @@ class _AddMemberSheet extends StatefulWidget {
 
 class _AddMemberSheetState extends State<_AddMemberSheet> {
   String? _selectedUserId;
-  String _ruolo = 'Membro';
+  int _ruolo = SquadraRuolo.membro;
   bool _isLoading = true;
   bool _isSaving = false;
   List<Map<String, dynamic>> _technicians = [];
@@ -302,14 +325,17 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
           const SizedBox(height: 16),
           AppFieldShell(
             label: 'Ruolo',
-            child: DropdownButtonFormField<String>(
+            // Backend `SquadraRuoloEnum` (WorkEnums.cs) only has Membro=0/Capo=1 — no "TeamLead"
+            // value exists, so offering it here (as this dropdown used to) always fails
+            // deserialization server-side. See SquadraRuolo in admin_api_client.dart.
+            child: DropdownButtonFormField<int>(
               // ignore: deprecated_member_use — controlled field, needs value not initialValue
               value: _ruolo,
               items: const [
-                DropdownMenuItem(value: 'Membro', child: Text('Membro')),
-                DropdownMenuItem(value: 'TeamLead', child: Text('Team Lead')),
+                DropdownMenuItem(value: SquadraRuolo.membro, child: Text('Membro')),
+                DropdownMenuItem(value: SquadraRuolo.capo, child: Text('Capo squadra')),
               ],
-              onChanged: (v) => setState(() => _ruolo = v ?? 'Membro'),
+              onChanged: (v) => setState(() => _ruolo = v ?? SquadraRuolo.membro),
             ),
           ),
           const SizedBox(height: 16),

@@ -89,6 +89,10 @@ class StepRiepilogoTicket extends ConsumerWidget {
           const SizedBox(height: 12),
         ],
 
+        // ── Priority ───────────────────────────────────────────────────────
+        _SummaryRow(label: 'Priorità', value: state.priority),
+        const SizedBox(height: 12),
+
         // ── Description ────────────────────────────────────────────────────
         if (state.description != null && state.description!.isNotEmpty) ...[
           const SizedBox(height: 8),

@@ -23,6 +23,10 @@ class TicketApiClient {
     String? assignedUserId,
     required int statusId,
     required int typeId,
+    // TicketPriorityEnum, sent on the wire as `priorita` — a bare string, not int (see
+    // TicketPriorityEnum.cs: it carries its own [JsonConverter(JsonStringEnumConverter)]).
+    // Bassa | Media | Alta | Urgente; matches the backend's own "Media" default.
+    String priorita = 'Media',
     String? clientId,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
@@ -36,11 +40,16 @@ class TicketApiClient {
         'assignedUserId': ?assignedUserId,
         'statusId': statusId,
         'typeId': typeId,
+        'priorita': priorita,
         'clientId': ?clientId,
       },
     );
 
-    return response.data!['ticketId'] as String;
+    // The backend returns the shared `BasicPkResponse` — `{"id": ...}` — never `{"ticketId": ...}`.
+    // Reading the wrong key here meant every successful create threw right after the ticket had
+    // already been recorded server-side (same bug class as AdminApiClient — see
+    // admin_api_client_test.dart).
+    return response.data!['id'] as String;
   }
 
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {

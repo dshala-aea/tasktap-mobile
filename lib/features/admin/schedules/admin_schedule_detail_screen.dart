@@ -9,6 +9,8 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../features/calendario/calendario_providers.dart' show scheduleStatusName;
+import '../../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -62,17 +64,30 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
   }
 }
 
-class _ScheduleDetailBody extends StatelessWidget {
+class _ScheduleDetailBody extends ConsumerWidget {
   const _ScheduleDetailBody({required this.schedule, required this.scheduleId});
 
   final Schedule schedule;
   final String scheduleId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final dateLabel = DateFormat('EEEE d MMMM yyyy', 'it').format(schedule.activityDate.toLocal());
     final timeLabel =
         '${_fmtTime(schedule.timeStartMinutes)} — ${_fmtTime(schedule.timeEndMinutes)}';
+
+    // The DTO already carries all of this (Schedule.userId/locationId/statusId/ticketId — see
+    // app_database.dart) — it was just never rendered here. Resolved through the same lookups the
+    // rest of the app already uses (colleagueNameProvider, allLocationsProvider,
+    // scheduleStatusName, allTicketsProvider), never re-derived.
+    final assigneeName = ref.watch(colleagueNameProvider(schedule.userId)).valueOrNull;
+    final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
+    final sedeName = _findLocationName(locations, schedule.locationId);
+    final statusName = scheduleStatusName(schedule.statusId);
+    final tickets = ref.watch(allTicketsProvider).valueOrNull ?? const [];
+    final linkedTicketTitle = schedule.ticketId == null
+        ? null
+        : _findTicketTitle(tickets, schedule.ticketId!);
 
     return CustomScrollView(
       slivers: [
@@ -93,11 +108,16 @@ class _ScheduleDetailBody extends StatelessWidget {
                   KeyVal(label: 'Titolo', value: schedule.title.isNotEmpty ? schedule.title : '—'),
                   KeyVal(label: 'Data', value: dateLabel),
                   KeyVal(label: 'Orario', value: timeLabel),
+                  KeyVal(label: 'Assegnato a', value: assigneeName ?? '—'),
+                  KeyVal(label: 'Sede', value: sedeName ?? '—'),
+                  KeyVal(label: 'Stato', value: statusName),
                   KeyVal(
-                    label: 'Note',
-                    value: schedule.description.isNotEmpty ? schedule.description : '—',
-                    showDivider: false,
+                    label: 'Ticket collegato',
+                    value: linkedTicketTitle ?? '—',
+                    showDivider: schedule.description.isNotEmpty,
                   ),
+                  if (schedule.description.isNotEmpty)
+                    KeyVal(label: 'Note', value: schedule.description, showDivider: false),
                 ],
               ),
             ),
@@ -107,6 +127,20 @@ class _ScheduleDetailBody extends StatelessWidget {
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
+  }
+
+  String? _findLocationName(List<Location> locations, String locationId) {
+    for (final l in locations) {
+      if (l.id == locationId) return l.name;
+    }
+    return null;
+  }
+
+  String? _findTicketTitle(List<Ticket> tickets, String ticketId) {
+    for (final t in tickets) {
+      if (t.id == ticketId) return t.title;
+    }
+    return null;
   }
 
   String _fmtTime(int minutes) {

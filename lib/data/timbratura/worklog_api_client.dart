@@ -212,6 +212,19 @@ class WorklogApiClient {
     if (data == null) throw StateError('Risposta vuota da getGiornata');
     return GiornataDto.fromJson(data);
   }
+
+  /// POST /api/worklog/today/submit
+  ///
+  /// Sends the caller's finished hours for the day for approval (the day-level counterpart to
+  /// the `Submit` action `getGiornata` offers — see `WorkLogController.SubmitToday`). Returns the
+  /// day as it now stands, same shape as [getGiornata].
+  Future<GiornataDto> submitToday() async {
+    final response = await _dio.post<Map<String, dynamic>>('/api/worklog/today/submit');
+
+    final data = response.data;
+    if (data == null) throw StateError('Risposta vuota da submitToday');
+    return GiornataDto.fromJson(data);
+  }
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────

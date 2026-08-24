@@ -2,6 +2,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
@@ -256,10 +257,29 @@ final pauseGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
 
 /// Notifier for punch-in / punch-out / pause / resume.
 class PunchNotifier extends StateNotifier<AsyncValue<void>> {
-  PunchNotifier(this._repo, [this._syncService]) : super(const AsyncData(null));
+  PunchNotifier(this._repo, [this._syncService, ILocationService? locationService])
+    : _locationService = locationService ?? const DisabledLocationService(),
+      super(const AsyncData(null));
 
   final IWorkSessionRepository _repo;
   final TimbraSyncService? _syncService;
+  final ILocationService _locationService;
+
+  /// Best-effort GPS capture for an interval-opening event (ingresso/ripresa).
+  ///
+  /// Deliberately silent: never prompts for permission (`willPromptForPermission` guard) and
+  /// never blocks or fails the punch when a position isn't available. Simple timbra works with
+  /// no position at all by design — see cantiere_timbra_screen's own copy, "La timbratura
+  /// normale... funziona senza GPS" — this only stops the app from discarding a position it could
+  /// have captured for free (permission already granted) instead of ever recording it.
+  Future<GpsCoords?> _captureGpsSilently() async {
+    try {
+      if (await _locationService.willPromptForPermission()) return null;
+      return await _locationService.getCurrentPosition();
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> punch(TimbraState current) async {
     state = const AsyncLoading();
@@ -267,7 +287,14 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
       final now = DateTime.now().toUtc();
       if (!current.isOnShift) {
         // Start shift
-        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kIngresso);
+        final coords = await _captureGpsSilently();
+        await _repo.addEvent(
+          id: _uuid.v4(),
+          eventTime: now,
+          eventType: _kIngresso,
+          latitude: coords?.lat,
+          longitude: coords?.lng,
+        );
       } else {
         // End shift
         await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kFine);
@@ -286,7 +313,14 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       final now = DateTime.now().toUtc();
       if (current.isOnPause) {
-        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kRipresa);
+        final coords = await _captureGpsSilently();
+        await _repo.addEvent(
+          id: _uuid.v4(),
+          eventTime: now,
+          eventType: _kRipresa,
+          latitude: coords?.lat,
+          longitude: coords?.lng,
+        );
       } else {
         await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kPausa);
       }
@@ -305,5 +339,54 @@ final punchNotifierProvider = StateNotifierProvider.autoDispose<PunchNotifier, A
   return PunchNotifier(
     ref.watch(workSessionRepositoryProvider),
     ref.watch(timbraSyncServiceProvider),
+    ref.watch(locationServiceProvider),
   );
 });
+
+// ── Submit-day action ─────────────────────────────────────────────────────────
+
+/// The guard for "invia le ore" (submit today's finished hours for approval).
+///
+/// Mirrors [punchGuardProvider]/[pauseGuardProvider]'s `resolveGuard` merge rule with the
+/// `Submit` action. Unlike punch/pause, submitting has no meaning when the server cannot be
+/// reached at all (there is nothing local to fall back to — approval is inherently a
+/// server-side workflow), so callers combine this with an explicit check that the server
+/// actually offered `Submit` (see `giornataProvider(...).valueOrNull?.action('Submit')`) before
+/// showing the control at all; this only governs whether a shown control is tappable.
+final submitGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
+  return resolveGuard(
+    giornata: ref.watch(giornataProvider).valueOrNull,
+    hasPendingSync: ref.watch(hasPendingSyncProvider),
+    action: 'Submit',
+  );
+});
+
+/// Notifier for the day-level "invia le ore" action.
+///
+/// Backend `POST /api/worklog/today/submit` exists and `GiornataDto.actions` already tells the
+/// device when the server is willing to accept it (see `WorkLogController.SubmitToday`); nothing
+/// on mobile called it before this.
+class SubmitDayNotifier extends StateNotifier<AsyncValue<void>> {
+  SubmitDayNotifier(this._client, this._ref) : super(const AsyncData(null));
+
+  final WorklogApiClient _client;
+  final Ref _ref;
+
+  Future<void> submit() async {
+    state = const AsyncLoading();
+    try {
+      await _client.submitToday();
+      state = const AsyncData(null);
+      // The server's view of the day just changed (Submit likely went from offered to refused,
+      // reason "already_submitted") — refresh it rather than let the UI show a stale offer.
+      _ref.invalidate(giornataProvider);
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
+  }
+}
+
+final submitDayNotifierProvider =
+    StateNotifierProvider.autoDispose<SubmitDayNotifier, AsyncValue<void>>((ref) {
+      return SubmitDayNotifier(ref.watch(worklogApiClientProvider), ref);
+    });

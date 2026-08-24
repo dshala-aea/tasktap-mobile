@@ -103,9 +103,13 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
                 final nome = squadra['nome'] as String? ?? '';
                 final spec = squadra['specializzazione'] as String? ?? '';
                 final colore = squadra['coloreCalendario'] as String?;
+                // Backend derives this on every /api/squadre response (PopulateCapiSquadraAsync
+                // in SquadreController) — it was never read on mobile.
+                final capoNome = squadra['capSquadraNome'] as String?;
                 return _SquadraRow(
                   nome: nome,
                   specializzazione: spec,
+                  capoNome: capoNome,
                   colore: colore,
                   isLast: i == filtered.length - 1,
                   onTap: () => context.push('/altro/squadre/${squadra['id']}', extra: squadra),
@@ -123,6 +127,7 @@ class _SquadraRow extends StatelessWidget {
   const _SquadraRow({
     required this.nome,
     required this.specializzazione,
+    this.capoNome,
     required this.colore,
     required this.isLast,
     required this.onTap,
@@ -130,9 +135,17 @@ class _SquadraRow extends StatelessWidget {
 
   final String nome;
   final String specializzazione;
+  final String? capoNome;
   final String? colore;
   final bool isLast;
   final VoidCallback onTap;
+
+  String get _subtitle {
+    final hasCapo = capoNome != null && capoNome!.isNotEmpty;
+    if (specializzazione.isNotEmpty && hasCapo) return '$specializzazione · Capo: $capoNome';
+    if (hasCapo) return 'Capo: $capoNome';
+    return specializzazione.isNotEmpty ? specializzazione : '—';
+  }
 
   Color _parseColor(BuildContext context, String? hex) {
     if (hex == null || hex.isEmpty) return context.colors.inkMuted;
@@ -154,7 +167,7 @@ class _SquadraRow extends StatelessWidget {
         child: Icon(LucideIcons.users, size: 20, color: _parseColor(context, colore)),
       ),
       title: nome,
-      subtitle: specializzazione.isNotEmpty ? specializzazione : '—',
+      subtitle: _subtitle,
       showDivider: !isLast,
       onTap: onTap,
     );

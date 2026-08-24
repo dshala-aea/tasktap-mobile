@@ -11,6 +11,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
@@ -26,6 +27,8 @@ abstract class _StubRepo implements IWorkSessionRepository {
     required String id,
     required DateTime eventTime,
     required String eventType,
+    double? latitude,
+    double? longitude,
   }) async {}
 
   @override
@@ -39,6 +42,9 @@ abstract class _StubRepo implements IWorkSessionRepository {
 
   @override
   Future<void> clearToday() async {}
+
+  @override
+  Future<void> markReconciledOrphan(String id) async {}
 }
 
 class _NoopRepo extends _StubRepo {}
@@ -63,11 +69,17 @@ AppDatabase _makeDb() {
   return AppDatabase(NativeDatabase.memory());
 }
 
-Widget _buildApp(AppDatabase db) {
+Widget _buildApp(AppDatabase db, {ILocationService? locationService}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),
+      // Real LocationService touches platform channels (Geolocator) that no widget test here
+      // mocks, and PunchNotifier now calls it (best-effort, silent GPS capture — see
+      // PunchNotifier._captureGpsSilently) on every punch/pause. DisabledLocationService is the
+      // same "no position, never prompts" behavior the app itself falls back to whenever the
+      // technician has GPS turned off, so this is a realistic default, not just a test workaround.
+      locationServiceProvider.overrideWithValue(locationService ?? const DisabledLocationService()),
     ],
     child: const MaterialApp(home: TimbraScreen()),
   );

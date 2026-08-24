@@ -36,6 +36,9 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
   DateTime? _startDate;
   DateTime? _endDate;
   String? _selectedCustomerId;
+  // CantiereStatusEnum (WorkEnums.cs): Active=0, Completed=1, Cancelled=2. New cantieri default to
+  // Active; edits prefill from the cached row in _loadCantiere.
+  int _status = 0;
   bool _isSaving = false;
 
   /// True once an edit-mode load has completed and found nothing in the
@@ -70,6 +73,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
         _startDate = cantiere.startDate;
         _endDate = cantiere.endDate;
         _selectedCustomerId = cantiere.customerId;
+        _status = cantiere.status;
       });
     } else {
       setState(() => _prefillFailed = true);
@@ -124,6 +128,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
           notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           startDate: _startDate,
           endDate: _endDate,
+          status: _status,
           customerId: _selectedCustomerId,
         );
       } else {
@@ -135,6 +140,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
           notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
           startDate: _startDate,
           endDate: _endDate,
+          status: _status,
           customerId: _selectedCustomerId,
         );
       }
@@ -269,6 +275,22 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
             const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+            const SizedBox(height: 16),
+
+            // CantiereStatusEnum (WorkEnums.cs): every cantiere created from mobile used to be
+            // silently forced to Active (status: 0) with no way to pick anything else.
+            AppFieldShell(
+              label: 'Stato',
+              child: DropdownButtonFormField<int>(
+                initialValue: _status,
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text('Attivo')),
+                  DropdownMenuItem(value: 1, child: Text('Completato')),
+                  DropdownMenuItem(value: 2, child: Text('Annullato')),
+                ],
+                onChanged: (v) => setState(() => _status = v ?? 0),
+              ),
+            ),
             const SizedBox(height: 32),
 
             AppButton(

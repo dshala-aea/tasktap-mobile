@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
@@ -78,6 +79,16 @@ class LoginNotifier extends StateNotifier<LoginState> {
   }
 
   Future<void> signOut() async {
+    // Unregister this device's FCM token BEFORE signing out — the access token this call needs
+    // is gone the moment signOut() completes, and a device that stays registered keeps receiving
+    // push for an account no longer signed in on it. Mirrors the same guard/token-source
+    // `_syncPushRegistration` already uses in impostazioni_provider.dart.
+    if (NotificationService.isAvailable) {
+      final token = _repo.currentUser?.accessToken;
+      if (token != null && token.isNotEmpty) {
+        await NotificationService.instance.unregisterDeviceToken(token);
+      }
+    }
     await _repo.signOut();
     state = const LoginState();
   }

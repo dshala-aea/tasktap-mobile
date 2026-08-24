@@ -135,6 +135,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       assignedUserId: _formState.assignedUserId,
       statusId: _formState.statusId!,
       typeId: _formState.typeId!,
+      priorita: _formState.priority,
       isOnline: isOnline,
     );
 

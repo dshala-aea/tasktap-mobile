@@ -21,7 +21,13 @@ import '../local/app_database.dart';
 
 /// One work interval ready to be sent to the server.
 class WorkInterval {
-  const WorkInterval({required this.clientId, required this.startTime, this.endTime});
+  const WorkInterval({
+    required this.clientId,
+    required this.startTime,
+    this.endTime,
+    this.latitude,
+    this.longitude,
+  });
 
   /// Stable identifier derived from the opening event's id.
   final String clientId;
@@ -32,8 +38,16 @@ class WorkInterval {
   /// UTC timestamp of the interval end (fine or pausa event), or null if active.
   final DateTime? endTime;
 
+  /// GPS position captured on the opening (ingresso/ripresa) event, or null when none was
+  /// captured — the backend's `MobileSessionDto` carries a single lat/lng pair per interval
+  /// ("GPS latitude at punch time"), so only the opener's position is meaningful here.
+  final double? latitude;
+  final double? longitude;
+
   @override
-  String toString() => 'WorkInterval(clientId: $clientId, start: $startTime, end: $endTime)';
+  String toString() =>
+      'WorkInterval(clientId: $clientId, start: $startTime, end: $endTime, '
+      'lat: $latitude, lng: $longitude)';
 }
 
 // ── Assembler ─────────────────────────────────────────────────────────────────
@@ -52,6 +66,8 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
 
   String? openClientId;
   DateTime? openStart;
+  double? openLatitude;
+  double? openLongitude;
 
   for (final s in sessions) {
     final t = s.eventTime; // stored as UTC by the repo
@@ -61,17 +77,37 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
       case 'ripresa':
         // Close any accidentally-open interval (defensive: shouldn't happen in normal flow)
         if (openClientId != null && openStart != null) {
-          intervals.add(WorkInterval(clientId: openClientId, startTime: openStart, endTime: t));
+          intervals.add(
+            WorkInterval(
+              clientId: openClientId,
+              startTime: openStart,
+              endTime: t,
+              latitude: openLatitude,
+              longitude: openLongitude,
+            ),
+          );
         }
         openClientId = s.id;
         openStart = t;
+        openLatitude = s.latitude;
+        openLongitude = s.longitude;
 
       case 'fine':
       case 'pausa':
         if (openClientId != null && openStart != null) {
-          intervals.add(WorkInterval(clientId: openClientId, startTime: openStart, endTime: t));
+          intervals.add(
+            WorkInterval(
+              clientId: openClientId,
+              startTime: openStart,
+              endTime: t,
+              latitude: openLatitude,
+              longitude: openLongitude,
+            ),
+          );
           openClientId = null;
           openStart = null;
+          openLatitude = null;
+          openLongitude = null;
         }
       // else: close event with no open interval — ignore
 
@@ -83,7 +119,15 @@ List<WorkInterval> assembleIntervals(List<WorkSession> sessions) {
 
   // If still open, emit active interval (endTime null).
   if (openClientId != null && openStart != null) {
-    intervals.add(WorkInterval(clientId: openClientId, startTime: openStart, endTime: null));
+    intervals.add(
+      WorkInterval(
+        clientId: openClientId,
+        startTime: openStart,
+        endTime: null,
+        latitude: openLatitude,
+        longitude: openLongitude,
+      ),
+    );
   }
 
   return intervals;

@@ -294,6 +294,11 @@ void main() {
       );
     });
 
+    contractTest('submitting the day matches the server', () {
+      final client = WorklogApiClient(dio);
+      return capture(() => client.submitToday());
+    });
+
     contractTest('cantiere clock-in matches the server', () {
       final client = CantiereWorklogApiClient(dio);
       return capture(

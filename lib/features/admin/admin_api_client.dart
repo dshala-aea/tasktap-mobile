@@ -12,6 +12,20 @@ import '../../data/api/json_parse.dart';
 // local Drift cache for offline-first behavior.
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// Squadra member role — mirrors backend `SquadraRuoloEnum` (`WorkEnums.cs`), which has no
+/// `[JsonStringEnumConverter]` and no `TeamLead` value. It deserializes as a bare integer, so
+/// sending `ruolo` as a JSON string (e.g. `"TeamLead"`) fails backend deserialization for the
+/// whole add-member/change-role call.
+class SquadraRuolo {
+  static const int membro = 0;
+  static const int capo = 1;
+
+  /// Display label for a `ruolo` value read back from the backend. Defaults to "Membro" for
+  /// anything other than [capo] (including missing/null), matching the backend enum's own
+  /// `Membro = 0` default.
+  static String label(Object? ruolo) => ruolo == capo ? 'Capo' : 'Membro';
+}
+
 class AdminApiClient {
   AdminApiClient(this._dio);
   final Dio _dio;
@@ -47,7 +61,7 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
-    return res.data!['customerId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateCustomer(
@@ -82,6 +96,11 @@ class AdminApiClient {
     );
   }
 
+  /// Soft-deletes a customer. Mirrors `DELETE /api/customers/{id}` (CustomersController.Delete).
+  Future<void> deleteCustomer(String id) async {
+    await _dio.delete('/api/customers/$id');
+  }
+
   // ── Locations ────────────────────────────────────────────────────────────
 
   Future<String> createLocation({
@@ -112,7 +131,7 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
-    return res.data!['locationId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateLocation(
@@ -175,7 +194,7 @@ class AdminApiClient {
         'customerId': ?customerId,
       },
     );
-    return res.data!['cantiereId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateCantiere(
@@ -204,6 +223,11 @@ class AdminApiClient {
         'customerId': ?customerId,
       },
     );
+  }
+
+  /// Hard-deletes a cantiere. Mirrors `DELETE /api/cantieri/{id}` (CantieriController.Delete).
+  Future<void> deleteCantiere(String id) async {
+    await _dio.delete('/api/cantieri/$id');
   }
 
   // ── Schedules ────────────────────────────────────────────────────────────
@@ -244,7 +268,7 @@ class AdminApiClient {
         'squadraId': ?squadraId,
       },
     );
-    return res.data!['scheduleId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateSchedule(
@@ -327,7 +351,7 @@ class AdminApiClient {
         'salePrice': ?salePrice,
       },
     );
-    return res.data!['materialId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateMateriale(
@@ -389,7 +413,7 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
-    return res.data!['prodottoAssistenzaId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateProdottoAssistenza(
@@ -456,7 +480,7 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
-    return res.data!['contractId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateContract(
@@ -525,7 +549,7 @@ class AdminApiClient {
         if (note != null && note.isNotEmpty) 'note': note,
       },
     );
-    return res.data!['squadraId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateSquadra(
@@ -553,7 +577,7 @@ class AdminApiClient {
   Future<void> addSquadraMember(
     String squadraId, {
     required String userId,
-    String ruolo = 'Membro',
+    int ruolo = SquadraRuolo.membro,
   }) async {
     await _dio.post(
       '/api/squadre/$squadraId/membri',

@@ -89,13 +89,18 @@ void main() {
       expect(draft!.title, 'Manutenzione pompa');
     });
 
-    test('setDetails persists details', () async {
+    test('setDetails persists details to Drift verbatim (not the metadata blob)', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, repo) = _makeEditor(db);
 
       await notifier.setDetails('Intervento ordinario');
 
       expect(notifier.state.details, 'Intervento ordinario');
+      // Regression: the persisted `details` column used to be overwritten by
+      // `_buildMetadataJson()` (GPS/free-text metadata) on every autosave, never the text actually
+      // typed here. See the "rapportino data-loss regression" group below.
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, 'Intervento ordinario');
     });
 
     test('setCustomerFromCache sets customerId and clears freeText', () async {
@@ -672,6 +677,78 @@ void main() {
 
       expect(state1.reportId, 'report-a');
       expect(state2.reportId, 'report-b');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Regression: rapportino data-loss bug.
+  //
+  // `_buildHeaderCompanion()` used to write `_buildDetailsJson()` (GPS/free-text metadata) into
+  // the `details` column — the same column `setDetails` puts the technician's typed description
+  // into — on every autosave. Metadata always won the last write, so the typed description never
+  // reached Drift, the backend, or the customer-facing PDF. `details` and `metadataJson` are
+  // separate columns now (schema v14); see submission_queue_test.dart for the full
+  // typing→submit-payload version of this regression.
+  // ══════════════════════════════════════════════════════════════════════════════
+  group('rapportino data-loss regression — details vs metadata', () {
+    test('a description typed then autosaved is preserved, not overwritten by metadata', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = _makeEditor(db);
+
+      // Metadata (GPS + free-text) captured first, as it often is on-site before the technician
+      // writes up what they did.
+      await notifier.setWorkAddress('Via Roma 10, Milano');
+      notifier.setGps(45.4654, 9.1859);
+      await notifier.setCustomerFreeText('ACME Srl (non in lista)');
+
+      // Then the technician types the actual description, which autosaves.
+      await notifier.setDetails('Sostituita guarnizione bruciatore');
+
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, 'Sostituita guarnizione bruciatore');
+      expect(draft.details, isNot(contains('gpsLatitude')));
+      expect(draft.details, isNot(contains('workAddress')));
+      // The metadata is not lost either — it lives in its own column.
+      expect(draft.metadataJson, contains('workAddress'));
+      expect(draft.metadataJson, contains('customerFreeText'));
+    });
+
+    test('metadata captured after the description does not clobber it on a later autosave', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = _makeEditor(db);
+
+      // The order that actually triggered the bug: description typed first, metadata captured
+      // afterwards (e.g. GPS acquired at the end of the visit) — every autosave in between,
+      // including the ones after the GPS capture, used to overwrite `details` with metadata-only
+      // JSON that contained no trace of the typed text.
+      await notifier.setDetails('Sostituita guarnizione bruciatore');
+      await notifier.setWorkAddress('Via Roma 10, Milano');
+      notifier.setGps(45.4654, 9.1859);
+      await notifier.setCantiereFreeText('Cantiere Nord');
+
+      expect(notifier.state.details, 'Sostituita guarnizione bruciatore');
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, 'Sostituita guarnizione bruciatore');
+    });
+
+    test('a realistic keystroke-by-keystroke typing sequence survives every intermediate autosave', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = _makeEditor(db);
+
+      const typed = 'Verificata pressione impianto, nessuna anomalia riscontrata';
+      // Mirrors StepDettagli's AppTextField.onChanged, which calls setDetails (and therefore
+      // autosaves) on every keystroke.
+      for (var i = 1; i <= typed.length; i++) {
+        await notifier.setDetails(typed.substring(0, i));
+      }
+      // GPS captured mid-typing, as the "Acquisisci" button allows at any point in the flow.
+      notifier.setGps(45.4654, 9.1859);
+      await notifier.setDetails(typed); // one more keystroke-driven autosave after GPS
+
+      expect(notifier.state.details, typed);
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, typed);
+      expect(draft.metadataJson, contains('gpsLatitude'));
     });
   });
 }

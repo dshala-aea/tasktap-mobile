@@ -8,6 +8,11 @@
 // widget dependencies (LucideIcons etc.).
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// TicketPriorityEnum values (TicketPriorityEnum.cs) — sent on the wire as `priorita`, a
+/// string, not an int. "Media" is the backend's own default.
+const List<String> kTicketPriorities = ['Bassa', 'Media', 'Alta', 'Urgente'];
+const String kDefaultTicketPriority = 'Media';
+
 class NewTicketFormState {
   const NewTicketFormState({
     this.customerId,
@@ -17,6 +22,7 @@ class NewTicketFormState {
     this.typeId,
     this.statusId,
     this.assignedUserId,
+    this.priority = kDefaultTicketPriority,
   });
 
   final String? customerId;
@@ -27,6 +33,11 @@ class NewTicketFormState {
   final int? statusId;
   final String? assignedUserId;
 
+  /// SLA/urgency of the ticket — Bassa | Media | Alta | Urgente. Never null: defaults to
+  /// [kDefaultTicketPriority], mirroring the backend's own default so a technician who never
+  /// touches the picker still sends an explicit, correct value.
+  final String priority;
+
   NewTicketFormState copyWith({
     String? customerId,
     String? locationId,
@@ -35,6 +46,7 @@ class NewTicketFormState {
     int? typeId,
     int? statusId,
     String? assignedUserId,
+    String? priority,
     bool clearCustomerId = false,
     bool clearLocationId = false,
     bool clearTitle = false,
@@ -51,6 +63,7 @@ class NewTicketFormState {
       typeId: clearTypeId ? null : (typeId ?? this.typeId),
       statusId: clearStatusId ? null : (statusId ?? this.statusId),
       assignedUserId: clearAssignedUserId ? null : (assignedUserId ?? this.assignedUserId),
+      priority: priority ?? this.priority,
     );
   }
 

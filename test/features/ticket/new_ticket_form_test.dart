@@ -431,6 +431,11 @@ void main() {
     // to drive a submit in a widget test when the button itself (found via
     // its exact label) is unambiguous, sidestepping that layering.
     Future<void> tapCreaTicket(WidgetTester tester) async {
+      // The Riepilogo ListView lazily builds only what's within its viewport + cache extent
+      // (standard Sliver behaviour, not test-specific) — the priority row (item 7 of the
+      // feature audit) added enough height that "Crea ticket" no longer falls inside that
+      // window on the test surface without scrolling to it first.
+      await tester.scrollUntilVisible(find.widgetWithText(AppButton, 'Crea ticket'), 300);
       final button = tester.widget<AppButton>(find.widgetWithText(AppButton, 'Crea ticket'));
       button.onPressed!();
       await tester.pumpAndSettle();
@@ -487,11 +492,12 @@ void main() {
         final queued = await db.select(db.pendingTickets).get();
         expect(queued.single.state, 'pendingSync');
 
-        // Reconnect: the server now accepts the create.
+        // Reconnect: the server now accepts the create. The backend returns the shared
+        // BasicPkResponse — {"id": ...} — not {"ticketId": ...}; see ticket_api_client_test.dart.
         when(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data'))).thenAnswer(
           (_) async => Response(
             requestOptions: RequestOptions(path: '/api/tickets'),
-            data: {'ticketId': 'server-ticket-1'},
+            data: {'id': 'server-ticket-1'},
             statusCode: 200,
           ),
         );

@@ -89,6 +89,7 @@ void main() {
           locationId: any(named: 'locationId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       );
@@ -113,6 +114,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenAnswer((_) async => 'server-ticket-1');
@@ -154,6 +156,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenAnswer((_) async => 'server-ticket-2');
@@ -174,6 +177,71 @@ void main() {
       final row = await repo.getById(outcome.localId);
       expect(row!.state, 'submitted');
     });
+
+    test('defaults to Media priority and threads it through to the API call', () async {
+      String? capturedPriorita;
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedPriorita = inv.namedArguments[#priorita] as String?;
+        return 'server-ticket-3';
+      });
+
+      await queue.create(
+        title: 'Nessuna priorità scelta',
+        customerId: 'cust-3',
+        locationId: 'loc-3',
+        statusId: 1,
+        typeId: 1,
+        isOnline: true,
+      );
+
+      expect(capturedPriorita, 'Media');
+    });
+
+    test('an explicit priority survives local persistence and reaches the API call', () async {
+      String? capturedPriorita;
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedPriorita = inv.namedArguments[#priorita] as String?;
+        return 'server-ticket-4';
+      });
+
+      final outcome = await queue.create(
+        title: 'Guasto critico',
+        customerId: 'cust-4',
+        locationId: 'loc-4',
+        statusId: 1,
+        typeId: 1,
+        priorita: 'Urgente',
+        isOnline: true,
+      );
+
+      final row = await repo.getById(outcome.localId);
+      expect(row!.priorita, 'Urgente');
+      expect(capturedPriorita, 'Urgente');
+    });
   });
 
   group('TicketCreationQueue.create — online failure (ambiguous outcome)', () {
@@ -187,6 +255,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenThrow(Exception('Network error'));
@@ -230,6 +299,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            priorita: any(named: 'priorita'),
             clientId: any(named: 'clientId'),
           ),
         ).thenThrow(Exception('Timeout'));
@@ -255,6 +325,7 @@ void main() {
             assignedUserId: any(named: 'assignedUserId'),
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
+            priorita: any(named: 'priorita'),
             clientId: any(named: 'clientId'),
           ),
         ).thenAnswer((_) async => 'server-ticket-9');
@@ -281,6 +352,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenAnswer((invocation) async {
@@ -314,6 +386,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenThrow(Exception('Network error'));
@@ -337,6 +410,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenAnswer((_) async => 'server-ticket-3');
@@ -378,6 +452,7 @@ void main() {
           assignedUserId: any(named: 'assignedUserId'),
           statusId: any(named: 'statusId'),
           typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
           clientId: any(named: 'clientId'),
         ),
       ).thenAnswer((inv) async {

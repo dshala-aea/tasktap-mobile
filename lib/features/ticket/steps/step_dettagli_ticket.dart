@@ -109,6 +109,21 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
               id != null ? widget.onChanged(widget.state.copyWith(typeId: id)) : null,
           validator: (v) => v == null ? 'Campo obbligatorio' : null,
         ),
+
+        const SizedBox(height: 24),
+
+        // ── Priority ───────────────────────────────────────────────────────
+        _SectionLabel(text: 'Priorità'),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          initialValue: widget.state.priority,
+          isExpanded: true,
+          items: kTicketPriorities
+              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+              .toList(),
+          onChanged: (p) =>
+              p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
+        ),
       ],
     );
   }

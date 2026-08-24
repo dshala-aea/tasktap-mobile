@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/reports/report_submit_api_client.dart';
 import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
 import 'package:tasktap_mobile/data/sync/submission_queue.dart';
+import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Mocks & fallbacks
@@ -707,5 +708,119 @@ void main() {
       expect(draft!.stato, 'Inviato');
       expect(draft.isLocalOnly, isFalse);
     });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Regression: rapportino autosave data-loss bug.
+  //
+  // ReportEditorNotifier's autosave used to write the GPS/free-text metadata blob into the same
+  // `details` column the technician's typed description lives in, so every autosave silently
+  // discarded whatever the technician had typed — and that blob is exactly what SubmissionQueue
+  // sends to the backend/customer PDF as the report's description. This drives a real
+  // ReportEditorNotifier through a realistic typing + autosave sequence, then submits through the
+  // real SubmissionQueue, and asserts the *typed text* — not the metadata blob — reaches the
+  // backend payload.
+  // ══════════════════════════════════════════════════════════════════════════════
+  group('rapportino autosave data-loss regression', () {
+    test(
+      'typed description reaches the submit payload verbatim, GPS/free-text metadata does not '
+      'clobber it',
+      () async {
+        final editorRepo = DraftReportRepository(db);
+        final notifier = ReportEditorNotifier(
+          initialState: const ReportEditorState(
+            reportId: 'report-1',
+            tenantId: 'tenant-1',
+            insertedUserId: 'user-1',
+          ),
+          repo: editorRepo,
+        );
+
+        // A realistic sequence: title, then the description typed keystroke-by-keystroke (each
+        // keystroke triggers autosave in the real UI — see step_dettagli.dart's onChanged), then
+        // free-text customer + GPS captured afterwards (also autosaving), exactly the ordering
+        // that used to let the metadata blob win the last write to `details`.
+        await notifier.setTitle('Manutenzione caldaia');
+        const typed = 'Sostituita guarnizione, verificata pressione impianto';
+        for (var i = 1; i <= typed.length; i++) {
+          await notifier.setDetails(typed.substring(0, i));
+        }
+        await notifier.setCustomerFreeText('ACME Srl (non in lista)');
+        await notifier.setWorkAddress('Via Roma 10, Milano');
+        notifier.setGps(45.4642, 9.19);
+        // setGps's autosave is fire-and-forget; give it a tick to land before reading back.
+        await Future<void>.delayed(Duration.zero);
+
+        // Locally persisted: both survive, in separate columns.
+        final draft = await editorRepo.getDraft('report-1');
+        expect(draft, isNotNull);
+        expect(draft!.details, typed);
+        expect(draft.metadataJson, contains('ACME Srl'));
+        expect(draft.metadataJson, contains('Via Roma 10'));
+        expect(draft.metadataJson, contains('45.4642'));
+        // The metadata blob must never appear in `details` again.
+        expect(draft.details, isNot(contains('customerFreeText')));
+        expect(draft.details, isNot(contains('gpsLatitude')));
+
+        // Fill in what enqueue()/processAll() require to actually submit.
+        await db
+            .into(db.reportStaffTable)
+            .insert(
+              ReportStaffTableCompanion.insert(
+                id: 'staff-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                reportId: 'report-1',
+                userId: 'user-1',
+              ),
+            );
+        await db
+            .into(db.reportMateriali)
+            .insert(
+              ReportMaterialiCompanion.insert(
+                id: 'mat-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                reportId: 'report-1',
+                quantity: 1.0,
+                freeTextName: const Value('Guarnizione'),
+              ),
+            );
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: true,
+          serverAllegatoId: 'sig-cust',
+        );
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: false,
+          serverAllegatoId: 'sig-tech',
+        );
+
+        SubmitReportRequest? capturedRequest;
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer((inv) async {
+          capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+          return const SubmitReportResponse(
+            id: 'report-1',
+            title: 'Manutenzione caldaia',
+            stato: '1',
+            inviatoAt: null,
+          );
+        });
+
+        await queue.enqueue('report-1');
+        await queue.processAll();
+
+        expect(capturedRequest, isNotNull);
+        expect(capturedRequest!.details, typed);
+        expect(capturedRequest!.details, isNot(contains('customerFreeText')));
+        expect(capturedRequest!.details, isNot(contains('gpsLatitude')));
+      },
+    );
   });
 }

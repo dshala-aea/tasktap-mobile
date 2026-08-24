@@ -31,6 +31,9 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
   final _coloreCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   bool _isSaving = false;
+  // Backend forces IsActive=true on create (SquadreController.Create) — there is nothing to
+  // toggle until the squadra exists, so this only matters (and is only shown) while editing.
+  bool _isActive = true;
 
   bool get _isEditing => widget.squadra != null;
 
@@ -47,6 +50,7 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
     _specializzazioneCtrl.text = s['specializzazione'] as String? ?? '';
     _coloreCtrl.text = s['coloreCalendario'] as String? ?? '';
     _noteCtrl.text = s['note'] as String? ?? '';
+    _isActive = s['isActive'] as bool? ?? true;
   }
 
   @override
@@ -77,6 +81,7 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
               : _specializzazioneCtrl.text.trim(),
           coloreCalendario: _coloreCtrl.text.trim().isEmpty ? null : _coloreCtrl.text.trim(),
           note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+          isActive: _isActive,
         );
       } else {
         await api.createSquadra(
@@ -154,6 +159,23 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
             const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
+            const SizedBox(height: 16),
+
+            // Only shown while editing — a new squadra is always created active
+            // (SquadreController.Create hardcodes IsActive=true), so there is nothing to toggle
+            // yet. This is the only way to deactivate/reactivate a squadra from mobile.
+            if (_isEditing)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _isActive ? 'Squadra attiva' : 'Squadra disattivata',
+                      style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                    ),
+                  ),
+                  AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
+                ],
+              ),
             const SizedBox(height: 32),
 
             AppButton(
