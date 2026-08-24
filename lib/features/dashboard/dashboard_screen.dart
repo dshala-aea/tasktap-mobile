@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
+import '../altro/notifiche_provider.dart';
 import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
@@ -30,6 +31,7 @@ class DashboardScreen extends ConsumerWidget {
     final userName = user?.displayName ?? user?.email ?? 'Tecnico';
     final stats = ref.watch(dashboardStatsProvider);
     final trackers = ref.watch(visibleTrackersProvider);
+    final unreadNotifiche = ref.watch(notificheUnreadCountProvider);
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -53,6 +55,7 @@ class DashboardScreen extends ConsumerWidget {
                     icon: LucideIcons.bell,
                     label: 'Notifiche',
                     glass: true,
+                    showDot: unreadNotifiche > 0,
                     onTap: () => context.push(AppRoutes.altroNotifiche),
                   ),
                   HeaderIconBtn(

@@ -174,5 +174,42 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets('bell shows a dot when there are unread notifications', (tester) async {
+      await pumpDashboard(tester);
+
+      final bell = tester.widget<HeaderIconBtn>(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Notifiche'),
+      );
+      expect(bell.showDot, isFalse);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('bell shows a dot once an unread notification is cached', (tester) async {
+      await db
+          .into(db.appNotifications)
+          .insert(
+            AppNotificationsCompanion.insert(
+              id: 'notif-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.now().toUtc(),
+              userId: 'u1',
+              title: 'Nuovo ticket assegnato',
+              message: 'Ticket #42 assegnato a te',
+              type: 'ticket',
+              deliveryType: 'push',
+            ),
+          );
+
+      await pumpDashboard(tester);
+
+      final bell = tester.widget<HeaderIconBtn>(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Notifiche'),
+      );
+      expect(bell.showDot, isTrue);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 }
