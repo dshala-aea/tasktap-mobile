@@ -2,26 +2,25 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/widgets/widgets.dart';
-import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
-import '../../presentation/providers/schedule_providers.dart';
 import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
 import 'id_plate_hero_comp.dart';
+import 'work_queue_section.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// The technician's day, in the order they need it.
 ///
-/// Running clocks, today's interventi, the next seven days, then the two things worth starting
-/// from here. The stat grid that used to sit above all of it is gone — see the Oggi section.
+/// Running clocks, then the work queue (five named tiers, see WorkQueueSection), then the two
+/// things worth starting from here. The stat grid that used to sit above all of it is gone — see
+/// the Oggi section.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -31,8 +30,6 @@ class DashboardScreen extends ConsumerWidget {
     final userName = user?.displayName ?? user?.email ?? 'Tecnico';
     final stats = ref.watch(dashboardStatsProvider);
     final trackers = ref.watch(visibleTrackersProvider);
-    final todayAsync = ref.watch(todaySchedulesProvider);
-    final upcomingAsync = ref.watch(upcomingSchedulesProvider);
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -78,17 +75,14 @@ class DashboardScreen extends ConsumerWidget {
               ),
             ),
 
-            // ── Oggi ──────────────────────────────────────────────────────────
+            // ── Coda di lavoro ────────────────────────────────────────────────
             //
-            // Today's interventi were a number in a 2×2 stat grid — `Interventi oggi  3` — while
-            // the only list on the screen started at tomorrow. The one question a technician opens
-            // this app to answer was the one thing rendered as a digit.
-            //
-            // The grid is gone with it. Four counts derivable from the two lists beneath them,
-            // taking the width of the screen above the fold, is the hero-metric template doing
-            // nothing: nobody acts on "Completati 2". What survives is the one count that is not
-            // visible in the list itself — how many of today's jobs are already done — folded into
-            // the section heading.
+            // Was two flat lists — "Oggi" (today, unordered by urgency) then "Prossimi" (the next
+            // seven days) — with a 2×2 stat grid above them nobody could act on ("Completati 2").
+            // Replaced by five named tiers (Live/Da fare/In attesa/Programmato/Fatto), explainable
+            // rather than ranked: a technician can say *why* a job is in Da fare ("nothing else is
+            // open yet today"), which an opaque priority score never lets them do. See
+            // WorkQueueSection's own doc comment for the fuller reasoning and what this replaced.
             SliverToBoxAdapter(
               child: SectionTitle(
                 title: 'Oggi',
@@ -97,21 +91,7 @@ class DashboardScreen extends ConsumerWidget {
                     : null,
               ),
             ),
-            _ScheduleSliver(
-              schedules: todayAsync,
-              emptyTitle: 'Nessun intervento oggi',
-              emptyBody: 'Buona giornata. I lavori assegnati appariranno qui.',
-              showDate: false,
-            ),
-
-            // ── Prossimi interventi ───────────────────────────────────────────
-            const SliverToBoxAdapter(child: SectionTitle(title: 'Prossimi')),
-            _ScheduleSliver(
-              schedules: upcomingAsync,
-              emptyTitle: 'Nessun intervento in programma',
-              emptyBody:
-                  'I prossimi interventi appariranno qui dopo la sincronizzazione.',
-            ),
+            const SliverToBoxAdapter(child: WorkQueueSection()),
 
             // ── Start something ───────────────────────────────────────────────
             //
@@ -158,189 +138,3 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-/// A list of interventi, or the reason there isn't one. Used for both Oggi and Prossimi.
-class _ScheduleSliver extends StatelessWidget {
-  const _ScheduleSliver({
-    required this.schedules,
-    required this.emptyTitle,
-    required this.emptyBody,
-    this.showDate = true,
-  });
-
-  final AsyncValue<List<Schedule>> schedules;
-
-  /// False for today's list, where every row would carry the same date.
-  final bool showDate;
-  final String emptyTitle;
-  final String emptyBody;
-
-  @override
-  Widget build(BuildContext context) {
-    return schedules.when(
-      data: (list) => list.isEmpty
-          ? SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.pagePadding,
-                ),
-                child: EmptyState(
-                  icon: LucideIcons.calendarOff,
-                  title: emptyTitle,
-                  body: emptyBody,
-                ),
-              ),
-            )
-          : SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpacing.pagePadding,
-                    i == 0 ? 0 : 8,
-                    AppSpacing.pagePadding,
-                    AppSpacing.sm,
-                  ),
-                  child: _UpcomingItem(schedule: list[i], showDate: showDate),
-                ),
-                childCount: list.length,
-              ),
-            ),
-      loading: () => const SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(AppSpacing.xxl),
-            child: CircularProgressIndicator(),
-          ),
-        ),
-      ),
-      // Was `SizedBox.shrink()`. A failed read of today's schedules therefore rendered as an
-      // absence — the same picture as a day with no work booked. The one screen a technician opens
-      // to find out whether they have a job this morning would have told them they had none.
-      //
-      // It is drawn as unavailable rather than as an error because it is not the technician's
-      // mistake and there is no red channel to spend on it; the reason names the one action that
-      // can fix it.
-      error: (err, stack) => const SliverToBoxAdapter(
-        child: UnavailableState(
-          titolo: 'Elenco non disponibile',
-          motivo:
-              'Non è stato possibile leggere gli interventi salvati sul telefono. '
-              'Tira giù per sincronizzare.',
-        ),
-      ),
-    );
-  }
-}
-
-class _UpcomingItem extends ConsumerWidget {
-  const _UpcomingItem({required this.schedule, this.showDate = true});
-
-  final Schedule schedule;
-  final bool showDate;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final location = ref
-        .watch(locationByIdProvider(schedule.locationId))
-        .valueOrNull;
-    final customerName = location != null
-        ? ref
-              .watch(customerByIdProvider(location.customerId))
-              .valueOrNull
-              ?.companyName
-        : null;
-
-    // Built only when it is going to be shown — today's rows never render a date, and formatting
-    // one there costs a locale lookup to throw the result away.
-    final dateLabel = showDate
-        ? DateFormat('EEE d MMM', 'it').format(schedule.activityDate.toLocal())
-        : '';
-    final timeLabel = _minutesToTime(schedule.timeStartMinutes);
-    final subtitle = [
-      customerName,
-      location?.city,
-    ].where((s) => s != null && s.isNotEmpty).join(' · ');
-
-    final ticketId = schedule.ticketId;
-
-    // Was `AppCard.pressable(onTap: () {})` — a card that rippled under the thumb and went
-    // nowhere. A scheduled intervento opens its ticket where it has one; where it has none there
-    // is nothing to open, so it renders as a plain cell and does not invite the tap at all.
-    return AppCard(
-      onTap: ticketId != null
-          ? () => context.push(AppRoutes.ticketDetailPath(ticketId))
-          : null,
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  schedule.title.isNotEmpty ? schedule.title : 'Intervento',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.ink,
-                  ),
-                ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      color: context.colors.inkMuted,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // On today's list the date is the same on every row, so it says nothing and the
-              // time — the thing that orders the day — gets the weight instead.
-              if (showDate)
-                Text(
-                  dateLabel,
-                  style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.ink,
-                  ),
-                ),
-              Text(
-                timeLabel,
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: showDate ? 11 : 15,
-                  fontWeight: showDate ? FontWeight.w400 : FontWeight.w700,
-                  color: showDate
-                      ? context.colors.inkMuted
-                      : context.colors.ink,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _minutesToTime(int minutes) {
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
-  }
-}
