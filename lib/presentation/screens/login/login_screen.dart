@@ -87,7 +87,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-/// Inline TaskTap logo — yellow pill with wordmark.
+/// Inline TaskTap logo — accent pill with wordmark.
 class _TaskTapLogo extends StatelessWidget {
   const _TaskTapLogo();
 

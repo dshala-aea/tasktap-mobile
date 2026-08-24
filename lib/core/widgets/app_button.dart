@@ -165,7 +165,7 @@ class AppButton extends StatelessWidget {
   // content) — and every modern reference this session's design research checked (Linear, Vercel,
   // Stripe, Notion) reserves box-shadow for transient overlays, never a static in-flow control.
   // A soft shadow is also invisible outdoors in direct sun, which this app cannot afford to rely
-  // on: the yellow fill and the ink-on-yellow contrast already carry the button with no shadow
+  // on: the accent fill and the ink-on-accent contrast already carry the button with no shadow
   // needed at all.
   List<BoxShadow> _shadows(BuildContext context) => const [];
 

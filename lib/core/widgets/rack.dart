@@ -86,8 +86,10 @@ class _RailBar extends StatelessWidget {
 ///   three. A card floats; a drawer is mounted.
 /// - It carries a **ledge** — the graphite pull bar down the leading edge — instead of a drop
 ///   shadow. That is the depth cue, and unlike a shadow it survives a dark ground and direct sun.
-/// - When [strapped] the ledge goes brand yellow. That is the app's single most important state
-///   change: *this one is live*. A running timbratura, the selected day, the ticket you are on.
+/// - When [strapped] the ledge goes the brand accent. That is the app's single most important
+///   state change: *this one needs you*. The selected day, the ticket you are on, a draft still
+///   unfinished. Not a live/running clock — that's [LiveDot], deliberately a different mark, or
+///   the accent would be spent on the ordinary state of most of a shift.
 class RackCell extends StatelessWidget {
   const RackCell({
     super.key,
@@ -105,7 +107,8 @@ class RackCell extends StatelessWidget {
 
   final Widget child;
 
-  /// Live, running, or selected. Turns the ledge brand yellow.
+  /// Selected, priority, or still-needs-finishing. Turns the ledge the brand accent. Not for a
+  /// live/running state: see [LiveDot].
   final bool strapped;
 
   final VoidCallback? onTap;

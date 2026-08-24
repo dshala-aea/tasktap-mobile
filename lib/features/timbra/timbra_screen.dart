@@ -25,8 +25,8 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///   - `ScreenHeader(dark: true)` — "Timbra", no back (root tab), no actions (nothing on this
 ///     screen is a notification or a profile setting, so none are offered)
 ///   - Date label (uppercase, Manrope 13 muted)
-///   - Live clock (Sora 72 thin, yellow, ticking every second)
-///   - Circular punch button (radial yellow gradient)
+///   - Live clock (Sora 72 thin, accent orange, ticking every second)
+///   - Circular punch button (flat accent fill, red when ending — no gradient, no shadow)
 ///   - Pause/resume pill (only while on shift)
 ///   - "Sessioni di oggi" card (session rows + running total)
 class TimbraScreen extends ConsumerStatefulWidget {

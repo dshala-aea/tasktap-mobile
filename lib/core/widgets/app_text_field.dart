@@ -103,7 +103,7 @@ class AppTextField extends StatelessWidget {
     //
     // Static labels read the same whether the field is empty, focused or full — which matters on
     // a form being filled in a van — and they let the field itself be quiet: a filled inset with
-    // a hairline, and the yellow only when it has focus.
+    // a hairline, and the accent only when it has focus.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,

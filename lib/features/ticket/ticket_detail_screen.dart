@@ -1479,9 +1479,9 @@ class _OreTab extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AppCard(
-                strapped: running > 0,
                 child: Row(
                   children: [
+                    if (running > 0) ...[const LiveDot(), const SizedBox(width: 8)],
                     Expanded(
                       child: Text(
                         'Totale registrato',
@@ -1547,11 +1547,16 @@ class _WorklogRow extends StatelessWidget {
         : '${_hhmm(entry.startTime)} – ${_hhmm(entry.endTime!)}';
 
     return ListRow(
-      strapped: entry.isRunning,
-      leading: Icon(
-        entry.isManualEntry ? LucideIcons.pencil : LucideIcons.timer,
-        size: 20,
-        color: entry.isRunning ? c.ink : c.inkMuted,
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (entry.isRunning) ...[const LiveDot(), const SizedBox(width: 6)],
+          Icon(
+            entry.isManualEntry ? LucideIcons.pencil : LucideIcons.timer,
+            size: 20,
+            color: entry.isRunning ? c.ink : c.inkMuted,
+          ),
+        ],
       ),
       title: dateLabel,
       subtitle: [

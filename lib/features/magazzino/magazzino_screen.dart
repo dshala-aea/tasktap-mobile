@@ -418,9 +418,9 @@ class _GiacenzaRow extends StatelessWidget {
     final unit = giacenza.unitOfMeasure;
 
     return ListRow(
-      // Below-minimum lines take the danger ledge, not the yellow strap: the strap means "this one
-      // is live", and a short stock line is a warning, not a running job. Overloading the strap
-      // here would cost it the meaning it has everywhere else.
+      // Below-minimum lines take the danger ledge, not the accent strap: the strap means
+      // "selected or needs finishing", and a short stock line is a warning, not that. Overloading
+      // the strap here would cost it the meaning it has everywhere else.
       ledgeColor: giacenza.sottoScorta ? c.red : null,
       leading: _Tile(
         icon: giacenza.sottoScorta

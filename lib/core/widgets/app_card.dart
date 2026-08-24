@@ -51,7 +51,8 @@ class AppCard extends StatelessWidget {
 
   final Color? backgroundColor;
 
-  /// Live, running, or selected — turns the ledge brand yellow.
+  /// Selected, priority, or still-needs-finishing — turns the ledge the brand accent. Not for a
+  /// live/running state: that's [LiveDot], deliberately a different mark (see its doc comment).
   final bool strapped;
 
   /// False for a cell that is not on the rail: inside a sheet, a dialog, or a nested panel.

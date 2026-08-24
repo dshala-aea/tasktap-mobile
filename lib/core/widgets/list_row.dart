@@ -39,7 +39,8 @@ class ListRow extends StatelessWidget {
   /// Retained for compatibility. The pitch between cells is the separator now.
   final bool showDivider;
 
-  /// Live, running, or selected — turns the ledge brand yellow.
+  /// Selected, priority, or still-needs-finishing — turns the ledge the brand accent. Not for a
+  /// live/running state: see [LiveDot].
   final bool strapped;
 
   /// For a row whose state is neither ordinary nor live: overdue, rejected, queued.

@@ -189,8 +189,8 @@ class _UserCard extends StatelessWidget {
       // ledgeColor is explicit rather than the theme default: this card is a fixed CHARCOAL plate
       // regardless of light/dark mode, and the default ledge token is tuned for the bone label card
       // it usually sits on — on a fixed dark ground it would read close to invisible, the same
-      // problem active_tracker_strip's own border already solved with translucent white. Not
-      // yellow: that means attention-required or selected, and this static identity plate is
+      // problem active_tracker_strip's own border already solved with translucent white. Not the
+      // accent: that means attention-required or selected, and this static identity plate is
       // neither — same reasoning as the dashboard hero's own DA FARE readout staying white when
       // nothing is outstanding.
       child: RackCell(

@@ -36,7 +36,7 @@ class AppFab extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.Y,
               // Machined, not moulded — and closer to Material 3's own squircle FAB than the
-              // circle this drew before. It reads as the yellow lever on the load rail, which is
+              // circle this drew before. It reads as the accent lever on the load rail, which is
               // the one place in a van that colour means "pull this".
               borderRadius: AppRack.freeShape,
               // A graphite bottom edge gives it the ledge every other object in the rack has, so

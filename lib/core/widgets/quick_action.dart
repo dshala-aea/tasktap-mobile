@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// Quick action — 50 px yellow circle + icon (20) + centered Manrope 700/10
+/// Quick action — 50 px accent circle + icon (20) + centered Manrope 700/10
 /// label.
 ///
 /// ```dart

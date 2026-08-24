@@ -113,7 +113,7 @@ class _PinnedTabsDelegate extends SliverPersistentHeaderDelegate {
         color: background,
         // Only once something is actually passing underneath. A permanent rule would draw a second
         // line under the strip while it is still sitting in the page, competing with the active
-        // tab's own yellow underline.
+        // tab's own accent underline.
         border: overlapsContent
             ? Border(bottom: BorderSide(color: divider, width: 1))
             : null,
