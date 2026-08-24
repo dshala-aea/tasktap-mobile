@@ -74,57 +74,137 @@ class RapportinoFormScreen extends ConsumerWidget {
             AppSpacing.pagePadding,
             context.navClearance,
           ),
-          child: GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            childAspectRatio: 1.5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _StepTile(
-                icon: LucideIcons.fileText,
-                label: 'Dettagli',
-                done: dettagliDone,
-                onTap: () => openCompartmentSheet(
-                  context,
-                  label: 'Dettagli',
-                  content: StepDettagli(reportId: reportId),
-                ),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.5,
+                children: [
+                  _StepTile(
+                    icon: LucideIcons.fileText,
+                    label: 'Dettagli',
+                    done: dettagliDone,
+                    onTap: () => openCompartmentSheet(
+                      context,
+                      label: 'Dettagli',
+                      content: StepDettagli(reportId: reportId),
+                    ),
+                  ),
+                  _StepTile(
+                    icon: LucideIcons.clock,
+                    label: 'Ore',
+                    done: oreDone,
+                    onTap: () => openCompartmentSheet(
+                      context,
+                      label: 'Ore',
+                      content: StepOre(reportId: reportId),
+                    ),
+                  ),
+                  _StepTile(
+                    icon: LucideIcons.package,
+                    label: 'Materiali',
+                    done: materialiDone,
+                    onTap: () => openCompartmentSheet(
+                      context,
+                      label: 'Materiali',
+                      content: StepMaterialiFold(reportId: reportId),
+                    ),
+                  ),
+                  _StepTile(
+                    icon: LucideIcons.send,
+                    label: 'Riepilogo',
+                    done: riepilogoDone,
+                    onTap: () => openCompartmentSheet(
+                      context,
+                      label: 'Riepilogo',
+                      content: StepRiepilogo(reportId: reportId),
+                    ),
+                  ),
+                ],
               ),
-              _StepTile(
-                icon: LucideIcons.clock,
-                label: 'Ore',
-                done: oreDone,
-                onTap: () => openCompartmentSheet(
-                  context,
-                  label: 'Ore',
-                  content: StepOre(reportId: reportId),
-                ),
-              ),
-              _StepTile(
-                icon: LucideIcons.package,
-                label: 'Materiali',
-                done: materialiDone,
-                onTap: () => openCompartmentSheet(
-                  context,
-                  label: 'Materiali',
-                  content: StepMaterialiFold(reportId: reportId),
-                ),
-              ),
-              _StepTile(
-                icon: LucideIcons.send,
-                label: 'Riepilogo',
-                done: riepilogoDone,
-                onTap: () => openCompartmentSheet(
-                  context,
-                  label: 'Riepilogo',
-                  content: StepRiepilogo(reportId: reportId),
-                ),
+              const SizedBox(height: 20),
+              _CompletionCard(
+                completed: [
+                  dettagliDone,
+                  oreDone,
+                  materialiDone,
+                  riepilogoDone,
+                ].where((d) => d).length,
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _CompletionCard — dark summary anchoring the checklist
+//
+// The grid alone left the rest of the screen a dead void with nothing telling the technician
+// where they stood. Same CHARCOAL/AppColors.Y language as Ore's "Totale ore" card: the checklist
+// is the input, this is the readout.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _CompletionCard extends StatelessWidget {
+  const _CompletionCard({required this.completed});
+
+  final int completed;
+
+  static const _total = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = completed == _total;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(color: AppColors.CHARCOAL, borderRadius: AppRack.freeShape),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Compilazione',
+                style: TextStyle(
+                  color: AppColors.onDarkMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$completed di $_total',
+                style: const TextStyle(
+                  color: AppColors.Y,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Icon(
+            ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
+            size: 18,
+            color: ready ? context.colors.green : AppColors.onDarkMuted,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            ready ? 'Pronto per l\'invio' : 'Da completare',
+            style: const TextStyle(
+              color: AppColors.onDark,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -152,7 +232,11 @@ class _StepTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // fit: expand — a bare Stack gives CompartmentTile loose constraints, so it shrinks to
+    // content width and leaves the badge floating at the grid cell's corner instead of the
+    // tile's own corner (visible as a detached circle to the right of each tile).
     return Stack(
+      fit: StackFit.expand,
       children: [
         CompartmentTile(icon: icon, label: label, onTap: onTap),
         Positioned(
