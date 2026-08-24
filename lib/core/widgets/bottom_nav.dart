@@ -141,9 +141,10 @@ class _NavTab extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
               decoration: BoxDecoration(
                 color: active ? AppColors.Y : Colors.transparent,
-                // 6, not the near-pill 19 this used to carry — a latch is machined square, not
-                // rounded into a pill. Matches AppRack.insetShape's own "compartment inside a
-                // compartment" radius rather than inventing a fourth radius for the app.
+                // AppRack.insetRadius (4, derived from cellRadius), not the near-pill 19 this
+                // used to carry — a latch is machined square, not rounded into a pill. Matches
+                // every other "compartment inside a compartment" in the app rather than inventing
+                // a fourth radius.
                 borderRadius: BorderRadius.circular(AppRack.insetRadius),
               ),
               child: Row(

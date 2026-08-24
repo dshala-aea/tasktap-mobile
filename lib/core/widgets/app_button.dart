@@ -14,9 +14,14 @@ enum AppButtonVariant { primary, secondary, dark, ghost, danger }
 
 /// Button size.
 ///
-/// - [lg] — vPad 14, hPad 24, fontSize 16, radius 20, iconSize 18
-/// - [md] — vPad 11, hPad 20, fontSize 14, radius 18, iconSize 16  (default)
-/// - [sm] — vPad 6,  hPad 14, fontSize 10, radius 10, iconSize 12
+/// - [lg] — vPad 14, hPad 24, fontSize 16, radius 10, iconSize 18
+/// - [md] — vPad 11, hPad 20, fontSize 14, radius 8, iconSize 16  (default)
+/// - [sm] — vPad 6,  hPad 14, fontSize 10, radius 6, iconSize 12
+///
+/// Radii tightened 2026-08-24: these were near-pill (20/18/10), deliberately matched to the
+/// floating pill nav as a pinned brand commitment. That pin retired with the nav itself (see
+/// `AppBottomNav`, now a case latch row) — a button machined at 10/8/6 now reads as one more
+/// compartment on the same case, not the odd soft shape left over from a world that moved on.
 enum AppButtonSize { lg, md, sm }
 
 /// TaskTap brand button — 5 variants × 3 sizes.
@@ -131,9 +136,9 @@ class AppButton extends StatelessWidget {
   };
 
   double get _radius => switch (size) {
-    AppButtonSize.lg => 20,
-    AppButtonSize.md => 18,
-    AppButtonSize.sm => 10,
+    AppButtonSize.lg => 10,
+    AppButtonSize.md => 8,
+    AppButtonSize.sm => 6,
   };
 
   double get _iconSize => switch (size) {

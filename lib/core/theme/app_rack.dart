@@ -16,19 +16,18 @@ import 'package:flutter/widgets.dart';
 /// 3. **Absence is drawn.** An empty slot is a cut silhouette ([silhouetteDash]), not whitespace.
 ///    A technician reading their own rack sees the missing tool; so does this app.
 ///
-/// ## Why the corner language softened back up
+/// ## Why the corner language tightened back up (2026-08-24, Cassetta)
 ///
-/// [cellRadius] was 6 for a while — a "machined, not moulded" rejection of the 12–14dp
-/// rounded-card idiom the original Figma spec drew. The rule that mattered was never the radius:
-/// it was replacing the drop shadow with the ledge, because a shadow disappears in direct sun and
-/// a solid bar does not. Radius carries no sunlight risk either way, so on deliberate revision
-/// [cellRadius] moved back toward that Figma number — 12, not 14, since a cell rounds only three
-/// corners (the fourth butts the rail) and a full 14 reads odd with one corner still square. The
-/// rail edge stays square ([cellRadiusFlush]) — that one *is* structural, not a style choice: a
-/// drawer front is still butted against the extrusion, whatever its other three corners look like.
-/// The pinned floating pill nav keeps its own large radius regardless: it is the load strap across
-/// the bottom of the load bay, a different object with a different geometry, and it is a brand
-/// commitment besides.
+/// [cellRadius] spent a while at 12 — a Figma-matched rounded-card idiom left over from the
+/// pre-Cassetta world, back when the floating pill nav's own large radius was a pinned brand
+/// commitment and a cell's corner was judged against it for family resemblance. That pin is
+/// retired: the nav is a case latch row now (see `AppBottomNav`, 10/8dp radii), and a cell that
+/// still rounds at 12 reads as a moulded card sitting inside a machined case — the exact mismatch
+/// the whole redirection exists to fix. [cellRadius] moves to 6, the same "machined, not moulded"
+/// value this file carried once before, this time for a reason that persists: a compartment is
+/// die-cut, not poured. The rail edge stays square ([cellRadiusFlush]) regardless — that one *is*
+/// structural, not a style choice: a drawer front is still butted against the extrusion, whatever
+/// its other three corners look like.
 abstract final class AppRack {
   // ── The rail ──────────────────────────────────────────────────────────────
 
@@ -70,9 +69,9 @@ abstract final class AppRack {
   /// second tap.
   static const double cellMinHeight = 64;
 
-  /// Corner radius of a cell on its three free edges. See the class doc for why this is 12, not
-  /// the tighter 6 it briefly was.
-  static const double cellRadius = 12;
+  /// Corner radius of a cell on its three free edges. See the class doc for why this is 6, not
+  /// the softer 12 it carried under the pre-Cassetta world.
+  static const double cellRadius = 6;
 
   /// Corner radius on the rail edge. Square — the cell is butted against the extrusion. Structural,
   /// not a style knob: does not move when [cellRadius] does.
