@@ -463,15 +463,7 @@ class _ToggleRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: context.colors.bg3,
-              borderRadius: AppRack.insetShape,
-            ),
-            child: Icon(icon, size: 17, color: context.colors.inkFaint),
-          ),
+          RowIconTile(icon: icon, size: 34, iconSize: 17),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

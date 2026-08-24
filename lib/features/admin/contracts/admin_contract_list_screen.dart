@@ -143,15 +143,7 @@ class _ContractRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: AppRack.insetShape,
-        ),
-        child: Icon(LucideIcons.fileSignature, size: 20, color: context.colors.inkMuted),
-      ),
+      leading: const RowIconTile(icon: LucideIcons.fileSignature),
       title: name,
       subtitle: customerName,
       meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true, outlined: true),

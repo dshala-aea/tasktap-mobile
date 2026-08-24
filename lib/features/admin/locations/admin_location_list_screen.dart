@@ -194,15 +194,7 @@ class _AdminLocationRow extends StatelessWidget {
     final cityLabel = location.city ?? '—';
 
     return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: AppRack.insetShape,
-        ),
-        child: Icon(LucideIcons.mapPin, size: 20, color: context.colors.inkMuted),
-      ),
+      leading: const RowIconTile(icon: LucideIcons.mapPin),
       title: location.name,
       subtitle: '$customerName · $cityLabel',
       showDivider: !isLast,

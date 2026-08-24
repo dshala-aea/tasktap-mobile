@@ -355,19 +355,7 @@ class _TicketRow extends ConsumerWidget {
       // day. Scanning a list of thirty for "which one am I on" is the single most common thing a
       // technician does on this screen.
       strapped: statusName.toLowerCase() == 'in corso',
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: AppRack.insetShape,
-        ),
-        child: Icon(
-          LucideIcons.ticket,
-          size: 20,
-          color: context.colors.inkMuted,
-        ),
-      ),
+      leading: const RowIconTile(icon: LucideIcons.ticket),
       title: ticket.title,
       subtitle: reference,
       meta: Column(

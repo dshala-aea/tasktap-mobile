@@ -146,15 +146,7 @@ class _ProdottoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: AppRack.insetShape,
-        ),
-        child: Icon(LucideIcons.wrench, size: 20, color: context.colors.inkMuted),
-      ),
+      leading: const RowIconTile(icon: LucideIcons.wrench),
       title: name,
       subtitle: customerName,
       // Only when inactive: an active product is the ordinary state of every row on this list,

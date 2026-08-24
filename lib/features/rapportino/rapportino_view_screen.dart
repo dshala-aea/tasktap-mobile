@@ -221,18 +221,10 @@ class _RapportinoViewBody extends ConsumerWidget {
                                 ?priceStr,
                               ].join(' · ');
                               return ListRow(
-                                leading: Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: context.colors.bg3,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    LucideIcons.package,
-                                    size: 18,
-                                    color: context.colors.inkMuted,
-                                  ),
+                                leading: const RowIconTile(
+                                  icon: LucideIcons.package,
+                                  size: 36,
+                                  iconSize: 18,
                                 ),
                                 title: name,
                                 subtitle: metaSub,

@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -218,24 +219,19 @@ class _AdminMaterialeRow extends StatelessWidget {
         : '—';
 
     return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: AppRack.insetShape,
-        ),
+      leading: RowIconTile(
+        icon: materiale.imageUrl == null ? LucideIcons.package : null,
         child: materiale.imageUrl != null
             ? ClipRRect(
-                borderRadius: AppRack.insetShape,
+                borderRadius: BorderRadius.circular(AppRack.insetRadius),
                 child: Image.network(
                   materiale.imageUrl!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) =>
-                      Icon(LucideIcons.package, size: 20, color: context.colors.inkMuted),
+                      Icon(LucideIcons.package, size: 20, color: AppColors.onDarkMuted),
                 ),
               )
-            : Icon(LucideIcons.package, size: 20, color: context.colors.inkMuted),
+            : null,
       ),
       title: materiale.name,
       subtitle: '${materiale.code} · $catLabel',

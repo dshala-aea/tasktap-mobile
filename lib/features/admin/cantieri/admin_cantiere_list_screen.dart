@@ -150,15 +150,7 @@ class _AdminCantiereRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: AppRack.insetShape,
-        ),
-        child: Icon(LucideIcons.hardHat, size: 20, color: context.colors.inkMuted),
-      ),
+      leading: const RowIconTile(icon: LucideIcons.hardHat),
       title: cantiere.name,
       subtitle: cityLabel,
       showDivider: !isLast,

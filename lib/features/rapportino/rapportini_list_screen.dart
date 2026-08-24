@@ -264,15 +264,7 @@ class _RapportinoRow extends ConsumerWidget {
       strapped: !isSubmitted,
       leading: Stack(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.colors.bg3,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(LucideIcons.fileText, size: 20, color: context.colors.inkMuted),
-          ),
+          const RowIconTile(icon: LucideIcons.fileText),
           if (hasBothSigs)
             Positioned(
               right: 0,

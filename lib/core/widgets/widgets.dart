@@ -20,6 +20,7 @@ export 'lookup_field.dart';
 export 'permission_purpose_sheet.dart';
 export 'quick_action.dart';
 export 'rack.dart';
+export 'row_icon_tile.dart';
 export 'screen_header.dart';
 export 'section_title.dart';
 export 'signature_pad.dart';
