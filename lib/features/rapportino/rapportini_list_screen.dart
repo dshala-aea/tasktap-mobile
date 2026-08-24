@@ -21,16 +21,17 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Filter chips for the rapportini list.
 ///
-/// Pagata / Annullato show empty until the backend syncs the full report
-/// lifecycle back to the device.
-// TODO(backend): sync submitted-report lifecycle for Pagata/Annullato states.
-enum _RapportinoFilter { tutti, bozza, inviata, pagata, annullato }
+/// All of them (bar Tutti/Bozza) reflect the real server lifecycle now — SyncService's
+/// `submittedReports` upsert (sync_service.dart) keeps `stato` current, including
+/// Respinto/Fatturato/Annullato, which used to never reach the device at all.
+enum _RapportinoFilter { tutti, bozza, inviata, respinta, pagata, annullato }
 
 extension _FilterLabel on _RapportinoFilter {
   String get label => switch (this) {
     _RapportinoFilter.tutti => 'Tutti',
     _RapportinoFilter.bozza => 'Bozza',
     _RapportinoFilter.inviata => 'Inviata',
+    _RapportinoFilter.respinta => 'Respinta',
     _RapportinoFilter.pagata => 'Pagata',
     _RapportinoFilter.annullato => 'Annullato',
   };
@@ -137,9 +138,9 @@ class _RapportiniListBody extends ConsumerWidget {
         _RapportinoFilter.tutti => true,
         _RapportinoFilter.bozza => label == 'bozza',
         _RapportinoFilter.inviata => label == 'inviata',
-        // Pagata/Annullato: no local data yet — always empty until backend sync.
-        _RapportinoFilter.pagata => false,
-        _RapportinoFilter.annullato => false,
+        _RapportinoFilter.respinta => label == 'respinta',
+        _RapportinoFilter.pagata => label == 'pagata',
+        _RapportinoFilter.annullato => label == 'annullato',
       };
       final matchQuery = query.isEmpty || d.title.toLowerCase().contains(query.toLowerCase());
       return matchFilter && matchQuery;

@@ -27,7 +27,11 @@ import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
-Future<void> _seedSubmittedDraft(AppDatabase db, {String id = 'report-1'}) async {
+Future<void> _seedSubmittedDraft(
+  AppDatabase db, {
+  String id = 'report-1',
+  String stato = 'Bozza',
+}) async {
   await db
       .into(db.draftReports)
       .insert(
@@ -40,7 +44,7 @@ Future<void> _seedSubmittedDraft(AppDatabase db, {String id = 'report-1'}) async
           locationId: 'sede-abc',
           customerId: const Value('Cliente Srl'),
           isLocalOnly: const Value(true),
-          stato: const Value('Bozza'),
+          stato: Value(stato),
           submissionState: const Value('submitted'),
           customerSignatureAllegatoId: const Value('sig-c-1'),
           technicianSignatureAllegatoId: const Value('sig-t-1'),
@@ -191,6 +195,51 @@ void main() {
 
       final pdfBtn = find.text('Scarica PDF');
       expect(pdfBtn, findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — rejection banner (mobile audit item #1)', () {
+    testWidgets('shows the rejection banner and Rilavora affordance for a Respinto report', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, stato: 'Respinto');
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
+      expect(find.text('Rilavora'), findsOneWidget);
+      expect(find.text('Respinta'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows no rejection banner for a report still awaiting review (Inviato)', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, stato: 'Inviato');
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
+      expect(find.text('Rilavora'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows no rejection banner for a submitted-not-yet-synced report (stato Bozza)', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
+      expect(find.text('Rilavora'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

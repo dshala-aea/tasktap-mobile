@@ -230,6 +230,16 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     if (_aiBusy) return;
 
     final editor = ref.read(reportEditorProvider(widget.reportId));
+
+    // Whatever is already in `details` when the draft is requested — typed or dictated via
+    // DictateButton above (the only field on this step wired to it). DictateButton has no
+    // separate transcript output of its own; it writes straight into this controller/field (see
+    // dictate_button.dart), so this is the one place a technician's spoken notes are held before
+    // the AI draft would otherwise overwrite them. Captured before the overwrite-confirmation
+    // dialog and the draft response replace it, so the backend's "Nota Vocale Tecnico" prompt
+    // section actually receives what was said on site instead of nothing.
+    final voiceTranscript = editor.details.trim();
+
     final hasTyped = editor.title.trim().isNotEmpty || editor.details.trim().isNotEmpty;
     if (hasTyped) {
       final overwrite = await showDialog<bool>(
@@ -256,7 +266,11 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     try {
       final draft = await ref
           .read(aiApiClientProvider)
-          .generateDraft(scheduleId: scheduleId, ticketId: ticketId);
+          .generateDraft(
+            scheduleId: scheduleId,
+            ticketId: ticketId,
+            voiceTranscript: voiceTranscript.isEmpty ? null : voiceTranscript,
+          );
 
       final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
       _titleCtrl.text = draft.title;

@@ -8,6 +8,7 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/entitlements/entitlement_providers.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../../data/tickets/ticket_creation_queue_watcher.dart';
@@ -26,6 +27,9 @@ import '../../../data/timbratura/work_log_reconciler.dart';
 /// Sync triggers:
 /// - On first mount (post-login): calls [SyncNotifier.performSync].
 /// - On app foreground resume: calls [SyncNotifier.performSync].
+/// - On reconnect, and every 60s while foregrounded: same call, added alongside the worklog
+///   reconcilers below so a rapportino status change (e.g. an office rejection —
+///   SyncService's `submittedReports` upsert) surfaces without waiting for the next resume.
 ///
 /// Worklog reconciliation triggers (see work_log_reconciler.dart for why this exists — in short,
 /// the same account clocking out on the web must not leave mobile showing "on shift" forever).
@@ -84,6 +88,16 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // Same correction, for the cantiere (worksite) session. See
       // cantiere_work_log_reconciler.dart.
       initCantiereWorkLogReconcileWatcher(ref);
+      // General sync already carries a submitted rapportino's server-side lifecycle back to the
+      // device (SyncService's `submittedReports` upsert) — including an office rejection — but
+      // until now it only ever ran on first mount and app-foreground resume (below). A
+      // technician staring at a rapportino they just fixed offline, who then regains signal
+      // without backgrounding the app, would not see a rejection until they happened to resume
+      // it. Reconnect + the same 60s foreground poll the two worklog reconcilers already use
+      // close that gap, matching their cadence exactly rather than inventing a third pattern.
+      ref.read(connectivityProvider.notifier).onReconnect(() {
+        ref.read(syncProvider.notifier).performSync();
+      });
       _startReconcilePoll();
     });
   }
@@ -101,6 +115,7 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     _reconcilePoll = Timer.periodic(const Duration(seconds: 60), (_) {
       ref.read(workLogReconcilerProvider).reconcile();
       ref.read(cantiereWorkLogReconcilerProvider).reconcile();
+      ref.read(syncProvider.notifier).performSync();
     });
   }
 

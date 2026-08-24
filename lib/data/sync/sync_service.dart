@@ -42,6 +42,12 @@ class SyncService {
       await _upsertTickets(payload.tickets);
       await _upsertSchedules(payload.schedules);
       await _upsertDraftReports(payload.draftReports);
+      // Reports this technician submitted that have since left the draft state (Inviato,
+      // Controllato, Fatturato, Respinto, Annullato). Same upsert as drafts — the payload already
+      // carries the server-authoritative `stato`/`inviatoAt`/etc — so this is what makes an
+      // office rejection (POST /api/reports/{id}/respingi) actually show up on the device instead
+      // of the phone never learning about it. See sync_dto.dart's `submittedReports` doc comment.
+      await _upsertDraftReports(payload.submittedReports);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);

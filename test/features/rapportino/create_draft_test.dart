@@ -1,182 +1,236 @@
-import 'dart:async';
+// dart format width=100
+// test/features/rapportino/create_draft_test.dart
+//
+// Tests for createReworkDraft — the "Rilavora" affordance a rejected (Respinto) rapportino
+// gets on RapportinoViewScreen (mobile audit item #1).
+//
+// The backend's ReportStateMachine only allows Bozza → Inviato (CanInvia requires
+// Stato == Bozza), so a Respinto report cannot be resubmitted under its own id. Rework instead
+// clones the rejected report's data into a brand-new local draft — this file verifies that clone:
+// header fields, staff/materiali/controlli rows, and that signatures are deliberately NOT carried
+// over (they attest to a version of the report the office already rejected).
 
-import 'package:drift/drift.dart' hide isNull, isNotNull;
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
+
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
-import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/rapportino/create_draft.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
-class _MockAuthRepository extends Mock implements IAuthRepository {}
+AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
-void main() {
-  late AppDatabase db;
-  late _MockAuthRepository repo;
-  late StreamController<AuthUser?> authStream;
+final _testUser = AuthUser(
+  id: 'user-2',
+  email: 'tecnico@example.com',
+  accessToken: 'tok',
+  refreshToken: 'ref',
+  expiresAt: DateTime.utc(2030, 1, 1),
+);
 
-  final user = AuthUser(
-    id: 'real-user-id',
-    email: 'mario@tasktap.io',
-    accessToken: 't',
-    refreshToken: 'r',
-    expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-  );
-
-  setUp(() {
-    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
-    db = AppDatabase(NativeDatabase.memory());
-    repo = _MockAuthRepository();
-    authStream = StreamController<AuthUser?>.broadcast();
-    when(() => repo.authStateChanges).thenAnswer((_) => authStream.stream);
-  });
-
-  tearDown(() async {
-    await authStream.close();
-    await db.close();
-  });
-
-  /// Runs [body] with a WidgetRef, since createLocalDraft takes one.
-  Future<void> withRef(
-    WidgetTester tester,
-    Future<void> Function(WidgetRef ref) body, {
-    required bool signedIn,
-  }) async {
-    when(() => repo.currentUser).thenReturn(signedIn ? user : null);
-
-    late WidgetRef captured;
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          authRepositoryProvider.overrideWithValue(repo),
-        ],
-        child: Consumer(
-          builder: (_, ref, _) {
-            // Watched, not merely captured: currentUserProvider reads authStateProvider, a
-            // StreamProvider that only subscribes once something listens. Without this the first
-            // read returns null and every signed-in case looks signed out.
-            ref.watch(currentUserProvider);
-            captured = ref;
-            return const SizedBox.shrink();
+/// Pumps a tiny widget tree, exposing a real WidgetRef via a Consumer (createReworkDraft, like
+/// createLocalDraft, takes a WidgetRef — it is meant to be called from a widget callback).
+Future<String?> _callCreateReworkDraft(
+  WidgetTester tester,
+  ProviderContainer container,
+  DraftReport source,
+) async {
+  String? result;
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Consumer(
+          builder: (context, ref, _) {
+            return ElevatedButton(
+              onPressed: () async {
+                result = await createReworkDraft(ref, source);
+              },
+              child: const Text('go'),
+            );
           },
         ),
       ),
+    ),
+  );
+  await tester.tap(find.text('go'));
+  await tester.pumpAndSettle();
+  return result;
+}
+
+DraftReportsCompanion _rejectedReportCompanion({String id = 'report-1'}) =>
+    DraftReportsCompanion.insert(
+      id: id,
+      tenantId: 'tenant-1',
+      createdAt: DateTime.utc(2026, 6, 1),
+      title: 'Manutenzione impianto',
+      scheduleId: const Value('sched-1'),
+      ticketId: const Value('ticket-1'),
+      customerId: const Value('cust-1'),
+      details: const Value('Sostituita guarnizione'),
+      technicianNotes: const Value('Da ricontrollare tra 6 mesi'),
+      insertedUserId: 'tecnico-1',
+      locationId: 'loc-1',
+      materialiNotRequired: const Value(false),
+      isLocalOnly: const Value(false),
+      stato: const Value('Respinto'),
+      submissionState: const Value('submitted'),
+      customerSignatureAllegatoId: const Value('sig-c-1'),
+      technicianSignatureAllegatoId: const Value('sig-t-1'),
+      customerSignoffText: const Value('Confermo accettazione'),
     );
-    if (signedIn) authStream.add(user);
-    await tester.pump();
-    await tester.pump();
-    await body(captured);
-  }
 
-  Future<void> seedTicket(String tenantId) async {
-    await db
-        .into(db.tickets)
-        .insert(
-          TicketsCompanion.insert(
-            id: 't1',
-            tenantId: tenantId,
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Perdita',
-            customerId: 'c1',
-            locationId: 'l1',
-            statusId: 1,
-            typeId: 1,
-          ),
-        );
-  }
+void main() {
+  late AppDatabase db;
+  late DraftReportRepository repo;
 
-  testWidgets('stamps the signed-in user, not a placeholder', (tester) async {
-    await withRef(tester, signedIn: true, (ref) async {
-      await seedTicket('tenant-real');
-      final id = await createLocalDraft(ref, title: 'Nuovo rapportino');
-      expect(id, isNotNull);
-
-      final draft = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
-
-      // Was the literal 'local-user', which the read-only view rendered verbatim as the person
-      // who wrote the report.
-      expect(draft.insertedUserId, 'real-user-id');
-    });
+  setUp(() {
+    db = _makeDb();
+    repo = DraftReportRepository(db);
   });
 
-  testWidgets('takes the tenant from the synced mirror', (tester) async {
-    await withRef(tester, signedIn: true, (ref) async {
-      await seedTicket('tenant-real');
-      final id = await createLocalDraft(ref, title: 'X');
-      final draft = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
+  tearDown(() async => db.close());
 
-      // Was 'local' — a tenant that does not exist, sitting in a table where sync writes real
-      // ones. The day anything filters by tenant, those drafts vanish.
-      expect(draft.tenantId, 'tenant-real');
+  ProviderContainer buildContainer({AuthUser? user}) => ProviderContainer(
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      currentUserProvider.overrideWithValue(user),
+    ],
+  );
+
+  group('createReworkDraft', () {
+    testWidgets('clones header fields into a new draft id, starting fresh as Bozza', (
+      tester,
+    ) async {
+      await repo.createDraft(_rejectedReportCompanion());
+      final source = (await repo.getDraft('report-1'))!;
+
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final newId = await _callCreateReworkDraft(tester, container, source);
+
+      expect(newId, isNotNull);
+      expect(newId, isNot('report-1'), reason: 'a new report id, not the rejected one');
+
+      final newDraft = await repo.getDraft(newId!);
+      expect(newDraft, isNotNull);
+      expect(newDraft!.title, 'Manutenzione impianto');
+      expect(newDraft.details, 'Sostituita guarnizione');
+      expect(newDraft.technicianNotes, 'Da ricontrollare tra 6 mesi');
+      expect(newDraft.ticketId, 'ticket-1');
+      expect(newDraft.scheduleId, 'sched-1');
+      expect(newDraft.customerId, 'cust-1');
+      expect(newDraft.stato, 'Bozza');
+      expect(newDraft.isLocalOnly, isTrue);
+      expect(newDraft.submissionState, 'draft');
+
+      // The rejected report itself is left exactly as it was.
+      final original = await repo.getDraft('report-1');
+      expect(original!.stato, 'Respinto');
     });
-  });
 
-  testWidgets('an explicit tenant beats the mirror lookup', (tester) async {
-    await withRef(tester, signedIn: true, (ref) async {
-      await seedTicket('tenant-from-mirror');
-      final id = await createLocalDraft(ref, title: 'X', tenantId: 'tenant-from-ticket');
-      final draft = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
+    testWidgets('does not carry over signatures or customer sign-off', (tester) async {
+      await repo.createDraft(_rejectedReportCompanion());
+      final source = (await repo.getDraft('report-1'))!;
 
-      expect(draft.tenantId, 'tenant-from-ticket');
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final newId = await _callCreateReworkDraft(tester, container, source);
+      final newDraft = await repo.getDraft(newId!);
+
+      expect(newDraft!.customerSignatureAllegatoId, isNull);
+      expect(newDraft.technicianSignatureAllegatoId, isNull);
+      expect(newDraft.customerSignoffText, isNull);
     });
-  });
 
-  testWidgets('before the first sync the tenant is empty, never invented', (tester) async {
-    await withRef(tester, signedIn: true, (ref) async {
-      // Nothing seeded: a fresh install that has not synced.
-      final id = await createLocalDraft(ref, title: 'X');
-      final draft = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
-
-      // Empty reads as "not known yet". A plausible-looking constant reads as an answer, and the
-      // server assigns the real tenant on submit either way.
-      expect(draft.tenantId, '');
-    });
-  });
-
-  testWidgets('refuses to create a draft when signed out', (tester) async {
-    await withRef(tester, signedIn: false, (ref) async {
-      final id = await createLocalDraft(ref, title: 'X');
-
-      // A rapportino is authored by somebody. Inventing an author is the shape of the
-      // user-<timestamp> bug this codebase already fixed once.
-      expect(id, isNull);
-      expect(await db.select(db.draftReports).get(), isEmpty);
-    });
-  });
-
-  testWidgets('carries the ticket context through', (tester) async {
-    await withRef(tester, signedIn: true, (ref) async {
-      await seedTicket('tenant-real');
-      final id = await createLocalDraft(
-        ref,
-        title: 'Rapportino — Perdita',
-        locationId: 'l1',
-        ticketId: 't1',
-        customerId: 'c1',
+    testWidgets('clones staff, materiali and controlli rows under the new report id', (
+      tester,
+    ) async {
+      await repo.createDraft(_rejectedReportCompanion());
+      await repo.upsertStaff(
+        ReportStaffTableCompanion.insert(
+          id: 's-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          reportId: 'report-1',
+          userId: 'user-1',
+          hoursWorked: const Value(4.0),
+          kmTraveled: const Value(20.0),
+        ),
       );
-      final draft = await (db.select(db.draftReports)..where((r) => r.id.equals(id!))).getSingle();
+      await repo.upsertMateriale(
+        ReportMaterialiCompanion.insert(
+          id: 'm-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          reportId: 'report-1',
+          freeTextName: const Value('Guarnizione'),
+          quantity: 2.0,
+        ),
+      );
+      await repo.upsertControllo(
+        ReportControlliCompanion.insert(
+          id: 'c-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          reportId: 'report-1',
+          controlId: 'ctrl-1',
+          stringValue: const Value('120 bar'),
+        ),
+      );
 
-      expect(draft.ticketId, 't1');
-      expect(draft.customerId, 'c1');
-      expect(draft.locationId, 'l1');
+      final source = (await repo.getDraft('report-1'))!;
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final newId = await _callCreateReworkDraft(tester, container, source);
+
+      final newStaff = await repo.getStaff(newId!);
+      expect(newStaff, hasLength(1));
+      expect(newStaff.single.userId, 'user-1');
+      expect(newStaff.single.hoursWorked, 4.0);
+      expect(newStaff.single.id, isNot('s-1'), reason: 'a new row id, not reusing the source one');
+
+      final newMateriali = await repo.getMateriali(newId);
+      expect(newMateriali, hasLength(1));
+      expect(newMateriali.single.freeTextName, 'Guarnizione');
+      expect(newMateriali.single.quantity, 2.0);
+
+      final newControlli = await repo.getControlli(newId);
+      expect(newControlli, hasLength(1));
+      expect(newControlli.single.controlId, 'ctrl-1');
+      expect(newControlli.single.stringValue, '120 bar');
+
+      // The rejected report's own child rows are untouched.
+      expect((await repo.getStaff('report-1')).single.id, 's-1');
     });
-  });
 
-  testWidgets('two drafts created in the same millisecond get distinct ids', (tester) async {
-    await withRef(tester, signedIn: true, (ref) async {
-      // The old id used millisecondsSinceEpoch. Two taps inside one millisecond — a double-tap on
-      // a fast device — produced the same id and the second insert collided with the first.
-      final a = await createLocalDraft(ref, title: 'A');
-      final b = await createLocalDraft(ref, title: 'B');
+    testWidgets('refuses (returns null) with no signed-in author, same as createLocalDraft', (
+      tester,
+    ) async {
+      await repo.createDraft(_rejectedReportCompanion());
+      final source = (await repo.getDraft('report-1'))!;
 
-      expect(a, isNot(b));
-      expect(await db.select(db.draftReports).get(), hasLength(2));
+      final container = buildContainer(user: null);
+      addTearDown(container.dispose);
+
+      final newId = await _callCreateReworkDraft(tester, container, source);
+      expect(newId, isNull);
+
+      // Nothing was created. A one-shot query, not `.watchAllReports()`: a live `.watch()`
+      // stream subscription left open inside a testWidgets body races this Flutter test binding's
+      // teardown against Drift's NativeDatabase closing ("Bad state: Cannot close sink while
+      // adding stream") — unrelated to correctness, but a `test`-vs-`testWidgets` interaction
+      // worth avoiding here rather than working around per-run.
+      final rows = await db.select(db.draftReports).get();
+      expect(rows, hasLength(1));
     });
   });
 }

@@ -19408,7 +19408,8 @@
           "allegati",
           "auditTrail",
           "materialiNonRichiesti",
-          "testoAccettazioneCliente"
+          "testoAccettazioneCliente",
+          "isAiAssisted"
         ],
         "type": "object",
         "properties": {
@@ -19553,6 +19554,10 @@
               "string"
             ],
             "description": "Customer acceptance text captured at signing time. See bool RapportinoDettaglioDto.MaterialiNonRichiesti\u0027s remarks."
+          },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Feature-parity audit item #1: \u0060Report.IsAiAssisted\u0060 is written on mobile submit and\nreturned once in the one-shot submit response, but no read endpoint returned it afterward \u2014\na re-fetch (this web review screen) could not tell whether a rapportino was AI-assisted."
           }
         },
         "description": "Ready-to-render payload for the Rapportino detail/review screen\n(\u0060GET /api/app/rapportini/{id}\u0060). Application-tier contract\n(\u0060docs/patterns/application-api.md\u0060): Italian property names, no \u0060[JsonPropertyName]\u0060,\nowned by the web app, no external compatibility promise. Replaces the previous mocked detail\nwith a composed read: report header \u002B staff \u002B materiali \u002B control values \u002B signature state.\nWrites stay on canonical \u0060/api/reports/*\u0060 \u2014 the app tier is read-only."

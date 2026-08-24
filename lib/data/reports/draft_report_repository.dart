@@ -46,6 +46,22 @@ class DraftReportRepository {
         .watch();
   }
 
+  /// Stream every report this device knows about — local-only drafts plus reports synced down
+  /// after leaving the draft state (Inviato/Controllato/Fatturato/Respinto/Annullato — see
+  /// SyncService's `submittedReports` upsert) — newest first.
+  ///
+  /// Every row in `draft_reports` already belongs to the signed-in technician (both the
+  /// local-draft and the synced-down queries are scoped server/client-side to this account), so
+  /// unlike [watchLocalDrafts] there is no `isLocalOnly` filter to apply: a report that left this
+  /// device's local-only state by being submitted is still this technician's own report, and the
+  /// Rapportini list needs to keep showing it (with its up-to-date status) rather than have it
+  /// disappear the moment `markSubmitted`/a sync clears the flag.
+  Stream<List<DraftReport>> watchAllReports() {
+    return (_db.select(
+      _db.draftReports,
+    )..orderBy([(r) => OrderingTerm.desc(r.updatedAt)])).watch();
+  }
+
   /// Delete a draft and all its children.
   Future<void> deleteDraft(String reportId) async {
     await _db.transaction(() async {

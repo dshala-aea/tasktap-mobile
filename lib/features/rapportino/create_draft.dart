@@ -1,11 +1,14 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart'
     show draftReportRepositoryProvider;
+
+const _uuid = Uuid();
 
 /// Creates a local rapportino draft with the identifiers this device actually knows.
 ///
@@ -92,4 +95,113 @@ Future<String> resolveDeviceTenantId(AppDatabase db) async {
 
   final customer = await (db.select(db.customers)..limit(1)).getSingleOrNull();
   return customer?.tenantId ?? '';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Rework — turning a rejected rapportino back into an editable draft.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Creates a new local draft seeded from a rejected report's own data, so the technician can fix
+/// it and resubmit. Returns the new draft's id, or `null` when creation is refused (same reason
+/// as [createLocalDraft]: no signed-in author to attribute it to).
+///
+/// ## Why a new report id, not editing [source] in place
+///
+/// `ReportStateMachine.CanInvia` (backend) only allows `Bozza → Inviato` — a `Respinto` report
+/// cannot be resubmitted under its own id; `POST /api/reports/submit` would reject it with
+/// "Il rapportino è già in stato Respinto" before ever reaching the network in a useful way.
+/// There is also no rejection-reason field on the backend to carry forward — `POST
+/// /api/reports/{id}/respingi` takes no request body and the `Report` entity has no such column
+/// (checked: `ReportsController.cs`, `ReportService.RespingiAsync`, `Report.cs`). So "rework"
+/// here means starting a genuinely new report — a fresh client-generated id, submitted through
+/// the ordinary `Bozza → Inviato` path — seeded with the rejected report's data, rather than
+/// reopening the old one. The rejected report itself is left exactly as it was: the record of
+/// what happened and when.
+///
+/// Copies the header fields the mobile editor tracks (title/details/technicianNotes/
+/// ticket-schedule-customer-location links, materialiNotRequired) plus every staff/materiali/
+/// controlli row. Deliberately does NOT copy the signatures or the customer sign-off text — those
+/// attest to a specific version of the report the office already rejected, and must be recaptured
+/// for the reworked one.
+Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
+  final user = ref.read(currentUserProvider);
+  if (user == null) return null;
+
+  final repo = ref.read(draftReportRepositoryProvider);
+  final id = 'draft-${DateTime.now().microsecondsSinceEpoch}';
+  final now = DateTime.now().toUtc();
+
+  await repo.createDraft(
+    DraftReportsCompanion.insert(
+      id: id,
+      tenantId: source.tenantId,
+      createdAt: now,
+      title: source.title,
+      scheduleId: Value(source.scheduleId),
+      ticketId: Value(source.ticketId),
+      customerId: Value(source.customerId),
+      details: Value(source.details),
+      metadataJson: Value(source.metadataJson),
+      insertedUserId: user.id,
+      locationId: source.locationId,
+      technicianNotes: Value(source.technicianNotes),
+      materialiNotRequired: Value(source.materialiNotRequired),
+      isLocalOnly: const Value(true),
+      stato: const Value('Bozza'),
+    ),
+  );
+
+  for (final s in await repo.getStaff(source.id)) {
+    await repo.upsertStaff(
+      ReportStaffTableCompanion.insert(
+        id: _uuid.v4(),
+        tenantId: source.tenantId,
+        createdAt: now,
+        reportId: id,
+        userId: s.userId,
+        hoursWorked: Value(s.hoursWorked),
+        kmTraveled: Value(s.kmTraveled),
+        vehicle: Value(s.vehicle),
+        costPerKm: Value(s.costPerKm),
+        notes: Value(s.notes),
+        startTime: Value(s.startTime),
+        endTime: Value(s.endTime),
+        pauseMinutes: Value(s.pauseMinutes),
+      ),
+    );
+  }
+
+  for (final m in await repo.getMateriali(source.id)) {
+    await repo.upsertMateriale(
+      ReportMaterialiCompanion.insert(
+        id: _uuid.v4(),
+        tenantId: source.tenantId,
+        createdAt: now,
+        reportId: id,
+        materialeId: Value(m.materialeId),
+        freeTextName: Value(m.freeTextName),
+        quantity: m.quantity,
+        unitOfMeasure: Value(m.unitOfMeasure),
+        notes: Value(m.notes),
+        magazzinoId: Value(m.magazzinoId),
+      ),
+    );
+  }
+
+  for (final c in await repo.getControlli(source.id)) {
+    await repo.upsertControllo(
+      ReportControlliCompanion.insert(
+        id: _uuid.v4(),
+        tenantId: source.tenantId,
+        createdAt: now,
+        reportId: id,
+        controlId: c.controlId,
+        stringValue: Value(c.stringValue),
+        boolValue: Value(c.boolValue),
+        dateValue: Value(c.dateValue),
+      ),
+    );
+  }
+
+  return id;
 }

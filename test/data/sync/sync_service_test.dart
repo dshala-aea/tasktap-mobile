@@ -35,6 +35,7 @@ Map<String, dynamic> _syncPayload({
   DateTime? since,
   List<Map<String, dynamic>> schedules = const [],
   List<Map<String, dynamic>> draftReports = const [],
+  List<Map<String, dynamic>> submittedReports = const [],
   List<Map<String, dynamic>> customers = const [],
   List<Map<String, dynamic>> locations = const [],
   List<Map<String, dynamic>> tickets = const [],
@@ -49,6 +50,7 @@ Map<String, dynamic> _syncPayload({
     'since': since?.toIso8601String(),
     'schedules': schedules,
     'draftReports': draftReports,
+    'submittedReports': submittedReports,
     'customers': customers,
     'locations': locations,
     'tickets': tickets,
@@ -171,11 +173,15 @@ Map<String, dynamic> _ticketTypeJson({int id = 1, String name = 'Assistenza'}) =
   'description': null,
 };
 
-Map<String, dynamic> _draftReportJson({String id = 'report-1'}) => {
+Map<String, dynamic> _draftReportJson({
+  String id = 'report-1',
+  String stato = 'Bozza',
+  String? updatedAt,
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
-  'updatedAt': null,
+  'updatedAt': updatedAt,
   'title': 'Rapportino bozza',
   'scheduleId': null,
   'ticketId': 'ticket-1',
@@ -190,7 +196,7 @@ Map<String, dynamic> _draftReportJson({String id = 'report-1'}) => {
   'technicianSignatureAllegatoId': null,
   'technicianNotes': null,
   'closedAt': null,
-  'stato': 'Bozza',
+  'stato': stato,
   'inviatoAt': null,
   'controllatoAt': null,
   'controllatoDa': null,
@@ -430,6 +436,103 @@ void main() {
 
       final rows = await db.select(db.customers).get();
       expect(rows.length, 1);
+    });
+  });
+
+  // ── Report lifecycle read-back (mobile audit item #1) ──────────────────────
+  //
+  // Mobile's rapportini list used to read only the local draft_reports rows this device itself
+  // created — an office rejection (POST /api/reports/{id}/respingi) never reached the phone.
+  // `submittedReports` (MobileUserSyncResult, backend) carries every report this technician
+  // submitted that has since left Bozza; these tests verify it reconciles into the same
+  // draft_reports table, converges on repeated syncs, and a Respinto change is picked up.
+
+  group('sync — submittedReports (server-side lifecycle read-back)', () {
+    test('upserts a submitted report even though it was never a local draft', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Inviato')]),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 1);
+      expect(rows.first.id, 'report-1');
+      expect(rows.first.stato, 'Inviato');
+      expect(rows.first.isLocalOnly, isFalse);
+    });
+
+    test('a Respinto status change from the office is picked up on the next sync', () async {
+      // First sync: submitted, awaiting review.
+      _stubDioGet(
+        mockDio,
+        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Inviato')]),
+      );
+      await svc.sync();
+      expect((await db.select(db.draftReports).get()).single.stato, 'Inviato');
+
+      // Office rejects it (POST /api/reports/{id}/respingi) — the next sync reflects that.
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          submittedReports: [
+            _draftReportJson(id: 'report-1', stato: 'Respinto', updatedAt: '2026-06-22T09:00:00Z'),
+          ],
+        ),
+      );
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 1, reason: 'must update in place, not duplicate');
+      expect(rows.first.stato, 'Respinto');
+    });
+
+    test('an already-synced status is a no-op on a repeated sync with the same payload', () async {
+      final payload = _syncPayload(
+        submittedReports: [_draftReportJson(id: 'report-1', stato: 'Respinto')],
+      );
+      _stubDioGet(mockDio, payload);
+      await svc.sync();
+
+      _stubDioGet(mockDio, payload);
+      await svc.sync();
+      _stubDioGet(mockDio, payload);
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 1);
+      expect(rows.first.stato, 'Respinto');
+    });
+
+    test('does not disturb a genuinely separate local-only draft with the same-shaped id space', () async {
+      // A local draft this device created and never submitted.
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'draft-local-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Bozza locale',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+            ),
+          );
+
+      _stubDioGet(
+        mockDio,
+        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Respinto')]),
+      );
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 2);
+      final local = rows.firstWhere((r) => r.id == 'draft-local-1');
+      expect(local.isLocalOnly, isTrue);
+      expect(local.stato, 'Bozza');
     });
   });
 

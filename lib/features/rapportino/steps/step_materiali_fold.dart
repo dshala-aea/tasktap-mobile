@@ -13,10 +13,10 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
+import '../../../data/reports/ticket_controls_cache_repository.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
-import '../../ticket/ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -516,10 +516,12 @@ class _PhotoThumb extends StatelessWidget {
 // each with its own label and input type. A field technician was never meant
 // to type a control ID — that requirement only existed because nothing wired
 // the real checklist through. This reads it via GET
-// /api/tickets/{ticketId}/controls (ticketControlsProvider) and renders one
-// input per item, driven by ControlType. Answers are still collected into
-// ControlloRow / upserted the same way as before — only how they're gathered
-// changed, not the submit payload shape.
+// /api/tickets/{ticketId}/controls through `cachedTicketControlsProvider`
+// (ticket_controls_cache_repository.dart) — the same fetch, plus a local cache so the
+// checklist is still viewable/answerable if connectivity drops mid-draft — and renders
+// one input per item, driven by ControlType. Answers are still collected into
+// ControlloRow / upserted the same way as before — only how the checklist itself is
+// fetched changed, not the submit payload shape.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _ControlliChecklist extends ConsumerWidget {
@@ -542,7 +544,7 @@ class _ControlliChecklist extends ConsumerWidget {
       );
     }
 
-    final controlsAsync = ref.watch(ticketControlsProvider(ticket));
+    final controlsAsync = ref.watch(cachedTicketControlsProvider(ticket));
 
     return controlsAsync.when(
       loading: () => const Padding(

@@ -21,9 +21,11 @@ import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
+import 'package:tasktap_mobile/data/reports/ticket_controls_cache_repository.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/steps/step_materiali_fold.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 class MockDio extends Mock implements Dio {}
@@ -291,7 +293,7 @@ void main() {
   });
 
   group('Controlli checklist — offline', () {
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('says plainly it is offline when nothing was ever cached', (tester) async {
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
@@ -301,6 +303,112 @@ void main() {
       expect(find.text('Nessun controllo previsto per questo intervento.'), findsNothing);
       // Offline must never degrade into the old typed-ID box either.
       expect(find.text('Aggiungi controllo'), findsNothing);
+    });
+  });
+
+  // ── Offline cache (mobile audit item #3) ────────────────────────────────────
+  //
+  // Every other section of this offline-first form works with zero network at capture time; the
+  // checklist used to be the one exception (no local cache — see the group above for the
+  // "nothing cached yet" case, unchanged by this feature). These verify the cache itself: a
+  // successful online fetch persists it, a cached checklist is viewable/answerable offline, and
+  // an answer given offline is an ordinary ControlloRow — already included in the submit payload
+  // the same way as every other answer (SubmissionQueue._buildRequest reads it straight from
+  // Drift, unaware of whether the checklist that produced it came from the network or the cache).
+
+  group('Controlli checklist — offline cache', () {
+    Map<String, dynamic> controlsPayload() => {
+      'id': 'grp-1',
+      'name': 'Sezione A',
+      'description': null,
+      'sortOrder': 0,
+      'subgroups': <dynamic>[],
+      'controls': [
+        {
+          'id': 'tc-1',
+          'templateControlId': 'tpl-1',
+          'controlLineageId': 'lin-1',
+          'label': 'Pressione OK',
+          'description': null,
+          'type': 0, // Checkbox
+          'isRequired': true,
+          'options': null,
+          'valoreLimite': null,
+          'sortOrder': 0,
+          'status': 'Pending',
+          'stringValue': null,
+          'boolValue': null,
+          'dateValue': null,
+          'completedByReportId': null,
+          'completedAt': null,
+        },
+      ],
+    };
+
+    testWidgets('a successful online fetch caches the checklist locally', (tester) async {
+      final dio = MockDio();
+      when(
+        () => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls'),
+      ).thenAnswer((_) async => _okResponse([controlsPayload()], '/api/tickets/$_ticketId/controls'));
+
+      final container = _buildContainer(db: db, dio: dio);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      final cached = await (db.select(
+        db.cachedTicketControls,
+      )..where((t) => t.ticketId.equals(_ticketId))).getSingleOrNull();
+      expect(cached, isNotNull);
+      expect(cached!.controlsJson, contains('Pressione OK'));
+    });
+
+    testWidgets('a cached checklist is viewable and answerable while offline', (tester) async {
+      // Seed the cache as if a previous online fetch already happened, before this device lost
+      // connectivity mid-draft.
+      await TicketControlsCacheRepository(db).cacheControls(_ticketId, [
+        TicketControlGroupDto.fromJson(controlsPayload()),
+      ]);
+
+      final container = _buildContainer(db: db, isOnline: false);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      // No offline error — the cache stands in for the network fetch.
+      expect(find.textContaining('Controlli non disponibili offline'), findsNothing);
+      expect(find.text('Pressione OK'), findsOneWidget);
+
+      // Still answerable: ticking it writes an ordinary ControlloRow, same as when online.
+      await tester.tap(find.byType(AppToggle).last);
+      await tester.pumpAndSettle();
+
+      final rows = container.read(reportEditorProvider(_reportId)).controlloRows;
+      expect(rows, hasLength(1));
+      expect(rows.single.controlId, 'tc-1');
+      expect(rows.single.boolValue, isTrue);
+    });
+
+    testWidgets('an answer recorded offline is persisted as a normal draft controllo row — '
+        'the same table SubmissionQueue reads to build the submit payload', (tester) async {
+      await TicketControlsCacheRepository(db).cacheControls(_ticketId, [
+        TicketControlGroupDto.fromJson(controlsPayload()),
+      ]);
+
+      final container = _buildContainer(db: db, isOnline: false);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(AppToggle).last);
+      await tester.pumpAndSettle();
+
+      // What SubmissionQueue._buildRequest actually reads at submit time.
+      final repo = DraftReportRepository(db);
+      final persisted = await repo.getControlli(_reportId);
+      expect(persisted, hasLength(1));
+      expect(persisted.single.controlId, 'tc-1');
+      expect(persisted.single.boolValue, isTrue);
     });
   });
 }

@@ -396,6 +396,30 @@ class ReportControlli extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── cached_ticket_controls ──────────────────────────────────────────────────
+/// Last successfully fetched checklist (`GET /api/tickets/{id}/controls`) for a ticket, so the
+/// rapportino's Controlli step can still be viewed and answered while offline mid-draft.
+///
+/// Every other section of the offline-first rapportino form (materials, staff, photos,
+/// signatures, GPS) works with zero network at capture time; the checklist used to be the one
+/// exception, throwing [TicketDetailOfflineException] with nothing to show. One row per ticket,
+/// overwritten on every successful online fetch — see `TicketControlsCacheRepository`. Answers
+/// recorded against a cached checklist are ordinary [ReportControlli] rows, already queued for
+/// submit the same way as the rest of the draft; caching the checklist's *questions* is the only
+/// piece that was missing.
+class CachedTicketControls extends Table {
+  TextColumn get ticketId => text()();
+
+  /// The raw `List<TicketControlGroupDto>` tree, serialized to JSON by
+  /// `TicketControlsCacheRepository` (that DTO has no `toJson` of its own — it only ever came
+  /// from the server before now).
+  TextColumn get controlsJson => text()();
+  DateTimeColumn get cachedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {ticketId};
+}
+
 // ── work_sessions (Timbra) ────────────────────────────────────────────────────
 /// Local-only clock-in / clock-out sessions for the Timbra feature.
 /// When the backend endpoint (D6) is implemented, these rows will be synced up.
@@ -660,13 +684,14 @@ class PendingTicketAttachments extends Table {
     Colleagues,
     Entitlements,
     PendingTicketAttachments,
+    CachedTicketControls,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration {
@@ -779,6 +804,11 @@ class AppDatabase extends _$AppDatabase {
           // site cannot be relied on to have signal. Same offline-outbox shape as pendingTickets:
           // see PendingTicketAttachments' own doc comment for why its retry policy is stricter.
           await m.createTable(pendingTicketAttachments);
+        }
+        if (from < 19) {
+          // Offline cache for the rapportino Controlli checklist — see
+          // `CachedTicketControls`'s own doc comment.
+          await m.createTable(cachedTicketControls);
         }
       },
     );

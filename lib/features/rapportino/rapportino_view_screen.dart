@@ -2,11 +2,14 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -153,6 +156,28 @@ class _RapportinoViewBody extends ConsumerWidget {
                     ),
                   ),
                 ),
+
+                // ── Rejection banner + rework affordance ────────────────────────
+                //
+                // The office rejected this report (POST /api/reports/{id}/respingi). The
+                // backend has no rejection-reason field to show (checked: ReportsController,
+                // ReportService.RespingiAsync, the Report entity itself all take/carry none), so
+                // this states the fact plainly instead of inventing a reason. "Rilavora" clones
+                // this report's data into a brand-new local draft — see createReworkDraft's own
+                // doc comment for why it can't simply reopen this same report id (the backend's
+                // state machine only allows Bozza → Inviato).
+                if (rapportinoIsRejected(draft))
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: _RejectionBanner(draft: draft),
+                    ),
+                  ),
 
                 // ── Descrizione ───────────────────────────────────────────────
                 if (draft.details != null && draft.details!.isNotEmpty)
@@ -302,6 +327,87 @@ class _RapportinoViewBody extends ConsumerWidget {
                 SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Rejection banner + rework button
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _RejectionBanner extends ConsumerStatefulWidget {
+  const _RejectionBanner({required this.draft});
+
+  final DraftReport draft;
+
+  @override
+  ConsumerState<_RejectionBanner> createState() => _RejectionBannerState();
+}
+
+class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
+  bool _busy = false;
+
+  Future<void> _rilavora() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final newId = await createReworkDraft(ref, widget.draft);
+      if (!mounted) return;
+      if (newId == null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Accedi per rilavorare il rapportino.')));
+        return;
+      }
+      context.push(AppRoutes.rapportiniEditor(newId));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.base),
+      decoration: BoxDecoration(
+        color: context.colors.red.withValues(alpha: 0.12),
+        border: Border.all(color: context.colors.red),
+        borderRadius: AppRack.freeShape,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(LucideIcons.xCircle, color: context.colors.red, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "L'ufficio ha respinto questo rapportino.",
+                  style: TextStyle(fontWeight: FontWeight.bold, color: context.colors.ink),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            // The backend has no motivo/reason field to show here — POST
+            // /api/reports/{id}/respingi takes no body and Report carries none — so this says
+            // what is true instead of a reason that does not exist yet.
+            "Rilavoralo per correggerlo e inviarlo di nuovo. L'ufficio non ha registrato "
+            'un motivo per questo rifiuto.',
+            style: TextStyle(color: context.colors.ink, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          AppButton(
+            label: 'Rilavora',
+            icon: const Icon(LucideIcons.penTool),
+            onPressed: _busy ? null : _rilavora,
+            isLoading: _busy,
           ),
         ],
       ),

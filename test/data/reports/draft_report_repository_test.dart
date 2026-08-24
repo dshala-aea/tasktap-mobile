@@ -177,6 +177,40 @@ void main() {
     });
   });
 
+  group('watchAllReports', () {
+    test('returns local-only and synced-down (submitted) reports alike', () async {
+      await repo.createDraft(_draftCompanion(id: 'r-local', isLocalOnly: true));
+      await repo.createDraft(_draftCompanion(id: 'r-synced', isLocalOnly: false));
+
+      final reports = await repo.watchAllReports().first;
+      expect(reports.map((r) => r.id).toSet(), {'r-local', 'r-synced'});
+    });
+
+    test('reflects a status update from a re-sync (e.g. Respinto) without disappearing', () async {
+      await repo.createDraft(_draftCompanion(id: 'r-1', isLocalOnly: true));
+      await repo.saveDraft(
+        DraftReportsCompanion(
+          id: const Value('r-1'),
+          tenantId: const Value('tenant-1'),
+          createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
+          title: const Value('Rapportino Test'),
+          insertedUserId: const Value('user-1'),
+          locationId: const Value('loc-1'),
+          stato: const Value('Respinto'),
+          isLocalOnly: const Value(false),
+        ),
+      );
+
+      final reports = await repo.watchAllReports().first;
+      expect(reports, hasLength(1));
+      expect(reports.single.stato, 'Respinto');
+    });
+
+    test('empty list when nothing cached', () async {
+      expect(await repo.watchAllReports().first, isEmpty);
+    });
+  });
+
   group('deleteDraft', () {
     test('removes draft header and all child rows', () async {
       await repo.createDraft(_draftCompanion());

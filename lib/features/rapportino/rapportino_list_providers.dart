@@ -9,14 +9,18 @@ import '../../presentation/providers/report_editor_providers.dart';
 // Rapportino list providers (D3b)
 //
 // Drives RapportiniListScreen and RapportinoViewScreen.
-// Only local DraftReports are cached; server lifecycle (Pagata/Annullato) is
-// not synced back to the device yet.
+//
+// The full server lifecycle (Inviato/Controllato/Fatturato/Respinto/Annullato) now syncs back to
+// the device — see SyncService's `submittedReports` upsert (sync_service.dart) — so this reads
+// every report the device knows about, not just still-local drafts. See
+// `DraftReportRepository.watchAllReports` for why no `isLocalOnly` filter is needed here.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Stream of all local drafts (isLocalOnly == true), newest first.
+/// Stream of every report this technician has locally — drafts and synced-down submitted
+/// reports alike — newest first.
 final rapportiniListProvider = StreamProvider.autoDispose<List<DraftReport>>((ref) {
   final repo = ref.watch(draftReportRepositoryProvider);
-  return repo.watchLocalDrafts();
+  return repo.watchAllReports();
 });
 
 /// Stream a single draft by id — for the view screen.
@@ -70,25 +74,55 @@ final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, 
 // Status-name resolver
 //
 // Maps submissionState + stato → Italian label for the StatusPill.
-// submitted  → "Inviata"
-// draft/readyToSubmit/failed  → "Bozza"
-// uploadingMedia/submitting   → "Invio…"
+// uploadingMedia/submitting → "Invio…" (local, in-flight — no server stato yet)
+// stato == Respinto         → "Respinta"
+// stato == Controllato      → "Controllato"
+// stato == Fatturato        → "Pagata"
+// stato == Annullato        → "Annullato"
+// submissionState==submitted OR stato==Inviato → "Inviata"
+// everything else           → "Bozza"
+//
+// `stato` is checked first for the four states past "submitted" because it — not the local
+// `submissionState` — is the field SyncService's `submittedReports` upsert keeps current: a
+// report this device never itself submitted (or one the office has since moved further along —
+// rejected, checked, invoiced) needs the right label regardless of what `submissionState` this
+// device last recorded for it. "Inviata" falls back to `submissionState == submitted` alongside
+// `stato == Inviato` because the two are set together by `markSubmitted` on this device but a
+// sync only ever touches `stato`, never `submissionState` (see SyncService._upsertDraftReports) —
+// requiring both would make a report this device submitted, and that has not been touched by the
+// office since, momentarily read as "Bozza" between submit and the next sync.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Returns the Italian status label shown in the StatusPill for a draft.
 String rapportinoStatusLabel(DraftReport draft) {
   final sub = DraftSubmissionState.fromString(draft.submissionState);
-  return switch (sub) {
-    DraftSubmissionState.submitted => 'Inviata',
-    DraftSubmissionState.uploadingMedia => 'Invio…',
-    DraftSubmissionState.submitting => 'Invio…',
-    _ => 'Bozza',
-  };
+  if (sub == DraftSubmissionState.uploadingMedia || sub == DraftSubmissionState.submitting) {
+    return 'Invio…';
+  }
+  switch (draft.stato) {
+    case 'Respinto':
+      return 'Respinta';
+    case 'Controllato':
+      return 'Controllato';
+    case 'Fatturato':
+      return 'Pagata';
+    case 'Annullato':
+      return 'Annullato';
+  }
+  if (sub == DraftSubmissionState.submitted || draft.stato == 'Inviato') {
+    return 'Inviata';
+  }
+  return 'Bozza';
 }
 
-/// Returns true when the draft is submitted (read-only view mode).
+/// Returns true once the report has left the draft state — either this device submitted it
+/// (`submissionState == submitted`) or a sync learned it left `Bozza` some other way — so the
+/// list should route to the read-only view instead of the editor.
 bool rapportinoIsSubmitted(DraftReport draft) {
-  return DraftSubmissionState.fromString(draft.submissionState) == DraftSubmissionState.submitted;
+  if (DraftSubmissionState.fromString(draft.submissionState) == DraftSubmissionState.submitted) {
+    return true;
+  }
+  return draft.stato != 'Bozza';
 }
 
 /// Returns true when the draft is in-flight (uploading or submitting).
@@ -96,3 +130,8 @@ bool rapportinoIsInFlight(DraftReport draft) {
   final sub = DraftSubmissionState.fromString(draft.submissionState);
   return sub == DraftSubmissionState.uploadingMedia || sub == DraftSubmissionState.submitting;
 }
+
+/// Returns true when the office rejected this report (`Inviato → Respinto`) — the case that
+/// needs a rework affordance rather than a plain read-only view. See `createReworkDraft`
+/// (create_draft.dart) and RapportinoViewScreen's rejection banner.
+bool rapportinoIsRejected(DraftReport draft) => draft.stato == 'Respinto';

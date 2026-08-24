@@ -6,6 +6,13 @@ class SyncResultDto {
   final DateTime? since;
   final List<ScheduleDto> schedules;
   final List<ReportDto> draftReports;
+
+  /// Reports this technician submitted that have since left the draft state — Inviato,
+  /// Controllato, Fatturato, Respinto, Annullato. Read-only on the device: this is what lets the
+  /// Rapportini list (and the reject/rework affordance) show what happened to a report after it
+  /// left the phone, instead of the device never learning the office rejected it. See
+  /// `MobileUserSyncResult.SubmittedReports` (backend) for the query this mirrors.
+  final List<ReportDto> submittedReports;
   final List<CustomerDto> customers;
   final List<LocationDto> locations;
   final List<TicketDto> tickets;
@@ -20,6 +27,7 @@ class SyncResultDto {
     required this.since,
     required this.schedules,
     required this.draftReports,
+    this.submittedReports = const [],
     required this.customers,
     required this.locations,
     required this.tickets,
@@ -36,6 +44,7 @@ class SyncResultDto {
       since: j['since'] == null ? null : DateTime.parse(j['since'] as String),
       schedules: _list(j['schedules'], ScheduleDto.fromJson),
       draftReports: _list(j['draftReports'], ReportDto.fromJson),
+      submittedReports: _list(j['submittedReports'], ReportDto.fromJson),
       customers: _list(j['customers'], CustomerDto.fromJson),
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),

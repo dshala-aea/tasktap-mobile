@@ -62,6 +62,10 @@ StatusColorPair statusColor(String stato) {
     // counterpart already uses.
     'inviato' => statusColor('Inviata'),
     'fatturato' => statusColor('Pagata'),
+    // Rejected rapportino (Inviato → Respinto, office sends it back for rework). Same red as
+    // Annullato/Scaduta — both read as "this needs attention", which a rejection does too.
+    'respinta' => const StatusColorPair(background: Color(0xFFFFDCDC), foreground: Color(0xFFAA0000)),
+    'respinto' => statusColor('Respinta'),
     'controllato' => const StatusColorPair(
       background: AppColors.statusControllato,
       foreground: AppColors.onStatusControllato,
