@@ -187,16 +187,17 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders an AppAccordion with all seven section labels', (tester) async {
+    testWidgets('renders a compartment grid with all eight section labels', (tester) async {
       await seedBase(db);
       // A taller surface, for the same reason the Pianificazioni test below already uses one: the
-      // accordion lives well down a CustomScrollView, slivers build lazily, and on the default
-      // 600dp test window it sits below the fold. The assertion is that the screen renders seven
+      // grid lives well down a CustomScrollView, slivers build lazily, and on the default 600dp
+      // test window it sits below the fold. The assertion is that the screen renders eight
       // section labels, not that they fit in 600dp.
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await pump(tester);
 
-      expect(find.byType(AppAccordion), findsOneWidget);
+      expect(find.byType(GridView), findsOneWidget);
+      expect(find.text('Dettagli'), findsOneWidget);
       expect(find.text('Report'), findsOneWidget);
       expect(find.text('Controllo'), findsOneWidget);
       expect(find.text('Allegati'), findsOneWidget);
@@ -350,8 +351,15 @@ void main() {
     testWidgets('shows description card when description is present', (tester) async {
       await seedBase(db);
       await pump(tester);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Dettagli'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dettagli'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Acqua che perde dal tubo.'), findsOneWidget);
+      await tester.binding.setSurfaceSize(null);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -410,6 +418,8 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Sostituzione valvola'), findsOneWidget);
       expect(find.text('Inviato'), findsOneWidget);
@@ -437,6 +447,8 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
 
       expect(find.text('Nessun rapportino'), findsOneWidget);
       expect(find.text('Non ci sono rapportini registrati per questo ticket.'), findsOneWidget);
@@ -448,6 +460,8 @@ void main() {
 
       await pump(tester, isOnline: false);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Report'));
       await tester.pumpAndSettle();
 
       expect(find.text('Rapportini non disponibili offline'), findsOneWidget);

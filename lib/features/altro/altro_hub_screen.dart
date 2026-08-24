@@ -163,7 +163,7 @@ class AltroHubScreen extends ConsumerWidget {
     return [
       for (final t in tiles)
         if (moduleIsOffered(t.module, entitlement))
-          _GestioneTile(icon: t.icon, label: t.label, onTap: t.onTap),
+          CompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
     ];
   }
 }
@@ -258,55 +258,6 @@ class _UserCard extends StatelessWidget {
 ///
 /// It is now a labelled cell like every other container in the app. What distinguishes ten
 /// drawers in a real van is the label and the silhouette on it, which is exactly what is left.
-class _GestioneTile extends StatelessWidget {
-  const _GestioneTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return RackCell(
-      onTap: onTap,
-      flush: false,
-      minHeight: 84,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.md,
-        AppSpacing.md,
-        AppSpacing.md,
-        AppSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 22, color: c.inkFaint),
-          const SizedBox(height: 14),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Sora',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: c.ink,
-              letterSpacing: -0.1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Sistema section
 // ══════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,3 @@
-export 'app_accordion.dart';
 export 'app_button.dart';
 export 'app_card.dart';
 export 'app_fab.dart';
@@ -11,6 +10,7 @@ export 'app_toggle.dart';
 export 'avatar.dart';
 export 'badge.dart';
 export 'bottom_nav.dart';
+export 'compartment_tile.dart';
 export 'empty_state.dart';
 export 'error_state.dart';
 export 'key_val.dart';

@@ -42,13 +42,17 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
 
   /// Ordered by who is holding the phone.
   ///
-  /// This used to be a pinned horizontal strip — four tabs fit a phone, there are seven, so three
-  /// sat past the visible edge on every ticket. It is an accordion now (see AppAccordion): every
-  /// section name is on screen at once, in this order, and opening one does not require finding it
-  /// in a scrolling strip first. The order survives from the tab era for the same reason it was
-  /// chosen then — Report/Controllo/Allegati/Ore is the technician's own path through a ticket;
-  /// Pianificazioni, Fabbisogno and Storico are office/lookup concerns and sit lower, not removed.
+  /// This was a pinned horizontal strip (four tabs fit a phone, there are eight — four sat past
+  /// the visible edge), then an accordion (every name on screen, but the page grew as long as
+  /// whichever section was open, and a technician had to scroll past a long one to reach the
+  /// next). Now a grid of compartments: every name is on screen at a constant size regardless of
+  /// what is open, and opening one is a bottom sheet over the ticket rather than the ticket
+  /// itself growing and shrinking underneath you. The order survives from the tab era for the
+  /// same reason it was chosen then — Dettagli/Report/Controllo/Allegati/Ore is the technician's
+  /// own path through a ticket; Pianificazioni, Fabbisogno and Storico are office/lookup concerns
+  /// and sit lower, not removed.
   static const _sectionLabels = [
+    'Dettagli',
     'Report',
     'Controllo',
     'Allegati',
@@ -266,14 +270,10 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
                 ),
 
-                // One card, not three.
-                //
-                // The facts, the description and the technician's notes each had an AppCard of
-                // their own, stacked down the screen with 16dp between them, and each of the last
-                // two carried a `SectionTitle` — the *page-level* heading, 18px with its own
-                // padding, nested inside a container that was already padded. Three containers
-                // for three parts of one ticket pushed the tabs off the first screen and made the
-                // boundaries between them louder than the content.
+                // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
+                // tecnico moved into the Dettagli compartment below — they're read once, not on
+                // every glance at this ticket, and belonged with the rest of the reference record
+                // rather than pinned above it.
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -296,37 +296,17 @@ class _TicketDetailBody extends ConsumerWidget {
                                 context.push(AppRoutes.clientiDetail(ticket.customerId)),
                           ),
                           KeyVal(label: 'Sede', value: locationName),
-                          KeyVal(label: 'Tecnico', value: tecnicoLabel),
-                          KeyVal(label: 'Data', value: dateLabel),
-                          KeyVal(
-                            label: 'Chiusura',
-                            value: closedLabel,
-                            showDivider:
-                                (ticket.description?.isNotEmpty ?? false) ||
-                                (ticket.technicianNotes?.isNotEmpty ?? false),
-                          ),
-                          if (ticket.description?.isNotEmpty ?? false)
-                            _Prose(
-                              title: 'Descrizione',
-                              body: ticket.description!,
-                            ),
-                          if (ticket.technicianNotes?.isNotEmpty ?? false)
-                            _Prose(
-                              title: 'Note tecnico',
-                              body: ticket.technicianNotes!,
-                            ),
-                          const SizedBox(height: 14),
+                          KeyVal(label: 'Tecnico', value: tecnicoLabel, showDivider: false),
                         ],
                       ),
                     ),
                   ),
                 ),
 
-                // Sections — an accordion, not a tab strip. See AppAccordion's own doc for why:
-                // seven tabs do not fit a phone width, and every section name being on screen at
-                // once beats a strip a technician has to scroll to find. Each item's builder is
-                // only invoked while its section is open, so a closed section's provider is never
-                // read — the same laziness the old tab switch gave for free.
+                // The record — a grid of compartments, not an accordion. Each opens a bottom
+                // sheet over the ticket rather than growing the page in place: the ticket's own
+                // shape stays constant no matter which section (or how much of it) is open. See
+                // _sectionLabels' own doc comment for the fuller reasoning and what this replaced.
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -335,13 +315,30 @@ class _TicketDetailBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
-                    child: AppAccordion(
-                      items: [
+                    child: GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 1.5,
+                      children: [
                         for (final label in sectionLabels)
-                          AppAccordionItem(
+                          CompartmentTile(
+                            icon: _sectionIcon(label),
                             label: label,
-                            builder: (context) =>
-                                _sectionContent(label, ticket.id),
+                            onTap: () => _openSection(
+                              context,
+                              label: label,
+                              content: label == 'Dettagli'
+                                  ? _DettagliSheet(
+                                      dateLabel: dateLabel,
+                                      closedLabel: closedLabel,
+                                      description: ticket.description,
+                                      technicianNotes: ticket.technicianNotes,
+                                    )
+                                  : _sectionContent(label, ticket.id),
+                            ),
                           ),
                       ],
                     ),
@@ -472,9 +469,11 @@ class _Prose extends StatelessWidget {
   }
 }
 
-/// Maps an accordion section's label to its content widget. A switch on the label, not an index,
-/// so the section list and its content can never drift apart by position — the label in
-/// `_sectionLabels` is also the key here.
+/// Maps a compartment's label to its content widget. A switch on the label, not an index, so the
+/// tile grid and its content can never drift apart by position — the label in `_sectionLabels` is
+/// also the key here. 'Dettagli' isn't here: it needs ticket fields already resolved by
+/// `_TicketDetailBody`, not a ticketId-keyed provider, so its call site builds `_DettagliSheet`
+/// directly instead of routing through this switch.
 Widget _sectionContent(String label, String ticketId) => switch (label) {
   'Report' => _ReportTab(ticketId: ticketId),
   'Controllo' => _ControlloTab(ticketId: ticketId),
@@ -485,6 +484,145 @@ Widget _sectionContent(String label, String ticketId) => switch (label) {
   'Storico' => _StoricoTab(ticketId: ticketId),
   _ => const SizedBox.shrink(),
 };
+
+/// Icon for a compartment tile. A switch on the same label set as [_sectionContent], kept
+/// separate because the grid needs it before a tile is ever tapped (unlike the content, which is
+/// built lazily on tap).
+IconData _sectionIcon(String label) => switch (label) {
+  'Dettagli' => LucideIcons.clipboardList,
+  'Report' => LucideIcons.fileText,
+  'Controllo' => LucideIcons.clipboardCheck,
+  'Allegati' => LucideIcons.paperclip,
+  'Ore' => LucideIcons.clock,
+  'Pianificazioni' => LucideIcons.calendarDays,
+  'Fabbisogno' => LucideIcons.package,
+  'Storico' => LucideIcons.history,
+  _ => LucideIcons.circle,
+};
+
+/// Opens a compartment's content as a bottom sheet over the ticket, rather than growing the
+/// ticket screen in place — see `_sectionLabels`' own doc comment for why. Scrollable and
+/// height-capped: every section widget here was built to sit inside an ambient scroll view (the
+/// accordion's, before this), not to bound its own height, so this supplies both.
+void _openSection(BuildContext context, {required String label, required Widget content}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) => DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (ctx, scrollController) => Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 10, bottom: 4),
+            child: _SheetHandle(),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+              AppSpacing.pagePadding,
+              AppSpacing.sm,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Sora',
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: ctx.colors.ink,
+                    ),
+                  ),
+                ),
+                HeaderIconBtn(
+                  icon: LucideIcons.x,
+                  label: 'Chiudi',
+                  onTap: () => Navigator.of(ctx).pop(),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, thickness: 1, color: ctx.colors.borderLight),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: scrollController,
+              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              child: content,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 36,
+        height: 4,
+        decoration: BoxDecoration(
+          color: context.colors.borderMedium,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+}
+
+/// The Dettagli compartment: what used to sit above the fold on every ticket, now read on demand.
+class _DettagliSheet extends StatelessWidget {
+  const _DettagliSheet({
+    required this.dateLabel,
+    required this.closedLabel,
+    required this.description,
+    required this.technicianNotes,
+  });
+
+  final String dateLabel;
+  final String closedLabel;
+  final String? description;
+  final String? technicianNotes;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDescription = description?.isNotEmpty ?? false;
+    final hasNotes = technicianNotes?.isNotEmpty ?? false;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          KeyVal(label: 'Data', value: dateLabel),
+          KeyVal(
+            label: 'Chiusura',
+            value: closedLabel,
+            showDivider: hasDescription || hasNotes,
+          ),
+          if (hasDescription) _Prose(title: 'Descrizione', body: description!),
+          if (hasNotes) _Prose(title: 'Note tecnico', body: technicianNotes!),
+        ],
+      ),
+    );
+  }
+}
 
 /// Centered spinner used by every fetch-on-demand tab while loading.
 class _TabLoading extends StatelessWidget {
