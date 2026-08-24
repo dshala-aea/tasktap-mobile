@@ -1,10 +1,16 @@
 // dart format width=100
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+
+/// `TicketsController.UploadAttachment`'s own cap. Checked client-side too — before a photo/file
+/// is even queued or sent — so an oversized file is rejected with a clear, actionable sentence
+/// rather than a 400 the technician has to make sense of after the upload appears to have run.
+const int kMaxTicketAttachmentBytes = 10 * 1024 * 1024;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TicketDetailApiClient
@@ -59,6 +65,43 @@ class TicketDetailApiClient {
         .cast<Map<String, dynamic>>()
         .map(TicketMaterialeDto.fromJson)
         .toList();
+  }
+
+  /// Uploads one photo/file directly to a ticket (Allegati tab).
+  ///
+  /// [ticketId] — the ticket to attach it to. [localPath] — absolute path to the local file.
+  /// [fileName] — original file name. [contentType] — MIME type (e.g. "image/jpeg").
+  ///
+  /// The 10 MB cap is enforced by `TicketsController.UploadAttachment` — see
+  /// [kMaxTicketAttachmentBytes] for the client-side check that runs before this is ever called.
+  ///
+  /// Throws [DioException] on network/server error.
+  Future<TicketAttachmentUploadResponse> uploadAttachment({
+    required String ticketId,
+    required String localPath,
+    required String fileName,
+    required String contentType,
+  }) async {
+    final file = File(localPath);
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        file.path,
+        filename: fileName,
+        contentType: DioMediaType.parse(contentType),
+      ),
+    });
+
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/tickets/$ticketId/attachments',
+      data: formData,
+      options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+    );
+
+    final data = response.data;
+    if (data == null) {
+      throw StateError('Empty response from attachment upload');
+    }
+    return TicketAttachmentUploadResponse.fromJson(data);
   }
 }
 
@@ -156,6 +199,24 @@ class TicketAttachmentDto {
       sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
       contentUrl: json['contentUrl'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+/// Response from `POST /api/tickets/{id}/attachments` — just enough to mark the local outbox
+/// row submitted. The full [TicketAttachmentDto] (fileName/size/createdAt/…) comes back from the
+/// next `GET /api/Tickets/{id}/attachments` instead, which is what the Allegati tab re-fetches
+/// after an upload lands.
+class TicketAttachmentUploadResponse {
+  const TicketAttachmentUploadResponse({required this.allegatoId, required this.contentUrl});
+
+  final String allegatoId;
+  final String contentUrl;
+
+  factory TicketAttachmentUploadResponse.fromJson(Map<String, dynamic> json) {
+    return TicketAttachmentUploadResponse(
+      allegatoId: json['allegatoId'] as String,
+      contentUrl: json['contentUrl'] as String? ?? '',
     );
   }
 }

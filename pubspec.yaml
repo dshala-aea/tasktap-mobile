@@ -86,6 +86,9 @@ dev_dependencies:
 
   # Testing
   mocktail: ^1.0.4
+  # Fakes ImagePickerPlatform.instance in widget tests (ticket_detail_screen_test.dart) — a
+  # transitive dep of image_picker already, declared directly because the test imports it.
+  image_picker_platform_interface: ^2.11.1
 
   # App icon + splash generation
   # Run: flutter pub run flutter_launcher_icons

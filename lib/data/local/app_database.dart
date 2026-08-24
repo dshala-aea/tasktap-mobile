@@ -596,6 +596,42 @@ class PendingTickets extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Local outbox for a ticket attachment picked (camera/gallery) from the ticket-detail Allegati
+/// tab while offline, or whose upload otherwise didn't complete immediately.
+///
+/// Mirrors [PendingTickets]'s shape, but the retry policy is stricter: unlike ticket creation
+/// (which carries `clientId` so a resend is deduplicated server-side — see
+/// TicketCreationQueue's doc comment), `POST /api/tickets/{id}/attachments` has no
+/// client-supplied idempotency key. A `failed` row's outcome on the server is therefore genuinely
+/// unknown, and auto-retrying it risks attaching the same photo twice. Only `pendingSync` rows —
+/// created while genuinely offline, so the request was never sent — are safe to retry
+/// automatically; `failed` requires an explicit, user-initiated retry (see
+/// TicketAttachmentUploadQueue).
+class PendingTicketAttachments extends Table {
+  TextColumn get id => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  TextColumn get ticketId => text()();
+
+  /// Absolute path to the locally captured/picked file — the source for the eventual upload.
+  TextColumn get localPath => text()();
+  TextColumn get fileName => text()();
+  TextColumn get contentType => text()();
+  IntColumn get sizeBytes => integer()();
+
+  /// pendingSync | submitting | submitted | failed
+  TextColumn get state => text().withDefault(const Constant('pendingSync'))();
+
+  /// Human-readable error from the last failed attempt (null when ok).
+  TextColumn get error => text().nullable()();
+
+  /// Set once the server confirms the upload — the real Allegato id.
+  TextColumn get serverAttachmentId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Database class
 // ══════════════════════════════════════════════════════════════════════════════
@@ -623,13 +659,14 @@ class PendingTickets extends Table {
     PendingTickets,
     Colleagues,
     Entitlements,
+    PendingTicketAttachments,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration {
@@ -736,6 +773,12 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(cantierePunches, cantierePunches.description);
           await m.addColumn(cantierePunches, cantierePunches.notes);
           await m.addColumn(workSessions, workSessions.gpsAccuracyMeters);
+        }
+        if (from < 18) {
+          // Ticket detail's Allegati tab gained upload (camera/gallery), and a technician on
+          // site cannot be relied on to have signal. Same offline-outbox shape as pendingTickets:
+          // see PendingTicketAttachments' own doc comment for why its retry policy is stricter.
+          await m.createTable(pendingTicketAttachments);
         }
       },
     );

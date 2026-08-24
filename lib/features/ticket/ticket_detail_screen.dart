@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
@@ -10,10 +13,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
+import '../../data/tickets/pending_ticket_attachment_state.dart';
+import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../rapportino/create_draft.dart';
+import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
@@ -219,6 +226,12 @@ class _TicketDetailBody extends ConsumerWidget {
             subtitle: reference,
             actions: [
               HeaderIconBtn(
+                icon: LucideIcons.pencil,
+                label: 'Modifica',
+                glass: true,
+                onTap: () => _openEditTicket(context, ticket),
+              ),
+              HeaderIconBtn(
                 icon: LucideIcons.userCheck,
                 label: 'Assegna',
                 glass: true,
@@ -420,6 +433,15 @@ class _TicketDetailBody extends ConsumerWidget {
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
+  }
+
+  /// Pushed rather than a sheet: [EditTicketScreen] reuses the create-wizard's own step widgets
+  /// (StepClienteSede / StepDettagliTicket), which are built to fill a page, not to sit inside a
+  /// DraggableScrollableSheet the way the compartment tabs do.
+  void _openEditTicket(BuildContext context, Ticket ticket) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => EditTicketScreen(ticketId: ticket.id)));
   }
 
   void _showAssignSheet(BuildContext context, WidgetRef ref, Ticket ticket) {
@@ -820,55 +842,314 @@ class _AllegatiTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final attachmentsAsync = ref.watch(ticketAttachmentsProvider(ticketId));
+    final pending = ref.watch(pendingTicketAttachmentsProvider(ticketId)).valueOrNull ?? const [];
 
-    return attachmentsAsync.when(
-      loading: () => const _TabLoading(),
-      error: (e, _) => _TabError(
-        icon: LucideIcons.paperclip,
-        offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Allegati non disponibili offline',
-        offlineBody:
-            'Gli allegati di questo ticket richiedono una connessione: riprova quando '
-            'torni online.',
-        errorTitle: 'Impossibile caricare gli allegati',
-        errorBody:
-            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
-      ),
-      data: (attachments) {
-        if (attachments.isEmpty) {
-          return const _EmptyTab(
-            icon: LucideIcons.paperclip,
-            label: 'Nessun allegato',
-            body: 'Non ci sono allegati caricati per questo ticket.',
-          );
-        }
-        return Padding(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Always offered, regardless of whether the server list loaded, errored, or says
+        // offline: a technician on site with no signal is exactly who most needs to be able to
+        // capture a photo now rather than be told to come back later.
+        Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,
             AppSpacing.md,
             AppSpacing.pagePadding,
             0,
           ),
-          child: Column(
-            children: attachments.map((a) {
-              final dateLabel = DateFormat(
-                'dd/MM/yyyy HH:mm',
-                'it',
-              ).format(a.createdAt.toLocal());
-              return ListRow(
-                leading: Icon(
-                  LucideIcons.paperclip,
-                  size: 20,
-                  color: context.colors.inkMuted,
+          child: _AttachmentUploadButtons(ticketId: ticketId),
+        ),
+        if (pending.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.base,
+              AppSpacing.pagePadding,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'In sospeso (${pending.length})',
+                  style: TextStyle(
+                    fontFamily: 'Sora',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: context.colors.ink,
+                  ),
                 ),
-                title: a.fileName,
-                subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
-                showDivider: a != attachments.last,
-              );
-            }).toList(),
+                const SizedBox(height: 8),
+                for (final a in pending) ...[
+                  _PendingAttachmentRow(attachment: a),
+                  const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          ),
+        attachmentsAsync.when(
+          loading: () => const _TabLoading(),
+          error: (e, _) => _TabError(
+            icon: LucideIcons.paperclip,
+            offline: e is TicketDetailOfflineException,
+            offlineTitle: 'Allegati non disponibili offline',
+            offlineBody:
+                'Gli allegati già caricati su questo ticket richiedono una connessione per '
+                'essere elencati: riprova quando torni online.',
+            errorTitle: 'Impossibile caricare gli allegati',
+            errorBody:
+                'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+          ),
+          data: (attachments) {
+            if (attachments.isEmpty) {
+              // Never claims there really is nothing when a pending upload is sitting above —
+              // the empty state is about the server-confirmed list only.
+              return pending.isNotEmpty
+                  ? const SizedBox.shrink()
+                  : const _EmptyTab(
+                      icon: LucideIcons.paperclip,
+                      label: 'Nessun allegato',
+                      body: 'Non ci sono allegati caricati per questo ticket.',
+                    );
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+                AppSpacing.pagePadding,
+                0,
+              ),
+              child: Column(
+                children: attachments.map((a) {
+                  final dateLabel = DateFormat(
+                    'dd/MM/yyyy HH:mm',
+                    'it',
+                  ).format(a.createdAt.toLocal());
+                  return ListRow(
+                    leading: Icon(
+                      LucideIcons.paperclip,
+                      size: 20,
+                      color: context.colors.inkMuted,
+                    ),
+                    title: a.fileName,
+                    subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
+                    showDivider: a != attachments.last,
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// Galleria / Fotocamera — picks a photo and hands it to [TicketAttachmentUploadQueue].
+///
+/// Mirrors StepMaterialiFold's `_pickImage` (the rapportino's established photo-capture pattern):
+/// same package (`image_picker`), same `imageQuality: 80`, same "one honest sentence" failure
+/// message for a local capture/read error. What differs is what happens to the file afterwards —
+/// a rapportino photo is folded into the draft and uploaded when the whole rapportino submits;
+/// here there is no parent draft, so the queue uploads (or offline-queues) it immediately.
+class _AttachmentUploadButtons extends ConsumerStatefulWidget {
+  const _AttachmentUploadButtons({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  ConsumerState<_AttachmentUploadButtons> createState() => _AttachmentUploadButtonsState();
+}
+
+class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButtons> {
+  bool _busy = false;
+
+  Future<void> _pickImage(ImageSource source) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final picker = ImagePicker();
+      final xfile = await picker.pickImage(source: source, imageQuality: 80);
+      if (xfile == null) return;
+
+      final file = File(xfile.path);
+      final bytes = await file.readAsBytes();
+
+      // Rejected client-side, before it is ever queued or sent: a rejection after the file sat
+      // in the offline outbox for a while would read as a delayed, unexplained failure.
+      if (bytes.length > kMaxTicketAttachmentBytes) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'File troppo grande: il limite per gli allegati è 10 MB. Scegline uno più piccolo.',
+            ),
+            backgroundColor: context.colors.red,
           ),
         );
-      },
+        return;
+      }
+
+      final isOnline = ref.read(isOnlineProvider);
+      final outcome = await ref
+          .read(ticketAttachmentUploadQueueProvider)
+          .upload(
+            ticketId: widget.ticketId,
+            localPath: xfile.path,
+            fileName: xfile.name,
+            contentType: 'image/jpeg',
+            sizeBytes: bytes.length,
+            isOnline: isOnline,
+          );
+
+      if (!mounted) return;
+      if (outcome.isQueuedOffline) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Sei offline: la foto è stata salvata e verrà caricata automaticamente alla '
+              'riconnessione.',
+            ),
+            backgroundColor: context.colors.amber,
+          ),
+        );
+      } else if (outcome.isSubmitted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Allegato caricato')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(outcome.error ?? 'Caricamento non riuscito.'),
+            backgroundColor: context.colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // Local capture and file read — never a server call, so there is no status to interpret.
+      // Mirrors StepMaterialiFold's own _pickImage catch for exactly this reason.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
+            ),
+            backgroundColor: context.colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _busy ? null : () => _pickImage(ImageSource.gallery),
+            icon: const Icon(LucideIcons.image),
+            label: const Text('Galleria'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: _busy ? null : () => _pickImage(ImageSource.camera),
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(LucideIcons.camera),
+            label: const Text('Fotocamera'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brand,
+              foregroundColor: context.colors.brandOn,
+              minimumSize: const Size(0, 52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One not-yet-confirmed attachment — offline, uploading, or failed. Mirrors
+/// `_PendingTicketRow` on the ticket list (same three-state read, same colours), the established
+/// pattern for "something local hasn't reached the server yet" in this app.
+class _PendingAttachmentRow extends ConsumerWidget {
+  const _PendingAttachmentRow({required this.attachment});
+
+  final PendingTicketAttachment attachment;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = PendingTicketAttachmentState.fromString(attachment.state);
+    final isFailed = state == PendingTicketAttachmentState.failed;
+
+    final String subtitle = switch (state) {
+      PendingTicketAttachmentState.pendingSync =>
+        'In attesa di connessione — verrà caricato automaticamente',
+      PendingTicketAttachmentState.submitting => 'Caricamento…',
+      PendingTicketAttachmentState.failed =>
+        'Caricamento non riuscito: ${attachment.error ?? 'errore sconosciuto'}',
+      PendingTicketAttachmentState.submitted => 'Caricato',
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: isFailed ? context.colors.redSoft : context.colors.bg3,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
+            size: 18,
+            color: isFailed ? context.colors.red : context.colors.inkMuted,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  attachment.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.ink,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 11, color: context.colors.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (isFailed)
+            TextButton(
+              onPressed: () =>
+                  ref.read(ticketAttachmentUploadQueueProvider).retry(attachment.id),
+              child: const Text('Riprova'),
+            ),
+        ],
+      ),
     );
   }
 }

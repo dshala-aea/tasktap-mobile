@@ -642,6 +642,8 @@ void main() {
           'covered by openapi_contract_test.dart, which also checks the three nested DTOs',
       'POST /api/reports/{}/attachments':
           'multipart FormData, not a JSON body — there is no schema to check it against',
+      'POST /api/tickets/{}/attachments':
+          'multipart FormData, not a JSON body — there is no schema to check it against',
       'POST /api/devices':
           'sent by NotificationService, which builds its own Dio from Env at call time rather '
           'than taking one, so there is no seam to capture without changing production code',

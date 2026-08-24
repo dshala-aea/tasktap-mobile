@@ -9,6 +9,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/entitlements/entitlement_providers.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../../data/timbratura/cantiere_timbra_sync_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconcile_watcher.dart';
@@ -64,6 +65,9 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // features/ticket/new_ticket_form_screen.dart); this flushes the
       // ones that are safe to auto-retry as soon as connectivity returns.
       initTicketCreationQueueWatcher(ref);
+      // Same push-on-reconnect treatment for a photo/file picked from ticket detail's Allegati
+      // tab while offline (features/ticket/ticket_detail_screen.dart).
+      initTicketAttachmentUploadQueueWatcher(ref);
       // Retries the OIDC token refresh as soon as connectivity returns —
       // matters most right after a cold start on no signal, where auth
       // falls back to a cached, signed-in-but-offline identity (see

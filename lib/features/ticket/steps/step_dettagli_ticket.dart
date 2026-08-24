@@ -15,10 +15,21 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class StepDettagliTicket extends ConsumerStatefulWidget {
-  const StepDettagliTicket({super.key, required this.state, required this.onChanged});
+  const StepDettagliTicket({
+    super.key,
+    required this.state,
+    required this.onChanged,
+    this.showPriority = true,
+  });
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
+
+  /// Hidden in ticket-edit mode (see EditTicketScreen): the local ticket mirror carries no
+  /// `priorita` column at all (it is never synced down — see Tickets table in app_database.dart),
+  /// so there is no current value to pre-fill here. Showing the picker anyway would default to
+  /// "Media" regardless of the ticket's real priority and silently reset it on save.
+  final bool showPriority;
 
   @override
   ConsumerState<StepDettagliTicket> createState() => _StepDettagliTicketState();
@@ -110,20 +121,22 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
           validator: (v) => v == null ? 'Campo obbligatorio' : null,
         ),
 
-        const SizedBox(height: 24),
+        if (widget.showPriority) ...[
+          const SizedBox(height: 24),
 
-        // ── Priority ───────────────────────────────────────────────────────
-        _SectionLabel(text: 'Priorità'),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: widget.state.priority,
-          isExpanded: true,
-          items: kTicketPriorities
-              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-              .toList(),
-          onChanged: (p) =>
-              p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
-        ),
+          // ── Priority ───────────────────────────────────────────────────────
+          _SectionLabel(text: 'Priorità'),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: widget.state.priority,
+            isExpanded: true,
+            items: kTicketPriorities
+                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                .toList(),
+            onChanged: (p) =>
+                p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
+          ),
+        ],
       ],
     );
   }

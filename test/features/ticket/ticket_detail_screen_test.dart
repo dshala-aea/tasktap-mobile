@@ -1,5 +1,6 @@
 // test/features/ticket/ticket_detail_screen_test.dart
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
@@ -7,6 +8,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
@@ -14,10 +16,31 @@ import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/tickets/pending_ticket_attachment_repository.dart';
+import 'package:tasktap_mobile/data/tickets/pending_ticket_attachment_state.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
+
+/// Stands in for the platform camera/gallery — the same seam the plugin itself exists for; every
+/// call is local capture + file read, never a platform channel a widget test can drive directly.
+/// Returns [pathToReturn] as the "picked" file, or null to simulate the user backing out of the
+/// picker.
+class _FakeImagePickerPlatform extends ImagePickerPlatform {
+  _FakeImagePickerPlatform(this.pathToReturn);
+
+  final String? pathToReturn;
+
+  @override
+  Future<XFile?> getImageFromSource({
+    required ImageSource source,
+    ImagePickerOptions options = const ImagePickerOptions(),
+  }) async {
+    final path = pathToReturn;
+    return path == null ? null : XFile(path);
+  }
+}
 
 class MockAuthRepository extends Mock implements IAuthRepository {}
 
@@ -61,6 +84,8 @@ void main() {
   late AppDatabase db;
   late MockAuthRepository repo;
   late StreamController<AuthUser?> authStream;
+  final ImagePickerPlatform originalImagePickerPlatform = ImagePickerPlatform.instance;
+  final List<File> tempFiles = [];
 
   final fakeUser = AuthUser(
     id: 'u1',
@@ -81,7 +106,27 @@ void main() {
   tearDown(() async {
     authStream.close();
     await db.close();
+    ImagePickerPlatform.instance = originalImagePickerPlatform;
+    for (final f in tempFiles) {
+      if (f.existsSync()) f.deleteSync();
+    }
+    tempFiles.clear();
   });
+
+  /// A real file on disk — `_pickImage`'s size check reads it with `File.readAsBytes`, so the
+  /// "picked" path has to resolve to something real, not a fixture string. Sparse (via
+  /// `truncate`) rather than actually written: the 10 MB-cap test only needs the right *length*,
+  /// and allocating/writing a real multi-megabyte buffer on every run is unnecessary I/O.
+  File makeTempFile(String name, int sizeBytes) {
+    // No prefix: `xfile.name` (what `_pickImage` uses as `fileName`) is derived from the path's
+    // basename, so the file's own name has to be exactly what a test expects to find on screen.
+    final file = File('${Directory.systemTemp.path}/$name');
+    final raf = file.openSync(mode: FileMode.write);
+    raf.truncateSync(sizeBytes);
+    raf.closeSync();
+    tempFiles.add(file);
+    return file;
+  }
 
   Future<void> pump(
     WidgetTester tester, {
@@ -377,6 +422,44 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // Bounded pumps rather than pumpAndSettle: the upload buttons show an indeterminate
+  // CircularProgressIndicator while `_busy`, which — like the worklog LiveDot above — never lets
+  // pumpAndSettle's frame-quiescence check succeed. Mirrors this file's own `pump(..., settle:
+  // false)` workaround for the identical class of problem.
+  // `tester.pump` only advances Flutter's own frame clock — it never waits for a genuine
+  // asynchronous gap (File.readAsBytes, Drift's own I/O) to resolve on the real event loop. The
+  // tap itself has to run inside `runAsync` so the operations it kicks off (`_pickImage`) execute
+  // in the real zone; pumping afterwards then picks up the resulting setState calls. Also stands
+  // in for pumpAndSettle, which never converges here — like the worklog LiveDot above, the upload
+  // buttons show an indeterminate CircularProgressIndicator while `_busy`.
+  Future<void> tapAndSettle(WidgetTester tester, Finder finder) async {
+    await tester.tap(finder);
+    await tester.pump(); // apply setState(_busy = true)
+    // `_pickImage` chains several genuine async hops (file read, Drift's own background-isolate
+    // write, the mocked-but-real Dio Future) that a plain `tester.pump` never waits for — it only
+    // advances Flutter's own frame clock. Alternating a real delay with a pump, inside `runAsync`,
+    // gives each hop a real window to land and a frame to be picked up in.
+    await tester.runAsync(() async {
+      for (var i = 0; i < 40; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await tester.pump();
+      }
+    });
+  }
+
+  /// [resetAndDispose] for a test that tapped one of the upload buttons above: `pumpAndSettle`
+  /// never converges while `_busy`'s CircularProgressIndicator is still showing (same reasoning
+  /// as `tapAndSettle` itself), and in a slow sandbox a large file read can still be in flight
+  /// after `tapAndSettle`'s own bounded window. Bounded pumps here rather than an unbounded
+  /// `pumpAndSettle` avoid that hang regardless.
+  Future<void> resetAndDisposeAfterUpload(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(null);
+    await tester.pumpWidget(const SizedBox.shrink());
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
   Future<void> resetAndDispose(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(null);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -594,6 +677,178 @@ void main() {
       expect(find.text('Allegati non disponibili offline'), findsOneWidget);
       expect(find.text('Nessun allegato'), findsNothing);
       await resetAndDispose(tester);
+    });
+
+    testWidgets('a successful upload while online adds the file to the list', (tester) async {
+      await seedBase(db);
+      var serverAttachments = <Map<String, dynamic>>[];
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments')).thenAnswer(
+        (_) async => _okResponse<List<dynamic>>(
+          serverAttachments,
+          '/api/Tickets/ticket-1/attachments',
+        ),
+      );
+      when(
+        () => dio.post<Map<String, dynamic>>(
+          '/api/tickets/ticket-1/attachments',
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async {
+        // Simulates the server now having the file — the next GET (triggered by the queue's
+        // onUploaded invalidation) picks this up.
+        serverAttachments = [
+          {
+            'id': 'att-new',
+            'fileName': 'foto.jpg',
+            'contentType': 'image/jpeg',
+            'sizeBytes': 2048,
+            'contentUrl': '/api/tickets/ticket-1/attachments/att-new/content',
+            'uploadedByUserId': 'u1',
+            'createdAt': '2026-07-05T09:00:00Z',
+          },
+        ];
+        return _okResponse({
+          'allegatoId': 'att-new',
+          'contentUrl': '/api/tickets/ticket-1/attachments/att-new/content',
+        }, '/api/tickets/ticket-1/attachments');
+      });
+
+      ImagePickerPlatform.instance = _FakeImagePickerPlatform(
+        makeTempFile('foto.jpg', 2048).path,
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapTab(tester, 'Allegati');
+
+      expect(find.text('Nessun allegato'), findsOneWidget);
+
+      await tapAndSettle(tester, find.text('Fotocamera'));
+
+      expect(find.text('foto.jpg'), findsOneWidget);
+      expect(find.text('Nessun allegato'), findsNothing);
+      await resetAndDisposeAfterUpload(tester);
+    });
+
+    testWidgets(
+      'picking a photo while offline queues it locally without ever calling the network',
+      (tester) async {
+        // Exercises the real _pickImage → TicketAttachmentUploadQueue.upload(isOnline: false)
+        // path end to end (queue-level offline/online branching itself is covered exhaustively in
+        // ticket_attachment_upload_queue_test.dart). A MockDio with zero stubs makes the
+        // assertion self-checking: any accidental network call throws instead of silently
+        // succeeding.
+        await seedBase(db);
+        ImagePickerPlatform.instance = _FakeImagePickerPlatform(
+          makeTempFile('offline.jpg', 4096).path,
+        );
+
+        final dio = MockDio();
+        await pump(tester, dio: dio, isOnline: false);
+        await tapTab(tester, 'Allegati');
+
+        await tapAndSettle(tester, find.text('Galleria'));
+
+        // A direct Drift read here (rather than through a watched provider a widget rebuild
+        // would pick up) still needs `runAsync` — same reasoning as `tapAndSettle` itself.
+        final rows = await tester.runAsync(
+          () => PendingTicketAttachmentRepository(db).watchForTicket('ticket-1').first,
+        );
+        expect(rows, hasLength(1));
+        expect(rows!.single.fileName, 'offline.jpg');
+        expect(rows.single.state, 'pendingSync');
+        verifyNever(
+          () => dio.post<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        );
+        await resetAndDisposeAfterUpload(tester);
+      },
+    );
+
+    testWidgets(
+      'a queued (pendingSync) attachment renders like the ticket list\'s own pending section',
+      (tester) async {
+        // Pure rendering check, seeded directly — the pendingSync row itself (and how it gets
+        // there) is covered by the test above and by TicketAttachmentUploadQueue's own tests.
+        // This is the "In attesa di connessione" read a technician actually sees, mirroring
+        // _PendingTicketRow on the ticket list (see ticket_list_screen.dart).
+        await seedBase(db);
+        await PendingTicketAttachmentRepository(db).insert(
+          id: 'pa-queued',
+          ticketId: 'ticket-1',
+          localPath: '/tmp/whatever.jpg',
+          fileName: 'offline.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 4096,
+          state: PendingTicketAttachmentState.pendingSync,
+        );
+
+        await pump(tester, isOnline: false);
+        await tapTab(tester, 'Allegati');
+
+        expect(find.text('In sospeso (1)'), findsOneWidget);
+        expect(find.text('offline.jpg'), findsOneWidget);
+        expect(find.textContaining('In attesa di connessione'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('a failed pending attachment offers Riprova, matching the retry pattern', (
+      tester,
+    ) async {
+      await seedBase(db);
+      final repo = PendingTicketAttachmentRepository(db);
+      await repo.insert(
+        id: 'pa-1',
+        ticketId: 'ticket-1',
+        localPath: '/tmp/whatever.jpg',
+        fileName: 'whatever.jpg',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+        state: PendingTicketAttachmentState.failed,
+      );
+      await repo.updateState(
+        id: 'pa-1',
+        state: PendingTicketAttachmentState.failed,
+        error: 'Nessuna connessione. Riprova quando torni online.',
+      );
+
+      await pump(tester, isOnline: false);
+      await tapTab(tester, 'Allegati');
+
+      expect(find.textContaining('Caricamento non riuscito'), findsOneWidget);
+      expect(find.text('Riprova'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('a file over the 10 MB cap is rejected client-side, never queued', (tester) async {
+      await seedBase(db);
+      final bigFile = makeTempFile('big.jpg', 10 * 1024 * 1024 + 1);
+      ImagePickerPlatform.instance = _FakeImagePickerPlatform(bigFile.path);
+
+      final dio = MockDio();
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/attachments'));
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapTab(tester, 'Allegati');
+
+      await tapAndSettle(tester, find.text('Fotocamera'));
+
+      expect(find.textContaining('10 MB'), findsOneWidget);
+      expect(find.text('In sospeso (1)'), findsNothing);
+      expect(find.text('big.jpg'), findsNothing);
+
+      final rows = await tester.runAsync(
+        () => PendingTicketAttachmentRepository(db).watchForTicket('ticket-1').first,
+      );
+      expect(rows, isEmpty);
+      await resetAndDisposeAfterUpload(tester);
     });
   });
 

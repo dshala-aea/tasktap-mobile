@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
+import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_workflow_api_client.dart';
@@ -85,6 +86,15 @@ final ticketAttachmentsProvider = FutureProvider.autoDispose
       }
       final api = ref.watch(ticketDetailApiClientProvider);
       return api.fetchAttachments(ticketId);
+    });
+
+/// Attachments picked from this ticket's Allegati tab that have not yet reached the server —
+/// waiting for connectivity, currently uploading, or failed (needs a manual retry). Surfaced
+/// alongside [ticketAttachmentsProvider] so nothing captured offline is invisible, mirroring how
+/// [pendingTicketsProvider] sits beside the confirmed ticket list.
+final pendingTicketAttachmentsProvider = StreamProvider.autoDispose
+    .family<List<PendingTicketAttachment>, String>((ref, ticketId) {
+      return ref.watch(pendingTicketAttachmentRepositoryProvider).watchForTicket(ticketId);
     });
 
 /// A ticket's checklist, resolved from the maintenance-template version it

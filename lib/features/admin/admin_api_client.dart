@@ -312,6 +312,34 @@ class AdminApiClient {
     await _dio.put('/api/tickets/$ticketId', data: {'assignedUserId': ?userId});
   }
 
+  /// General field edit from ticket detail (`EditTicketScreen`) — distinct from [assignTicket],
+  /// which narrowly sends `assignedUserId` for the "Assegna" action.
+  ///
+  /// Matches `UpdateTicketRequest` (`TicketsController.cs`): every field is optional there too,
+  /// but this only ever sends the five the edit screen actually exposes — title, description,
+  /// customer, location, type. `statusId` has no PUT field at all (status changes go through
+  /// `PUT /api/Tickets/{id}/status` — see `TicketWorkflowApiClient.updateStatus`) and priority is
+  /// deliberately left alone (see `StepDettagliTicket.showPriority`'s doc comment for why).
+  Future<void> updateTicket(
+    String id, {
+    String? title,
+    String? description,
+    String? customerId,
+    String? locationId,
+    int? typeId,
+  }) async {
+    await _dio.put(
+      '/api/tickets/$id',
+      data: {
+        'title': ?title,
+        'description': ?description,
+        'customerId': ?customerId,
+        'locationId': ?locationId,
+        'typeId': ?typeId,
+      },
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/users',
