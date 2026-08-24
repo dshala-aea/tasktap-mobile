@@ -26,6 +26,51 @@ class SquadraRuolo {
   static String label(Object? ruolo) => ruolo == capo ? 'Capo' : 'Membro';
 }
 
+/// One existing schedule that overlaps a proposed one, from
+/// `POST /api/schedules/check-conflicts` (`ScheduleConflictDto` in `SchedulesController.cs`).
+class ScheduleConflict {
+  const ScheduleConflict({
+    required this.id,
+    required this.activityDate,
+    required this.timeStart,
+    required this.timeEnd,
+    this.userId,
+    this.squadraId,
+    required this.title,
+    required this.conflictOnUser,
+    required this.conflictOnSquadra,
+  });
+
+  final String id;
+  final DateTime activityDate;
+
+  /// "HH:MM:SS", as the backend's `TimeSpan` serialises.
+  final String timeStart;
+  final String timeEnd;
+
+  final String? userId;
+  final String? squadraId;
+  final String title;
+
+  /// Whether the checked technician is the one directly assigned on this conflicting schedule.
+  final bool conflictOnUser;
+
+  /// Whether the checked squadra is the one assigned on this conflicting schedule.
+  final bool conflictOnSquadra;
+
+  factory ScheduleConflict.fromJson(Map<String, dynamic> j) => ScheduleConflict(
+    id: j['id'] as String,
+    activityDate: DateTime.parse(j['activityDate'] as String),
+    timeStart: j['timeStart'] as String? ?? '00:00:00',
+    timeEnd: j['timeEnd'] as String? ?? '00:00:00',
+    userId: j['userId'] as String?,
+    squadraId: j['squadraId'] as String?,
+    title: j['title'] as String? ?? '',
+    conflictOnUser: j['conflictOnUser'] as bool? ?? false,
+    conflictOnSquadra: j['conflictOnSquadra'] as bool? ?? false,
+  );
+}
+
 class AdminApiClient {
   AdminApiClient(this._dio);
   final Dio _dio;
@@ -236,7 +281,10 @@ class AdminApiClient {
     required DateTime activityDate,
     required int timeStartMinutes,
     required int timeEndMinutes,
-    required String userId,
+    // Optional, matching backend `CreateScheduleRequest.UserId` (ADR-0009): a schedule can be
+    // assigned to a squadra and to no individual, and requiring this here made a team-only
+    // schedule impossible to create from mobile.
+    String? userId,
     required int statusId,
     required String locationId,
     String? ticketId,
@@ -246,16 +294,22 @@ class AdminApiClient {
     String? teamLeadId,
     String? staffIds,
     String? squadraId,
+    /// Sent as `?force=true` when the caller already showed the admin a conflict list (from
+    /// [checkScheduleConflicts]) and they chose to save anyway. Mirrors
+    /// `SchedulesController.Create`'s `force` query param, which otherwise answers 409 with the
+    /// conflicts.
+    bool force = false,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/schedules',
+      queryParameters: force ? {'force': true} : null,
       data: {
         'activityDate': activityDate.toIso8601String(),
         'timeStart':
             '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
         'timeEnd':
             '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
-        'userId': userId,
+        'userId': ?userId,
         'statusId': statusId,
         'locationId': locationId,
         'ticketId': ?ticketId,
@@ -271,6 +325,18 @@ class AdminApiClient {
     return res.data!['id'] as String;
   }
 
+  /// Updates a schedule, including its assignment (`teamLeadId`/`staffIds`/`squadraId`) — this used
+  /// to only cover the five scalar fields, which meant an admin could never re-assign an existing
+  /// schedule from mobile even though `UpdateScheduleRequest` (`SchedulesController.cs`) has always
+  /// accepted these.
+  ///
+  /// To actually *change* which assignment kind a schedule has (e.g. individual → squadra), the
+  /// caller must explicitly clear the sources being replaced by passing the all-zeros GUID
+  /// (`00000000-0000-0000-0000-000000000000`) for `userId`/`teamLeadId`/`squadraId`, or `"[]"` for
+  /// `staffIds` — omitting a field here means "untouched" server-side
+  /// (`ScheduleAssignmentWriter.ApplyAsync`: "only sources the input speaks about are reconciled"),
+  /// and a JSON `null` binds identically to an absent key, so there is no other way to say "no
+  /// longer this". `AdminScheduleFormScreen._save` does this when switching assignment type.
   Future<void> updateSchedule(
     String id, {
     DateTime? activityDate,
@@ -283,9 +349,15 @@ class AdminApiClient {
     bool? allDay,
     String? title,
     String? description,
+    String? teamLeadId,
+    String? staffIds,
+    String? squadraId,
+    /// See [createSchedule]'s `force`.
+    bool force = false,
   }) async {
     await _dio.put(
       '/api/schedules/$id',
+      queryParameters: force ? {'force': true} : null,
       data: {
         if (activityDate != null)
           'activityDate': activityDate.toIso8601String(),
@@ -302,8 +374,58 @@ class AdminApiClient {
         'allDay': ?allDay,
         'title': ?title,
         'description': ?description,
+        'teamLeadId': ?teamLeadId,
+        'staffIds': ?staffIds,
+        'squadraId': ?squadraId,
       },
     );
+  }
+
+  /// Live schedule detail — `GET /api/schedules/{id}` (`SchedulesController.GetById`). Unlike the
+  /// Drift mirror (`Schedule` row + `ScheduleAssignees`, synced from the sparser sync payload),
+  /// this resolves `teamLeadId`/`squadraId`/`squadraNome`, which nothing on-device carries. Used to
+  /// prefill the assignment picker when opening the edit form — offline, the form falls back to
+  /// what the mirror knows (direct/team, no squadra id) rather than blocking entirely.
+  Future<Map<String, dynamic>?> fetchScheduleDetail(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/schedules/$id');
+    return res.data;
+  }
+
+  /// The all-zeros GUID `updateSchedule` needs to *explicitly* clear an assignment field — see
+  /// that method's doc comment for why an omitted/null field cannot do this.
+  static const String emptyAssignmentId = '00000000-0000-0000-0000-000000000000';
+
+  /// Pre-flight conflict check, mirroring `POST /api/schedules/check-conflicts`
+  /// (`SchedulesController.CheckConflicts`). Returns every schedule the given user/squadra is
+  /// already explicitly booked on for the same day with an overlapping time (or either is
+  /// `allDay`). An empty list means it is safe to save without `force`.
+  Future<List<ScheduleConflict>> checkScheduleConflicts({
+    required DateTime activityDate,
+    required int timeStartMinutes,
+    required int timeEndMinutes,
+    bool allDay = false,
+    String? userId,
+    String? squadraId,
+    String? excludeScheduleId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/schedules/check-conflicts',
+      data: {
+        'activityDate': activityDate.toIso8601String(),
+        'timeStart':
+            '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
+        'timeEnd':
+            '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
+        'allDay': allDay,
+        'userId': ?userId,
+        'squadraId': ?squadraId,
+        'excludeScheduleId': ?excludeScheduleId,
+      },
+    );
+    final conflicts = res.data?['conflicts'] as List<dynamic>? ?? const [];
+    return conflicts
+        .map((e) => ScheduleConflict.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   // ── Tickets ─────────────────────────────────────────────────────────────

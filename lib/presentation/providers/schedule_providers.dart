@@ -154,3 +154,58 @@ final allCantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref)
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.cantieri)..orderBy([(c) => OrderingTerm.asc(c.name)])).watch();
 });
+
+// ── Schedule assignment (ADR-0009) ─────────────────────────────────────────────
+
+/// Everyone on one schedule, from the local `ScheduleAssignees` mirror.
+///
+/// Kept separate from [Schedule] itself on purpose — see `app_database.dart`'s `Schedules` doc
+/// comment: `teamLeadId`/`staffIds`/`squadraId` were dropped from that table when assignment moved
+/// server-side to a set of rows, and this reads that same set rather than re-adding them.
+final scheduleAssigneesProvider = StreamProvider.autoDispose.family<List<ScheduleAssignee>, String>(
+  (ref, scheduleId) {
+    final db = ref.watch(appDatabaseProvider);
+    return (db.select(
+      db.scheduleAssignees,
+    )..where((a) => a.scheduleId.equals(scheduleId))).watch();
+  },
+);
+
+/// Ids of every schedule that has at least one squadra-mediated assignee (`isTeam`).
+///
+/// This is the on-device signal for "is this a team job" — the squadra's own name is not synced
+/// to the device (only `/api/schedules/{id}` resolves it, online-only), so a calendar view can
+/// show *that* a schedule is squadra-assigned without fabricating a name it does not have. See
+/// `calendario/views/*` — the four calendar views read this to render a team indicator.
+final teamAssignedScheduleIdsProvider = StreamProvider.autoDispose<Set<String>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final query = db.selectOnly(db.scheduleAssignees)
+    ..addColumns([db.scheduleAssignees.scheduleId])
+    ..where(db.scheduleAssignees.isTeam.equals(true));
+  return query
+      .map((row) => row.read(db.scheduleAssignees.scheduleId)!)
+      .watch()
+      .map((ids) => ids.toSet());
+});
+
+/// `scheduleId` → every `userId` on it, from the local `ScheduleAssignees` mirror — everyone,
+/// regardless of why they are on it (direct, lead, squadra member, legacy staff).
+///
+/// Backs the admin schedule list's technician and squadra filters
+/// (`admin_schedule_list_screen.dart`): "assigned to this technician" means every way they could
+/// be on the schedule, the same semantics the backend's own `IScheduleAssignmentResolver.
+/// WhereAssignedTo` uses for `GET /api/schedules?userId=`; "assigned to this squadra" is not a
+/// filterable field on-device at all (no squadra id is synced — see
+/// `teamAssignedScheduleIdsProvider`'s doc comment) but its *members* are known once fetched
+/// (`AdminApiClient.fetchSquadraDetail`), so the squadra filter intersects this map's per-schedule
+/// user sets against the fetched member ids.
+final scheduleAssigneeMapProvider = StreamProvider.autoDispose<Map<String, Set<String>>>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return db.select(db.scheduleAssignees).watch().map((rows) {
+    final map = <String, Set<String>>{};
+    for (final row in rows) {
+      map.putIfAbsent(row.scheduleId, () => {}).add(row.userId);
+    }
+    return map;
+  });
+});

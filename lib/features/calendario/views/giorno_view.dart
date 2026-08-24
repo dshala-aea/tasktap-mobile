@@ -6,6 +6,7 @@ import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -43,6 +44,7 @@ class GiornoView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final totalHeight = (_kEndHour - _kStartHour) * _kHourHeight;
+    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, context.navClearance),
@@ -111,6 +113,7 @@ class GiornoView extends ConsumerWidget {
                       schedule: s,
                       onTapTicket: onTapTicket,
                       onTapSchedule: onTapSchedule,
+                      isTeam: teamScheduleIds.contains(s.id),
                     ),
                 ],
               ),
@@ -129,11 +132,16 @@ class _EventBlock extends StatelessWidget {
     required this.schedule,
     this.onTapTicket,
     this.onTapSchedule,
+    this.isTeam = false,
   });
 
   final Schedule schedule;
   final void Function(String ticketId)? onTapTicket;
   final void Function(Schedule schedule)? onTapSchedule;
+
+  /// See `_ScheduleListRow.isTeam` in `lista_view.dart` for what this flag means and why it has
+  /// no squadra name attached.
+  final bool isTeam;
 
   @override
   Widget build(BuildContext context) {
@@ -189,16 +197,27 @@ class _EventBlock extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              schedule.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: pair.foreground,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isTeam) ...[
+                  Icon(LucideIcons.users, size: 10, color: pair.foreground.withAlpha(204)),
+                  const SizedBox(width: 3),
+                ],
+                Flexible(
+                  child: Text(
+                    schedule.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: pair.foreground,
+                    ),
+                  ),
+                ),
+              ],
             ),
             // No height gate on the time: the 44dp floor makes the old `height > 36` test
             // always true, and a block that shows a title without its hours is worth less than

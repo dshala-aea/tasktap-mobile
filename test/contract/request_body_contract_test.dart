@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/data/agenda/agenda_api_client.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
@@ -442,6 +443,42 @@ void main() {
     });
   });
 
+  group('agenda', () {
+    contractTest('creating an item matches the server', () {
+      final client = AgendaApiClient(dio);
+      return capture(
+        () => client.createAgendaItem(
+          date: DateTime.utc(2026, 8, 17),
+          timeStart: '09:00:00',
+          timeEnd: '10:00:00',
+          title: 'Richiamare il fornitore',
+          description: 'per il pezzo mancante',
+          priority: 2,
+        ),
+      );
+    });
+
+    contractTest('updating an item matches the server', () {
+      final client = AgendaApiClient(dio);
+      return capture(
+        () => client.updateAgendaItem(
+          _id(20),
+          date: DateTime.utc(2026, 8, 17),
+          timeStart: '09:00:00',
+          timeEnd: '10:00:00',
+          title: 'Richiamare il fornitore',
+          description: 'per il pezzo mancante',
+          priority: 2,
+        ),
+      );
+    });
+
+    contractTest('completing an item matches the server', () {
+      final client = AgendaApiClient(dio);
+      return capture(() => client.completeAgendaItem(_id(21)));
+    });
+  });
+
   // ── Office writes ───────────────────────────────────────────────────────────
   //
   // Lower stakes for a technician but the same failure mode, and these are the
@@ -529,6 +566,33 @@ void main() {
     contractTest('schedule update matches the server', () {
       final client = AdminApiClient(dio);
       return capture(() => client.updateSchedule(_id(24), statusId: 2));
+    });
+
+    contractTest('schedule update with assignment fields matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.updateSchedule(
+          _id(24),
+          userId: AdminApiClient.emptyAssignmentId,
+          teamLeadId: _id(39),
+          staffIds: '["${_id(40)}"]',
+          squadraId: AdminApiClient.emptyAssignmentId,
+          force: true,
+        ),
+      );
+    });
+
+    contractTest('schedule conflict check matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.checkScheduleConflicts(
+          activityDate: DateTime.utc(2026, 8, 20),
+          timeStartMinutes: 480,
+          timeEndMinutes: 720,
+          userId: _id(41),
+          excludeScheduleId: _id(42),
+        ),
+      );
     });
 
     contractTest('ticket assignment matches the server', () {

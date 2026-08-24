@@ -80,7 +80,21 @@ class _ScheduleDetailBody extends ConsumerWidget {
     // app_database.dart) — it was just never rendered here. Resolved through the same lookups the
     // rest of the app already uses (colleagueNameProvider, allLocationsProvider,
     // scheduleStatusName, allTicketsProvider), never re-derived.
-    final assigneeName = ref.watch(colleagueNameProvider(schedule.userId)).valueOrNull;
+    final directAssigneeName = ref.watch(colleagueNameProvider(schedule.userId)).valueOrNull;
+    // A squadra-only schedule has no direct assignee — `schedule.userId` is the all-zeros GUID the
+    // server sends for "nobody directly assigned" (see `SyncScheduleDto.From`'s doc comment), which
+    // `colleagueNameProvider` never resolves. The squadra's own name/id is not synced to the device
+    // (only `GET /api/schedules/{id}`, online-only, resolves it — see
+    // `teamAssignedScheduleIdsProvider`'s doc comment), but its members are, via `ScheduleAssignees`
+    // — so this shows who they are instead of leaving the row blank.
+    final assignees = ref.watch(scheduleAssigneesProvider(scheduleId)).valueOrNull ?? const [];
+    final teamMemberIds = assignees.where((a) => a.isTeam).map((a) => a.userId).toList();
+    final teamMemberNames = teamMemberIds
+        .map((id) => ref.watch(colleagueNameProvider(id)).valueOrNull)
+        .whereType<String>()
+        .toList();
+    final assigneeName =
+        directAssigneeName ?? (teamMemberNames.isEmpty ? null : 'Squadra: ${teamMemberNames.join(', ')}');
     final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
     final sedeName = _findLocationName(locations, schedule.locationId);
     final statusName = scheduleStatusName(schedule.statusId);

@@ -132,4 +132,78 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  testWidgets('falls back to squadra member names when there is no direct assignee', (
+    tester,
+  ) async {
+    // A squadra-only schedule: the server sends the all-zeros GUID for "userId" (see
+    // SyncScheduleDto.From's doc comment) and carries the real assignees in ScheduleAssignees —
+    // isTeam=true, isDirect=false.
+    const zeroGuid = '00000000-0000-0000-0000-000000000000';
+
+    await db
+        .into(db.colleagues)
+        .insert(ColleaguesCompanion.insert(id: 'user-2', displayName: 'Luigi Bianchi'));
+    await db
+        .into(db.colleagues)
+        .insert(ColleaguesCompanion.insert(id: 'user-3', displayName: 'Anna Verdi'));
+
+    await db
+        .into(db.locations)
+        .insert(
+          LocationsCompanion.insert(
+            id: 'loc-2',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            customerId: 'cust-1',
+            name: 'Sede Sud',
+          ),
+        );
+
+    await db
+        .into(db.schedules)
+        .insert(
+          SchedulesCompanion.insert(
+            id: 'sched-team',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            activityDate: DateTime.utc(2026, 6, 21),
+            timeStartMinutes: 480,
+            timeEndMinutes: 600,
+            userId: zeroGuid,
+            statusId: 1,
+            locationId: 'loc-2',
+            title: 'Intervento squadra',
+            description: '',
+          ),
+        );
+
+    await db
+        .into(db.scheduleAssignees)
+        .insert(
+          ScheduleAssigneesCompanion.insert(
+            scheduleId: 'sched-team',
+            userId: 'user-2',
+            isTeam: const Value(true),
+          ),
+        );
+    await db
+        .into(db.scheduleAssignees)
+        .insert(
+          ScheduleAssigneesCompanion.insert(
+            scheduleId: 'sched-team',
+            userId: 'user-3',
+            isTeam: const Value(true),
+          ),
+        );
+
+    await tester.pumpWidget(_buildView(db: db, scheduleId: 'sched-team'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Luigi Bianchi'), findsOneWidget);
+    expect(find.textContaining('Anna Verdi'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 }

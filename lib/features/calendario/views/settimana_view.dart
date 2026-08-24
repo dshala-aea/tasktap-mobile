@@ -4,9 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -43,6 +46,7 @@ class SettimanaView extends ConsumerWidget {
     final grouped = groupSchedulesByDay(schedules);
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
+    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -111,6 +115,7 @@ class SettimanaView extends ConsumerWidget {
                   (s) => _WeekEventChip(
                     schedule: s,
                     onTap: () => onEventTap?.call(s),
+                    isTeam: teamScheduleIds.contains(s.id),
                   ),
                 ),
                 if (daySchedules.isEmpty)
@@ -136,10 +141,14 @@ class SettimanaView extends ConsumerWidget {
 }
 
 class _WeekEventChip extends StatelessWidget {
-  const _WeekEventChip({required this.schedule, required this.onTap});
+  const _WeekEventChip({required this.schedule, required this.onTap, this.isTeam = false});
 
   final Schedule schedule;
   final VoidCallback onTap;
+
+  /// See `_ScheduleListRow.isTeam` in `lista_view.dart` for what this flag means and why it has
+  /// no squadra name attached.
+  final bool isTeam;
 
   @override
   Widget build(BuildContext context) {
@@ -158,16 +167,31 @@ class _WeekEventChip extends StatelessWidget {
           horizontal: 6,
           vertical: AppSpacing.xs,
         ),
-        child: Text(
-          schedule.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: pair.foreground,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isTeam) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(LucideIcons.users, size: 9, color: pair.foreground.withAlpha(204)),
+              ),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                schedule.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Manrope',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: pair.foreground,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

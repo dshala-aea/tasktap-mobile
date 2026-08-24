@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -36,13 +37,20 @@ class ListaView extends ConsumerWidget {
 
     final grouped = groupSchedulesByDay(schedules);
     final dayFmt = DateFormat('EEEE d MMMM', 'it');
+    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     final children = <Widget>[];
     for (final entry in grouped.entries) {
       // Section header
       children.add(_DateHeader(date: entry.key, formatter: dayFmt));
       for (final s in entry.value) {
-        children.add(_ScheduleListRow(schedule: s, onTapTicket: onTapTicket));
+        children.add(
+          _ScheduleListRow(
+            schedule: s,
+            onTapTicket: onTapTicket,
+            isTeam: teamScheduleIds.contains(s.id),
+          ),
+        );
       }
     }
 
@@ -87,10 +95,15 @@ class _DateHeader extends StatelessWidget {
 }
 
 class _ScheduleListRow extends StatelessWidget {
-  const _ScheduleListRow({required this.schedule, this.onTapTicket});
+  const _ScheduleListRow({required this.schedule, this.onTapTicket, this.isTeam = false});
 
   final Schedule schedule;
   final void Function(String ticketId)? onTapTicket;
+
+  /// Whether this schedule has a squadra-mediated assignee (`ScheduleAssignees.isTeam`) — a "team
+  /// job" a technician cannot tell apart from a personal one otherwise. See
+  /// `teamAssignedScheduleIdsProvider`'s doc comment for why this is a flag, not a squadra name.
+  final bool isTeam;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +124,19 @@ class _ScheduleListRow extends StatelessWidget {
       ),
       title: schedule.title,
       subtitle: timeRange,
-      meta: StatusPill(stato: statusName, small: true, outlined: true),
+      meta: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isTeam) ...[
+            Tooltip(
+              message: 'Assegnato a una squadra',
+              child: Icon(LucideIcons.users, size: 14, color: context.colors.inkMuted),
+            ),
+            const SizedBox(width: 6),
+          ],
+          StatusPill(stato: statusName, small: true, outlined: true),
+        ],
+      ),
       onTap: schedule.ticketId != null && onTapTicket != null
           ? () => onTapTicket!(schedule.ticketId!)
           : null,

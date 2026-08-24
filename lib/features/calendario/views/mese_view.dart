@@ -2,10 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/local/app_database.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -37,6 +39,7 @@ class MeseView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final grouped = groupSchedulesByDay(schedules);
+    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
     final selectedKey = DateTime(
@@ -116,6 +119,7 @@ class MeseView extends ConsumerWidget {
                       final isSelected = key == selectedKey;
                       final daySchedules = grouped[key] ?? [];
                       final count = daySchedules.length;
+                      final hasTeam = daySchedules.any((s) => teamScheduleIds.contains(s.id));
 
                       return Expanded(
                         child: Padding(
@@ -151,6 +155,7 @@ class MeseView extends ConsumerWidget {
                                   _EventDots(
                                     count: count,
                                     isSelected: isSelected,
+                                    hasTeam: hasTeam,
                                   ),
                               ],
                             ),
@@ -170,10 +175,15 @@ class MeseView extends ConsumerWidget {
 }
 
 class _EventDots extends StatelessWidget {
-  const _EventDots({required this.count, required this.isSelected});
+  const _EventDots({required this.count, required this.isSelected, this.hasTeam = false});
 
   final int count;
   final bool isSelected;
+
+  /// Whether at least one schedule this day has a squadra-mediated assignee — see
+  /// `_ScheduleListRow.isTeam` in `lista_view.dart` for what this flag means and why the day cell
+  /// shows an icon rather than a squadra name.
+  final bool hasTeam;
 
   @override
   Widget build(BuildContext context) {
@@ -182,17 +192,28 @@ class _EventDots extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(show, (i) {
-          return Container(
-            width: 4,
-            height: 4,
-            margin: const EdgeInsets.symmetric(horizontal: 1),
-            decoration: BoxDecoration(
-              color: isSelected ? AppColors.Y : context.colors.amber,
-              shape: BoxShape.circle,
+        children: [
+          if (hasTeam)
+            Padding(
+              padding: const EdgeInsets.only(right: 2),
+              child: Icon(
+                LucideIcons.users,
+                size: 8,
+                color: isSelected ? AppColors.Y : context.colors.amber,
+              ),
             ),
-          );
-        }),
+          ...List.generate(show, (i) {
+            return Container(
+              width: 4,
+              height: 4,
+              margin: const EdgeInsets.symmetric(horizontal: 1),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.Y : context.colors.amber,
+                shape: BoxShape.circle,
+              ),
+            );
+          }),
+        ],
       ),
     );
   }

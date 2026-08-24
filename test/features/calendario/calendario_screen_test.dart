@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -436,6 +437,27 @@ void main() {
       await pump(tester, view: CalendarioView.lista);
       // Two schedules → two StatusPills
       expect(find.byType(StatusPill), findsNWidgets(2));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows a squadra indicator only on the team-assigned schedule', (tester) async {
+      await seedSchedules(db);
+      // Only "sched-today" is squadra-assigned — a row per (schedule, user) in the local
+      // ScheduleAssignees mirror, isTeam=true (see teamAssignedScheduleIdsProvider).
+      await db
+          .into(db.scheduleAssignees)
+          .insert(
+            ScheduleAssigneesCompanion.insert(
+              scheduleId: 'sched-today',
+              userId: 'u2',
+              isTeam: const Value(true),
+            ),
+          );
+
+      await pump(tester, view: CalendarioView.lista);
+
+      expect(find.byIcon(LucideIcons.users), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
