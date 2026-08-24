@@ -13,6 +13,7 @@ import 'core/crash_reporting/sentry_crash_reporter.dart';
 import 'core/notifications/notification_service.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/suspended_banner.dart';
 import 'presentation/providers/auth_providers.dart';
@@ -188,11 +189,19 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       // dashboard visit would have shown, not discover the block only when the final submit 403s.
       builder: (context, child) => BiometricLock(
         enabled: biometricLock,
-        child: Column(
-          children: [
-            SafeArea(bottom: false, child: const SuspendedBanner()),
-            Expanded(child: child ?? const SizedBox.shrink()),
-          ],
+        // CHARCOAL backdrop, not transparent: SuspendedBanner now paints its own safe area (see
+        // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
+        // with nothing behind that empty state, the status-bar strip fell back to plain white,
+        // which read fine while every header was also light and reads as a stray bar now that
+        // virtually every screen's header is the dark case-shell plate.
+        child: ColoredBox(
+          color: AppColors.CHARCOAL,
+          child: Column(
+            children: [
+              const SuspendedBanner(),
+              Expanded(child: child ?? const SizedBox.shrink()),
+            ],
+          ),
         ),
       ),
     );

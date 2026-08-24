@@ -254,7 +254,7 @@ class _DateLabel extends StatelessWidget {
         fontSize: 13,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.2,
-        color: context.colors.inkMuted,
+        color: AppColors.onDarkMuted,
       ),
       textAlign: TextAlign.center,
     );
@@ -407,7 +407,7 @@ class _PunchButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
+            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: AppColors.onDarkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -497,7 +497,7 @@ class _PauseButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
+            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: AppColors.onDarkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -539,7 +539,12 @@ class _SessionsCard extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        // Matches the empty-state Expanded below: a min-sized Column asked to also host a flex
+        // child is an unstable combination (its own reported size and the flex child's allocated
+        // space can disagree), and `fillHeight` already tells this widget exactly which sizing it
+        // was actually given — max when the parent handed it a bounded box to fill, min when it's
+        // sitting in a scrolling fallback with unbounded height and must size to its own content.
+        mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section title + optional pending-sync indicator
@@ -552,7 +557,7 @@ class _SessionsCard extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.4,
-                  color: context.colors.inkMuted,
+                  color: AppColors.onDarkMuted,
                 ),
               ),
               if (hasPendingSync) ...[
@@ -608,7 +613,7 @@ class _NoSessionsYet extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
         child: Text(
           'Nessuna timbratura oggi',
-          style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Manrope'),
+          style: TextStyle(color: AppColors.onDarkMuted, fontSize: 13, fontFamily: 'Manrope'),
         ),
       ),
     );
@@ -662,7 +667,7 @@ class _SessionRow extends StatelessWidget {
       case 'ripresa':
         return context.colors.cyan;
       default:
-        return context.colors.inkMuted;
+        return AppColors.onDarkMuted;
     }
   }
 

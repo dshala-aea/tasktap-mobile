@@ -186,12 +186,22 @@ class AppButton extends StatelessWidget {
 
     Widget content;
     if (isLoading) {
-      content = SizedBox(
-        width: _fontSize,
-        height: _fontSize,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(_fg(context)),
+      // Center, not a bare SizedBox: a full-width button hands the tree below it a *tight*
+      // infinite-width constraint (from the `SizedBox(width: double.infinity)` at the bottom of
+      // this method), and nothing between it and here loosens that constraint. A ConstrainedBox
+      // (which is what SizedBox compiles to) enforces its own request within the incoming bounds
+      // rather than overriding them — so the spinner's own "be exactly 16x16" was being clamped
+      // into "be exactly as wide as the button," stretching a circle into an oval the width of
+      // the screen. Center loosens the constraint back to loose-infinite, which is what a child
+      // that wants its own intrinsic size actually needs.
+      content = Center(
+        child: SizedBox(
+          width: _fontSize,
+          height: _fontSize,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(_fg(context)),
+          ),
         ),
       );
     } else if (icon != null) {

@@ -16,18 +16,14 @@ import 'package:flutter/widgets.dart';
 /// 3. **Absence is drawn.** An empty slot is a cut silhouette ([silhouetteDash]), not whitespace.
 ///    A technician reading their own rack sees the missing tool; so does this app.
 ///
-/// ## Why the corner language tightened back up (2026-08-24, Cassetta)
+/// ## Corner radius: settled at the validated number, not re-litigated per world
 ///
-/// [cellRadius] spent a while at 12 — a Figma-matched rounded-card idiom left over from the
-/// pre-Cassetta world, back when the floating pill nav's own large radius was a pinned brand
-/// commitment and a cell's corner was judged against it for family resemblance. That pin is
-/// retired: the nav is a case latch row now (see `AppBottomNav`, 10/8dp radii), and a cell that
-/// still rounds at 12 reads as a moulded card sitting inside a machined case — the exact mismatch
-/// the whole redirection exists to fix. [cellRadius] moves to 6, the same "machined, not moulded"
-/// value this file carried once before, this time for a reason that persists: a compartment is
-/// die-cut, not poured. The rail edge stays square ([cellRadiusFlush]) regardless — that one *is*
-/// structural, not a style choice: a drawer front is still butted against the extrusion, whatever
-/// its other three corners look like.
+/// [cellRadius] tried 6 for a day under the "die-cut compartment" reading of Cassetta — reverted
+/// on direct user feedback that a 6px radius at this cell size reads as dated and over-square, not
+/// machined. 12 is where this session's own competitor research (Linear, Vercel, Stripe, Notion —
+/// see the design-token audit this session ran) converged independently of any one world's
+/// metaphor: it is not "the old Figma number" or "the Cassetta number," it is the number four
+/// separate references landed on for a card at this density. Stop moving it per redirection.
 abstract final class AppRack {
   // ── The rail ──────────────────────────────────────────────────────────────
 
@@ -69,9 +65,9 @@ abstract final class AppRack {
   /// second tap.
   static const double cellMinHeight = 64;
 
-  /// Corner radius of a cell on its three free edges. See the class doc for why this is 6, not
-  /// the softer 12 it carried under the pre-Cassetta world.
-  static const double cellRadius = 6;
+  /// Corner radius of a cell on its three free edges. See the class doc — this is the validated
+  /// number, not a per-world value.
+  static const double cellRadius = 12;
 
   /// Corner radius on the rail edge. Square — the cell is butted against the extrusion. Structural,
   /// not a style knob: does not move when [cellRadius] does.
@@ -95,16 +91,6 @@ abstract final class AppRack {
 
   /// Shape for a compartment inside a cell.
   static const BorderRadius insetShape = BorderRadius.all(Radius.circular(insetRadius));
-
-  // ── The ledge and the strap ───────────────────────────────────────────────
-
-  /// The graphite pull bar down a cell's leading edge. This is what makes a cell read as a drawer
-  /// front rather than a rectangle, and it is the only depth cue the world uses on a light ground.
-  static const double ledgeWidth = 6;
-
-  /// The yellow load strap. Same width as the ledge because it *replaces* it: a strapped cell is
-  /// one whose ledge has gone yellow, not one wearing an extra stripe.
-  static const double strapWidth = ledgeWidth;
 
   /// Height of the label strip at the top of a cell — the printed card in its window.
   static const double labelStripHeight = 20;

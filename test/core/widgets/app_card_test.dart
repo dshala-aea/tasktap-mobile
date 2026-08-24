@@ -28,8 +28,8 @@ void main() {
 
       // A card was BG1 with a soft shadow and a 14px radius — the moulded rounded-card idiom.
       // A cell is the bone label card, square where it butts the rail, machined on the other
-      // three corners, and carries no shadow at all: depth is the ledge, which survives a dark
-      // ground and direct sunlight where a 10%-black shadow does not.
+      // three corners, and carries no shadow at all: depth is a hairline border, which survives a
+      // dark ground and direct sunlight where a 10%-black shadow does not.
       expect(box.color, equals(AppPalette.light.labelCard));
       expect(box.boxShadow, isNull);
       expect(box.borderRadius, equals(AppRack.cellShape));

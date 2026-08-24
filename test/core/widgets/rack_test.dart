@@ -47,14 +47,18 @@ void main() {
       );
     });
 
-    testWidgets('an unstrapped cell draws a graphite ledge', (tester) async {
+    testWidgets('an unstrapped cell draws a plain hairline border', (tester) async {
       await tester.pumpWidget(_wrap(const RackCell(child: Text('x'))));
-      expect(_ledgeColour(tester), AppPalette.light.ledge);
+      final border = _cellBorder(tester);
+      expect(border.top.color, AppPalette.light.borderLight);
+      expect(border.top.width, 1);
     });
 
-    testWidgets('a strapped cell turns its ledge brand yellow', (tester) async {
+    testWidgets('a strapped cell turns its border the brand accent', (tester) async {
       await tester.pumpWidget(_wrap(const RackCell(strapped: true, child: Text('x'))));
-      expect(_ledgeColour(tester), AppColors.Y);
+      final border = _cellBorder(tester);
+      expect(border.top.color, AppColors.Y);
+      expect(border.top.width, greaterThan(1), reason: 'state also thickens the border');
     });
 
     testWidgets('strapped wins over an explicit ledge colour', (tester) async {
@@ -62,7 +66,7 @@ void main() {
         _wrap(const RackCell(strapped: true, ledgeColor: Color(0xFF00FF00), child: Text('x'))),
       );
       expect(
-        _ledgeColour(tester),
+        _cellBorder(tester).top.color,
         AppColors.Y,
         reason: 'live outranks every other state a ledge can carry',
       );
@@ -113,7 +117,7 @@ void main() {
               as BoxDecoration;
 
       expect(decoration.color, AppPalette.dark.labelCard);
-      expect(_ledgeColour(tester), AppPalette.dark.ledge);
+      expect(_cellBorder(tester).top.color, AppPalette.dark.borderLight);
     });
   });
 
@@ -178,11 +182,15 @@ void main() {
   });
 }
 
-/// The ledge is the Positioned layer at the cell's leading edge.
-Color? _ledgeColour(WidgetTester tester) {
-  final positioned = tester.widget<Positioned>(
-    find.descendant(of: find.byType(RackCell), matching: find.byType(Positioned)).first,
-  );
-  final box = (positioned.child as DecoratedBox).decoration as BoxDecoration;
-  return box.color;
+/// A cell's state now lives on its own border, not a separate ledge bar — see RackCell's class
+/// doc for why.
+Border _cellBorder(WidgetTester tester) {
+  final decoration =
+      tester
+              .widget<DecoratedBox>(
+                find.descendant(of: find.byType(RackCell), matching: find.byType(DecoratedBox)).first,
+              )
+              .decoration
+          as BoxDecoration;
+  return decoration.border! as Border;
 }

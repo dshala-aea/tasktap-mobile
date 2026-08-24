@@ -25,21 +25,32 @@ class SuspendedBanner extends ConsumerWidget {
       // Fixed danger red, same as offline_guard's SnackBar — the one danger red does not flip
       // with theme, so the white text pairing below is safe under both.
       color: context.colors.red,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.sm),
-      child: Row(
-        children: [
-          const Icon(LucideIcons.alertTriangle, size: 16, color: AppColors.WHITE),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              'Abbonamento non attivo. I dati sono consultabili, ma non è possibile salvare o '
-              'modificare finché non viene riattivato.',
-              style: const TextStyle(color: AppColors.WHITE, fontSize: 12, height: 1.3),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+      // The safe area lives *inside* the red fill, not around it — the caller used to wrap this
+      // whole widget in its own SafeArea, which left the status-bar strip above the banner
+      // unpainted (default white) rather than red. That gap read as invisible back when the
+      // screen below it was also light; against the now-dark header it became a stark white bar
+      // sitting between the status bar and the banner. A colored system banner bleeds into the
+      // notch/status-bar inset; only its content needs clearing away from it.
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.sm),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.alertTriangle, size: 16, color: AppColors.WHITE),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Abbonamento non attivo. I dati sono consultabili, ma non è possibile salvare o '
+                  'modificare finché non viene riattivato.',
+                  style: const TextStyle(color: AppColors.WHITE, fontSize: 12, height: 1.3),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

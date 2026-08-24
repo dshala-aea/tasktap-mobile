@@ -80,16 +80,23 @@ class _RailBar extends StatelessWidget {
 
 /// A drawer front on the rail: the app's universal container.
 ///
-/// Replaces the rounded card. The differences that matter:
+/// Depth is a hairline border, never a drop shadow — a shadow disappears in direct sun, a border
+/// does not. [strapped] (or an explicit [ledgeColor]) marks state by recoloring and thickening
+/// that same border, not by gluing a separate colored bar to the leading edge.
 ///
-/// - It is **flush to the rail** on its leading edge (square corner) and machined on the other
-///   three. A card floats; a drawer is mounted.
-/// - It carries a **ledge** — the graphite pull bar down the leading edge — instead of a drop
-///   shadow. That is the depth cue, and unlike a shadow it survives a dark ground and direct sun.
-/// - When [strapped] the ledge goes the brand accent. That is the app's single most important
-///   state change: *this one needs you*. The selected day, the ticket you are on, a draft still
-///   unfinished. Not a live/running clock — that's [LiveDot], deliberately a different mark, or
-///   the accent would be spent on the ordinary state of most of a shift.
+/// ## Why the ledge bar is gone (2026-08-24)
+///
+/// This used to carry a 6dp graphite-or-accent bar down the leading edge — a second material
+/// glued onto the card rather than a property of its own edge. Direct user feedback: it read as
+/// two colors stitched together, not one considered surface, and it was the single biggest thing
+/// making the app look dated. A colored *border* says the same thing (this row is strapped,
+/// selected, or overdue) as a property of the card's own outline, the way Stripe, Linear, and
+/// Vercel all mark a selected or flagged row — not as a second block of material sitting on it.
+///
+/// [strapped] is still the app's single most important state change: *this one needs you*. The
+/// selected day, the ticket you are on, a draft still unfinished. Not a live/running clock —
+/// that's [LiveDot], deliberately a different mark, or the accent would be spent on the ordinary
+/// state of most of a shift.
 class RackCell extends StatelessWidget {
   const RackCell({
     super.key,
@@ -121,7 +128,7 @@ class RackCell extends StatelessWidget {
 
   final String? semanticLabel;
 
-  /// Overrides the ledge colour for a cell whose state is neither ordinary nor live — a rejected
+  /// Overrides the border colour for a cell whose state is neither ordinary nor live — a rejected
   /// report, an overdue job. [strapped] still wins.
   final Color? ledgeColor;
 
@@ -135,54 +142,19 @@ class RackCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final shape = flush ? AppRack.cellShape : AppRack.freeShape;
-    final ledge = strapped ? AppColors.Y : (ledgeColor ?? c.ledge);
+    final accent = strapped ? AppColors.Y : ledgeColor;
 
-    // Deliberately not `CrossAxisAlignment.stretch`. A stretched Row demands a bounded height
-    // from its parent, and a cell's parent is almost always a Column inside a scroll view, which
-    // offers infinite height — that combination throws on every layout pass. The ledge does not
-    // need the Row to stretch anyway: it is drawn by the Positioned layer below, which gets its
-    // height from the Stack. This Row only reserves the ledge's width.
-    final body = Row(
-      children: [
-        const SizedBox(width: AppRack.ledgeWidth),
-        Expanded(
-          child: Padding(padding: padding ?? AppRack.cellPadding, child: child),
-        ),
-      ],
-    );
+    final body = Padding(padding: padding ?? AppRack.cellPadding, child: child);
 
-    // The ledge is a Positioned layer rather than a Row child so it sits inside the border and
-    // squares off against the rail edge without fighting the corner radius.
-    Widget inner(Widget bodyChild) => ConstrainedBox(
-      constraints: BoxConstraints(minHeight: minHeight),
-      child: Stack(
-        children: [
-          bodyChild,
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: AppRack.ledgeWidth,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: ledge,
-                borderRadius: flush
-                    ? BorderRadius.zero
-                    : const BorderRadius.only(
-                        topLeft: Radius.circular(AppRack.cellRadius),
-                        bottomLeft: Radius.circular(AppRack.cellRadius),
-                      ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    Widget inner(Widget bodyChild) =>
+        ConstrainedBox(constraints: BoxConstraints(minHeight: minHeight), child: bodyChild);
 
     final decoration = BoxDecoration(
       color: background ?? c.labelCard,
       borderRadius: shape,
-      border: Border.all(color: c.borderLight, width: 1),
+      // A plain hairline in the ordinary case; strapped/ledgeColor thickens and recolors the same
+      // border rather than adding a second material. See the class doc for why.
+      border: Border.all(color: accent ?? c.borderLight, width: accent != null ? 1.5 : 1),
     );
 
     if (onTap == null && onLongPress == null) {
