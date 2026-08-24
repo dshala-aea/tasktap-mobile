@@ -130,7 +130,7 @@ class ScreenHeader extends StatelessWidget {
     this.showBack = false,
     this.onBack,
     this.actions = const [],
-    this.dark = false,
+    this.dark = true,
   });
 
   final String title;
@@ -139,7 +139,9 @@ class ScreenHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final List<Widget> actions;
 
-  /// Dark variant: white title on a dark background.
+  /// The case-shell top plate: dark ground, white title. Default, not an opt-in — this is what
+  /// makes the header read as part of the same shell as the bottom nav rather than a five-screen
+  /// exception. Screens that genuinely need a light header (none do today) can still pass `false`.
   final bool dark;
 
   @override
@@ -149,8 +151,11 @@ class ScreenHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
       // The top plate of the load bay. Headers used to float with no edge at all, so a scrolled
       // list ran up underneath the title with nothing marking where the rack began; the rail now
-      // starts at this line.
+      // starts at this line. Self-painted CHARCOAL when dark, rather than relying on the Scaffold
+      // behind it: the header is the plate riveted to the case lid, not a transparent label
+      // floating over whatever colour the page happens to be.
       decoration: BoxDecoration(
+        color: dark ? AppColors.CHARCOAL : null,
         border: Border(
           bottom: BorderSide(
             color: dark
@@ -239,8 +244,9 @@ class ScreenHeaderBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onBack;
   final List<Widget> actions;
 
-  /// Defaults to the screen background, so the header reads as part of the page rather than as a
-  /// bar sitting on top of it.
+  /// Defaults to the case-shell CHARCOAL, matching every other header in the app — a form screen
+  /// is still light content under a dark plate, same grammar as a list screen. Override for a
+  /// caller that genuinely needs something else (none do today).
   final Color? backgroundColor;
 
   /// 8 + 12 padding around a 44dp target, plus the subtitle's line when there is one.
@@ -249,7 +255,7 @@ class ScreenHeaderBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? context.colors.bg2;
+    final bg = backgroundColor ?? AppColors.CHARCOAL;
 
     // Derived, not passed. `ScreenHeader.dark` decides whether the title and back button are
     // painted for a dark ground, and leaving that to the caller is precisely how this app

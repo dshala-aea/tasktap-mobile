@@ -120,10 +120,11 @@ class _AdminMaterialeListBody extends ConsumerWidget {
               subtitle: '${filtered.length} totali',
               showBack: true,
               actions: [
-                IconButton(
-                  icon: Icon(showInactive ? LucideIcons.eye : LucideIcons.eyeOff, size: 20),
-                  tooltip: showInactive ? 'Nascondi inattivi' : 'Mostra inattivi',
-                  onPressed: () => onShowInactiveChanged(!showInactive),
+                HeaderIconBtn(
+                  icon: showInactive ? LucideIcons.eye : LucideIcons.eyeOff,
+                  label: showInactive ? 'Nascondi inattivi' : 'Mostra inattivi',
+                  glass: true,
+                  onTap: () => onShowInactiveChanged(!showInactive),
                 ),
               ],
             ),

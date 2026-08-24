@@ -95,6 +95,7 @@ class _SquadraDetailBody extends ConsumerWidget {
               HeaderIconBtn(
                 icon: LucideIcons.pencil,
                 label: 'Modifica squadra',
+                glass: true,
                 onTap: () => context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra),
               ),
             ],
