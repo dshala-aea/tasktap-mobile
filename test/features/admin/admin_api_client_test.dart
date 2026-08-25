@@ -545,4 +545,66 @@ void main() {
       expect(captured['cantiereId'], 'cant-1');
     });
   });
+
+  // Cantieri module #8, Gap 5: Cantiere.CommessaId existed on the backend entity but neither
+  // CreateCantiereRequest nor UpdateCantiereRequest accepted it (fixed backend-side in af9039c,
+  // "Accept CommessaId on cantiere create/update") — until then a mobile field here would have
+  // silently no-opped, so it was deliberately left unbuilt in the prior pass.
+  group('cantiere commessa (Gap 5)', () {
+    test('createCantiere sends commessaId when provided', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/cantieri', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'cant-1'}, '/api/cantieri'));
+
+      await client.createCantiere(name: 'Cantiere A', commessaId: 'commessa-1');
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/cantieri', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['commessaId'], 'commessa-1');
+    });
+
+    test('createCantiere omits commessaId when not provided', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/cantieri', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'cant-1'}, '/api/cantieri'));
+
+      await client.createCantiere(name: 'Cantiere A');
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/cantieri', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured.containsKey('commessaId'), isFalse);
+    });
+
+    test('updateCantiere sends commessaId when provided', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/cantieri/cant-1', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantieri/cant-1'));
+
+      await client.updateCantiere('cant-1', name: 'Cantiere A', commessaId: 'commessa-1');
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/cantieri/cant-1', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['commessaId'], 'commessa-1');
+    });
+
+    test('fetchCommesse GETs /api/commesse and reads the paginated envelope', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>('/api/commesse'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {'id': 'commessa-1', 'codice': 'COM-001', 'descrizione': 'Manutenzione annuale'},
+          ],
+        }, '/api/commesse'),
+      );
+
+      final commesse = await client.fetchCommesse();
+
+      expect(commesse, hasLength(1));
+      expect(commesse.single['codice'], 'COM-001');
+    });
+  });
 }

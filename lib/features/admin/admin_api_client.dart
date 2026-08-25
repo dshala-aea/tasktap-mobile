@@ -223,6 +223,10 @@ class AdminApiClient {
     DateTime? endDate,
     int status = 0,
     String? customerId,
+    // CreateCantiereRequest.CommessaId (CantieriController.cs) — landed backend-side in af9039c;
+    // before that this field didn't exist on the request DTO at all, so sending it would have
+    // silently no-opped (see Gap 5 of the feature audit).
+    String? commessaId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/cantieri',
@@ -237,6 +241,7 @@ class AdminApiClient {
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'status': status,
         'customerId': ?customerId,
+        'commessaId': ?commessaId,
       },
     );
     return res.data!['id'] as String;
@@ -253,6 +258,8 @@ class AdminApiClient {
     DateTime? endDate,
     int status = 0,
     String? customerId,
+    /// See [createCantiere]'s own doc comment on this field.
+    String? commessaId,
   }) async {
     await _dio.put(
       '/api/cantieri/$id',
@@ -266,6 +273,7 @@ class AdminApiClient {
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'status': status,
         'customerId': ?customerId,
+        'commessaId': ?commessaId,
       },
     );
   }
@@ -375,6 +383,16 @@ class AdminApiClient {
       '/api/cantiereworklog',
       queryParameters: {'cantiereId': cantiereId, 'pageSize': 50, 'sort': '-workDate'},
     );
+    return pagedItems(res.data);
+  }
+
+  // ── Commesse ─────────────────────────────────────────────────────────────
+  //
+  // No local Drift mirror — like Squadre/ProdottoAssistenza, fetched live wherever a picker needs
+  // the list (here: the cantiere form's Commessa field, Gap 5 of the feature audit).
+
+  Future<List<Map<String, dynamic>>> fetchCommesse() async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/commesse');
     return pagedItems(res.data);
   }
 

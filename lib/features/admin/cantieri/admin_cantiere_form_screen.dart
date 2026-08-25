@@ -16,6 +16,14 @@ import '../admin_widgets.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
+/// Commesse for the form's picker — live fetch, no local Drift mirror (same as Squadre/
+/// ProdottoAssistenza elsewhere in admin). Gap 5 of the feature audit: `Cantiere.CommessaId`
+/// existed on the entity, but `CreateCantiereRequest`/`UpdateCantiereRequest` didn't accept it
+/// until af9039c on the backend — this picker was left unbuilt until then.
+final adminCommesseProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref.watch(adminApiClientProvider).fetchCommesse();
+});
+
 /// Admin cantiere form — create or edit.
 class AdminCantiereFormScreen extends ConsumerStatefulWidget {
   const AdminCantiereFormScreen({super.key, this.cantiereId});
@@ -36,6 +44,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
   DateTime? _startDate;
   DateTime? _endDate;
   String? _selectedCustomerId;
+  String? _selectedCommessaId;
   // CantiereStatusEnum (WorkEnums.cs): Active=0, Completed=1, Cancelled=2. New cantieri default to
   // Active; edits prefill from the cached row in _loadCantiere.
   int _status = 0;
@@ -73,6 +82,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
         _startDate = cantiere.startDate;
         _endDate = cantiere.endDate;
         _selectedCustomerId = cantiere.customerId;
+        _selectedCommessaId = cantiere.commessaId;
         _status = cantiere.status;
       });
     } else {
@@ -130,6 +140,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
           endDate: _endDate,
           status: _status,
           customerId: _selectedCustomerId,
+          commessaId: _selectedCommessaId,
         );
       } else {
         await api.createCantiere(
@@ -142,6 +153,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
           endDate: _endDate,
           status: _status,
           customerId: _selectedCustomerId,
+          commessaId: _selectedCommessaId,
         );
       }
 
@@ -190,6 +202,14 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
 
     final customersAsync = ref.watch(allCustomersProvider);
     final customers = customersAsync.valueOrNull ?? [];
+    final commesseAsync = ref.watch(adminCommesseProvider);
+    final commesse = commesseAsync.valueOrNull ?? [];
+    // If the cached value isn't in the fetched (first-page) list — e.g. an inactive or
+    // otherwise-filtered commessa — keep it selectable rather than silently blanking the field on
+    // open, which would let an unrelated save clear a real link.
+    final commessaCodici = {for (final c in commesse) c['id'] as String: c['codice'] as String? ?? ''};
+    final missingCommessaId =
+        _selectedCommessaId != null && !commessaCodici.containsKey(_selectedCommessaId);
 
     final startLabel = _startDate != null
         ? DateFormat('dd/MM/yyyy').format(_startDate!)
@@ -232,6 +252,31 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                   ),
                 ],
                 onChanged: (v) => setState(() => _selectedCustomerId = v),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            AppFieldShell(
+              label: 'Commessa',
+              child: DropdownButtonFormField<String?>(
+                initialValue: _selectedCommessaId,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Nessuna commessa')),
+                  if (missingCommessaId)
+                    DropdownMenuItem(
+                      value: _selectedCommessaId,
+                      child: Text(_selectedCommessaId!),
+                    ),
+                  ...commesse.map((c) {
+                    final codice = c['codice'] as String? ?? '';
+                    final descrizione = c['descrizione'] as String?;
+                    final label = descrizione != null && descrizione.isNotEmpty
+                        ? '$codice ($descrizione)'
+                        : codice;
+                    return DropdownMenuItem(value: c['id'] as String, child: Text(label));
+                  }),
+                ],
+                onChanged: (v) => setState(() => _selectedCommessaId = v),
               ),
             ),
             const SizedBox(height: 16),

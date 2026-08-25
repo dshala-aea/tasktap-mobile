@@ -541,13 +541,18 @@ void main() {
           startDate: DateTime.utc(2026, 8, 1),
           endDate: DateTime.utc(2026, 12, 1),
           customerId: _id(20),
+          // Gap 5: CommessaId landed on CreateCantiereRequest in af9039c.
+          commessaId: _id(52),
         ),
       );
     });
 
     contractTest('cantiere update matches the server', () {
       final client = AdminApiClient(dio);
-      return capture(() => client.updateCantiere(_id(21), name: 'Cantiere Centro'));
+      return capture(
+        // Gap 5: CommessaId landed on UpdateCantiereRequest in af9039c.
+        () => client.updateCantiere(_id(21), name: 'Cantiere Centro', commessaId: _id(53)),
+      );
     });
 
     // Cantieri module #8, Gap 1: contacts CRUD had no mobile call site at all.

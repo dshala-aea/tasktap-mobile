@@ -14813,6 +14813,13 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "commessaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -22512,6 +22519,13 @@
             "$ref": "#/components/schemas/CantiereStatusEnum"
           },
           "customerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "commessaId": {
             "type": [
               "null",
               "string"
