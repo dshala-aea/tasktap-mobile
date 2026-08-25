@@ -46,7 +46,7 @@ class ImpostazioniScreen extends ConsumerWidget {
               child: _ProfileCard(displayName: displayName, email: user?.email),
             ),
 
-            // ── Notifiche ──────────────────────────────────────────────────
+            // ── Notifiche — canali ────────────────────────────────────────
             const SliverToBoxAdapter(
               child: _SettingsSectionTitle(title: 'Notifiche'),
             ),
@@ -66,13 +66,61 @@ class ImpostazioniScreen extends ConsumerWidget {
                         _togglePush(context, settings.pushAbilitate, notifier),
                   ),
                   _ToggleRow(
+                    icon: LucideIcons.mail,
+                    title: 'Email',
+                    subtitle: 'Ricevi notifiche via email',
+                    value: settings.notificheEmail,
+                    onChanged: (_) => notifier.toggle(key: 'notificheEmail'),
+                  ),
+                  _ToggleRow(
+                    icon: LucideIcons.inbox,
+                    title: 'Notifiche in app',
+                    subtitle: 'Mostra gli avvisi nell\'elenco notifiche',
+                    value: settings.notificheInApp,
+                    onChanged: (_) => notifier.toggle(key: 'notificheInApp'),
+                    showDivider: false,
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Notifiche — categorie ─────────────────────────────────────
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Notifiche attive'),
+            ),
+            SliverToBoxAdapter(
+              child: _SettingsGroup(
+                children: [
+                  _ToggleRow(
                     icon: LucideIcons.clipboardList,
                     title: 'Interventi',
                     subtitle: 'Nuovi interventi assegnati',
                     value: settings.notificheInterventi,
                     onChanged: (_) =>
                         notifier.toggle(key: 'notificheInterventi'),
-                    showDivider: false,
+                  ),
+                  _ToggleRow(
+                    icon: LucideIcons.calendar,
+                    title: 'Pianificazione',
+                    subtitle: 'Promemoria e cambi di programmazione',
+                    value: settings.notifichePianificazione,
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notifichePianificazione'),
+                  ),
+                  _ToggleRow(
+                    icon: LucideIcons.shieldCheck,
+                    title: 'Licenza e abbonamento',
+                    subtitle: 'Scadenze di licenza e abbonamento',
+                    value: settings.notificheLicenza,
+                    onChanged: (_) => notifier.toggle(key: 'notificheLicenza'),
+                  ),
+                  _ToggleRow(
+                    icon: LucideIcons.clock,
+                    title: 'Ore e presenze',
+                    subtitle: 'Invio e approvazione di ore e presenze',
+                    value: settings.notificheOrePresenze,
+                    onChanged: (_) =>
+                        notifier.toggle(key: 'notificheOrePresenze'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.fileText,
@@ -81,6 +129,13 @@ class ImpostazioniScreen extends ConsumerWidget {
                     value: settings.notificheRapportini,
                     onChanged: (_) =>
                         notifier.toggle(key: 'notificheRapportini'),
+                  ),
+                  _ToggleRow(
+                    icon: LucideIcons.atSign,
+                    title: 'Menzioni',
+                    subtitle: 'Quando vieni menzionato in un commento',
+                    value: settings.notificheMenzioni,
+                    onChanged: (_) => notifier.toggle(key: 'notificheMenzioni'),
                     showDivider: false,
                   ),
                 ],

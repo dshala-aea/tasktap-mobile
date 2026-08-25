@@ -13,8 +13,14 @@ import '../../presentation/providers/auth_providers.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 const _kPushAbilitate = 'settings.push_abilitate';
+const _kNotificheEmail = 'settings.notifiche_email';
+const _kNotificheInApp = 'settings.notifiche_in_app';
 const _kNotificheInterventi = 'settings.notifiche_interventi';
+const _kNotifichePianificazione = 'settings.notifiche_pianificazione';
+const _kNotificheLicenza = 'settings.notifiche_licenza';
+const _kNotificheOrePresenze = 'settings.notifiche_ore_presenze';
 const _kNotificheRapportini = 'settings.notifiche_rapportini';
+const _kNotificheMenzioni = 'settings.notifiche_menzioni';
 const _kSyncOffline = 'settings.sync_offline';
 const _kGeoLocazione = 'settings.geo_locazione';
 const _kTemaScuro = 'settings.tema_scuro';
@@ -34,10 +40,17 @@ const _kNotifichePending = 'settings.notifiche_pending';
 
 class ImpostazioniState {
   const ImpostazioniState({
-    // Notifiche
+    // Notifiche — canali
     this.pushAbilitate = true,
+    this.notificheEmail = true,
+    this.notificheInApp = true,
+    // Notifiche — categorie
     this.notificheInterventi = true,
+    this.notifichePianificazione = true,
+    this.notificheLicenza = true,
+    this.notificheOrePresenze = true,
     this.notificheRapportini = true,
+    this.notificheMenzioni = true,
     // App
     this.syncOffline = true,
     // True, not false. GPS was captured on every cantiere clock-in regardless of this flag, so
@@ -50,10 +63,18 @@ class ImpostazioniState {
     this.autenticazioneBiometrica = false,
   });
 
-  // ── Notifiche ────────────────────────────────────────────────────────────
+  // ── Notifiche — canali ───────────────────────────────────────────────────
   final bool pushAbilitate;
+  final bool notificheEmail;
+  final bool notificheInApp;
+
+  // ── Notifiche — categorie ────────────────────────────────────────────────
   final bool notificheInterventi;
+  final bool notifichePianificazione;
+  final bool notificheLicenza;
+  final bool notificheOrePresenze;
   final bool notificheRapportini;
+  final bool notificheMenzioni;
 
   // ── App ──────────────────────────────────────────────────────────────────
   final bool syncOffline;
@@ -65,8 +86,14 @@ class ImpostazioniState {
 
   ImpostazioniState copyWith({
     bool? pushAbilitate,
+    bool? notificheEmail,
+    bool? notificheInApp,
     bool? notificheInterventi,
+    bool? notifichePianificazione,
+    bool? notificheLicenza,
+    bool? notificheOrePresenze,
     bool? notificheRapportini,
+    bool? notificheMenzioni,
     bool? syncOffline,
     bool? geoLocazione,
     bool? temaScuro,
@@ -74,8 +101,14 @@ class ImpostazioniState {
   }) {
     return ImpostazioniState(
       pushAbilitate: pushAbilitate ?? this.pushAbilitate,
+      notificheEmail: notificheEmail ?? this.notificheEmail,
+      notificheInApp: notificheInApp ?? this.notificheInApp,
       notificheInterventi: notificheInterventi ?? this.notificheInterventi,
+      notifichePianificazione: notifichePianificazione ?? this.notifichePianificazione,
+      notificheLicenza: notificheLicenza ?? this.notificheLicenza,
+      notificheOrePresenze: notificheOrePresenze ?? this.notificheOrePresenze,
       notificheRapportini: notificheRapportini ?? this.notificheRapportini,
+      notificheMenzioni: notificheMenzioni ?? this.notificheMenzioni,
       syncOffline: syncOffline ?? this.syncOffline,
       geoLocazione: geoLocazione ?? this.geoLocazione,
       temaScuro: temaScuro ?? this.temaScuro,
@@ -110,8 +143,14 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     final prefs = await SharedPreferences.getInstance();
     state = ImpostazioniState(
       pushAbilitate: prefs.getBool(_kPushAbilitate) ?? true,
+      notificheEmail: prefs.getBool(_kNotificheEmail) ?? true,
+      notificheInApp: prefs.getBool(_kNotificheInApp) ?? true,
       notificheInterventi: prefs.getBool(_kNotificheInterventi) ?? true,
+      notifichePianificazione: prefs.getBool(_kNotifichePianificazione) ?? true,
+      notificheLicenza: prefs.getBool(_kNotificheLicenza) ?? true,
+      notificheOrePresenze: prefs.getBool(_kNotificheOrePresenze) ?? true,
       notificheRapportini: prefs.getBool(_kNotificheRapportini) ?? true,
+      notificheMenzioni: prefs.getBool(_kNotificheMenzioni) ?? true,
       syncOffline: prefs.getBool(_kSyncOffline) ?? true,
       geoLocazione: prefs.getBool(_kGeoLocazione) ?? true,
       temaScuro: prefs.getBool(_kTemaScuro) ?? false,
@@ -148,12 +187,22 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
   void toggle({required String key}) {
     state = switch (key) {
       'pushAbilitate' => state.copyWith(pushAbilitate: !state.pushAbilitate),
+      'notificheEmail' => state.copyWith(notificheEmail: !state.notificheEmail),
+      'notificheInApp' => state.copyWith(notificheInApp: !state.notificheInApp),
       'notificheInterventi' => state.copyWith(
         notificheInterventi: !state.notificheInterventi,
+      ),
+      'notifichePianificazione' => state.copyWith(
+        notifichePianificazione: !state.notifichePianificazione,
+      ),
+      'notificheLicenza' => state.copyWith(notificheLicenza: !state.notificheLicenza),
+      'notificheOrePresenze' => state.copyWith(
+        notificheOrePresenze: !state.notificheOrePresenze,
       ),
       'notificheRapportini' => state.copyWith(
         notificheRapportini: !state.notificheRapportini,
       ),
+      'notificheMenzioni' => state.copyWith(notificheMenzioni: !state.notificheMenzioni),
       'syncOffline' => state.copyWith(syncOffline: !state.syncOffline),
       'geoLocazione' => state.copyWith(geoLocazione: !state.geoLocazione),
       'temaScuro' => state.copyWith(temaScuro: !state.temaScuro),
@@ -181,14 +230,23 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     }
   }
 
-  /// The three toggles that have a server field. The other four are device settings with no
-  /// server counterpart, and sending them anywhere would be inventing a contract.
-  static bool _isServerBacked(String key) =>
-      key == 'pushAbilitate' ||
-      key == 'notificheInterventi' ||
-      key == 'notificheRapportini';
+  /// The nine toggles that have a server field (everything except `enableSMS`, which has no
+  /// backend send-path implementation and therefore no UI here). The four device settings below
+  /// have no server counterpart, and sending them anywhere would be inventing a contract.
+  static bool _isServerBacked(String key) => switch (key) {
+    'pushAbilitate' ||
+    'notificheEmail' ||
+    'notificheInApp' ||
+    'notificheInterventi' ||
+    'notifichePianificazione' ||
+    'notificheLicenza' ||
+    'notificheOrePresenze' ||
+    'notificheRapportini' ||
+    'notificheMenzioni' => true,
+    _ => false,
+  };
 
-  /// Send the three server-backed toggles, marking them pending until the server confirms.
+  /// Send the nine server-backed toggles, marking them pending until the server confirms.
   ///
   /// The pending flag is written *before* the request, not after a failure: a process killed
   /// mid-flight would otherwise leave the change local-only with nothing recording that it had
@@ -198,9 +256,15 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     await prefs.setBool(_kNotifichePending, true);
     try {
       await _api.update(
+        enableInApp: state.notificheInApp,
         enablePush: state.pushAbilitate,
+        enableEmail: state.notificheEmail,
         ticketNotifications: state.notificheInterventi,
+        scheduleNotifications: state.notifichePianificazione,
+        licenseNotifications: state.notificheLicenza,
+        workLogNotifications: state.notificheOrePresenze,
         documentNotifications: state.notificheRapportini,
+        mentionNotifications: state.notificheMenzioni,
       );
       await prefs.setBool(_kNotifichePending, false);
     } catch (_) {
@@ -234,13 +298,25 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 
     state = state.copyWith(
       pushAbilitate: remote.enablePush,
+      notificheEmail: remote.enableEmail,
+      notificheInApp: remote.enableInApp,
       notificheInterventi: remote.ticketNotifications,
+      notifichePianificazione: remote.scheduleNotifications,
+      notificheLicenza: remote.licenseNotifications,
+      notificheOrePresenze: remote.workLogNotifications,
       notificheRapportini: remote.documentNotifications,
+      notificheMenzioni: remote.mentionNotifications,
     );
 
     await prefs.setBool(_kPushAbilitate, remote.enablePush);
+    await prefs.setBool(_kNotificheEmail, remote.enableEmail);
+    await prefs.setBool(_kNotificheInApp, remote.enableInApp);
     await prefs.setBool(_kNotificheInterventi, remote.ticketNotifications);
+    await prefs.setBool(_kNotifichePianificazione, remote.scheduleNotifications);
+    await prefs.setBool(_kNotificheLicenza, remote.licenseNotifications);
+    await prefs.setBool(_kNotificheOrePresenze, remote.workLogNotifications);
     await prefs.setBool(_kNotificheRapportini, remote.documentNotifications);
+    await prefs.setBool(_kNotificheMenzioni, remote.mentionNotifications);
 
     // Push arriving from another device still has to register or unregister *this* one.
     if (pushChanged) _syncPushRegistration(remote.enablePush);
@@ -248,8 +324,14 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 
   bool _valueForKey(String key) => switch (key) {
     'pushAbilitate' => state.pushAbilitate,
+    'notificheEmail' => state.notificheEmail,
+    'notificheInApp' => state.notificheInApp,
     'notificheInterventi' => state.notificheInterventi,
+    'notifichePianificazione' => state.notifichePianificazione,
+    'notificheLicenza' => state.notificheLicenza,
+    'notificheOrePresenze' => state.notificheOrePresenze,
     'notificheRapportini' => state.notificheRapportini,
+    'notificheMenzioni' => state.notificheMenzioni,
     'syncOffline' => state.syncOffline,
     'geoLocazione' => state.geoLocazione,
     'temaScuro' => state.temaScuro,
@@ -259,8 +341,14 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
 
   String _prefKeyForKey(String key) => switch (key) {
     'pushAbilitate' => _kPushAbilitate,
+    'notificheEmail' => _kNotificheEmail,
+    'notificheInApp' => _kNotificheInApp,
     'notificheInterventi' => _kNotificheInterventi,
+    'notifichePianificazione' => _kNotifichePianificazione,
+    'notificheLicenza' => _kNotificheLicenza,
+    'notificheOrePresenze' => _kNotificheOrePresenze,
     'notificheRapportini' => _kNotificheRapportini,
+    'notificheMenzioni' => _kNotificheMenzioni,
     'syncOffline' => _kSyncOffline,
     'geoLocazione' => _kGeoLocazione,
     'temaScuro' => _kTemaScuro,

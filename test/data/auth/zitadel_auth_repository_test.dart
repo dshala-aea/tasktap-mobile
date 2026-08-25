@@ -13,6 +13,7 @@
 
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,8 @@ import 'package:tasktap_mobile/data/auth/zitadel_auth_repository.dart';
 class MockAppAuth extends Mock implements FlutterAppAuth {}
 
 class MockSecureStorage extends Mock implements FlutterSecureStorage {}
+
+class MockDio extends Mock implements Dio {}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -49,6 +52,7 @@ void main() {
     registerFallbackValue(
       AuthorizationTokenRequest('client', 'redirect', issuer: 'https://issuer.test'),
     );
+    registerFallbackValue(Options());
   });
 
   late MockAppAuth appAuth;
@@ -235,6 +239,118 @@ void main() {
       expect(store.containsKey(_refreshTokenKey), isFalse);
       expect(store.containsKey(_cachedIdentityKey), isFalse);
       expect(repo.currentUser, isNull);
+    });
+
+    // Regression: `POST /api/auth/logout` on the TaskTap backend is client-side only — no
+    // server-side revocation exists there, so a captured refresh token would keep working after a
+    // technician signed out on this device. signOut() must revoke it at Zitadel's own OAuth
+    // revocation endpoint before discarding it locally.
+    group('Zitadel refresh-token revocation', () {
+      late MockDio revocationDio;
+
+      setUp(() {
+        revocationDio = MockDio();
+      });
+
+      Future<ZitadelAuthRepository> signedInRepo() async {
+        when(() => appAuth.authorizeAndExchangeCode(any())).thenAnswer(
+          (_) async => AuthorizationTokenResponse(
+            'access-1',
+            'refresh-to-revoke',
+            DateTime.now().toUtc().add(const Duration(hours: 1)),
+            _fakeIdToken(sub: 'u1', email: 'tech@tasktap.io'),
+            'Bearer',
+            null,
+            null,
+            null,
+          ),
+        );
+
+        final repo = ZitadelAuthRepository(
+          appAuth: appAuth,
+          storage: storage,
+          revocationHttpClient: revocationDio,
+          restore: false,
+        );
+        await repo.signIn();
+        return repo;
+      }
+
+      test('POSTs the refresh token to the revocation endpoint before clearing local state',
+          () async {
+        when(
+          () => revocationDio.post<void>(
+            any(),
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              Response<void>(requestOptions: RequestOptions(path: '/oauth/v2/revoke'), statusCode: 200),
+        );
+
+        final repo = await signedInRepo();
+        await repo.signOut();
+
+        final captured = verify(
+          () => revocationDio.post<void>(
+            captureAny(),
+            data: captureAny(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        ).captured;
+
+        expect(captured[0], endsWith('/oauth/v2/revoke'));
+        final sentData = captured[1] as Map<String, dynamic>;
+        expect(sentData['token'], 'refresh-to-revoke');
+        expect(sentData['token_type_hint'], 'refresh_token');
+        expect(sentData.containsKey('client_id'), isTrue);
+
+        // Local state is still cleared as normal.
+        expect(store.containsKey(_refreshTokenKey), isFalse);
+        expect(store.containsKey(_cachedIdentityKey), isFalse);
+        expect(repo.currentUser, isNull);
+      });
+
+      // The best-effort contract: offline, an unreachable IdP, or any other revocation failure
+      // must never block or fail the user-visible sign-out.
+      test('a revocation failure does not prevent local sign-out', () async {
+        when(
+          () => revocationDio.post<void>(
+            any(),
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        ).thenThrow(DioException(requestOptions: RequestOptions(path: '/oauth/v2/revoke')));
+
+        final repo = await signedInRepo();
+
+        // Must complete without throwing despite the revocation call failing.
+        await repo.signOut();
+
+        expect(store.containsKey(_refreshTokenKey), isFalse);
+        expect(store.containsKey(_cachedIdentityKey), isFalse);
+        expect(repo.currentUser, isNull);
+      });
+
+      test('no revocation attempt is made when there is no session to revoke', () async {
+        final repo = ZitadelAuthRepository(
+          appAuth: appAuth,
+          storage: storage,
+          revocationHttpClient: revocationDio,
+          restore: false,
+        );
+
+        await repo.signOut();
+
+        verifyNever(
+          () => revocationDio.post<void>(
+            any(),
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        );
+      });
     });
   });
 }

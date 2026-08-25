@@ -8,7 +8,11 @@ import 'package:dio/dio.dart';
 //   GET    /api/notifications          — paginated list (InApp delivery only)
 //   PUT    /api/notifications/{id}/read — mark one as read
 //   PUT    /api/notifications/read-all  — mark all as read
-//   GET    /api/notifications/unread-count
+//
+// No client for GET /api/notifications/unread-count: the app derives its badge count from the
+// Drift-cached notification list instead (notificheUnreadCountProvider), which stays correct
+// offline and needs no extra round trip. A dedicated method for this route existed here with zero
+// callers and was removed rather than kept as unused surface.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class NotificationApiClient {
@@ -47,12 +51,6 @@ class NotificationApiClient {
   /// Mark all notifications as read for the current user.
   Future<void> markAllAsRead() async {
     await _dio.put('/api/notifications/read-all');
-  }
-
-  /// Get the unread notification count.
-  Future<int> getUnreadCount() async {
-    final response = await _dio.get('/api/notifications/unread-count');
-    return (response.data as Map<String, dynamic>)['unreadCount'] as int;
   }
 }
 

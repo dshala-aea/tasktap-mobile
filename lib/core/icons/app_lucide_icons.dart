@@ -33,6 +33,7 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData atSign = IconData(0xf170, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
   static const IconData bell = IconData(0xf19c, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
   static const IconData bellOff = IconData(
     0xf19f,
@@ -204,6 +205,7 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData mail = IconData(0xf3b4, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
   static const IconData mapPin = IconData(
     0xf3c0,
     fontFamily: 'Lucide',

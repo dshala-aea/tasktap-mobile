@@ -12107,6 +12107,46 @@
         }
       }
     },
+    "/api/WorkLog/active/team": {
+      "get": {
+        "tags": [
+          "WorkLog"
+        ],
+        "summary": "The office roster: everything currently tracking time across the whole tenant, tagged with\nwho it belongs to \u2014 the admin/office-facing \u0022who is clocked in right now\u0022 view Task\u0026lt;IActionResult\u0026gt; WorkLogController.Active(CancellationToken ct) deliberately does not answer, since that one is scoped to the caller\u0027s own\nday by design.",
+        "description": "Same \u0060configure\u0060 gate as approve/reject/the approval queue above: reading everyone\nelse\u0027s running trackers is the supervisory half of this module, not the employee\u0027s own-day\nread permission.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/WorkLog/today": {
       "get": {
         "tags": [
@@ -13442,6 +13482,21 @@
             ],
             "description": "The cantiere or ticket, so a client can link to it. Null for attendance.",
             "format": "uuid"
+          },
+          "userId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who this tracker belongs to. Null from Task\u0026lt;IReadOnlyList\u0026lt;ActiveTracker\u0026gt;\u0026gt; IActiveTrackerQuery.GetForUserAsync(Guid tenantId, Guid userId, CancellationToken ct = default(CancellationToken)) \u2014 the\ncaller already knows it\u0027s their own \u2014 and populated only by\nTask\u0026lt;IReadOnlyList\u0026lt;ActiveTracker\u0026gt;\u0026gt; IActiveTrackerQuery.GetForTenantAsync(Guid tenantId, CancellationToken ct = default(CancellationToken)), the office roster view.",
+            "format": "uuid"
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Display name to go with UserId. Same null-unless-tenant-scoped rule."
           }
         },
         "description": "One running tracker."

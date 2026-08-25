@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -22,9 +24,11 @@ class ZitadelAuthRepository implements IAuthRepository {
   ZitadelAuthRepository({
     FlutterAppAuth? appAuth,
     FlutterSecureStorage? storage,
+    Dio? revocationHttpClient,
     bool restore = true,
   }) : _appAuth = appAuth ?? FlutterAppAuth(),
-       _storage = storage ?? const FlutterSecureStorage() {
+       _storage = storage ?? const FlutterSecureStorage(),
+       _revocationHttpClient = revocationHttpClient ?? Dio() {
     if (restore) unawaited(_restore());
   }
 
@@ -34,6 +38,14 @@ class ZitadelAuthRepository implements IAuthRepository {
 
   final FlutterAppAuth _appAuth;
   final FlutterSecureStorage _storage;
+
+  /// Plain HTTP client for the one non-AppAuth call this repository makes: revoking the refresh
+  /// token at sign-out (see [_revokeRefreshToken]). Deliberately not `dioProvider`'s configured
+  /// instance — that one carries `AuthInterceptor`, which exists to *attach* a bearer token and
+  /// silently refresh on 401; revocation needs neither and firing it through that interceptor
+  /// would be the wrong tool wired to the wrong call.
+  final Dio _revocationHttpClient;
+
   final StreamController<AuthUser?> _controller = StreamController<AuthUser?>.broadcast();
 
   AuthUser? _current;
@@ -117,12 +129,58 @@ class ZitadelAuthRepository implements IAuthRepository {
 
   @override
   Future<void> signOut() async {
+    // Best-effort, and BEFORE local state is cleared: the refresh token being revoked is the same
+    // one about to be discarded below, and there is nothing left to send it with afterwards.
+    await _revokeRefreshToken();
     await _storage.delete(key: _refreshTokenKey);
     await _storage.delete(key: _cachedIdentityKey);
     _emit(null);
   }
 
   // ── internals ──────────────────────────────────────────────────────────
+
+  /// Revoke the current refresh token at Zitadel's OAuth revocation endpoint.
+  ///
+  /// `POST /api/auth/logout` on the TaskTap backend is client-side only (see the audit finding
+  /// this closes) — no server-side token revocation exists there either, so without this a
+  /// captured refresh token would keep minting new access tokens after a technician signs out on
+  /// this device. Zitadel's revocation endpoint is the actual place that can invalidate it.
+  ///
+  /// `flutter_appauth` wraps AppAuth's authorization/token/end-session calls only; it exposes no
+  /// revocation helper (verified against its published API — `EndSessionRequest` opens the IdP's
+  /// *browser* logout page, which is a different flow with a different UX cost, not a silent
+  /// revoke). So this sends the standard RFC 7009 request by hand: `POST {issuer}/oauth/v2/revoke`
+  /// with `token` + `token_type_hint=refresh_token` + `client_id` — no client secret, matching
+  /// every other call this repository makes to a public/PKCE-only client.
+  ///
+  /// Deliberately best-effort: offline, an unreachable IdP, or a revocation the server itself
+  /// rejects must never block or fail the user-visible sign-out. The technician is leaving this
+  /// device regardless, and [signOut] clears local state unconditionally right after this call
+  /// returns — including when it throws.
+  Future<void> _revokeRefreshToken() async {
+    final refreshToken = _current?.refreshToken;
+    if (refreshToken == null || refreshToken.isEmpty) return;
+
+    try {
+      await _revocationHttpClient.post<void>(
+        '${Env.oidcIssuer}/oauth/v2/revoke',
+        data: <String, dynamic>{
+          'token': refreshToken,
+          'token_type_hint': 'refresh_token',
+          'client_id': Env.oidcClientId,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          // Any HTTP status is a completed, non-exceptional attempt as far as sign-out is
+          // concerned — a 4xx from an already-expired/rotated token is not a reason to retry or
+          // to treat this as failed in a way that would need surfacing.
+          validateStatus: (_) => true,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Zitadel refresh-token revocation failed (best-effort, sign-out continues): $e');
+    }
+  }
 
   /// On startup, mint a fresh session from the stored refresh token (if any).
   ///
