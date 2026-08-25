@@ -194,6 +194,114 @@ void main() {
     });
   });
 
+  group('fetchAllUsersWithSquadraInfo', () {
+    // Gaps 6/7 of the feature audit: squadra member counts and last-access display are both
+    // derived from this one bulk `/api/users` fetch rather than an N+1 over squadre or members.
+    test('sends isActive=true and paginates until totalPages is exhausted', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((invocation) async {
+        final params =
+            invocation.namedArguments[const Symbol('queryParameters')] as Map<String, dynamic>;
+        final page = params['page'] as int;
+        if (page == 1) {
+          return _okResponse({
+            'items': [
+              {'id': 'u1', 'squadraId': 'sq-1', 'lastAccessAt': '2026-08-20T10:00:00Z'},
+            ],
+            'page': 1,
+            'pageSize': 100,
+            'totalItems': 2,
+            'totalPages': 2,
+          }, '/api/users');
+        }
+        return _okResponse({
+          'items': [
+            {'id': 'u2', 'squadraId': 'sq-1', 'lastAccessAt': null},
+          ],
+          'page': 2,
+          'pageSize': 100,
+          'totalItems': 2,
+          'totalPages': 2,
+        }, '/api/users');
+      });
+
+      final users = await client.fetchAllUsersWithSquadraInfo();
+
+      expect(users.map((u) => u['id']), ['u1', 'u2']);
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured;
+      expect(captured.length, 2);
+      expect((captured[0] as Map)['isActive'], true);
+      expect((captured[0] as Map)['page'], 1);
+      expect((captured[1] as Map)['page'], 2);
+    });
+
+    test('makes exactly one call when there is only one page', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {'id': 'u1', 'squadraId': null, 'lastAccessAt': null},
+          ],
+          'page': 1,
+          'pageSize': 100,
+          'totalItems': 1,
+          'totalPages': 1,
+        }, '/api/users'),
+      );
+
+      final users = await client.fetchAllUsersWithSquadraInfo();
+
+      expect(users.length, 1);
+      verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).called(1);
+    });
+
+    test('omits isActive when activeOnly is false', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': <Map<String, dynamic>>[],
+          'page': 1,
+          'pageSize': 100,
+          'totalItems': 0,
+          'totalPages': 1,
+        }, '/api/users'),
+      );
+
+      await client.fetchAllUsersWithSquadraInfo(activeOnly: false);
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured;
+      expect((captured.first as Map).containsKey('isActive'), isFalse);
+    });
+  });
+
   group('delete* methods', () {
     test('deleteCustomer DELETEs /api/customers/{id}', () async {
       when(

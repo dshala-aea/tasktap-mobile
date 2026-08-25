@@ -104,7 +104,12 @@ enum _ViewMode { calendario, elenco }
 /// Admin schedule list — a real calendar (month grid) plus a filterable elenco: date range,
 /// status, squadra and technician, on top of the title search this screen used to be limited to.
 class AdminScheduleListScreen extends StatefulWidget {
-  const AdminScheduleListScreen({super.key});
+  const AdminScheduleListScreen({super.key, this.initialSquadraId});
+
+  /// Pre-applies the squadra filter when navigated here from that squadra's detail screen (Gap 9
+  /// of the feature audit) — see `admin_squadra_detail_screen.dart`'s "Pianificazioni squadra"
+  /// header action and the `pianificazioni` route's builder in `app_router.dart`.
+  final String? initialSquadraId;
 
   @override
   State<AdminScheduleListScreen> createState() => _AdminScheduleListScreenState();
@@ -117,6 +122,19 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime? _selectedDay;
   AdminScheduleFilters _filters = const AdminScheduleFilters();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSquadraId != null) {
+      _filters = AdminScheduleFilters(squadraId: widget.initialSquadraId);
+      // The calendar tab still respects the filter (it just highlights matching days), but arriving
+      // here to look at *this squadra's* schedule reads better landing straight on the filtered
+      // elenco than on an unfiltered month grid the admin then has to interpret against a filter
+      // they can't see applied.
+      _viewMode = _ViewMode.elenco;
+    }
+  }
 
   @override
   void dispose() {

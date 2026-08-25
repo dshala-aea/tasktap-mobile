@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import 'admin_squadra_list_screen.dart' show allUsersWithSquadraProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -93,6 +95,16 @@ class _SquadraDetailBody extends ConsumerWidget {
     // SquadreController) — never read on mobile before.
     final capoNome = squadra['capSquadraNome'] as String?;
 
+    // Gap 6 of the feature audit: `lastAccessAt` is a real column on `User`, returned on every
+    // `/api/users` response, but was surfaced nowhere on mobile. `allUsersWithSquadraProvider` is
+    // the same bulk fetch the list screen uses for member counts (Gap 7) — reused here rather than
+    // a live per-member `/api/users/{id}` call, so this row list still costs one network request
+    // for the whole screen, not one per member.
+    final usersById = {
+      for (final u in ref.watch(allUsersWithSquadraProvider).valueOrNull ?? const [])
+        u['id'] as String: u,
+    };
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -104,6 +116,17 @@ class _SquadraDetailBody extends ConsumerWidget {
             // (membership, not the squadra's own fields) — so unlike the other admin detail
             // screens, this header action is not a duplicate of the FAB and stays.
             actions: [
+              // Gap 9 of the feature audit — no link existed from a squadra to its own schedule.
+              // AdminScheduleListScreen already supports a squadra filter (its filter sheet), this
+              // just pre-applies it via `initialSquadraId` instead of making the admin open the
+              // filter sheet and pick this same squadra by name right after tapping in from here.
+              HeaderIconBtn(
+                icon: LucideIcons.calendarDays,
+                label: 'Pianificazioni squadra',
+                glass: true,
+                onTap: () =>
+                    context.push('/altro/pianificazioni', extra: squadra['id'] as String?),
+              ),
               HeaderIconBtn(
                 icon: LucideIcons.pencil,
                 label: 'Modifica squadra',
@@ -172,10 +195,18 @@ class _SquadraDetailBody extends ConsumerWidget {
                 final nome = userId.isEmpty
                     ? null
                     : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                // Only claim "Mai" (never) when the bulk fetch actually resolved this user and
+                // found no access timestamp — a userId absent from the fetch (page-size cap,
+                // deactivated, or not yet loaded) is unknown, not "never accessed", so the row
+                // falls back to just the role in that case rather than asserting something false.
+                final user = usersById[userId];
+                final subtitle = user == null
+                    ? ruolo
+                    : '$ruolo · Ultimo accesso: ${_formatLastAccess(user['lastAccessAt'] as String?)}';
                 return ListRow(
                   leading: AppAvatar(name: nome ?? '?', size: 36),
                   title: nome ?? 'Membro non sincronizzato',
-                  subtitle: ruolo,
+                  subtitle: subtitle,
                   meta: IconButton(
                     icon: const Icon(LucideIcons.userMinus, size: 18),
                     onPressed: () => _removeMember(context, userId),
@@ -223,6 +254,15 @@ class _SquadraDetailBody extends ConsumerWidget {
       }
     }
   }
+}
+
+/// Formats a `User.lastAccessAt` ISO timestamp (or its absence) for the member row — "Mai" for a
+/// user who has never accessed the app (the field is `null`), otherwise the same absolute
+/// `dd/MM/yyyy HH:mm` timestamp style this app already uses for other point-in-time fields
+/// (`signedAt` in `rapportino_view_screen.dart`), converted to local time.
+String _formatLastAccess(String? iso) {
+  if (iso == null) return 'Mai';
+  return DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(iso).toLocal());
 }
 
 /// Bottom sheet to add a member to a squadra.

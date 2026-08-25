@@ -402,8 +402,12 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'pianificazioni',
+                    // `extra` is a squadraId when navigated here from that squadra's detail
+                    // screen (Gap 9 of the feature audit, "Pianificazioni squadra" header
+                    // action) — pre-applies the squadra filter instead of landing on the
+                    // unfiltered list and making the admin reopen the filter sheet.
                     builder: (context, state) =>
-                        const AdminScheduleListScreen(),
+                        AdminScheduleListScreen(initialSquadraId: state.extra as String?),
                     routes: [
                       GoRoute(
                         path: 'nuova',

@@ -15,6 +15,17 @@ final adminSquadreProvider = FutureProvider.autoDispose<List<Map<String, dynamic
   return api.fetchSquadre();
 });
 
+/// Backs per-squadra member counts here (Gap 7 of the feature audit) and, on the detail screen,
+/// each member's last-access display (Gap 6) — one shared bulk fetch rather than either fetching
+/// per squadra row or per member row. See
+/// [AdminApiClient.fetchAllUsersWithSquadraInfo]'s doc comment for why.
+final allUsersWithSquadraProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
+  ref,
+) async {
+  final api = ref.watch(adminApiClientProvider);
+  return api.fetchAllUsersWithSquadraInfo();
+});
+
 /// Admin squadra list — online-only.
 class AdminSquadraListScreen extends ConsumerWidget {
   const AdminSquadraListScreen({super.key});
@@ -70,6 +81,18 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
       return nome.contains(_query.toLowerCase());
     }).toList();
 
+    // One bulk fetch for the whole list, not one per row — see allUsersWithSquadraProvider's doc
+    // comment. `squadraId` is the derived field UsersController.PopulateSquadreAsync projects onto
+    // every user response.
+    final users = ref.watch(allUsersWithSquadraProvider).valueOrNull ?? const [];
+    final memberCounts = <String, int>{};
+    for (final u in users) {
+      final squadraId = u['squadraId'] as String?;
+      if (squadraId != null) {
+        memberCounts[squadraId] = (memberCounts[squadraId] ?? 0) + 1;
+      }
+    }
+
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminSquadreProvider.future),
       child: CustomScrollView(
@@ -106,10 +129,12 @@ class _SquadraListBodyState extends ConsumerState<_SquadraListBody> {
                 // Backend derives this on every /api/squadre response (PopulateCapiSquadraAsync
                 // in SquadreController) — it was never read on mobile.
                 final capoNome = squadra['capSquadraNome'] as String?;
+                final memberCount = memberCounts[squadra['id'] as String? ?? ''] ?? 0;
                 return _SquadraRow(
                   nome: nome,
                   specializzazione: spec,
                   capoNome: capoNome,
+                  memberCount: memberCount,
                   colore: colore,
                   isLast: i == filtered.length - 1,
                   onTap: () => context.push('/altro/squadre/${squadra['id']}', extra: squadra),
@@ -128,6 +153,7 @@ class _SquadraRow extends StatelessWidget {
     required this.nome,
     required this.specializzazione,
     this.capoNome,
+    required this.memberCount,
     required this.colore,
     required this.isLast,
     required this.onTap,
@@ -136,15 +162,25 @@ class _SquadraRow extends StatelessWidget {
   final String nome;
   final String specializzazione;
   final String? capoNome;
+
+  /// Derived client-side from `allUsersWithSquadraProvider` — the backend has no `membriCount`
+  /// field on the squadra list response (Gap 7 of the feature audit; web's own `nMembri` column
+  /// renders 0 for the same reason, per its `api.ts` header comment).
+  final int memberCount;
   final String? colore;
   final bool isLast;
   final VoidCallback onTap;
 
+  String get _membriLabel => memberCount == 1 ? '1 membro' : '$memberCount membri';
+
   String get _subtitle {
     final hasCapo = capoNome != null && capoNome!.isNotEmpty;
-    if (specializzazione.isNotEmpty && hasCapo) return '$specializzazione · Capo: $capoNome';
-    if (hasCapo) return 'Capo: $capoNome';
-    return specializzazione.isNotEmpty ? specializzazione : '—';
+    if (specializzazione.isNotEmpty && hasCapo) {
+      return '$specializzazione · Capo: $capoNome · $_membriLabel';
+    }
+    if (hasCapo) return 'Capo: $capoNome · $_membriLabel';
+    if (specializzazione.isNotEmpty) return '$specializzazione · $_membriLabel';
+    return _membriLabel;
   }
 
   Color _parseColor(BuildContext context, String? hex) {

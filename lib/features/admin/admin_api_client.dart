@@ -613,6 +613,41 @@ class AdminApiClient {
     return pagedItems(res.data);
   }
 
+  /// Every user in the tenant, paginating through the backend's page-size cap
+  /// (`ListQuery.SafePageSize` clamps to 1–100 — `TaskTapAPI.Api/Queries/ListQuery.cs`), each
+  /// carrying the derived `squadraId`/`lastAccessAt` projection `UsersController.PopulateSquadreAsync`
+  /// puts on every `/api/users` response (backend commit `c5fe0d5`).
+  ///
+  /// Exists so the squadra list/detail screens can derive a per-squadra member count (Gap 7 of the
+  /// feature audit) and each member's last-access timestamp (Gap 6) from ONE bulk fetch, shared via
+  /// `allUsersWithSquadraProvider` — chosen over the two N+1 alternatives: a
+  /// `GET /api/squadre/{id}/membri` call per squadra row on the list screen (N calls, N = squadra
+  /// count, just to answer "how many"), or a live `GET /api/users/{id}` call per member row on the
+  /// detail screen (N calls, N = member count, for a field the bulk list already carries). The call
+  /// count here instead scales with total tenant users ÷ 100 — one request for any tenant under the
+  /// page-size cap, which every seat-billed tenant this app serves is in practice (see the
+  /// pagination comment on `UsersController.GetAll`: "seats are billed per head... hundreds, not
+  /// millions").
+  ///
+  /// [activeOnly], like [fetchTechnicians]'s own filter, excludes deactivated users — they don't
+  /// need to be counted as squadra members or looked up for a last-access display.
+  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({bool activeOnly = true}) async {
+    final result = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/users',
+        queryParameters: {if (activeOnly) 'isActive': true, 'page': page, 'pageSize': 100},
+      );
+      final items = pagedItems(res.data);
+      result.addAll(items);
+      final totalPages = res.data?['totalPages'] as int? ?? 1;
+      if (items.isEmpty || page >= totalPages) break;
+      page++;
+    }
+    return result;
+  }
+
   // ── Materiali ────────────────────────────────────────────────────────────
 
   Future<String> createMateriale({
