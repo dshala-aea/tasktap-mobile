@@ -121,6 +121,22 @@ class _AdminMaterialeListBody extends ConsumerWidget {
               subtitle: '${filtered.length} totali',
               showBack: true,
               actions: [
+                // Gap 3/4 of the feature audit: the stock-aware screen (quantities, movements,
+                // carico/scarico/trasferimento) existed with no route pointing at it.
+                HeaderIconBtn(
+                  icon: LucideIcons.arrowLeftRight,
+                  label: 'Giacenze e movimenti',
+                  glass: true,
+                  onTap: () => context.push('/altro/magazzino/giacenze'),
+                ),
+                // Gap 2: warehouse (Sede/Furgone) admin CRUD, distinct from this materiali
+                // catalogue.
+                HeaderIconBtn(
+                  icon: LucideIcons.warehouse,
+                  label: 'Magazzini',
+                  glass: true,
+                  onTap: () => context.push('/altro/magazzino/magazzini'),
+                ),
                 HeaderIconBtn(
                   icon: showInactive ? LucideIcons.eye : LucideIcons.eyeOff,
                   label: showInactive ? 'Nascondi inattivi' : 'Mostra inattivi',

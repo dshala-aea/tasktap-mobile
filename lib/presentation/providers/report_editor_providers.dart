@@ -101,6 +101,7 @@ class MaterialeRow {
     required this.quantity,
     this.unitOfMeasure,
     this.notes,
+    this.magazzinoId,
   });
 
   final String id;
@@ -111,6 +112,12 @@ class MaterialeRow {
   final String? unitOfMeasure;
   final String? notes;
 
+  /// Which warehouse this line was taken from — required for the server's
+  /// `StockMovementService` to actually deplete stock on submit (it silently
+  /// no-ops when this is null). Defaults to the technician's assigned
+  /// furgone; see `_showAddMaterialeDialog` in step_materiali_fold.dart.
+  final String? magazzinoId;
+
   String get displayName => freeTextName ?? materialeId ?? '';
 
   MaterialeRow copyWith({
@@ -119,6 +126,7 @@ class MaterialeRow {
     double? quantity,
     String? unitOfMeasure,
     String? notes,
+    String? magazzinoId,
   }) {
     return MaterialeRow(
       id: id,
@@ -128,6 +136,7 @@ class MaterialeRow {
       quantity: quantity ?? this.quantity,
       unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
       notes: notes ?? this.notes,
+      magazzinoId: magazzinoId ?? this.magazzinoId,
     );
   }
 }
@@ -253,7 +262,6 @@ class ReportEditorState {
   /// character. The honest claim is "a model was involved in producing this", not "this is
   /// verbatim model output".
   final bool isAiAssisted;
-
 
   // Step 5 — Firme
   final String? customerSignatureLocalPath;
@@ -831,6 +839,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       quantity: Value(row.quantity),
       unitOfMeasure: Value(row.unitOfMeasure),
       notes: Value(row.notes),
+      magazzinoId: Value(row.magazzinoId),
     );
   }
 

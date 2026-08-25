@@ -71,6 +71,22 @@ final movimentiProvider = FutureProvider.autoDispose<PagedResult<MovimentoDto>>(
   },
 );
 
+/// The current technician's assigned van warehouse, from
+/// `GET /api/magazzino/furgone/{userId}` — the default source for rapportino material lines
+/// (`step_materiali_fold.dart`). Null when this user has no furgone assigned; the caller falls
+/// back to an explicit picker in that case.
+final furgoneDiUserProvider = FutureProvider.autoDispose
+    .family<MagazzinoDto?, String>((ref, userId) {
+      final client = ref.watch(magazzinoApiClientProvider);
+      return client.getFurgoneByUser(userId);
+    });
+
+/// All warehouses (for admin CRUD and the "cambia magazzino" override picker).
+final magazziniProvider = FutureProvider.autoDispose<List<MagazzinoDto>>((ref) {
+  final client = ref.watch(magazzinoApiClientProvider);
+  return client.getMagazzini();
+});
+
 /// Distinct non-null category values from the materiali table.
 final materialiCategoriesProvider = StreamProvider.autoDispose<List<String>>((
   ref,

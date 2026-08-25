@@ -31,6 +31,11 @@ import '../../features/admin/schedules/admin_schedule_form_screen.dart';
 import '../../features/admin/materiali/admin_materiale_list_screen.dart';
 import '../../features/admin/materiali/admin_materiale_detail_screen.dart';
 import '../../features/admin/materiali/admin_materiale_form_screen.dart';
+import '../../features/admin/magazzini/admin_magazzino_list_screen.dart';
+import '../../features/admin/magazzini/admin_magazzino_detail_screen.dart';
+import '../../features/admin/magazzini/admin_magazzino_form_screen.dart';
+import '../../features/magazzino/magazzino_screen.dart';
+import '../../data/magazzino/magazzino_api_client.dart' show MagazzinoDto;
 import '../../features/admin/prodotti/admin_prodotto_list_screen.dart';
 import '../../features/admin/prodotti/admin_prodotto_detail_screen.dart';
 import '../../features/admin/prodotti/admin_prodotto_form_screen.dart';
@@ -86,7 +91,9 @@ abstract final class AppRoutes {
     final params = <String>[];
     if (ticketId != null) params.add('ticketId=$ticketId');
     if (customerId != null) params.add('customerId=$customerId');
-    return params.isEmpty ? cantiereTimbra : '$cantiereTimbra?${params.join('&')}';
+    return params.isEmpty
+        ? cantiereTimbra
+        : '$cantiereTimbra?${params.join('&')}';
   }
 
   /// Personal to-do list against `/api/agenda` — a technician's own quick tasks, separate from
@@ -97,14 +104,25 @@ abstract final class AppRoutes {
   static const String altroClientiDetail = '/altro/clienti/:id';
   static const String altroMagazzino = '/altro/magazzino';
 
+  /// Stock levels and movements (Articoli/Giacenze/Movimenti) — the read-through-to-server screen
+  /// that was built (`MagazzinoScreen`) but never wired into the router until Gap 3/4 of the
+  /// feature audit gave it write actions and a reason to be reachable.
+  static const String altroMagazzinoGiacenze = '/altro/magazzino/giacenze';
+
+  /// Warehouse (Magazzino entity — Sede/Furgone) admin CRUD, distinct from the materiali catalogue
+  /// CRUD that already lived at [altroMagazzino]. Gap 2 of the feature audit.
+  static const String altroMagazzini = '/altro/magazzino/magazzini';
+
   /// Build the detail path for a given customer id.
   static String clientiDetail(String id) => '/altro/clienti/$id';
 
   /// Build the editor path for a given draft report id (under Altro › Rapportini).
-  static String rapportiniEditor(String reportId) => '/altro/rapportini/editor/$reportId';
+  static String rapportiniEditor(String reportId) =>
+      '/altro/rapportini/editor/$reportId';
 
   /// Build the read-only view path for a submitted rapportino.
-  static String rapportiniView(String reportId) => '/altro/rapportini/view/$reportId';
+  static String rapportiniView(String reportId) =>
+      '/altro/rapportini/view/$reportId';
 }
 
 /// Global navigator key — use for imperative navigation outside widget tree.
@@ -142,7 +160,10 @@ GoRouter buildRouter(WidgetRef ref) {
     refreshListenable: _AuthStateListenable(ref),
     routes: [
       // ── Auth ────────────────────────────────────────────────────────────
-      GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (context, state) => const LoginScreen(),
+      ),
 
       // ── Cantiere timbra (pushed from ticket detail) ──────────────────────
       GoRoute(
@@ -150,12 +171,18 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) {
           final ticketId = state.uri.queryParameters['ticketId'];
           final customerId = state.uri.queryParameters['customerId'];
-          return CantiereTimbraScreen(ticketId: ticketId, customerId: customerId);
+          return CantiereTimbraScreen(
+            ticketId: ticketId,
+            customerId: customerId,
+          );
         },
       ),
 
       // ── New ticket form (pushed from ticket list FAB) ─────────────────────
-      GoRoute(path: '/ticket/new', builder: (context, state) => const NewTicketFormScreen()),
+      GoRoute(
+        path: '/ticket/new',
+        builder: (context, state) => const NewTicketFormScreen(),
+      ),
 
       // ── Main Shell (5-tab pill bottom nav) ───────────────────────────────
       StatefulShellRoute.indexedStack(
@@ -187,8 +214,9 @@ GoRouter buildRouter(WidgetRef ref) {
                     // needs the vertical space the shell's floating pill nav would otherwise
                     // eat permanently. See parentNavigatorKey on every form/detail route below.
                     parentNavigatorKey: rootNavigatorKey,
-                    builder: (context, state) =>
-                        TicketDetailScreen(ticketId: state.pathParameters['id']!),
+                    builder: (context, state) => TicketDetailScreen(
+                      ticketId: state.pathParameters['id']!,
+                    ),
                   ),
                 ],
               ),
@@ -198,7 +226,10 @@ GoRouter buildRouter(WidgetRef ref) {
           StatefulShellBranch(
             navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'timbra'),
             routes: [
-              GoRoute(path: AppRoutes.timbra, builder: (context, state) => const TimbraScreen()),
+              GoRoute(
+                path: AppRoutes.timbra,
+                builder: (context, state) => const TimbraScreen(),
+              ),
             ],
           ),
           // 3 — Calendario
@@ -226,23 +257,31 @@ GoRouter buildRouter(WidgetRef ref) {
                       GoRoute(
                         path: 'editor/:reportId',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            RapportinoFormScreen(reportId: state.pathParameters['reportId']!),
+                        builder: (context, state) => RapportinoFormScreen(
+                          reportId: state.pathParameters['reportId']!,
+                        ),
                       ),
                       GoRoute(
                         path: 'view/:reportId',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            RapportinoViewScreen(reportId: state.pathParameters['reportId']!),
+                        builder: (context, state) => RapportinoViewScreen(
+                          reportId: state.pathParameters['reportId']!,
+                        ),
                       ),
                     ],
                   ),
-                  GoRoute(path: 'profilo', builder: (context, state) => const ProfiloScreen()),
+                  GoRoute(
+                    path: 'profilo',
+                    builder: (context, state) => const ProfiloScreen(),
+                  ),
                   GoRoute(
                     path: 'impostazioni',
                     builder: (context, state) => const ImpostazioniScreen(),
                   ),
-                  GoRoute(path: 'notifiche', builder: (context, state) => const NotificheScreen()),
+                  GoRoute(
+                    path: 'notifiche',
+                    builder: (context, state) => const NotificheScreen(),
+                  ),
                   GoRoute(
                     path: 'i-miei-dati',
                     builder: (context, state) => const IMieiDatiScreen(),
@@ -261,8 +300,9 @@ GoRouter buildRouter(WidgetRef ref) {
                         parentNavigatorKey: rootNavigatorKey,
                         // AgendaController has no GET-by-id route — the item travels as `extra`
                         // from the list row that pushed this route (see AgendaFormScreen's doc).
-                        builder: (context, state) =>
-                            AgendaFormScreen(item: state.extra as AgendaItemDto?),
+                        builder: (context, state) => AgendaFormScreen(
+                          item: state.extra as AgendaItemDto?,
+                        ),
                       ),
                     ],
                   ),
@@ -273,19 +313,23 @@ GoRouter buildRouter(WidgetRef ref) {
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminCustomerFormScreen(),
+                        builder: (context, state) =>
+                            const AdminCustomerFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AdminCustomerDetailScreen(customerId: state.pathParameters['id']!),
+                        builder: (context, state) => AdminCustomerDetailScreen(
+                          customerId: state.pathParameters['id']!,
+                        ),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
-                                AdminCustomerFormScreen(customerId: state.pathParameters['id']!),
+                                AdminCustomerFormScreen(
+                                  customerId: state.pathParameters['id']!,
+                                ),
                           ),
                         ],
                       ),
@@ -293,24 +337,29 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'cantieri',
-                    builder: (context, state) => const AdminCantiereListScreen(),
+                    builder: (context, state) =>
+                        const AdminCantiereListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminCantiereFormScreen(),
+                        builder: (context, state) =>
+                            const AdminCantiereFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AdminCantiereDetailScreen(cantiereId: state.pathParameters['id']!),
+                        builder: (context, state) => AdminCantiereDetailScreen(
+                          cantiereId: state.pathParameters['id']!,
+                        ),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
-                                AdminCantiereFormScreen(cantiereId: state.pathParameters['id']),
+                                AdminCantiereFormScreen(
+                                  cantiereId: state.pathParameters['id'],
+                                ),
                           ),
                         ],
                       ),
@@ -318,24 +367,29 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'sedi',
-                    builder: (context, state) => const AdminLocationListScreen(),
+                    builder: (context, state) =>
+                        const AdminLocationListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuova',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminLocationFormScreen(),
+                        builder: (context, state) =>
+                            const AdminLocationFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AdminLocationDetailScreen(locationId: state.pathParameters['id']!),
+                        builder: (context, state) => AdminLocationDetailScreen(
+                          locationId: state.pathParameters['id']!,
+                        ),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
-                                AdminLocationFormScreen(locationId: state.pathParameters['id']),
+                                AdminLocationFormScreen(
+                                  locationId: state.pathParameters['id'],
+                                ),
                           ),
                         ],
                       ),
@@ -343,24 +397,29 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'pianificazioni',
-                    builder: (context, state) => const AdminScheduleListScreen(),
+                    builder: (context, state) =>
+                        const AdminScheduleListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuova',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminScheduleFormScreen(),
+                        builder: (context, state) =>
+                            const AdminScheduleFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AdminScheduleDetailScreen(scheduleId: state.pathParameters['id']!),
+                        builder: (context, state) => AdminScheduleDetailScreen(
+                          scheduleId: state.pathParameters['id']!,
+                        ),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
-                                AdminScheduleFormScreen(scheduleId: state.pathParameters['id']),
+                                AdminScheduleFormScreen(
+                                  scheduleId: state.pathParameters['id'],
+                                ),
                           ),
                         ],
                       ),
@@ -368,24 +427,71 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'magazzino',
-                    builder: (context, state) => const AdminMaterialeListScreen(),
+                    builder: (context, state) =>
+                        const AdminMaterialeListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminMaterialeFormScreen(),
+                        builder: (context, state) =>
+                            const AdminMaterialeFormScreen(),
+                      ),
+                      // Stock levels and movements (Gap 3/4 of the feature audit) — a static
+                      // segment, declared before `:id` below so `/magazzino/giacenze` matches
+                      // this route rather than being captured as a materiale id.
+                      GoRoute(
+                        path: 'giacenze',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) => const MagazzinoScreen(),
+                      ),
+                      // Warehouse (Magazzino entity) admin CRUD — Gap 2 of the feature audit.
+                      // Also a static segment, ordered before `:id` for the same reason.
+                      GoRoute(
+                        path: 'magazzini',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) =>
+                            const AdminMagazzinoListScreen(),
+                        routes: [
+                          GoRoute(
+                            path: 'nuovo',
+                            parentNavigatorKey: rootNavigatorKey,
+                            builder: (context, state) =>
+                                const AdminMagazzinoFormScreen(),
+                          ),
+                          GoRoute(
+                            path: ':id',
+                            parentNavigatorKey: rootNavigatorKey,
+                            builder: (context, state) =>
+                                AdminMagazzinoDetailScreen(
+                                  magazzino: state.extra as MagazzinoDto?,
+                                ),
+                            routes: [
+                              GoRoute(
+                                path: 'modifica',
+                                parentNavigatorKey: rootNavigatorKey,
+                                builder: (context, state) =>
+                                    AdminMagazzinoFormScreen(
+                                      magazzino: state.extra as MagazzinoDto?,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            AdminMaterialeDetailScreen(materialeId: state.pathParameters['id']!),
+                        builder: (context, state) => AdminMaterialeDetailScreen(
+                          materialeId: state.pathParameters['id']!,
+                        ),
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) =>
-                                AdminMaterialeFormScreen(materialeId: state.pathParameters['id']),
+                                AdminMaterialeFormScreen(
+                                  materialeId: state.pathParameters['id'],
+                                ),
                           ),
                         ],
                       ),
@@ -393,27 +499,34 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'prodotti',
-                    builder: (context, state) => const AdminProdottoListScreen(),
+                    builder: (context, state) =>
+                        const AdminProdottoListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminProdottoFormScreen(),
+                        builder: (context, state) =>
+                            const AdminProdottoFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final prodotto = state.extra as Map<String, dynamic>?;
-                          return AdminProdottoDetailScreen(prodotto: prodotto ?? {});
+                          return AdminProdottoDetailScreen(
+                            prodotto: prodotto ?? {},
+                          );
                         },
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) {
-                              final prodotto = state.extra as Map<String, dynamic>?;
-                              return AdminProdottoFormScreen(prodotto: prodotto);
+                              final prodotto =
+                                  state.extra as Map<String, dynamic>?;
+                              return AdminProdottoFormScreen(
+                                prodotto: prodotto,
+                              );
                             },
                           ),
                         ],
@@ -422,27 +535,34 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'contratti',
-                    builder: (context, state) => const AdminContractListScreen(),
+                    builder: (context, state) =>
+                        const AdminContractListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminContractFormScreen(),
+                        builder: (context, state) =>
+                            const AdminContractFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final contract = state.extra as Map<String, dynamic>?;
-                          return AdminContractDetailScreen(contract: contract ?? {});
+                          return AdminContractDetailScreen(
+                            contract: contract ?? {},
+                          );
                         },
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) {
-                              final contract = state.extra as Map<String, dynamic>?;
-                              return AdminContractFormScreen(contract: contract);
+                              final contract =
+                                  state.extra as Map<String, dynamic>?;
+                              return AdminContractFormScreen(
+                                contract: contract,
+                              );
                             },
                           ),
                         ],
@@ -456,21 +576,25 @@ GoRouter buildRouter(WidgetRef ref) {
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AdminSquadraFormScreen(),
+                        builder: (context, state) =>
+                            const AdminSquadraFormScreen(),
                       ),
                       GoRoute(
                         path: ':id',
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) {
                           final squadra = state.extra as Map<String, dynamic>?;
-                          return AdminSquadraDetailScreen(squadra: squadra ?? {});
+                          return AdminSquadraDetailScreen(
+                            squadra: squadra ?? {},
+                          );
                         },
                         routes: [
                           GoRoute(
                             path: 'modifica',
                             parentNavigatorKey: rootNavigatorKey,
                             builder: (context, state) {
-                              final squadra = state.extra as Map<String, dynamic>?;
+                              final squadra =
+                                  state.extra as Map<String, dynamic>?;
                               return AdminSquadraFormScreen(squadra: squadra);
                             },
                           ),
@@ -495,7 +619,8 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'non-disponibile',
                     builder: (context, state) {
-                      final args = state.extra as ({String titolo, String motivo})?;
+                      final args =
+                          state.extra as ({String titolo, String motivo})?;
                       final titolo = args?.titolo ?? 'Sezione non disponibile';
                       return Scaffold(
                         backgroundColor: context.colors.bg2,

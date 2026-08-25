@@ -294,6 +294,7 @@ class AdminApiClient {
     String? teamLeadId,
     String? staffIds,
     String? squadraId,
+
     /// Sent as `?force=true` when the caller already showed the admin a conflict list (from
     /// [checkScheduleConflicts]) and they chose to save anyway. Mirrors
     /// `SchedulesController.Create`'s `force` query param, which otherwise answers 409 with the
@@ -352,6 +353,7 @@ class AdminApiClient {
     String? teamLeadId,
     String? staffIds,
     String? squadraId,
+
     /// See [createSchedule]'s `force`.
     bool force = false,
   }) async {
@@ -393,7 +395,8 @@ class AdminApiClient {
 
   /// The all-zeros GUID `updateSchedule` needs to *explicitly* clear an assignment field — see
   /// that method's doc comment for why an omitted/null field cannot do this.
-  static const String emptyAssignmentId = '00000000-0000-0000-0000-000000000000';
+  static const String emptyAssignmentId =
+      '00000000-0000-0000-0000-000000000000';
 
   /// Pre-flight conflict check, mirroring `POST /api/schedules/check-conflicts`
   /// (`SchedulesController.CheckConflicts`). Returns every schedule the given user/squadra is
@@ -485,6 +488,7 @@ class AdminApiClient {
     String? marca,
     double? purchasePrice,
     double? salePrice,
+    double? aliquotaIva,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/materiali',
@@ -499,6 +503,7 @@ class AdminApiClient {
         if (marca != null && marca.isNotEmpty) 'marca': marca,
         'purchasePrice': ?purchasePrice,
         'salePrice': ?salePrice,
+        'aliquotaIVA': ?aliquotaIva,
       },
     );
     return res.data!['id'] as String;
@@ -514,6 +519,7 @@ class AdminApiClient {
     String? marca,
     double? purchasePrice,
     double? salePrice,
+    double? aliquotaIva,
     bool? isActive,
   }) async {
     await _dio.put(
@@ -527,9 +533,117 @@ class AdminApiClient {
         'marca': ?marca,
         'purchasePrice': ?purchasePrice,
         'salePrice': ?salePrice,
+        'aliquotaIVA': ?aliquotaIva,
         'isActive': ?isActive,
       },
     );
+  }
+
+  /// Soft-deletes a materiale — mirrors `DELETE /api/materiali/{id}` (`MaterialiController.Delete`),
+  /// which sets `IsActive = false` server-side rather than removing the row. Reactivating is a
+  /// plain [updateMateriale] call with `isActive: true` — there is no separate "undelete" route.
+  Future<void> deleteMateriale(String id) async {
+    await _dio.delete('/api/materiali/$id');
+  }
+
+  // ── Materiale barcodes ───────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchMaterialeBarcodes(
+    String materialeId,
+  ) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/materiali/$materialeId/barcodes',
+    );
+    return (res.data ?? const []).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addMaterialeBarcode(
+    String materialeId, {
+    required String barcode,
+    String? barcodeType,
+    bool isPrimary = false,
+  }) async {
+    await _dio.post(
+      '/api/materiali/$materialeId/barcodes',
+      data: {
+        'barcode': barcode,
+        'barcodeType': ?barcodeType,
+        'isPrimary': isPrimary,
+      },
+    );
+  }
+
+  Future<void> updateMaterialeBarcode(
+    String materialeId,
+    String barcodeId, {
+    String? barcode,
+    String? barcodeType,
+    bool? isPrimary,
+  }) async {
+    await _dio.put(
+      '/api/materiali/$materialeId/barcodes/$barcodeId',
+      data: {
+        'barcode': ?barcode,
+        'barcodeType': ?barcodeType,
+        'isPrimary': ?isPrimary,
+      },
+    );
+  }
+
+  Future<void> deleteMaterialeBarcode(
+    String materialeId,
+    String barcodeId,
+  ) async {
+    await _dio.delete('/api/materiali/$materialeId/barcodes/$barcodeId');
+  }
+
+  Future<void> setPrimaryMaterialeBarcode(
+    String materialeId,
+    String barcodeId,
+  ) async {
+    await _dio.put('/api/materiali/$materialeId/barcodes/$barcodeId/primary');
+  }
+
+  // ── Materiale image ──────────────────────────────────────────────────────
+
+  /// Uploads (replacing any previous) image for a materiale — multipart, field name `file` to
+  /// match `MaterialiController.UploadImage(Guid id, IFormFile file, ...)`. Returns the content
+  /// URL to serve it back (`MaterialeImageResponse.ContentUrl`), never a storage key.
+  Future<String> uploadMaterialeImage(
+    String materialeId, {
+    required List<int> bytes,
+    required String fileName,
+    String? contentType,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+        contentType: contentType == null
+            ? null
+            : DioMediaType.parse(contentType),
+      ),
+    });
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/materiali/$materialeId/image',
+      data: formData,
+      options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+    );
+    return res.data!['contentUrl'] as String;
+  }
+
+  Future<void> deleteMaterialeImage(String materialeId) async {
+    await _dio.delete('/api/materiali/$materialeId/image');
+  }
+
+  /// Live materiale detail — `GET /api/materiali/{id}` (`MaterialiController.GetById`), the full
+  /// `MaterialeWithBarcodesDto`. Used to prefill fields the local Drift mirror does not carry
+  /// (`AliquotaIVA`, barcodes) when opening the edit form — best-effort, offline just leaves that
+  /// management unavailable this session rather than blocking the base-field prefill, which
+  /// already comes from Drift and works offline.
+  Future<Map<String, dynamic>?> fetchMaterialeDetail(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/materiali/$id');
+    return res.data;
   }
 
   // ── ProdottoAssistenza ──────────────────────────────────────────────────

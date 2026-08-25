@@ -1,13 +1,17 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -63,17 +67,86 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
   }
 }
 
-class _MaterialeDetailBody extends StatelessWidget {
+/// Toggles a materiale's active state — Gap 5 of the feature audit: `isActive` was only ever
+/// *displayed* here (and on the list row), never written from mobile, even though the backend's
+/// soft-delete (`DELETE /api/materiali/{id}` → `IsActive = false`) and reactivate
+/// (`PUT` with `isActive: true`) both already exist.
+Future<void> _toggleActive(BuildContext context, WidgetRef ref, MaterialiData materiale) async {
+  final deactivating = materiale.isActive;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(deactivating ? 'Disattiva materiale' : 'Riattiva materiale'),
+      content: Text(
+        deactivating
+            ? 'Il materiale "${materiale.name}" non sarà più selezionabile nei nuovi rapportini o carichi/scarichi. Puoi riattivarlo in qualsiasi momento.'
+            : 'Il materiale "${materiale.name}" tornerà selezionabile.',
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: deactivating ? TextButton.styleFrom(foregroundColor: ctx.colors.red) : null,
+          child: Text(deactivating ? 'Disattiva' : 'Riattiva'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  if (!context.mounted) return;
+  if (!ensureOnlineOrWarn(context, ref)) return;
+
+  try {
+    final api = ref.read(adminApiClientProvider);
+    if (deactivating) {
+      await api.deleteMateriale(materiale.id);
+    } else {
+      await api.updateMateriale(materiale.id, isActive: true);
+    }
+    unawaited(ref.read(syncProvider.notifier).performSync());
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(deactivating ? 'Materiale disattivato' : 'Materiale riattivato'),
+          backgroundColor: context.colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Impossibile aggiornare lo stato. Riprova.'),
+          backgroundColor: context.colors.red,
+        ),
+      );
+    }
+  }
+}
+
+class _MaterialeDetailBody extends ConsumerWidget {
   const _MaterialeDetailBody({required this.materiale});
 
   final MaterialiData materiale;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(title: materiale.name, subtitle: materiale.code, showBack: true),
+          child: ScreenHeader(
+            title: materiale.name,
+            subtitle: materiale.code,
+            showBack: true,
+            actions: [
+              HeaderIconBtn(
+                icon: materiale.isActive ? LucideIcons.xCircle : LucideIcons.checkCircle,
+                label: materiale.isActive ? 'Disattiva' : 'Riattiva',
+                glass: true,
+                onTap: () => _toggleActive(context, ref, materiale),
+              ),
+            ],
+          ),
         ),
         // ── Image ──────────────────────────────────────────────────────
         if (materiale.imageUrl != null)

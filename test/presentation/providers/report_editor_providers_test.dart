@@ -325,6 +325,59 @@ void main() {
       expect(dbRows.first.freeTextName, isNull);
     });
 
+    // Gap 1 (feature audit, module #7): a material line with no magazzinoId reaches the server
+    // fine but silently never depletes stock — StockMovementService no-ops on a null MagazzinoId.
+    test('addMateriale persists magazzinoId to Drift', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = _makeEditor(db);
+
+      await notifier.addMateriale(
+        const MaterialeRow(
+          id: 'm-3',
+          reportId: 'draft-1',
+          materialeId: 'mat-1',
+          quantity: 2.0,
+          magazzinoId: 'furgone-1',
+        ),
+      );
+
+      final dbRows = await repo.getMateriali('draft-1');
+      expect(dbRows.first.magazzinoId, 'furgone-1');
+    });
+
+    test('a materiale row with no magazzinoId persists it as null, not lost silently', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = _makeEditor(db);
+
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-4', reportId: 'draft-1', materialeId: 'mat-1', quantity: 1.0),
+      );
+
+      final dbRows = await repo.getMateriali('draft-1');
+      expect(dbRows.first.magazzinoId, isNull);
+    });
+
+    test('updateMateriale (quantity change via the qty stepper) preserves magazzinoId', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = _makeEditor(db);
+
+      await notifier.addMateriale(
+        const MaterialeRow(
+          id: 'm-5',
+          reportId: 'draft-1',
+          materialeId: 'mat-1',
+          quantity: 1.0,
+          magazzinoId: 'furgone-1',
+        ),
+      );
+      final row = notifier.state.materialeRows.first;
+      await notifier.updateMateriale(row.copyWith(quantity: 3.0));
+
+      final dbRows = await repo.getMateriali('draft-1');
+      expect(dbRows.first.quantity, 3.0);
+      expect(dbRows.first.magazzinoId, 'furgone-1');
+    });
+
     test('removeMateriale removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, repo) = _makeEditor(db);

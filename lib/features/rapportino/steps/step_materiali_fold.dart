@@ -11,11 +11,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
+import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../../data/reports/ticket_controls_cache_repository.dart';
+import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../magazzino/magazzino_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -40,6 +44,14 @@ class StepMaterialiFold extends ConsumerWidget {
     final state = ref.watch(reportEditorProvider(reportId));
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final photos = state.allegatoRows.where((a) => !a.isSignature).toList();
+
+    // The technician's assigned van warehouse — watched here (not inside the dialog) so it is
+    // fetched once per visit to this step and every "Aggiungi materiale" tap reuses it, rather
+    // than re-fetching over the network on a dialog a technician can open a dozen times on one job.
+    final currentUser = ref.watch(currentUserProvider);
+    final furgoneAsync = currentUser == null
+        ? const AsyncValue<MagazzinoDto?>.data(null)
+        : ref.watch(furgoneDiUserProvider(currentUser.id));
 
     // A Column, not a ListView: this sits inside the compartment sheet's own ambient
     // SingleChildScrollView now, not a screen-height-bounded Expanded body — an inner scrollable
@@ -108,7 +120,7 @@ class StepMaterialiFold extends ConsumerWidget {
               ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () => _showAddMaterialeDialog(context, ref),
+              onPressed: () => _showAddMaterialeDialog(context, ref, furgoneAsync.valueOrNull),
               icon: const Icon(LucideIcons.plusSquare),
               label: const Text('Aggiungi materiale'),
               style: OutlinedButton.styleFrom(
@@ -182,7 +194,11 @@ class StepMaterialiFold extends ConsumerWidget {
     );
   }
 
-  void _showAddMaterialeDialog(BuildContext context, WidgetRef ref) {
+  void _showAddMaterialeDialog(
+    BuildContext context,
+    WidgetRef ref,
+    MagazzinoDto? defaultMagazzino,
+  ) {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final materialiAsync = ref.read(allMaterialiProvider);
 
@@ -192,6 +208,11 @@ class StepMaterialiFold extends ConsumerWidget {
     final uomCtrl = TextEditingController();
     String? selectedMaterialeId;
     String freeTextName = '';
+    // Defaults to the technician's own furgone (zero extra taps for the common case — see Gap 1 in
+    // the feature audit). "Cambia" below lets them source a line from a different warehouse, e.g.
+    // stock picked up from a Sede for a job done off the van.
+    String? selectedMagazzinoId = defaultMagazzino?.id;
+    String? selectedMagazzinoNome = defaultMagazzino?.nome;
 
     showDialog<void>(
       context: context,
@@ -254,6 +275,32 @@ class StepMaterialiFold extends ConsumerWidget {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(LucideIcons.warehouse, size: 16, color: ctx.colors.inkMuted),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        selectedMagazzinoNome != null
+                            ? 'Da: $selectedMagazzinoNome'
+                            : 'Nessun magazzino assegnato',
+                        style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final picked = await _pickMagazzino(ctx, ref);
+                        if (picked != null) {
+                          selectedMagazzinoId = picked.id;
+                          selectedMagazzinoNome = picked.nome;
+                          setDialogState(() {});
+                        }
+                      },
+                      child: const Text('Cambia'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -274,6 +321,7 @@ class StepMaterialiFold extends ConsumerWidget {
                     freeTextName: selectedMaterialeId == null && typed.isNotEmpty ? typed : null,
                     quantity: qty,
                     unitOfMeasure: uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
+                    magazzinoId: selectedMagazzinoId,
                   ),
                 );
                 Navigator.pop(ctx);
@@ -281,6 +329,49 @@ class StepMaterialiFold extends ConsumerWidget {
               child: const Text('Aggiungi'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Lets the technician override the auto-selected warehouse for one material line — e.g. a part
+  /// picked up from a Sede rather than their own furgone. Returns null if they dismiss without
+  /// choosing.
+  Future<MagazzinoDto?> _pickMagazzino(BuildContext context, WidgetRef ref) {
+    return showModalBottomSheet<MagazzinoDto>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Consumer(
+          builder: (ctx, ref, _) {
+            final async = ref.watch(magazziniProvider);
+            return async.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(humanErrorMessage(e, azione: 'caricare i magazzini')),
+              ),
+              data: (list) => list.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text('Nessun magazzino disponibile.'),
+                    )
+                  : ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final m in list)
+                          ListTile(
+                            leading: const Icon(LucideIcons.warehouse),
+                            title: Text(m.nome),
+                            subtitle: Text(m.tipo),
+                            onTap: () => Navigator.pop(ctx, m),
+                          ),
+                      ],
+                    ),
+            );
+          },
         ),
       ),
     );

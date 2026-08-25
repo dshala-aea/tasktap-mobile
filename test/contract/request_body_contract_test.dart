@@ -11,6 +11,7 @@ import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
+import 'package:tasktap_mobile/data/magazzino/magazzino_api_client.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
@@ -692,6 +693,80 @@ void main() {
       final client = AdminApiClient(dio);
       return capture(() => client.fatturaReport(_id(38)));
     });
+
+    // Gap 5 of the feature audit: barcode management had no mobile call site at all.
+    contractTest('materiale barcode creation matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.addMaterialeBarcode(
+          _id(43),
+          barcode: '8001234567890',
+          barcodeType: 'EAN13',
+          isPrimary: true,
+        ),
+      );
+    });
+
+    contractTest('materiale barcode update matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.updateMaterialeBarcode(_id(44), _id(45), barcode: '8001234567890'),
+      );
+    });
+
+    contractTest('setting a materiale barcode primary matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(() => client.setPrimaryMaterialeBarcode(_id(56), _id(57)));
+    });
+  });
+
+  // Gap 1/2/3/4 of the feature audit: warehouse CRUD and stock movements had no mobile call site.
+  group('magazzino', () {
+    contractTest('warehouse creation matches the server', () {
+      final client = MagazzinoApiClient(dio);
+      return capture(
+        () => client.createMagazzino(nome: 'Furgone Nord', tipo: 'Furgone', assegnatoUserId: _id(46)),
+      );
+    });
+
+    contractTest('warehouse update matches the server', () {
+      final client = MagazzinoApiClient(dio);
+      return capture(() => client.updateMagazzino(_id(47), nome: 'Furgone Nord', isActive: true));
+    });
+
+    contractTest('carico matches the server', () {
+      final client = MagazzinoApiClient(dio);
+      return capture(
+        () => client.carico(
+          magazzinoId: _id(48),
+          materialeId: _id(49),
+          quantita: 5,
+          note: 'rifornimento',
+        ),
+      );
+    });
+
+    contractTest('scarico matches the server', () {
+      final client = MagazzinoApiClient(dio);
+      return capture(() => client.scarico(magazzinoId: _id(50), materialeId: _id(51), quantita: 2));
+    });
+
+    contractTest('trasferimento matches the server', () {
+      final client = MagazzinoApiClient(dio);
+      return capture(
+        () => client.trasferimento(
+          magazzinoId: _id(52),
+          materialeId: _id(53),
+          quantita: 1,
+          magazzinoDestinazioneId: _id(54),
+        ),
+      );
+    });
+
+    contractTest('setting a stock-minimo threshold matches the server', () {
+      final client = MagazzinoApiClient(dio);
+      return capture(() => client.setStockMinimo(stockId: _id(55), stockMinimo: 4));
+    });
   });
 
   // ── The part that keeps this file honest ────────────────────────────────────
@@ -707,6 +782,8 @@ void main() {
       'POST /api/reports/{}/attachments':
           'multipart FormData, not a JSON body — there is no schema to check it against',
       'POST /api/tickets/{}/attachments':
+          'multipart FormData, not a JSON body — there is no schema to check it against',
+      'POST /api/materiali/{}/image':
           'multipart FormData, not a JSON body — there is no schema to check it against',
       'POST /api/devices':
           'sent by NotificationService, which builds its own Dio from Env at call time rather '

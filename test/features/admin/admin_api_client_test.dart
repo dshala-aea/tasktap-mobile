@@ -214,5 +214,149 @@ void main() {
 
       verify(() => mockDio.delete<dynamic>('/api/cantieri/cant-1')).called(1);
     });
+
+    // Gap 5 of the feature audit: mobile admin previously never let you deactivate a materiale.
+    test('deleteMateriale DELETEs /api/materiali/{id} (soft-delete server-side)', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/materiali/mat-1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/materiali/mat-1'));
+
+      await client.deleteMateriale('mat-1');
+
+      verify(() => mockDio.delete<dynamic>('/api/materiali/mat-1')).called(1);
+    });
+  });
+
+  // Gap 5 of the feature audit: AliquotaIVA had no mobile field at all.
+  group('materiale AliquotaIVA', () {
+    test('createMateriale sends aliquotaIVA', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/materiali', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'mat-1'}, '/api/materiali'));
+
+      await client.createMateriale(code: 'M1', name: 'Guarnizione', aliquotaIva: 22);
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/materiali', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['aliquotaIVA'], 22);
+    });
+
+    test('updateMateriale sends a 0.00 aliquotaIVA (reverse-charge/exempt), not omitting it', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/materiali/mat-1', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/materiali/mat-1'));
+
+      await client.updateMateriale('mat-1', aliquotaIva: 0);
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/materiali/mat-1', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['aliquotaIVA'], 0);
+    });
+  });
+
+  group('materiale barcodes (Gap 5)', () {
+    test('fetchMaterialeBarcodes reads the bare array GET returns', () async {
+      when(() => mockDio.get<List<dynamic>>('/api/materiali/mat-1/barcodes')).thenAnswer(
+        (_) async => _okResponse([
+          {'id': 'b1', 'barcode': '123456', 'barcodeType': 'EAN13', 'isPrimary': true},
+        ], '/api/materiali/mat-1/barcodes'),
+      );
+
+      final result = await client.fetchMaterialeBarcodes('mat-1');
+
+      expect(result, hasLength(1));
+      expect(result.single['barcode'], '123456');
+    });
+
+    test('addMaterialeBarcode posts barcode/type/isPrimary', () async {
+      when(
+        () => mockDio.post<dynamic>('/api/materiali/mat-1/barcodes', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/materiali/mat-1/barcodes'));
+
+      await client.addMaterialeBarcode('mat-1', barcode: '999', barcodeType: 'EAN13', isPrimary: true);
+
+      final captured = verify(
+        () =>
+            mockDio.post<dynamic>('/api/materiali/mat-1/barcodes', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['barcode'], '999');
+      expect(captured['isPrimary'], isTrue);
+    });
+
+    test('deleteMaterialeBarcode DELETEs the barcode sub-resource', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/materiali/mat-1/barcodes/b1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/materiali/mat-1/barcodes/b1'));
+
+      await client.deleteMaterialeBarcode('mat-1', 'b1');
+
+      verify(() => mockDio.delete<dynamic>('/api/materiali/mat-1/barcodes/b1')).called(1);
+    });
+
+    test('setPrimaryMaterialeBarcode PUTs the /primary sub-route', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/materiali/mat-1/barcodes/b1/primary'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/materiali/mat-1/barcodes/b1/primary'));
+
+      await client.setPrimaryMaterialeBarcode('mat-1', 'b1');
+
+      verify(() => mockDio.put<dynamic>('/api/materiali/mat-1/barcodes/b1/primary')).called(1);
+    });
+  });
+
+  group('materiale image (Gap 5)', () {
+    test('uploadMaterialeImage reads contentUrl from the response', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/materiali/mat-1/image',
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'allegatoId': 'a1',
+          'contentUrl': '/api/materiali/mat-1/image/content',
+        }, '/api/materiali/mat-1/image'),
+      );
+
+      final url = await client.uploadMaterialeImage(
+        'mat-1',
+        bytes: [1, 2, 3],
+        fileName: 'foto.jpg',
+        contentType: 'image/jpeg',
+      );
+
+      expect(url, '/api/materiali/mat-1/image/content');
+    });
+
+    test('deleteMaterialeImage DELETEs /api/materiali/{id}/image', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/materiali/mat-1/image'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/materiali/mat-1/image'));
+
+      await client.deleteMaterialeImage('mat-1');
+
+      verify(() => mockDio.delete<dynamic>('/api/materiali/mat-1/image')).called(1);
+    });
+  });
+
+  group('fetchMaterialeDetail (Gap 5 prefill)', () {
+    test('reads the full MaterialeWithBarcodesDto envelope', () async {
+      when(() => mockDio.get<Map<String, dynamic>>('/api/materiali/mat-1')).thenAnswer(
+        (_) async => _okResponse({
+          'id': 'mat-1',
+          'code': 'M1',
+          'name': 'Guarnizione',
+          'aliquotaIVA': 22.0,
+          'barcodes': <Map<String, dynamic>>[],
+        }, '/api/materiali/mat-1'),
+      );
+
+      final detail = await client.fetchMaterialeDetail('mat-1');
+
+      expect(detail?['aliquotaIVA'], 22.0);
+    });
   });
 }

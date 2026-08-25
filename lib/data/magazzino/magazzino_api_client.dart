@@ -98,7 +98,9 @@ class MovimentoDto {
 
   factory MovimentoDto.fromJson(Map<String, dynamic> json) => MovimentoDto(
     id: json['id'] as String? ?? '',
-    data: DateTime.tryParse(json['data'] as String? ?? '')?.toUtc() ?? DateTime.now().toUtc(),
+    data:
+        DateTime.tryParse(json['data'] as String? ?? '')?.toUtc() ??
+        DateTime.now().toUtc(),
     tipo: json['tipo'] as String? ?? '',
     materialeId: json['materialeId'] as String? ?? '',
     quantita: asDoubleOr0(json['quantita']),
@@ -108,6 +110,47 @@ class MovimentoDto {
     materialeNome: json['materialeNome'] as String?,
     causale: json['causale'] as String?,
     userNome: json['userNome'] as String?,
+  );
+}
+
+/// A warehouse (Sede or Furgone). Mirrors the `Magazzino` entity — this DTO is only ever built
+/// from a raw entity response (`MagazzinoController` returns the entity directly, not a
+/// projection), so every field here must tolerate whatever that serializes.
+class MagazzinoDto {
+  const MagazzinoDto({
+    required this.id,
+    required this.nome,
+    required this.tipo,
+    this.assegnatoUserId,
+    this.indirizzo,
+    this.note,
+    required this.isActive,
+  });
+
+  final String id;
+  final String nome;
+
+  /// `"Sede"` or `"Furgone"` — `MagazzinoTipoEnum` carries its own
+  /// `[JsonConverter(typeof(JsonStringEnumConverter))]`, so this is always the string label, never
+  /// the numeric value.
+  final String tipo;
+
+  /// For a Furgone: the technician it is assigned to. Null for a Sede.
+  final String? assegnatoUserId;
+  final String? indirizzo;
+  final String? note;
+  final bool isActive;
+
+  bool get isFurgone => tipo == 'Furgone';
+
+  factory MagazzinoDto.fromJson(Map<String, dynamic> json) => MagazzinoDto(
+    id: json['id'] as String? ?? '',
+    nome: json['nome'] as String? ?? '',
+    tipo: json['tipo'] as String? ?? 'Sede',
+    assegnatoUserId: json['assegnatoUserId'] as String?,
+    indirizzo: json['indirizzo'] as String?,
+    note: json['note'] as String?,
+    isActive: json['isActive'] as bool? ?? true,
   );
 }
 
@@ -129,17 +172,19 @@ class PagedResult<T> {
 
   bool get hasMore => pagina < totalePagine;
 
-  factory PagedResult.fromJson(Map<String, dynamic> json, T Function(Map<String, dynamic>) item) =>
-      PagedResult(
-        elementi: (json['elementi'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
-            .map(item)
-            .toList(),
-        pagina: asIntOr0(json['pagina']),
-        dimensionePagina: asIntOr0(json['dimensionePagina']),
-        totaleElementi: asIntOr0(json['totaleElementi']),
-        totalePagine: asIntOr0(json['totalePagine']),
-      );
+  factory PagedResult.fromJson(
+    Map<String, dynamic> json,
+    T Function(Map<String, dynamic>) item,
+  ) => PagedResult(
+    elementi: (json['elementi'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(item)
+        .toList(),
+    pagina: asIntOr0(json['pagina']),
+    dimensionePagina: asIntOr0(json['dimensionePagina']),
+    totaleElementi: asIntOr0(json['totaleElementi']),
+    totalePagine: asIntOr0(json['totalePagine']),
+  );
 }
 
 class MagazzinoApiClient {
@@ -203,6 +248,159 @@ class MagazzinoApiClient {
     final data = response.data;
     if (data == null) throw StateError('Risposta vuota da movimenti');
     return PagedResult.fromJson(data, MovimentoDto.fromJson);
+  }
+
+  // ── Warehouses (Magazzino CRUD) ─────────────────────────────────────────────
+
+  /// GET /api/magazzino
+  Future<List<MagazzinoDto>> getMagazzini({
+    bool? isActive,
+    String? tipo,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/magazzino',
+      queryParameters: {'isActive': ?isActive, 'tipo': ?tipo, 'pageSize': 200},
+    );
+    return pagedItems(
+      response.data,
+    ).map(MagazzinoDto.fromJson).toList(growable: false);
+  }
+
+  /// GET /api/magazzino/furgone/{userId}
+  ///
+  /// A technician's assigned van warehouse — the default source for rapportino material lines
+  /// (`step_materiali_fold.dart`). Returns null when this user has no furgone assigned (a 404 from
+  /// the backend, not an error worth surfacing — an office-only technician legitimately has none).
+  Future<MagazzinoDto?> getFurgoneByUser(String userId) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>(
+        '/api/magazzino/furgone/$userId',
+      );
+      final data = response.data;
+      return data == null ? null : MagazzinoDto.fromJson(data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// POST /api/magazzino
+  Future<String> createMagazzino({
+    required String nome,
+    required String tipo,
+    String? assegnatoUserId,
+    String? indirizzo,
+    String? note,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/magazzino',
+      data: {
+        'nome': nome,
+        'tipo': tipo,
+        'assegnatoUserId': ?assegnatoUserId,
+        if (indirizzo != null && indirizzo.isNotEmpty) 'indirizzo': indirizzo,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
+    return response.data!['id'] as String;
+  }
+
+  /// PUT /api/magazzino/{id}
+  Future<void> updateMagazzino(
+    String id, {
+    String? nome,
+    String? assegnatoUserId,
+    String? indirizzo,
+    String? note,
+    bool? isActive,
+  }) async {
+    await _dio.put(
+      '/api/magazzino/$id',
+      data: {
+        'nome': ?nome,
+        'assegnatoUserId': ?assegnatoUserId,
+        'indirizzo': ?indirizzo,
+        'note': ?note,
+        'isActive': ?isActive,
+      },
+    );
+  }
+
+  // ── Stock movements (write) ──────────────────────────────────────────────────
+
+  /// POST /api/magazzino/{id}/carico — loads stock into a warehouse.
+  Future<void> carico({
+    required String magazzinoId,
+    required String materialeId,
+    required double quantita,
+    String? note,
+  }) async {
+    await _dio.post(
+      '/api/magazzino/$magazzinoId/carico',
+      data: {
+        'materialeId': materialeId,
+        'quantita': quantita,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
+  }
+
+  /// POST /api/magazzino/{id}/scarico — unloads stock from a warehouse.
+  ///
+  /// Throws [DioException] with a 400 response carrying the server's own explanation as a plain
+  /// JSON string body when there isn't enough stock — the caller must surface that text rather
+  /// than swallow it (`InsufficientStockException` on the backend).
+  Future<void> scarico({
+    required String magazzinoId,
+    required String materialeId,
+    required double quantita,
+    String? note,
+  }) async {
+    await _dio.post(
+      '/api/magazzino/$magazzinoId/scarico',
+      data: {
+        'materialeId': materialeId,
+        'quantita': quantita,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
+  }
+
+  /// POST /api/magazzino/{id}/trasferimento — moves stock from [magazzinoId] to
+  /// [magazzinoDestinazioneId] atomically. Same insufficient-stock failure mode as [scarico].
+  Future<void> trasferimento({
+    required String magazzinoId,
+    required String materialeId,
+    required double quantita,
+    required String magazzinoDestinazioneId,
+    String? note,
+  }) async {
+    await _dio.post(
+      '/api/magazzino/$magazzinoId/trasferimento',
+      data: {
+        'materialeId': materialeId,
+        'quantita': quantita,
+        'magazzinoDestinazioneId': magazzinoDestinazioneId,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
+  }
+
+  /// PUT /api/magazzino/stock/{id}/stock-minimo — [id] is the stock row's own id (a [GiacenzaDto.id]),
+  /// not the warehouse id.
+  Future<void> setStockMinimo({
+    required String stockId,
+    required double stockMinimo,
+  }) async {
+    await _dio.put(
+      '/api/magazzino/stock/$stockId/stock-minimo',
+      data: {'stockMinimo': stockMinimo},
+    );
+  }
+
+  /// DELETE /api/magazzino/stock/{id}/stock-minimo
+  Future<void> clearStockMinimo({required String stockId}) async {
+    await _dio.delete('/api/magazzino/stock/$stockId/stock-minimo');
   }
 }
 
