@@ -70,8 +70,10 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
   Widget build(BuildContext context) {
     final filtered = widget.prodotti.where((p) {
       if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
       final name = (p['name'] as String? ?? '').toLowerCase();
-      return name.contains(_query.toLowerCase());
+      final codice = (p['codice'] as String? ?? '').toLowerCase();
+      return name.contains(q) || codice.contains(q);
     }).toList();
 
     final customersAsync = ref.watch(allCustomersProvider);
@@ -92,7 +94,7 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
           SliverToBoxAdapter(
             child: AppSearchBar(
               controller: _searchCtrl,
-              hint: 'Cerca per nome…',
+              hint: 'Cerca per nome o codice…',
               onChanged: (q) => setState(() => _query = q),
             ),
           ),
@@ -112,9 +114,15 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
                 final customerId = prodotto['customerId'] as String? ?? '';
                 final customerName = customerMap[customerId] ?? '—';
                 final isActive = prodotto['isActive'] as bool? ?? true;
+                final codice = prodotto['codice'] as String?;
+                final categoria = prodotto['categoria'] as String?;
+                final prezzoVendita = prodotto['prezzoVendita'];
                 return _ProdottoRow(
                   name: name,
                   customerName: customerName,
+                  codice: codice,
+                  categoria: categoria,
+                  prezzoVendita: prezzoVendita is num ? prezzoVendita : null,
                   isActive: isActive,
                   isLast: i == filtered.length - 1,
                   onTap: () => context.push('/altro/prodotti/${prodotto['id']}', extra: prodotto),
@@ -132,6 +140,9 @@ class _ProdottoRow extends StatelessWidget {
   const _ProdottoRow({
     required this.name,
     required this.customerName,
+    required this.codice,
+    required this.categoria,
+    required this.prezzoVendita,
     required this.isActive,
     required this.isLast,
     required this.onTap,
@@ -139,20 +150,47 @@ class _ProdottoRow extends StatelessWidget {
 
   final String name;
   final String customerName;
+  final String? codice;
+  final String? categoria;
+  final num? prezzoVendita;
   final bool isActive;
   final bool isLast;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    // Gap 4 of the feature audit: the row used to show only name + customer, with no way to tell
+    // products apart by any commercial attribute on device — mirrors the materiale row's own
+    // "codice · categoria" subtitle + price meta shape (admin_materiale_list_screen.dart).
+    final subtitleParts = [customerName, if (categoria != null && categoria!.isNotEmpty) categoria!];
+    final priceLabel = prezzoVendita != null ? '€${prezzoVendita!.toStringAsFixed(2)}' : null;
+
     return ListRow(
       leading: const RowIconTile(icon: LucideIcons.wrench),
-      title: name,
-      subtitle: customerName,
-      // Only when inactive: an active product is the ordinary state of every row on this list,
-      // and printing "Attivo" on all of them would be the pill making the same noise the accent
-      // strap grammar refuses to make — it should mark the row that differs, not every row.
-      meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
+      title: codice != null && codice!.isNotEmpty ? '$codice · $name' : name,
+      subtitle: subtitleParts.join(' · '),
+      meta: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (priceLabel != null)
+            Text(
+              priceLabel,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: context.colors.ink, fontWeight: FontWeight.w600),
+            ),
+          // Only when inactive: an active product is the ordinary state of every row on this
+          // list, and printing "Attivo" on all of them would be the pill making the same noise
+          // the accent strap grammar refuses to make — it should mark the row that differs, not
+          // every row.
+          if (!isActive)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: StatusPill(stato: 'Inattivo', small: true, outlined: true),
+            ),
+        ],
+      ),
       showDivider: !isLast,
       onTap: onTap,
     );

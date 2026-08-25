@@ -681,4 +681,225 @@ void main() {
       expect(captured['customerId'], 'cust-1');
     });
   });
+
+  // Feature audit module #10 (Prodotti/Servizi), Gaps 1/2/7: mobile only ever sent the original
+  // scaffold field set. The backend's commercial fields (W6b Task 6 migration
+  // AddProdottoAssistenzaCommercialFields) and lifecycle fields (W6b Task 6) use Italian wire
+  // names via [JsonPropertyName] that don't match their Dart param names — `marca` → "marchio",
+  // `code` → "codice", `category` → "categoria", `unitOfMeasure` → "um", `purchasePrice` →
+  // "prezzoAcquisto", `salePrice` → "prezzoVendita" — everything else (modello/tipo/
+  // dataInstallazione/ultimaManutenzione/prossimaManutenzione/contrattoId/externalId) is already
+  // camelCase-identical between Dart and wire. See ProdottoAssistenza.cs:23-89 and
+  // ProdottoAssistenzaController.cs:318-391 (Create/UpdateProdottoAssistenzaRequest).
+  group('ProdottoAssistenza commercial + lifecycle fields (Gaps 1/2/7)', () {
+    test('createProdottoAssistenza sends every new field under its Italian wire name', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'id': 'prod-1'}, '/api/prodottoassistenza'));
+
+      await client.createProdottoAssistenza(
+        name: 'Caldaia',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        code: 'PROD-001',
+        category: 'Riscaldamento',
+        unitOfMeasure: 'pz',
+        purchasePrice: 100.5,
+        salePrice: 199.9,
+        marca: 'Baxi',
+        modello: 'ECO5',
+        tipo: 'Caldaia',
+        dataInstallazione: DateTime(2024, 1, 15),
+        ultimaManutenzione: DateTime(2025, 6, 1),
+        prossimaManutenzione: DateTime(2026, 6, 1),
+        contrattoId: 'contr-1',
+        externalId: 'EXT-42',
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['codice'], 'PROD-001');
+      expect(captured['categoria'], 'Riscaldamento');
+      expect(captured['um'], 'pz');
+      expect(captured['prezzoAcquisto'], 100.5);
+      expect(captured['prezzoVendita'], 199.9);
+      expect(captured['marchio'], 'Baxi');
+      expect(captured['modello'], 'ECO5');
+      expect(captured['tipo'], 'Caldaia');
+      expect(captured['dataInstallazione'], DateTime(2024, 1, 15).toIso8601String());
+      expect(captured['ultimaManutenzione'], DateTime(2025, 6, 1).toIso8601String());
+      expect(captured['prossimaManutenzione'], DateTime(2026, 6, 1).toIso8601String());
+      expect(captured['contrattoId'], 'contr-1');
+      expect(captured['externalId'], 'EXT-42');
+      // Never "marca" — that's the wire name for Materiale's brand field, not this entity's.
+      expect(captured.containsKey('marca'), isFalse);
+    });
+
+    test('createProdottoAssistenza omits the new fields entirely when not given', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'id': 'prod-1'}, '/api/prodottoassistenza'));
+
+      await client.createProdottoAssistenza(name: 'Caldaia', customerId: 'cust-1', locationId: 'loc-1');
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      for (final key in [
+        'codice',
+        'categoria',
+        'um',
+        'prezzoAcquisto',
+        'prezzoVendita',
+        'marchio',
+        'modello',
+        'tipo',
+        'dataInstallazione',
+        'ultimaManutenzione',
+        'prossimaManutenzione',
+        'contrattoId',
+        'externalId',
+      ]) {
+        expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
+      }
+    });
+
+    test('updateProdottoAssistenza sends isActive and every new field under its wire name', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/prodottoassistenza/prod-1', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/prodottoassistenza/prod-1'));
+
+      await client.updateProdottoAssistenza(
+        'prod-1',
+        isActive: false,
+        code: 'PROD-001',
+        category: 'Riscaldamento',
+        unitOfMeasure: 'pz',
+        purchasePrice: 100.5,
+        salePrice: 199.9,
+        marca: 'Baxi',
+        modello: 'ECO5',
+        tipo: 'Caldaia',
+        contrattoId: 'contr-1',
+        externalId: 'EXT-42',
+      );
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/prodottoassistenza/prod-1', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['isActive'], isFalse);
+      expect(captured['codice'], 'PROD-001');
+      expect(captured['categoria'], 'Riscaldamento');
+      expect(captured['um'], 'pz');
+      expect(captured['prezzoAcquisto'], 100.5);
+      expect(captured['prezzoVendita'], 199.9);
+      expect(captured['marchio'], 'Baxi');
+      expect(captured['modello'], 'ECO5');
+      expect(captured['tipo'], 'Caldaia');
+      expect(captured['contrattoId'], 'contr-1');
+      expect(captured['externalId'], 'EXT-42');
+    });
+  });
+
+  // Gap 5: ProdottoAssistenza had no delete anywhere on mobile despite the backend's hard-delete
+  // endpoint existing (ProdottoAssistenzaController.cs:230-247).
+  group('deleteProdottoAssistenza (Gap 5)', () {
+    test('DELETEs /api/prodottoassistenza/{id}', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/prodottoassistenza/prod-1'));
+
+      await client.deleteProdottoAssistenza('prod-1');
+
+      verify(() => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1')).called(1);
+    });
+  });
+
+  // Gap 3: Matricole — real 1:N serial-number sub-resource, previously entirely absent on mobile
+  // (ProdottoAssistenzaController.cs:253-313: GET/POST .../matricole, DELETE .../matricole/{id}).
+  group('Matricole (Gap 3)', () {
+    test('fetchMatricole GETs the bare array the backend returns', () async {
+      when(() => mockDio.get<List<dynamic>>('/api/prodottoassistenza/prod-1/matricole')).thenAnswer(
+        (_) async => _okResponse([
+          {'id': 'm1', 'numero': 'SN-001', 'note': null},
+        ], '/api/prodottoassistenza/prod-1/matricole'),
+      );
+
+      final result = await client.fetchMatricole('prod-1');
+
+      expect(result, hasLength(1));
+      expect(result.single['numero'], 'SN-001');
+    });
+
+    test('addMatricola posts numero/note and reads "id"', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza/prod-1/matricole',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            _okResponse({'id': 'm1'}, '/api/prodottoassistenza/prod-1/matricole'),
+      );
+
+      final id = await client.addMatricola('prod-1', numero: 'SN-001', note: 'Unità esterna');
+
+      expect(id, 'm1');
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza/prod-1/matricole',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['numero'], 'SN-001');
+      expect(captured['note'], 'Unità esterna');
+    });
+
+    test('addMatricola omits note when not given', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza/prod-1/matricole',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            _okResponse({'id': 'm1'}, '/api/prodottoassistenza/prod-1/matricole'),
+      );
+
+      await client.addMatricola('prod-1', numero: 'SN-001');
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/prodottoassistenza/prod-1/matricole',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured.containsKey('note'), isFalse);
+    });
+
+    test('deleteMatricola DELETEs the matricola sub-resource', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1/matricole/m1'),
+      ).thenAnswer(
+        (_) async => _okResponse(null, '/api/prodottoassistenza/prod-1/matricole/m1'),
+      );
+
+      await client.deleteMatricola('prod-1', 'm1');
+
+      verify(() => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1/matricole/m1')).called(1);
+    });
+  });
 }

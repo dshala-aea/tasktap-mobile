@@ -673,13 +673,51 @@ void main() {
           serialNumber: 'SN-1',
           warrantyExpiryDate: DateTime.utc(2027, 1, 1),
           notes: 'manutenzione annuale',
+          // Commercial + lifecycle fields (feature audit module #10, Gaps 1/2/7) — exercised
+          // here too, not just admin_api_client_test.dart's mocked-Dio pinning, so a wrong wire
+          // name (e.g. "marca" instead of the entity's actual `[JsonPropertyName("marchio")]`)
+          // fails against the real server schema, not just a hand-picked expectation.
+          code: 'PROD-001',
+          category: 'Riscaldamento',
+          unitOfMeasure: 'pz',
+          purchasePrice: 100.5,
+          salePrice: 199.9,
+          marca: 'Baxi',
+          modello: 'ECO5',
+          tipo: 'Caldaia',
+          dataInstallazione: DateTime.utc(2024, 1, 15),
+          ultimaManutenzione: DateTime.utc(2025, 6, 1),
+          prossimaManutenzione: DateTime.utc(2026, 6, 1),
+          contrattoId: _id(37),
+          externalId: 'EXT-42',
         ),
       );
     });
 
     contractTest('prodotto in assistenza update matches the server', () {
       final client = AdminApiClient(dio);
-      return capture(() => client.updateProdottoAssistenza(_id(30), name: 'Caldaia'));
+      return capture(
+        () => client.updateProdottoAssistenza(
+          _id(30),
+          name: 'Caldaia',
+          isActive: false,
+          code: 'PROD-001',
+          category: 'Riscaldamento',
+          unitOfMeasure: 'pz',
+          purchasePrice: 100.5,
+          salePrice: 199.9,
+          marca: 'Baxi',
+          modello: 'ECO5',
+          tipo: 'Caldaia',
+          contrattoId: _id(38),
+          externalId: 'EXT-42',
+        ),
+      );
+    });
+
+    contractTest('adding a matricola matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(() => client.addMatricola(_id(39), numero: 'SN-001', note: 'Unità esterna'));
     });
 
     contractTest('contract creation matches the server', () {

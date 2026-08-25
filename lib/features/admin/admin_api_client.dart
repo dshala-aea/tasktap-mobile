@@ -788,6 +788,16 @@ class AdminApiClient {
     return pagedItems(res.data);
   }
 
+  /// [code]/[category]/[unitOfMeasure]/[purchasePrice]/[salePrice] are the commercial fields
+  /// (W6b Task 6 migration `AddProdottoAssistenzaCommercialFields`, Gap 1 of the feature audit);
+  /// [marca]/[modello]/[tipo]/[dataInstallazione]/[ultimaManutenzione]/[prossimaManutenzione]/
+  /// [contrattoId] are the lifecycle fields (W6b Task 6, Gap 2); [externalId] is the legacy
+  /// gestionale id (W6b Task 8, Gap 7). Dart param names follow this file's existing English
+  /// convention (matching [createMateriale]'s `code`/`category`/`unitOfMeasure`/`purchasePrice`/
+  /// `salePrice`), but the wire names are Italian per `ProdottoAssistenza.cs`'s
+  /// `[JsonPropertyName]` overrides — most notably [marca] → `"marchio"` on the wire, NOT
+  /// `"marca"` (that's Materiale's brand field name, a different entity with a different wire
+  /// name for the same concept).
   Future<String> createProdottoAssistenza({
     required String name,
     required String customerId,
@@ -796,6 +806,19 @@ class AdminApiClient {
     String? serialNumber,
     DateTime? warrantyExpiryDate,
     String? notes,
+    String? code,
+    String? category,
+    String? unitOfMeasure,
+    double? purchasePrice,
+    double? salePrice,
+    String? marca,
+    String? modello,
+    String? tipo,
+    DateTime? dataInstallazione,
+    DateTime? ultimaManutenzione,
+    DateTime? prossimaManutenzione,
+    String? contrattoId,
+    String? externalId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/prodottoassistenza',
@@ -810,11 +833,34 @@ class AdminApiClient {
         if (warrantyExpiryDate != null)
           'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (code != null && code.isNotEmpty) 'codice': code,
+        if (category != null && category.isNotEmpty) 'categoria': category,
+        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty) 'um': unitOfMeasure,
+        'prezzoAcquisto': ?purchasePrice,
+        'prezzoVendita': ?salePrice,
+        if (marca != null && marca.isNotEmpty) 'marchio': marca,
+        if (modello != null && modello.isNotEmpty) 'modello': modello,
+        if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
+        if (dataInstallazione != null)
+          'dataInstallazione': dataInstallazione.toIso8601String(),
+        if (ultimaManutenzione != null)
+          'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
+        if (prossimaManutenzione != null)
+          'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
+        'contrattoId': ?contrattoId,
+        if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
       },
     );
     return res.data!['id'] as String;
   }
 
+  /// See [createProdottoAssistenza]'s doc comment for the field-name mapping. Following this
+  /// file's established update convention, every optional field here uses the null-aware `?`
+  /// map-entry spread — omitted (untouched server-side) only when null, sent (including empty
+  /// string, to clear) otherwise. The one exception is the four `DateTime?` fields, which the
+  /// backend's `UpdateProdottoAssistenzaRequest` can only ever *set* (each guarded by
+  /// `.HasValue` server-side, matching `warrantyExpiryDate`'s pre-existing behavior here) — there
+  /// is no way to clear a date once set via this endpoint.
   Future<void> updateProdottoAssistenza(
     String id, {
     String? name,
@@ -825,6 +871,19 @@ class AdminApiClient {
     DateTime? warrantyExpiryDate,
     String? notes,
     bool? isActive,
+    String? code,
+    String? category,
+    String? unitOfMeasure,
+    double? purchasePrice,
+    double? salePrice,
+    String? marca,
+    String? modello,
+    String? tipo,
+    DateTime? dataInstallazione,
+    DateTime? ultimaManutenzione,
+    DateTime? prossimaManutenzione,
+    String? contrattoId,
+    String? externalId,
   }) async {
     await _dio.put(
       '/api/prodottoassistenza/$id',
@@ -838,8 +897,57 @@ class AdminApiClient {
           'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         'notes': ?notes,
         'isActive': ?isActive,
+        'codice': ?code,
+        'categoria': ?category,
+        'um': ?unitOfMeasure,
+        'prezzoAcquisto': ?purchasePrice,
+        'prezzoVendita': ?salePrice,
+        'marchio': ?marca,
+        'modello': ?modello,
+        'tipo': ?tipo,
+        if (dataInstallazione != null)
+          'dataInstallazione': dataInstallazione.toIso8601String(),
+        if (ultimaManutenzione != null)
+          'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
+        if (prossimaManutenzione != null)
+          'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
+        'contrattoId': ?contrattoId,
+        'externalId': ?externalId,
       },
     );
+  }
+
+  /// Hard-deletes a prodotto assistenza — mirrors `DELETE /api/prodottoassistenza/{id}`
+  /// (`ProdottoAssistenzaController.Delete`), which has no soft-delete/undo path (Gap 5 of the
+  /// feature audit — this action never existed on mobile before).
+  Future<void> deleteProdottoAssistenza(String id) async {
+    await _dio.delete('/api/prodottoassistenza/$id');
+  }
+
+  // ── Matricole (Gap 3 of the feature audit) ──────────────────────────────
+  //
+  // Real 1:N serial-number sub-resource replacing the deprecated scalar `serialNumber` field
+  // (which stays on the entity/form, just no longer the only way to record a serial — see
+  // ProdottoAssistenzaController.cs:253-313 and Matricola.cs). Soft-removed server-side
+  // (IsActive=false), same shape as Materiale barcodes / cantiere contacts: list/add/remove under
+  // the parent's id, no update route (the backend never added one — add a new matricola / remove
+  // the wrong one instead of editing in place).
+
+  Future<List<Map<String, dynamic>>> fetchMatricole(String prodottoId) async {
+    final res = await _dio.get<List<dynamic>>('/api/prodottoassistenza/$prodottoId/matricole');
+    return (res.data ?? const []).cast<Map<String, dynamic>>();
+  }
+
+  Future<String> addMatricola(String prodottoId, {required String numero, String? note}) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/prodottoassistenza/$prodottoId/matricole',
+      data: {'numero': numero, 'note': ?note},
+    );
+    return res.data!['id'] as String;
+  }
+
+  Future<void> deleteMatricola(String prodottoId, String matricolaId) async {
+    await _dio.delete('/api/prodottoassistenza/$prodottoId/matricole/$matricolaId');
   }
 
   // ── Contracts ────────────────────────────────────────────────────────────
