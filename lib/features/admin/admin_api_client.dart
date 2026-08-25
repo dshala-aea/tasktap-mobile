@@ -71,6 +71,14 @@ class ScheduleConflict {
   );
 }
 
+/// Result of `POST /api/contracts/{id}/genera-schedule` — see [AdminApiClient.generaSchedule].
+class GeneraScheduleResult {
+  const GeneraScheduleResult({required this.created, required this.message});
+
+  final int created;
+  final String message;
+}
+
 class AdminApiClient {
   AdminApiClient(this._dio);
   final Dio _dio;
@@ -964,6 +972,26 @@ class AdminApiClient {
     return pagedItems(res.data);
   }
 
+  /// Live contract detail — `GET /api/contracts/{id}` (`ContractsController.GetById`). Feature
+  /// audit module #11, Gap D: a technician viewing a ticket/cantiere tied to a contract has no
+  /// local Drift mirror to read it from (contracts, like Contratti's other sub-resources, are
+  /// never synced to the device — see `fetchContracts`'s own doc comment), so this fetches the
+  /// single contract live the same way `fetchCantiereDetail`/`fetchSquadraDetail` do for their
+  /// entities.
+  Future<Map<String, dynamic>?> fetchContractById(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/contracts/$id');
+    return res.data;
+  }
+
+  /// [frequencyUnit] is the backend's `ContractFrequencyUnit` enum, which carries its own
+  /// `[JsonConverter(typeof(JsonStringEnumConverter))]` (`Contract.cs`) — the wire shape is the
+  /// STRING `"Days"`/`"Months"`/`"Years"`, not an ordinal int. [tipo] is `ContractTipoEnum?`,
+  /// serialized the same way (`"Manutenzione"`/`"Assistenza"`/`"Garanzia"`).
+  ///
+  /// [numero]/[autoRenewal]/[scadenzaGiorni]/[condizioni]/[tipo]/[externalId]/[codice] are the
+  /// feature audit module #11 Gap A fields — `CreateContractRequest`'s full W6b Task 6/8 field
+  /// set, previously entirely uncollected on mobile. `prodottoAssistenzaId` was already a
+  /// parameter here before Gap A; only the form never exposed a picker for it.
   Future<String> createContract({
     required String name,
     required String customerId,
@@ -974,8 +1002,15 @@ class AdminApiClient {
     DateTime? endDate,
     double? price,
     int frequencyValue = 1,
-    int frequencyUnit = 1,
+    String frequencyUnit = 'Months',
     String? notes,
+    String? numero,
+    bool autoRenewal = false,
+    int? scadenzaGiorni,
+    String? condizioni,
+    String? tipo,
+    String? externalId,
+    String? codice,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/contracts',
@@ -992,11 +1027,30 @@ class AdminApiClient {
         'frequencyValue': frequencyValue,
         'frequencyUnit': frequencyUnit,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (numero != null && numero.isNotEmpty) 'numero': numero,
+        'autoRenewal': autoRenewal,
+        'scadenzaGiorni': ?scadenzaGiorni,
+        if (condizioni != null && condizioni.isNotEmpty) 'condizioni': condizioni,
+        if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
+        if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
+        if (codice != null && codice.isNotEmpty) 'codice': codice,
       },
     );
     return res.data!['id'] as String;
   }
 
+  /// See [createContract]'s doc comment for the `frequencyUnit`/`tipo` string-enum wire shape.
+  /// Every optional field here uses the null-aware `?` map-entry spread — omitted (untouched
+  /// server-side) only when null, sent (including empty string, to clear) otherwise — matching
+  /// this file's established update convention (`updateProdottoAssistenza`,
+  /// `UpdateContractRequest`'s own plain-`string?` bucket for name/description/notes/numero/
+  /// condizioni/externalId). `codice` is deliberately sent as `null` rather than `""` when
+  /// empty, never round-tripping a blank string back — `Contract.Codice` carries a partial
+  /// UNIQUE index and a second contract cleared to `""` in the same tenant would 500 on it (see
+  /// `ContrattoEditSheet.tsx`'s own header comment on the web side of this exact trap).
+  /// `locationId`/`prodottoAssistenzaId`/`endDate`/`price`/`scadenzaGiorni`/`tipo` can never be
+  /// cleared through this endpoint once set (`.HasValue`-gated server-side) — callers pass `null`
+  /// for "leave untouched", same as before Gap A.
   Future<void> updateContract(
     String id, {
     String? name,
@@ -1008,9 +1062,16 @@ class AdminApiClient {
     DateTime? endDate,
     double? price,
     int? frequencyValue,
-    int? frequencyUnit,
+    String? frequencyUnit,
     String? notes,
     bool? isActive,
+    String? numero,
+    bool? autoRenewal,
+    int? scadenzaGiorni,
+    String? condizioni,
+    String? tipo,
+    String? externalId,
+    String? codice,
   }) async {
     await _dio.put(
       '/api/contracts/$id',
@@ -1027,7 +1088,58 @@ class AdminApiClient {
         'frequencyUnit': ?frequencyUnit,
         'notes': ?notes,
         'isActive': ?isActive,
+        'numero': ?numero,
+        'autoRenewal': ?autoRenewal,
+        'scadenzaGiorni': ?scadenzaGiorni,
+        'condizioni': ?condizioni,
+        'tipo': ?tipo,
+        'externalId': ?externalId,
+        // Never "" — see the doc comment above.
+        'codice': ?codice,
       },
+    );
+  }
+
+  /// `DELETE /api/contracts/{id}`. Every foreign key in this database is
+  /// `DeleteBehavior.Restrict` — a contract referenced by a ProdottoAssistenza, a generated
+  /// Schedule, or a Ticket cannot be deleted at all, and the server answers 409 with a message
+  /// naming exactly that (`ContractsController.Delete`'s doc comment) rather than a raw 500.
+  /// [humanErrorMessage] already surfaces a 409's `message` field verbatim, so callers don't
+  /// need to special-case the status code — same treatment as `deleteProdottoAssistenza`.
+  Future<void> deleteContract(String id) async {
+    await _dio.delete('/api/contracts/$id');
+  }
+
+  /// `POST /api/contracts/{id}/genera-schedule` (`ContractsController.GeneraSchedule`) —
+  /// materializes recurring `Schedule` rows from the contract's own `FrequencyValue`/
+  /// `FrequencyUnit` over `[dateFrom ?? contract.StartDate, dateTo ?? contract.EndDate ?? +3
+  /// months]`. [userId] is required server-side (`GeneraScheduleRequest.UserId` is a plain
+  /// `Guid`, not `Guid?`) — every generated Schedule needs an assignee, there is no "unassigned"
+  /// bulk-generate. [locationId] falls back to the contract's own location server-side when
+  /// omitted; the request 400s if neither is set. Returns the created count and the server's
+  /// own Italian summary message ("N pianificazioni generate.") for the caller to display as-is.
+  Future<GeneraScheduleResult> generaSchedule(
+    String contractId, {
+    required String userId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String? locationId,
+    int? statusId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/contracts/$contractId/genera-schedule',
+      data: {
+        'userId': userId,
+        if (dateFrom != null) 'dateFrom': dateFrom.toIso8601String(),
+        if (dateTo != null) 'dateTo': dateTo.toIso8601String(),
+        'locationId': ?locationId,
+        'statusId': ?statusId,
+      },
+    );
+    final data = res.data ?? const {};
+    return GeneraScheduleResult(
+      created: data['created'] as int? ?? 0,
+      message: data['message'] as String? ?? '',
     );
   }
 

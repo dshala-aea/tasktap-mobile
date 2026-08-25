@@ -720,6 +720,12 @@ void main() {
       return capture(() => client.addMatricola(_id(39), numero: 'SN-001', note: 'Unità esterna'));
     });
 
+    // Feature audit module #11, Gap A: exercises the full W6b Task 6/8 field set — numero/
+    // autoRenewal/scadenzaGiorni/condizioni/tipo/externalId/codice — against the real server
+    // schema, not just admin_api_client_test.dart's mocked-Dio pinning. `frequencyUnit` is sent
+    // as a string here on purpose: ContractFrequencyUnit carries its own
+    // [JsonConverter(typeof(JsonStringEnumConverter))] (Contract.cs), so the wire shape is
+    // "Months", not the ordinal int the form used to send.
     contractTest('contract creation matches the server', () {
       final client = AdminApiClient(dio);
       return capture(
@@ -729,14 +735,44 @@ void main() {
           startDate: DateTime.utc(2026, 1, 1),
           description: 'full service',
           locationId: _id(32),
+          prodottoAssistenzaId: _id(58),
           endDate: DateTime.utc(2026, 12, 31),
+          frequencyUnit: 'Years',
+          numero: 'CTR-2026-001',
+          autoRenewal: true,
+          scadenzaGiorni: 30,
+          condizioni: 'Pagamento a 30gg',
+          tipo: 'Manutenzione',
+          externalId: 'EXT-1',
+          codice: 'C-001',
         ),
       );
     });
 
     contractTest('contract update matches the server', () {
       final client = AdminApiClient(dio);
-      return capture(() => client.updateContract(_id(33), name: 'Manutenzione 2026'));
+      return capture(
+        () => client.updateContract(
+          _id(33),
+          name: 'Manutenzione 2026',
+          frequencyUnit: 'Days',
+          numero: 'CTR-2026-001',
+          autoRenewal: false,
+          scadenzaGiorni: 15,
+          condizioni: 'Pagamento a 15gg',
+          tipo: 'Assistenza',
+          externalId: 'EXT-2',
+          codice: 'C-002',
+        ),
+      );
+    });
+
+    // Feature audit module #11, Gap C: no mobile call site existed at all before this.
+    contractTest('genera-schedule matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.generaSchedule(_id(59), userId: _id(60), locationId: _id(61)),
+      );
     });
 
     contractTest('squadra creation matches the server', () {

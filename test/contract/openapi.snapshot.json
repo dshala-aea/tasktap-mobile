@@ -2520,6 +2520,7 @@
         "tags": [
           "Contracts"
         ],
+        "summary": "Hard-deletes a contract. Every foreign key in this database is\n\u0060DeleteBehavior.Restrict\u0060 (see \u0060ApplicationDbContext.OnModelCreating\u0060) \u2014 a\ncontract referenced by a ProdottoAssistenza, a generated Schedule, or a Ticket cannot be\ndeleted at all, by design. Without the catch below that surfaces as a raw 500 from the\nunhandled DbUpdateException; this turns it into the actual answer (same\ntreatment as \u0060CantieriController.Delete\u0060).",
         "parameters": [
           {
             "name": "id",

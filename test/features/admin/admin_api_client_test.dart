@@ -902,4 +902,186 @@ void main() {
       verify(() => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1/matricole/m1')).called(1);
     });
   });
+
+  // Feature audit module #11, Gap A: numero/codice/tipo/externalId/autoRenewal/scadenzaGiorni/
+  // condizioni were entirely uncollected on mobile, and frequencyUnit was sent as the ordinal int
+  // (0/1/2) rather than the string ("Days"/"Months"/"Years") ContractFrequencyUnit's own
+  // [JsonConverter(typeof(JsonStringEnumConverter))] actually reads/writes on the wire.
+  group('Contract field parity (Gap A)', () {
+    test('createContract sends the new fields under their wire names, frequencyUnit as a string', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'contr-1'}, '/api/contracts'));
+
+      await client.createContract(
+        name: 'Manutenzione annuale',
+        customerId: 'cust-1',
+        startDate: DateTime(2026, 1, 1),
+        prodottoAssistenzaId: 'prod-1',
+        frequencyUnit: 'Years',
+        numero: 'CTR-2026-001',
+        autoRenewal: true,
+        scadenzaGiorni: 30,
+        condizioni: 'Pagamento a 30gg',
+        tipo: 'Manutenzione',
+        externalId: 'EXT-1',
+        codice: 'C-001',
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['prodottoAssistenzaId'], 'prod-1');
+      expect(captured['frequencyUnit'], 'Years');
+      expect(captured['frequencyUnit'], isA<String>());
+      expect(captured['numero'], 'CTR-2026-001');
+      expect(captured['autoRenewal'], true);
+      expect(captured['scadenzaGiorni'], 30);
+      expect(captured['condizioni'], 'Pagamento a 30gg');
+      expect(captured['tipo'], 'Manutenzione');
+      expect(captured['externalId'], 'EXT-1');
+      expect(captured['codice'], 'C-001');
+    });
+
+    test('createContract defaults frequencyUnit to "Months" and autoRenewal to false', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'contr-1'}, '/api/contracts'));
+
+      await client.createContract(
+        name: 'Manutenzione annuale',
+        customerId: 'cust-1',
+        startDate: DateTime(2026, 1, 1),
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['frequencyUnit'], 'Months');
+      expect(captured['autoRenewal'], false);
+      for (final key in ['numero', 'scadenzaGiorni', 'condizioni', 'tipo', 'externalId', 'codice']) {
+        expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
+      }
+    });
+
+    test('updateContract sends the new fields, "" clears numero/condizioni/externalId', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/contracts/contr-1', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/contracts/contr-1'));
+
+      await client.updateContract(
+        'contr-1',
+        frequencyUnit: 'Days',
+        numero: '',
+        autoRenewal: true,
+        scadenzaGiorni: 15,
+        condizioni: '',
+        tipo: 'Garanzia',
+        externalId: '',
+        codice: null,
+      );
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/contracts/contr-1', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      expect(captured['frequencyUnit'], 'Days');
+      expect(captured['numero'], '');
+      expect(captured['autoRenewal'], true);
+      expect(captured['scadenzaGiorni'], 15);
+      expect(captured['condizioni'], '');
+      expect(captured['tipo'], 'Garanzia');
+      expect(captured['externalId'], '');
+      // codice is null here (leave untouched), never resent as "" — see the method's own doc
+      // comment on the partial-unique-index trap.
+      expect(captured.containsKey('codice'), isFalse);
+    });
+
+    test('updateContract omits untouched fields (null means "leave as is")', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/contracts/contr-1', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/contracts/contr-1'));
+
+      await client.updateContract('contr-1', name: 'Manutenzione 2026');
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/contracts/contr-1', data: captureAny(named: 'data')),
+      ).captured.single as Map;
+      for (final key in [
+        'numero',
+        'autoRenewal',
+        'scadenzaGiorni',
+        'condizioni',
+        'tipo',
+        'externalId',
+        'codice',
+        'frequencyUnit',
+      ]) {
+        expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
+      }
+    });
+  });
+
+  // Feature audit module #11, Gap B: DELETE /api/Contracts/{id} now returns a clean 409 when
+  // blocked by linked records; humanErrorMessage already surfaces that message verbatim.
+  group('deleteContract (Gap B)', () {
+    test('DELETEs /api/contracts/{id}', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/contracts/contr-1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/contracts/contr-1'));
+
+      await client.deleteContract('contr-1');
+
+      verify(() => mockDio.delete<dynamic>('/api/contracts/contr-1')).called(1);
+    });
+  });
+
+  // Feature audit module #11, Gap C: genera-schedule had zero mobile call site at all.
+  group('generaSchedule (Gap C)', () {
+    test('posts userId and reads back created/message', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/contracts/contr-1/genera-schedule',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'created': 12,
+          'message': '12 pianificazioni generate.',
+        }, '/api/contracts/contr-1/genera-schedule'),
+      );
+
+      final result = await client.generaSchedule('contr-1', userId: 'user-1');
+
+      expect(result.created, 12);
+      expect(result.message, '12 pianificazioni generate.');
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/contracts/contr-1/genera-schedule',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['userId'], 'user-1');
+      expect(captured.containsKey('dateFrom'), isFalse);
+      expect(captured.containsKey('dateTo'), isFalse);
+    });
+  });
+
+  // Feature audit module #11, Gap D: a technician viewing a ticket tied to a contract has no
+  // local Drift mirror to read it from — this fetches the single contract live.
+  group('fetchContractById (Gap D)', () {
+    test('GETs /api/contracts/{id}', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>('/api/contracts/contr-1'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'id': 'contr-1',
+          'name': 'Manutenzione annuale',
+        }, '/api/contracts/contr-1'),
+      );
+
+      final result = await client.fetchContractById('contr-1');
+
+      expect(result?['name'], 'Manutenzione annuale');
+    });
+  });
 }

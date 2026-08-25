@@ -410,6 +410,87 @@ void main() {
     });
   });
 
+  // Feature audit module #11, Gap D: a technician working a ticket tied to a contract had no way
+  // to see that contract's info at all — contracts were only reachable via the admin-only
+  // /altro/contratti route.
+  group('TicketDetailScreen — contract summary (Gap D)', () {
+    Future<void> seedWithContract(AppDatabase db) async {
+      await seedBase(db);
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+        const TicketsCompanion(contractId: Value('contr-1')),
+      );
+    }
+
+    // KeyVal renders its label uppercase (see key_val.dart's `_labelStyle`/`_horizontal`), so
+    // "Contratto"/"Scadenza"/"Condizioni" render on screen as "CONTRATTO"/"SCADENZA"/
+    // "CONDIZIONI" — matching how every other KeyVal label in this file is asserted against its
+    // *value*, never its own label text, except here where the label's mere presence/absence is
+    // exactly what's under test.
+    testWidgets('shows no Contratto row when the ticket has no contract', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.text('CONTRATTO'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows the linked contract\'s name, resolved live', (tester) async {
+      await seedWithContract(db);
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/contracts/contr-1')).thenAnswer(
+        (_) async => _okResponse({
+          'id': 'contr-1',
+          'name': 'Manutenzione annuale',
+        }, '/api/contracts/contr-1'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+
+      expect(find.text('CONTRATTO'), findsOneWidget);
+      expect(find.text('Manutenzione annuale'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping the row opens a read-only sheet with scadenza and condizioni', (
+      tester,
+    ) async {
+      await seedWithContract(db);
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/contracts/contr-1')).thenAnswer(
+        (_) async => _okResponse({
+          'id': 'contr-1',
+          'name': 'Manutenzione annuale',
+          'endDate': '2026-12-31T00:00:00Z',
+          'condizioni': 'Pagamento a 30gg',
+        }, '/api/contracts/contr-1'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.tap(find.text('Manutenzione annuale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('SCADENZA'), findsOneWidget);
+      expect(find.text('31/12/2026'), findsOneWidget);
+      expect(find.text('CONDIZIONI'), findsOneWidget);
+      expect(find.text('Pagamento a 30gg'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('says plainly it is offline instead of showing a broken row', (tester) async {
+      await seedWithContract(db);
+
+      await pump(tester, isOnline: false);
+
+      expect(find.text('Caricamento…'), findsNothing);
+      expect(find.text('CONTRATTO'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   // Taps a tab by its label. Uses a taller surface so the tab bar isn't
   // obscured by the bottom actions bar (mirrors the Pianificazioni test
   // above, which established the pattern for this screen).

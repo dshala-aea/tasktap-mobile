@@ -199,6 +199,20 @@ class _TicketDetailBody extends ConsumerWidget {
         : (ref.watch(colleagueNameProvider(assignedId)).valueOrNull ??
               assignedId);
 
+    // Feature audit module #11, Gap D: a technician working this ticket had no way to see the
+    // contract it's tied to — contracts are only reachable via the admin-only /altro/contratti
+    // route. This is read-only and deliberately small (name here, name/scadenza/condizioni in
+    // the sheet it opens) — not a route to a full contract editor.
+    final contractId = ticket.contractId;
+    final contractAsync = contractId == null
+        ? null
+        : ref.watch(contractByIdProvider(contractId));
+    final contractLabel = contractAsync?.when(
+      data: (c) => c?['name'] as String? ?? '—',
+      loading: () => 'Caricamento…',
+      error: (e, _) => '—',
+    );
+
     return SafeArea(
       top: false,
       child: Column(
@@ -309,7 +323,18 @@ class _TicketDetailBody extends ConsumerWidget {
                                 context.push(AppRoutes.clientiDetail(ticket.customerId)),
                           ),
                           KeyVal(label: 'Sede', value: locationName),
-                          KeyVal(label: 'Tecnico', value: tecnicoLabel, showDivider: false),
+                          KeyVal(
+                            label: 'Tecnico',
+                            value: tecnicoLabel,
+                            showDivider: contractLabel != null,
+                          ),
+                          if (contractLabel != null)
+                            KeyVal(
+                              label: 'Contratto',
+                              value: contractLabel,
+                              showDivider: false,
+                              onTap: () => _showContractSummarySheet(context, contractId!),
+                            ),
                         ],
                       ),
                     ),
@@ -453,6 +478,86 @@ class _TicketDetailBody extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => _AssignSheet(api: api, ticket: ticket),
+    );
+  }
+
+  /// Feature audit module #11, Gap D — read-only contract summary, opened from the "Contratto"
+  /// row above. Deliberately just a sheet, not a route: the contract editor itself stays behind
+  /// the admin-only /altro/contratti path, and this technician-facing surface only needs to
+  /// answer "what contract is this ticket under, and when/on what terms".
+  void _showContractSummarySheet(BuildContext context, String contractId) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => _ContractSummarySheet(contractId: contractId),
+    );
+  }
+}
+
+/// Read-only Nome/Scadenza/Condizioni for the contract a ticket is tied to. See
+/// [_TicketDetailBody._showContractSummarySheet]'s doc comment for why this is a sheet and not a
+/// route into the admin contract editor.
+class _ContractSummarySheet extends ConsumerWidget {
+  const _ContractSummarySheet({required this.contractId});
+
+  final String contractId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(contractByIdProvider(contractId));
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.pagePadding,
+          AppSpacing.base,
+          AppSpacing.pagePadding,
+          AppSpacing.base,
+        ),
+        child: async.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => const UnavailableState(
+            titolo: 'Contratto non disponibile',
+            motivo: 'Impossibile leggere i dati del contratto. Riprova quando torni online.',
+          ),
+          data: (contract) {
+            if (contract == null) {
+              return const EmptyState(
+                icon: LucideIcons.fileText,
+                title: 'Contratto non trovato',
+                body: 'Il contratto collegato non è disponibile.',
+              );
+            }
+            final name = contract['name'] as String? ?? '—';
+            final endDate = contract['endDate'] as String?;
+            final scadenzaLabel = endDate != null
+                ? DateFormat('dd/MM/yyyy', 'it').format(DateTime.parse(endDate))
+                : 'Nessuna data fine';
+            final condizioni = contract['condizioni'] as String?;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                StepLabel(title: 'Contratto'),
+                const SizedBox(height: 4),
+                KeyVal(label: 'Nome', value: name),
+                KeyVal(label: 'Scadenza', value: scadenzaLabel),
+                KeyVal(
+                  label: 'Condizioni',
+                  value: condizioni != null && condizioni.isNotEmpty ? condizioni : '—',
+                  showDivider: false,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 }

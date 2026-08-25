@@ -6,6 +6,7 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import '../admin/admin_api_client.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_workflow_api_client.dart';
 
@@ -155,4 +156,20 @@ final ticketHistoryProvider = FutureProvider.autoDispose
       }
       final api = ref.watch(ticketWorkflowApiClientProvider);
       return api.fetchHistory(ticketId);
+    });
+
+/// The contract a ticket is tied to (feature audit module #11, Gap D) — keyed by `contractId`,
+/// not `ticketId`, so a cantiere or another ticket pointing at the same contract shares this
+/// provider's cache rather than each issuing its own fetch.
+///
+/// Live-fetched, same as [AdminApiClient.fetchContractById]'s own doc comment explains: contracts
+/// have no local Drift mirror, only `Tickets.contractId` (a bare id column, synced) does. Online-
+/// only for the same reason every other tab on this screen without a mirror is.
+final contractByIdProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, contractId) async {
+      if (!ref.watch(isOnlineProvider)) {
+        throw const TicketDetailOfflineException();
+      }
+      final api = ref.watch(adminApiClientProvider);
+      return api.fetchContractById(contractId);
     });
