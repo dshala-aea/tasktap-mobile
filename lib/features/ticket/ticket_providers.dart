@@ -173,3 +173,18 @@ final contractByIdProvider = FutureProvider.autoDispose
       final api = ref.watch(adminApiClientProvider);
       return api.fetchContractById(contractId);
     });
+
+/// The commessa a ticket or cantiere is tagged with (feature audit module #13, Gap 6) — keyed by
+/// `commessaId`, not by the ticket/cantiere it belongs to, so a ticket and its cantiere pointing
+/// at the same commessa share this provider's cache rather than each issuing its own fetch.
+///
+/// Live-fetched, same reasoning as [contractByIdProvider]: commesse have no local Drift mirror,
+/// only `Tickets.commessaId`/`Cantieri.commessaId` (bare id columns, synced) do.
+final commessaByIdProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, commessaId) async {
+      if (!ref.watch(isOnlineProvider)) {
+        throw const TicketDetailOfflineException();
+      }
+      final api = ref.watch(adminApiClientProvider);
+      return api.fetchCommessaById(commessaId);
+    });

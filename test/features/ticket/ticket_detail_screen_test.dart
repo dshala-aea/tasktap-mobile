@@ -491,6 +491,55 @@ void main() {
     });
   });
 
+  // Feature audit module #13, Gap 6: mobile already syncs `Ticket.commessaId` locally but showed
+  // it nowhere in the UI — this fills that gap the same way Gap D filled the contract row above.
+  group('TicketDetailScreen — commessa (Gap 6)', () {
+    Future<void> seedWithCommessa(AppDatabase db) async {
+      await seedBase(db);
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+        const TicketsCompanion(commessaId: Value('commessa-1')),
+      );
+    }
+
+    testWidgets('shows no Commessa row when the ticket has no commessa', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.text('COMMESSA'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets("shows the linked commessa's codice, resolved live", (tester) async {
+      await seedWithCommessa(db);
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/commesse/commessa-1')).thenAnswer(
+        (_) async => _okResponse({
+          'id': 'commessa-1',
+          'codice': 'COM-001',
+        }, '/api/commesse/commessa-1'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+
+      expect(find.text('COMMESSA'), findsOneWidget);
+      expect(find.text('COM-001'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('says plainly it is offline instead of showing a broken row', (tester) async {
+      await seedWithCommessa(db);
+
+      await pump(tester, isOnline: false);
+
+      expect(find.text('Caricamento…'), findsNothing);
+      expect(find.text('COMMESSA'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   // Taps a tab by its label. Uses a taller surface so the tab bar isn't
   // obscured by the bottom actions bar (mirrors the Pianificazioni test
   // above, which established the pattern for this screen).

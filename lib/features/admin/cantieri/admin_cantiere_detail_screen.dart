@@ -137,6 +137,19 @@ class _CantiereDetailBody extends ConsumerWidget {
         ? DateFormat('dd/MM/yyyy').format(cantiere.endDate!.toLocal())
         : '—';
 
+    // Feature audit module #13, Gap 6: mobile already syncs `Cantiere.commessaId` but showed it
+    // nowhere. Resolved the same way as the ticket detail screen's own commessa row — live-
+    // fetched via the shared commessaByIdProvider, no local mirror exists for commesse.
+    final commessaId = cantiere.commessaId;
+    final commessaAsync = commessaId == null
+        ? null
+        : ref.watch(commessaByIdProvider(commessaId));
+    final commessaLabel = commessaAsync?.when(
+      data: (c) => c?['codice'] as String? ?? '—',
+      loading: () => 'Caricamento…',
+      error: (e, _) => '—',
+    );
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -167,7 +180,8 @@ class _CantiereDetailBody extends ConsumerWidget {
                   KeyVal(label: 'Indirizzo', value: cantiere.address ?? '—'),
                   KeyVal(label: 'CAP', value: cantiere.postalCode ?? '—'),
                   KeyVal(label: 'Inizio', value: startLabel),
-                  KeyVal(label: 'Fine', value: endLabel),
+                  KeyVal(label: 'Fine', value: endLabel, showDivider: commessaLabel != null),
+                  if (commessaLabel != null) KeyVal(label: 'Commessa', value: commessaLabel),
                   KeyVal(
                     label: 'Note',
                     value: cantiere.notes?.isNotEmpty == true ? cantiere.notes! : '—',

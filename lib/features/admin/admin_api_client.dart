@@ -411,6 +411,15 @@ class AdminApiClient {
     return pagedItems(res.data);
   }
 
+  /// Single commessa by id — feature audit module #13, Gap 6: mobile already syncs
+  /// `Ticket.commessaId`/`Cantiere.commessaId` (bare id columns) but had no way to resolve one to
+  /// its `codice` for display. Same shape as [fetchContractById]: no local Drift mirror, so this
+  /// is fetched live wherever a screen needs to show the commessa a ticket/cantiere belongs to.
+  Future<Map<String, dynamic>?> fetchCommessaById(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/commesse/$id');
+    return res.data;
+  }
+
   // ── Schedules ────────────────────────────────────────────────────────────
 
   Future<String> createSchedule({

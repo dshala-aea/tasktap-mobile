@@ -21,6 +21,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/cantieri/admin_cantiere_detail_screen.dart';
@@ -34,11 +35,13 @@ class _FakeAdminApiClient extends AdminApiClient {
     List<Map<String, dynamic>>? reports,
     List<Map<String, dynamic>>? workLogs,
     List<Map<String, dynamic>>? technicians,
+    Map<String, dynamic>? commessa,
   }) : _cantiereDetail = cantiereDetail ?? {'contacts': [], 'assignments': []},
        _tickets = tickets ?? [],
        _reports = reports ?? [],
        _workLogs = workLogs ?? [],
        _technicians = technicians ?? [],
+       _commessa = commessa,
        super(Dio());
 
   final Map<String, dynamic> _cantiereDetail;
@@ -46,6 +49,12 @@ class _FakeAdminApiClient extends AdminApiClient {
   final List<Map<String, dynamic>> _reports;
   final List<Map<String, dynamic>> _workLogs;
   final List<Map<String, dynamic>> _technicians;
+  // Feature audit module #13, Gap 6 — GET /api/commesse/{id}, keyed by whatever single id the
+  // test seeded onto the cantiere (no test here exercises more than one commessa at a time).
+  final Map<String, dynamic>? _commessa;
+
+  @override
+  Future<Map<String, dynamic>?> fetchCommessaById(String id) async => _commessa;
 
   final List<String> deletedContactIds = [];
   final List<String> removedAssignmentIds = [];
@@ -134,9 +143,22 @@ AppDatabase _makeDb() {
   return AppDatabase(NativeDatabase.memory());
 }
 
-Widget _buildScreen({required AppDatabase db, required AdminApiClient api, String id = 'cant-1'}) {
+Widget _buildScreen({
+  required AppDatabase db,
+  required AdminApiClient api,
+  String id = 'cant-1',
+  // Every existing sub-resource fetch on this screen ignores connectivity and just attempts the
+  // request (see the "Live sub-resource providers" comment in the screen itself), so this default
+  // matches that: true, unlike ticket_detail_screen_test.dart's own harness which defaults to
+  // false. Only the new commessa row (Gap 6) reads isOnlineProvider at all.
+  bool isOnline = true,
+}) {
   return ProviderScope(
-    overrides: [appDatabaseProvider.overrideWithValue(db), adminApiClientProvider.overrideWithValue(api)],
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      adminApiClientProvider.overrideWithValue(api),
+      isOnlineProvider.overrideWithValue(isOnline),
+    ],
     child: MaterialApp(home: AdminCantiereDetailScreen(cantiereId: id)),
   );
 }
@@ -166,9 +188,10 @@ Future<void> _pumpScreen(
   required AppDatabase db,
   required AdminApiClient api,
   String id = 'cant-1',
+  bool isOnline = true,
 }) async {
   await tester.binding.setSurfaceSize(const Size(800, 2400));
-  await tester.pumpWidget(_buildScreen(db: db, api: api, id: id));
+  await tester.pumpWidget(_buildScreen(db: db, api: api, id: id, isOnline: isOnline));
   await tester.pumpAndSettle();
 }
 
@@ -403,6 +426,44 @@ void main() {
 
       expect(find.text('Manutenzione impianto'), findsOneWidget);
       expect(find.text('Controllato'), findsOneWidget);
+      await _teardown(tester);
+    });
+  });
+
+  // Feature audit module #13, Gap 6 (not the same as the module-#8 "Gap 6" group above — the
+  // numbering restarts per module): mobile already syncs `Cantiere.commessaId` locally but showed
+  // it nowhere in the UI.
+  group('Commessa (module 13, Gap 6)', () {
+    testWidgets('shows no Commessa row when the cantiere has no commessa', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
+
+      expect(find.text('COMMESSA'), findsNothing);
+      await _teardown(tester);
+    });
+
+    testWidgets("shows the linked commessa's codice, resolved live", (tester) async {
+      await _seedCantiere(db);
+      await (db.update(db.cantieri)..where((c) => c.id.equals('cant-1'))).write(
+        const CantieriCompanion(commessaId: Value('commessa-1')),
+      );
+      final api = _FakeAdminApiClient(commessa: {'id': 'commessa-1', 'codice': 'COM-001'});
+      await _pumpScreen(tester, db: db, api: api);
+
+      expect(find.text('COMMESSA'), findsOneWidget);
+      expect(find.text('COM-001'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('says plainly it is offline instead of showing a broken row', (tester) async {
+      await _seedCantiere(db);
+      await (db.update(db.cantieri)..where((c) => c.id.equals('cant-1'))).write(
+        const CantieriCompanion(commessaId: Value('commessa-1')),
+      );
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient(), isOnline: false);
+
+      expect(find.text('Caricamento…'), findsNothing);
+      expect(find.text('COMMESSA'), findsOneWidget);
       await _teardown(tester);
     });
   });

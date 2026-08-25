@@ -213,6 +213,18 @@ class _TicketDetailBody extends ConsumerWidget {
       error: (e, _) => '—',
     );
 
+    // Feature audit module #13, Gap 6: mobile already syncs `Ticket.commessaId` but showed it
+    // nowhere. Resolved the same way as the contract row above — live-fetched, no local mirror.
+    final commessaId = ticket.commessaId;
+    final commessaAsync = commessaId == null
+        ? null
+        : ref.watch(commessaByIdProvider(commessaId));
+    final commessaLabel = commessaAsync?.when(
+      data: (c) => c?['codice'] as String? ?? '—',
+      loading: () => 'Caricamento…',
+      error: (e, _) => '—',
+    );
+
     return SafeArea(
       top: false,
       child: Column(
@@ -326,14 +338,20 @@ class _TicketDetailBody extends ConsumerWidget {
                           KeyVal(
                             label: 'Tecnico',
                             value: tecnicoLabel,
-                            showDivider: contractLabel != null,
+                            showDivider: contractLabel != null || commessaLabel != null,
                           ),
                           if (contractLabel != null)
                             KeyVal(
                               label: 'Contratto',
                               value: contractLabel,
-                              showDivider: false,
+                              showDivider: commessaLabel != null,
                               onTap: () => _showContractSummarySheet(context, contractId!),
+                            ),
+                          if (commessaLabel != null)
+                            KeyVal(
+                              label: 'Commessa',
+                              value: commessaLabel,
+                              showDivider: false,
                             ),
                         ],
                       ),
