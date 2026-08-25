@@ -550,6 +550,41 @@ void main() {
       return capture(() => client.updateCantiere(_id(21), name: 'Cantiere Centro'));
     });
 
+    // Cantieri module #8, Gap 1: contacts CRUD had no mobile call site at all.
+    contractTest('adding a cantiere contact matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.addCantiereContact(
+          _id(48),
+          name: 'Mario Rossi',
+          role: 'Titolare',
+          phone: '333123456',
+          email: 'mario.rossi@example.com',
+          notes: 'presente solo al mattino',
+        ),
+      );
+    });
+
+    contractTest('updating a cantiere contact matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.updateCantiereContact(_id(48), _id(49), name: 'Mario Rossi', role: 'Titolare'),
+      );
+    });
+
+    // Cantieri module #8, Gap 2: crew/assignment CRUD had no mobile call site at all.
+    contractTest('adding a cantiere assignment matches the server', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.addCantiereAssignment(
+          _id(50),
+          userId: _id(51),
+          role: 'Elettricista',
+          startDate: DateTime.utc(2026, 8, 1),
+        ),
+      );
+    });
+
     contractTest('schedule creation matches the server', () {
       final client = AdminApiClient(dio);
       return capture(

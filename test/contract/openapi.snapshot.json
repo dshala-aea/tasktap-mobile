@@ -1718,6 +1718,7 @@
         "tags": [
           "Cantieri"
         ],
+        "summary": "Hard-deletes a cantiere. Every foreign key in this database is \u0060DeleteBehavior.Restrict\u0060\n(see \u0060ApplicationDbContext.OnModelCreating\u0060) \u2014 a cantiere with any linked ticket,\nreport, work log, contact or crew assignment cannot be deleted at all, by design, not by\nomission. Without the catch below that surfaces as a raw 500 from the unhandled\nDbUpdateException; this turns it into the actual answer.",
         "parameters": [
           {
             "name": "id",

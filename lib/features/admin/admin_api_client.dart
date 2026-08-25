@@ -275,6 +275,109 @@ class AdminApiClient {
     await _dio.delete('/api/cantieri/$id');
   }
 
+  /// Live cantiere detail — `GET /api/cantieri/{id}` (`CantieriController.GetById`), returning
+  /// `CantiereDetailResponse` (`{cantiere, contacts, assignments}`). Unlike the Drift mirror
+  /// (`Cantieri` table, base fields only), this is the only source for a cantiere's contacts and
+  /// crew assignments — neither sub-resource is synced to the device.
+  Future<Map<String, dynamic>?> fetchCantiereDetail(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/cantieri/$id');
+    return res.data;
+  }
+
+  // ── Cantiere contacts ────────────────────────────────────────────────────
+  //
+  // Mirrors UpsertCantiereContactRequest (CantieriController.cs:386-393) — the same shape for
+  // both add and update, name required, everything else optional.
+
+  Future<String> addCantiereContact(
+    String cantiereId, {
+    required String name,
+    String? role,
+    String? phone,
+    String? email,
+    String? notes,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/cantieri/$cantiereId/contacts',
+      data: {'name': name, 'role': ?role, 'phone': ?phone, 'email': ?email, 'notes': ?notes},
+    );
+    return res.data!['id'] as String;
+  }
+
+  Future<void> updateCantiereContact(
+    String cantiereId,
+    String contactId, {
+    required String name,
+    String? role,
+    String? phone,
+    String? email,
+    String? notes,
+  }) async {
+    await _dio.put(
+      '/api/cantieri/$cantiereId/contacts/$contactId',
+      data: {'name': name, 'role': ?role, 'phone': ?phone, 'email': ?email, 'notes': ?notes},
+    );
+  }
+
+  /// Mirrors `DELETE /api/cantieri/{id}/contacts/{contactId}` (`CantieriController.DeleteContact`).
+  Future<void> deleteCantiereContact(String cantiereId, String contactId) async {
+    await _dio.delete('/api/cantieri/$cantiereId/contacts/$contactId');
+  }
+
+  // ── Cantiere crew assignments ───────────────────────────────────────────
+  //
+  // Individual technician only — `CantiereAssignment` has no `SquadraId` (unlike
+  // `ScheduleAssignment`), so there is no squadra-level assignment to offer here.
+
+  Future<String> addCantiereAssignment(
+    String cantiereId, {
+    required String userId,
+    String? role,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/cantieri/$cantiereId/assignments',
+      data: {
+        'userId': userId,
+        'role': ?role,
+        if (startDate != null) 'startDate': startDate.toIso8601String(),
+        if (endDate != null) 'endDate': endDate.toIso8601String(),
+      },
+    );
+    return res.data!['id'] as String;
+  }
+
+  /// Mirrors `DELETE /api/cantieri/{id}/assignments/{assignmentId}`
+  /// (`CantieriController.RemoveAssignment`).
+  Future<void> removeCantiereAssignment(String cantiereId, String assignmentId) async {
+    await _dio.delete('/api/cantieri/$cantiereId/assignments/$assignmentId');
+  }
+
+  // ── Cantiere linked records (read-only) ─────────────────────────────────
+  //
+  // None of these are synced to Drift — the cantiere detail screen's Ore/Interventi/Rapportini
+  // sections fetch them live, mirroring web's OreSection/InterventiSection/RapportiniSection
+  // (frontend/src/features/cantieri/CantiereSections.tsx).
+
+  /// Interventi (tickets) raised on this cantiere — `GET /api/tickets?cantiereId=`.
+  Future<List<Map<String, dynamic>>> fetchCantiereTickets(String cantiereId) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/tickets',
+      queryParameters: {'cantiereId': cantiereId, 'pageSize': 50, 'sort': '-createdAt'},
+    );
+    return pagedItems(res.data);
+  }
+
+  /// Hours logged on this cantiere — `GET /api/cantiereworklog?cantiereId=`.
+  Future<List<Map<String, dynamic>>> fetchCantiereWorkLogs(String cantiereId) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/cantiereworklog',
+      queryParameters: {'cantiereId': cantiereId, 'pageSize': 50, 'sort': '-workDate'},
+    );
+    return pagedItems(res.data);
+  }
+
   // ── Schedules ────────────────────────────────────────────────────────────
 
   Future<String> createSchedule({
@@ -857,6 +960,9 @@ class AdminApiClient {
 
   Future<List<Map<String, dynamic>>> fetchReports({
     String? stato,
+    // Rapportini documenting work on a cantiere (Gap 6) — `GET /api/reports?cantiereId=`, same
+    // filter web's RapportiniSection uses (frontend/src/features/cantieri/api.ts).
+    String? cantiereId,
     int page = 1,
     int pageSize = 50,
   }) async {
@@ -864,7 +970,7 @@ class AdminApiClient {
     // same endpoint, two shapes, one app. This was the broken one.
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/reports',
-      queryParameters: {'stato': ?stato, 'page': page, 'pageSize': pageSize},
+      queryParameters: {'stato': ?stato, 'cantiereId': ?cantiereId, 'page': page, 'pageSize': pageSize},
     );
     return pagedItems(res.data);
   }

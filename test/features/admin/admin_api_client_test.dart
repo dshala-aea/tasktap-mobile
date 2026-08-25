@@ -359,4 +359,190 @@ void main() {
       expect(detail?['aliquotaIVA'], 22.0);
     });
   });
+
+  // Cantieri module #8, Gap 1: contacts CRUD (UpsertCantiereContactRequest fields — name/role/
+  // phone/email/notes, camelCase per CantieriController.cs:386-393).
+  group('cantiere contacts (Gap 1)', () {
+    test('addCantiereContact posts to the contacts sub-route and reads "id"', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantieri/cant-1/contacts',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'id': 'contact-1'}, '/api/cantieri/cant-1/contacts'));
+
+      final id = await client.addCantiereContact('cant-1', name: 'Mario Rossi', phone: '333123');
+
+      expect(id, 'contact-1');
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantieri/cant-1/contacts',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['name'], 'Mario Rossi');
+      expect(captured['phone'], '333123');
+    });
+
+    test('updateCantiereContact PUTs the contact sub-resource', () async {
+      when(
+        () => mockDio.put<dynamic>(
+          '/api/cantieri/cant-1/contacts/contact-1',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse(null, '/api/cantieri/cant-1/contacts/contact-1'),
+      );
+
+      await client.updateCantiereContact('cant-1', 'contact-1', name: 'Mario Rossi', role: 'Titolare');
+
+      final captured = verify(
+        () => mockDio.put<dynamic>(
+          '/api/cantieri/cant-1/contacts/contact-1',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['name'], 'Mario Rossi');
+      expect(captured['role'], 'Titolare');
+    });
+
+    test('deleteCantiereContact DELETEs the contact sub-resource', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/cantieri/cant-1/contacts/contact-1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantieri/cant-1/contacts/contact-1'));
+
+      await client.deleteCantiereContact('cant-1', 'contact-1');
+
+      verify(() => mockDio.delete<dynamic>('/api/cantieri/cant-1/contacts/contact-1')).called(1);
+    });
+  });
+
+  // Cantieri module #8, Gap 2: crew/assignment CRUD (CreateCantiereAssignmentRequest — userId
+  // (required)/role/startDate/endDate, CantieriController.cs:395-400).
+  group('cantiere assignments (Gap 2)', () {
+    test('addCantiereAssignment posts userId and reads "id"', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantieri/cant-1/assignments',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({'id': 'assign-1'}, '/api/cantieri/cant-1/assignments'),
+      );
+
+      final id = await client.addCantiereAssignment('cant-1', userId: 'user-1', role: 'Elettricista');
+
+      expect(id, 'assign-1');
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/cantieri/cant-1/assignments',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['userId'], 'user-1');
+      expect(captured['role'], 'Elettricista');
+    });
+
+    test('removeCantiereAssignment DELETEs the assignment sub-resource', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/cantieri/cant-1/assignments/assign-1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/cantieri/cant-1/assignments/assign-1'));
+
+      await client.removeCantiereAssignment('cant-1', 'assign-1');
+
+      verify(
+        () => mockDio.delete<dynamic>('/api/cantieri/cant-1/assignments/assign-1'),
+      ).called(1);
+    });
+  });
+
+  // Cantieri module #8, Gap 6: read-only linked-records sections (ore/interventi/rapportini) on
+  // the cantiere detail screen — all live fetches, none of these are synced to Drift.
+  group('cantiere linked records (Gap 6)', () {
+    test('fetchCantiereDetail GETs /api/cantieri/{id} (contacts + assignments envelope)', () async {
+      when(() => mockDio.get<Map<String, dynamic>>('/api/cantieri/cant-1')).thenAnswer(
+        (_) async => _okResponse({
+          'cantiere': {'id': 'cant-1', 'name': 'Cantiere A'},
+          'contacts': <Map<String, dynamic>>[],
+          'assignments': <Map<String, dynamic>>[],
+        }, '/api/cantieri/cant-1'),
+      );
+
+      final detail = await client.fetchCantiereDetail('cant-1');
+
+      expect(detail?['contacts'], isEmpty);
+      expect(detail?['assignments'], isEmpty);
+    });
+
+    test('fetchCantiereTickets GETs /api/tickets filtered by cantiereId', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/tickets',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {'id': 't1', 'title': 'Guasto quadro'},
+          ],
+        }, '/api/tickets'),
+      );
+
+      final tickets = await client.fetchCantiereTickets('cant-1');
+
+      expect(tickets, hasLength(1));
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/tickets',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['cantiereId'], 'cant-1');
+    });
+
+    test('fetchCantiereWorkLogs GETs /api/cantiereworklog filtered by cantiereId', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/cantiereworklog',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {'id': 'wl1', 'workDate': '2026-08-20T00:00:00Z'},
+          ],
+        }, '/api/cantiereworklog'),
+      );
+
+      final logs = await client.fetchCantiereWorkLogs('cant-1');
+
+      expect(logs, hasLength(1));
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/cantiereworklog',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['cantiereId'], 'cant-1');
+    });
+
+    test('fetchReports sends cantiereId when provided, omits it otherwise', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/reports',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <Map<String, dynamic>>[]}, '/api/reports'));
+
+      await client.fetchReports(cantiereId: 'cant-1');
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/reports',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['cantiereId'], 'cant-1');
+    });
+  });
 }

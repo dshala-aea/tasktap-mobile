@@ -42,11 +42,11 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
   bool _isSaving = false;
 
   /// True once an edit-mode load has completed and found nothing in the
-  /// local cache. `db.cantieri` is never populated by sync (see
-  /// docs/api-gap-list.md), so this is the normal outcome for every
-  /// cantiereId today — surfaced explicitly instead of silently leaving
-  /// every field blank, which would let a save overwrite the real record
-  /// with empty values.
+  /// local cache. `db.cantieri` IS populated by sync (`SyncService._upsertCantieri`) — this now
+  /// only happens for a cantiere created on another device/surface that this device has not yet
+  /// pulled down, or one deleted server-side since the last sync — surfaced explicitly instead of
+  /// silently leaving every field blank, which would let a save overwrite the real record with
+  /// empty values.
   bool _prefillFailed = false;
 
   bool get _isEditing => widget.cantiereId != null;
