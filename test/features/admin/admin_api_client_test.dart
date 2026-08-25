@@ -607,4 +607,78 @@ void main() {
       expect(commesse.single['codice'], 'COM-001');
     });
   });
+
+  // Gap 3 of the feature audit: create/update already existed for Locations, delete did not.
+  group('deleteLocation (Gap 3)', () {
+    test('DELETEs /api/locations/{id}', () async {
+      when(
+        () => mockDio.delete<dynamic>('/api/locations/loc-1'),
+      ).thenAnswer((_) async => _okResponse(null, '/api/locations/loc-1'));
+
+      await client.deleteLocation('loc-1');
+
+      verify(() => mockDio.delete<dynamic>('/api/locations/loc-1')).called(1);
+    });
+  });
+
+  // Gap 7/8 of the feature audit: a customer's Contratti/Prodotti sections need the backend's own
+  // customerId filter, not a client-side filter over an unpaginated (default 20-item) fetch.
+  group('customer-scoped fetches (Gap 7/8)', () {
+    test('fetchContracts sends customerId as a query param when given', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <dynamic>[]}, '/api/contracts'));
+
+      await client.fetchContracts(customerId: 'cust-1');
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['customerId'], 'cust-1');
+    });
+
+    test('fetchContracts omits customerId when not given', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <dynamic>[]}, '/api/contracts'));
+
+      await client.fetchContracts();
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/contracts',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured.containsKey('customerId'), isFalse);
+    });
+
+    test('fetchProdottiAssistenza sends customerId as a query param when given', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <dynamic>[]}, '/api/prodottoassistenza'));
+
+      await client.fetchProdottiAssistenza(customerId: 'cust-1');
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['customerId'], 'cust-1');
+    });
+  });
 }

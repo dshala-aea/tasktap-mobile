@@ -211,6 +211,13 @@ class AdminApiClient {
     );
   }
 
+  /// Mirrors `DELETE /api/locations/{id}` (`LocationsController.Delete`). Gap 3 of the feature
+  /// audit — the create/edit half of Sedi CRUD existed, delete did not, on the customer detail
+  /// screen or anywhere else in the app.
+  Future<void> deleteLocation(String id) async {
+    await _dio.delete('/api/locations/$id');
+  }
+
   // ── Cantieri ─────────────────────────────────────────────────────────────
 
   Future<String> createCantiere({
@@ -769,8 +776,15 @@ class AdminApiClient {
 
   // ── ProdottoAssistenza ──────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> fetchProdottiAssistenza() async {
-    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza');
+  /// [customerId], when given, filters server-side via `ProdottoAssistenzaController.GetAll`'s
+  /// own `customerId` query param (Gap 8 of the feature audit — a customer's Prodotti section
+  /// needs this scoped, not a client-side filter over an unpaginated fetch that could miss rows
+  /// past the default 20-item page).
+  Future<List<Map<String, dynamic>>> fetchProdottiAssistenza({String? customerId}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/prodottoassistenza',
+      queryParameters: {'customerId': ?customerId, 'pageSize': 100},
+    );
     return pagedItems(res.data);
   }
 
@@ -830,8 +844,15 @@ class AdminApiClient {
 
   // ── Contracts ────────────────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> fetchContracts() async {
-    final res = await _dio.get<Map<String, dynamic>>('/api/contracts');
+  /// [customerId], when given, filters server-side via `ContractsController.GetAll`'s own
+  /// `customerId` query param (Gap 7 of the feature audit — a customer's Contratti section needs
+  /// this scoped, not a client-side filter over an unpaginated fetch that could miss rows past the
+  /// default 20-item page).
+  Future<List<Map<String, dynamic>>> fetchContracts({String? customerId}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/contracts',
+      queryParameters: {'customerId': ?customerId, 'pageSize': 100},
+    );
     return pagedItems(res.data);
   }
 

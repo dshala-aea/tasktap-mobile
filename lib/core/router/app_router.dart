@@ -373,8 +373,13 @@ GoRouter buildRouter(WidgetRef ref) {
                       GoRoute(
                         path: 'nuova',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) =>
-                            const AdminLocationFormScreen(),
+                        // `extra` carries an optional pre-selected customerId when pushed from
+                        // the customer detail screen's Sedi section (Gap 3 of the feature
+                        // audit) — null (the global Sedi list's own FAB) leaves the picker empty
+                        // as before.
+                        builder: (context, state) => AdminLocationFormScreen(
+                          initialCustomerId: state.extra as String?,
+                        ),
                       ),
                       GoRoute(
                         path: ':id',

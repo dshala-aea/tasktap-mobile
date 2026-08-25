@@ -33,6 +33,8 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
   final _postalCodeCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _latitudeCtrl = TextEditingController();
+  final _longitudeCtrl = TextEditingController();
   String? _selectedCustomerId;
   bool _isSaving = false;
 
@@ -58,6 +60,8 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
         _postalCodeCtrl.text = loc.postalCode ?? '';
         _phoneCtrl.text = loc.phone ?? '';
         _notesCtrl.text = loc.notes ?? '';
+        _latitudeCtrl.text = loc.latitude?.toString() ?? '';
+        _longitudeCtrl.text = loc.longitude?.toString() ?? '';
         _selectedCustomerId = loc.customerId;
       });
     }
@@ -71,6 +75,8 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
     _postalCodeCtrl.dispose();
     _phoneCtrl.dispose();
     _notesCtrl.dispose();
+    _latitudeCtrl.dispose();
+    _longitudeCtrl.dispose();
     super.dispose();
   }
 
@@ -87,6 +93,8 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
     setState(() => _isSaving = true);
     try {
       final api = ref.read(adminApiClientProvider);
+      final latitude = double.tryParse(_latitudeCtrl.text.trim());
+      final longitude = double.tryParse(_longitudeCtrl.text.trim());
 
       if (_isEditing) {
         await api.updateLocation(
@@ -96,6 +104,8 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
           address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
           city: _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
           postalCode: _postalCodeCtrl.text.trim().isEmpty ? null : _postalCodeCtrl.text.trim(),
+          latitude: latitude,
+          longitude: longitude,
           phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
           notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
@@ -106,6 +116,8 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
           address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
           city: _cityCtrl.text.trim().isEmpty ? null : _cityCtrl.text.trim(),
           postalCode: _postalCodeCtrl.text.trim().isEmpty ? null : _postalCodeCtrl.text.trim(),
+          latitude: latitude,
+          longitude: longitude,
           phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
           notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         );
@@ -188,6 +200,36 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
             const SizedBox(height: 16),
 
             AppTextField(label: 'Telefono', controller: _phoneCtrl),
+            const SizedBox(height: 16),
+
+            // Plain numeric fields — no map-picker widget exists anywhere in this app yet (web's
+            // Sedi tab uses an inline map, but that is a net-new component this pass isn't
+            // building). Both optional: a sede with no coordinates is common and not an error.
+            Row(
+              children: [
+                Expanded(
+                  child: AppTextField(
+                    label: 'Latitudine',
+                    controller: _latitudeCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppTextField(
+                    label: 'Longitudine',
+                    controller: _longitudeCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
 
             AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),

@@ -45,6 +45,22 @@ final ticketsForCustomerProvider = StreamProvider.autoDispose
           .watch();
     });
 
+/// All active locations (sedi) for a given [customerId], alphabetical by name.
+///
+/// Locations are synced to Drift (unlike cantiere contacts/assignments, which are fetched live),
+/// so this reads the local mirror the same way [ticketsForCustomerProvider] does — offline-capable,
+/// no network round-trip. Gap 3 of the feature audit: the customer detail screen had no Sedi
+/// section at all despite `LocationsController` having full CRUD and the location itself already
+/// being synced to the device.
+final locationsForCustomerProvider = StreamProvider.autoDispose
+    .family<List<Location>, String>((ref, customerId) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(db.locations)
+            ..where((l) => l.customerId.equals(customerId) & l.isActive.equals(true))
+            ..orderBy([(l) => OrderingTerm.asc(l.name)]))
+          .watch();
+    });
+
 /// The server-side customer record: the fiscal fields and counts the mirror does not carry.
 ///
 /// Enrichment, not the base. Everything the cliente detail already showed keeps coming from Drift,

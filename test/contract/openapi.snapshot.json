@@ -2680,6 +2680,30 @@
         }
       }
     },
+    "/api/customer-portal/admin/users/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "CustomerPortalAdmin"
+        ],
+        "summary": "Undoes Task\u0026lt;IActionResult\u0026gt; CustomerPortalAdminController.Deactivate(Guid id). Before this existed, a deactivated portal user could only\nbe recovered by deleting the row and re-inviting from scratch \u2014 the identity provider\naccount (string CustomerPortalUser.ExternalUserId) still exists the whole time, this\njust flips the local gate back open.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/customer-portal/admin/users/{id}": {
       "delete": {
         "tags": [

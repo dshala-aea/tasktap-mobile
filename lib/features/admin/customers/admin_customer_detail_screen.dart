@@ -179,6 +179,12 @@ class _CustomerDetailBody extends ConsumerWidget {
             child: _OverviewCard(customerId: customerId),
           ),
         ),
+        // ── Sedi (Gap 3) ─────────────────────────────────────────────────
+        SliverToBoxAdapter(child: _SediSection(customerId: customerId)),
+        // ── Contratti (Gap 7, read-only + create) ───────────────────────
+        SliverToBoxAdapter(child: _ContrattiSection(customerId: customerId)),
+        // ── Prodotti assistenza (Gap 8, read-only + create) ─────────────
+        SliverToBoxAdapter(child: _ProdottiSection(customerId: customerId)),
         // ── Note ─────────────────────────────────────────────────────────
         if (customer.notes != null && customer.notes!.isNotEmpty) ...[
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
@@ -312,6 +318,314 @@ class _OverviewStat extends StatelessWidget {
 
 /// The customer's ticket history from the local Drift cache — `ticketsForCustomerProvider`
 /// existed with no widget consuming it.
+// ══════════════════════════════════════════════════════════════════════════════
+// Sedi (Gap 3) — locations are synced to Drift (unlike cantiere contacts/assignments), so the
+// list itself is offline-capable via `locationsForCustomerProvider`. Create/edit/delete all go
+// through the global Sedi CRUD (`admin_location_form_screen.dart` / `admin_location_detail_
+// screen.dart`, both already built) rather than duplicating that form inline — "nuova" is pushed
+// pre-scoped to this customer via `extra`, edit pushes straight to the edit form, delete is
+// inline (mirrors `_deleteCustomer`'s confirm-then-call, no separate screen needed for that).
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SediSection extends ConsumerWidget {
+  const _SediSection({required this.customerId});
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locationsAsync = ref.watch(locationsForCustomerProvider(customerId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle(
+          title: 'Sedi',
+          action: IconButton(
+            icon: const Icon(LucideIcons.plus),
+            tooltip: 'Nuova sede',
+            onPressed: () => context.push('/altro/sedi/nuova', extra: customerId),
+          ),
+        ),
+        locationsAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) =>
+              _SectionError(onRetry: () => ref.invalidate(locationsForCustomerProvider(customerId))),
+          data: (locations) {
+            if (locations.isEmpty) {
+              return const EmptyState(
+                icon: LucideIcons.mapPin,
+                title: 'Nessuna sede',
+                body: 'Aggiungi una sede per questo cliente con il pulsante +.',
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: Column(
+                children: locations.asMap().entries.map((entry) {
+                  final loc = entry.value;
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.mapPin),
+                    title: loc.name,
+                    subtitle: loc.city != null && loc.city!.isNotEmpty ? loc.city : null,
+                    meta: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(LucideIcons.pencil, size: 18),
+                          tooltip: 'Modifica sede',
+                          onPressed: () => context.push('/altro/sedi/${loc.id}/modifica'),
+                        ),
+                        IconButton(
+                          icon: const Icon(LucideIcons.trash2, size: 18),
+                          tooltip: 'Elimina sede',
+                          onPressed: () => _deleteLocation(context, ref, id: loc.id, name: loc.name),
+                        ),
+                      ],
+                    ),
+                    onTap: () => context.push('/altro/sedi/${loc.id}'),
+                    showDivider: entry.key < locations.length - 1,
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteLocation(
+    BuildContext context,
+    WidgetRef ref, {
+    required String id,
+    required String name,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminare la sede?'),
+        content: Text('Vuoi eliminare "$name" dalle sedi di questo cliente?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await ref.read(adminApiClientProvider).deleteLocation(id);
+      unawaited(ref.read(syncProvider.notifier).performSync());
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sede eliminata')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Impossibile eliminare. Riprova.'),
+            backgroundColor: context.colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Contratti (Gap 7) — no local Drift mirror (like the cantiere's live-fetched sub-resources), so
+// this reads live via `AdminApiClient.fetchContracts(customerId: ...)`, server-side filtered.
+// Read-only list is the priority per the audit; "+" reuses the existing global create form
+// (`admin_contract_form_screen.dart`) rather than teaching it a pre-selected customer — cheap to
+// link, not cheap to also thread a new constructor param through a form that already resolves its
+// customer from a dropdown.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Contracts for [customerId] — `GET /api/contracts?customerId=`.
+final adminCustomerContractsProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
+      final api = ref.watch(adminApiClientProvider);
+      return api.fetchContracts(customerId: customerId);
+    });
+
+class _ContrattiSection extends ConsumerWidget {
+  const _ContrattiSection({required this.customerId});
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contractsAsync = ref.watch(adminCustomerContractsProvider(customerId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle(
+          title: 'Contratti',
+          action: IconButton(
+            icon: const Icon(LucideIcons.plus),
+            tooltip: 'Nuovo contratto',
+            onPressed: () => context.push('/altro/contratti/nuovo'),
+          ),
+        ),
+        contractsAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => _SectionError(
+            onRetry: () => ref.invalidate(adminCustomerContractsProvider(customerId)),
+          ),
+          data: (contracts) {
+            if (contracts.isEmpty) {
+              return const EmptyState(
+                icon: LucideIcons.fileSignature,
+                title: 'Nessun contratto',
+                body: 'Non risultano contratti per questo cliente.',
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: Column(
+                children: contracts.asMap().entries.map((entry) {
+                  final c = entry.value;
+                  final name = c['name'] as String? ?? '';
+                  final isActive = c['isActive'] as bool? ?? true;
+                  final price = c['price'] as num?;
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.fileSignature),
+                    title: name,
+                    subtitle: price != null ? '€${price.toStringAsFixed(2)}' : null,
+                    meta: isActive
+                        ? null
+                        : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
+                    onTap: () => context.push('/altro/contratti/${c['id']}', extra: c),
+                    showDivider: entry.key < contracts.length - 1,
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Prodotti assistenza (Gap 8) — same treatment as Contratti: no Drift mirror, live-fetched and
+// server-filtered by customerId, read-only priority with a cheap "+" to the existing global form.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Prodotti assistenza for [customerId] — `GET /api/prodottoassistenza?customerId=`.
+final adminCustomerProdottiProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, customerId) async {
+      final api = ref.watch(adminApiClientProvider);
+      return api.fetchProdottiAssistenza(customerId: customerId);
+    });
+
+class _ProdottiSection extends ConsumerWidget {
+  const _ProdottiSection({required this.customerId});
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prodottiAsync = ref.watch(adminCustomerProdottiProvider(customerId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle(
+          title: 'Prodotti assistenza',
+          action: IconButton(
+            icon: const Icon(LucideIcons.plus),
+            tooltip: 'Nuovo prodotto',
+            onPressed: () => context.push('/altro/prodotti/nuovo'),
+          ),
+        ),
+        prodottiAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) => _SectionError(
+            onRetry: () => ref.invalidate(adminCustomerProdottiProvider(customerId)),
+          ),
+          data: (prodotti) {
+            if (prodotti.isEmpty) {
+              return const EmptyState(
+                icon: LucideIcons.wrench,
+                title: 'Nessun prodotto',
+                body: 'Non risultano prodotti in assistenza per questo cliente.',
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: Column(
+                children: prodotti.asMap().entries.map((entry) {
+                  final p = entry.value;
+                  final name = p['name'] as String? ?? '';
+                  final serialNumber = p['serialNumber'] as String?;
+                  final isActive = p['isActive'] as bool? ?? true;
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.wrench),
+                    title: name,
+                    subtitle: serialNumber != null && serialNumber.isNotEmpty
+                        ? serialNumber
+                        : null,
+                    meta: isActive
+                        ? null
+                        : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
+                    onTap: () => context.push('/altro/prodotti/${p['id']}', extra: p),
+                    showDivider: entry.key < prodotti.length - 1,
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Shared inline error for a section — mirrors `_SectionError` in
+// admin_cantiere_detail_screen.dart (a failed sub-section should not block the rest of the
+// detail screen from being usable).
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SectionError extends StatelessWidget {
+  const _SectionError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: AppSpacing.md,
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Impossibile caricare. Riprova.',
+              style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.red),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Riprova')),
+        ],
+      ),
+    );
+  }
+}
+
 class _TicketHistoryCard extends ConsumerWidget {
   const _TicketHistoryCard({required this.customerId});
   final String customerId;

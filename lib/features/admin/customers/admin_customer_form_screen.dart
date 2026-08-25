@@ -39,6 +39,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
   late final TextEditingController _postalCodeCtrl;
   late final TextEditingController _countryCtrl;
   late final TextEditingController _notesCtrl;
+  bool _isActive = true;
   bool _isSubmitting = false;
 
   @override
@@ -77,6 +78,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
     _postalCodeCtrl.text = customer.postalCode ?? '';
     _countryCtrl.text = customer.country ?? '';
     _notesCtrl.text = customer.notes ?? '';
+    setState(() => _isActive = customer.isActive);
   }
 
   @override
@@ -115,6 +117,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
           postalCode: _postalCodeCtrl.text.trim(),
           country: _countryCtrl.text.trim(),
           notes: _notesCtrl.text.trim(),
+          isActive: _isActive,
         );
       } else {
         await client.createCustomer(
@@ -231,7 +234,30 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             const StepLabel(title: 'Note'),
             const SizedBox(height: 12),
             AppTextField.multiline(label: 'Note', controller: _notesCtrl, maxLines: 4),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // ── Stato (Gap 11) — edit mode only: `createCustomer` has no isActive param, every
+            // new customer starts active server-side, so there is nothing to toggle at creation.
+            if (widget.isEditMode) ...[
+              AppCard(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.base,
+                  vertical: AppSpacing.xs,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Attivo',
+                        style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                      ),
+                    ),
+                    AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // ── Submit ─────────────────────────────────────────────────────
             AppButton(

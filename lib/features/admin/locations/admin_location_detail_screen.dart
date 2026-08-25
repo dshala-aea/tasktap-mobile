@@ -86,6 +86,11 @@ class _LocationDetailBody extends StatelessWidget {
                   KeyVal(label: 'Indirizzo', value: location.address ?? '—'),
                   KeyVal(label: 'CAP', value: location.postalCode ?? '—'),
                   KeyVal(label: 'Telefono', value: location.phone ?? '—'),
+                  if (location.latitude != null && location.longitude != null)
+                    KeyVal(
+                      label: 'Coordinate',
+                      value: '${location.latitude}, ${location.longitude}',
+                    ),
                   KeyVal(
                     label: 'Note',
                     value: location.notes?.isNotEmpty == true ? location.notes! : '—',
