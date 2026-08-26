@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -68,7 +70,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 AppSpacing.base,
               ),
-              child: AppCard(
+              child: VetroCard(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                 child: Column(
                   children: [
@@ -114,7 +116,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
                   AppSpacing.pagePadding,
                   AppSpacing.base,
                 ),
-                child: AppCard(
+                child: VetroCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -136,7 +138,7 @@ class AdminReportDetailScreen extends ConsumerWidget {
                   AppSpacing.pagePadding,
                   AppSpacing.base,
                 ),
-                child: AppCard(
+                child: VetroCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -206,14 +208,14 @@ class _StateTransitionButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (stato == 'Inviato') {
-      return AppButton(
+      return VetroButton(
         label: 'Segna come controllato',
         icon: const Icon(LucideIcons.checkCircle, size: 18),
         onPressed: () => onTransition('controlla'),
       );
     }
     if (stato == 'Controllato') {
-      return AppButton(
+      return VetroButton(
         label: 'Segna come fatturato',
         icon: const Icon(LucideIcons.receipt, size: 18),
         onPressed: () => onTransition('fattura'),

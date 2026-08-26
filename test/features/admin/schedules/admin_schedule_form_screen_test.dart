@@ -25,6 +25,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_form_screen.dart';
+import 'package:tasktap_mobile/core/widgets/vetro_button.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 
 class MockDio extends Mock implements Dio {}
@@ -196,7 +197,7 @@ void main() {
   /// isn't enough here because that scrolls a widget that's already found; this one hasn't been
   /// built yet.
   Future<void> tapSubmitButton(WidgetTester tester, String label) async {
-    final button = find.widgetWithText(AppButton, label);
+    final button = find.widgetWithText(VetroButton, label);
     await tester.scrollUntilVisible(button, 300, scrollable: formScrollable);
     await tester.tap(button);
     await tester.pumpAndSettle();
@@ -205,14 +206,14 @@ void main() {
   /// Like [tapSubmitButton], for a save that is expected to hit a conflict and open the dialog.
   ///
   /// This can't finish with `pumpAndSettle`: `_isSaving` stays true for as long as the conflict
-  /// dialog is up — that is the point, so a second tap can't race in behind it — and `AppButton`
+  /// dialog is up — that is the point, so a second tap can't race in behind it — and `VetroButton`
   /// renders that as an indeterminate `CircularProgressIndicator`, which never lets
   /// `pumpAndSettle`'s frame-quiescence check succeed (the same class of problem
   /// ticket_detail_screen_test.dart's own `tapAndSettle` documents for its upload buttons).
   /// Bounded pumps give the mocked check-conflicts call — and the dialog's entrance animation —
   /// room to resolve without waiting for that spinner to stop, which it never will on its own.
   Future<void> tapSubmitButtonExpectingDialog(WidgetTester tester, String label) async {
-    final button = find.widgetWithText(AppButton, label);
+    final button = find.widgetWithText(VetroButton, label);
     await tester.scrollUntilVisible(button, 300, scrollable: formScrollable);
     await tester.tap(button);
     for (var i = 0; i < 10; i++) {

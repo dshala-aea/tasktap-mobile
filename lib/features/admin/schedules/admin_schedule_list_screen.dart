@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -635,7 +636,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: AppButton(
+                  child: VetroButton(
                     label: 'Applica',
                     onPressed: () => Navigator.pop(
                       context,

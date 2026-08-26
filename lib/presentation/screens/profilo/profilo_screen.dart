@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_vetro_palette.dart';
+import '../../../core/widgets/vetro_button.dart';
 import '../../providers/auth_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -42,11 +44,11 @@ class ProfiloScreen extends ConsumerWidget {
                     // Avatar
                     CircleAvatar(
                       radius: 28,
-                      backgroundColor: AppColors.brand,
+                      backgroundColor: context.vetro.tint,
                       child: Text(
                         _initials(user.displayName ?? user.email),
                         style: AppTextStyles.titleLarge.copyWith(
-                          color: context.colors.brandOn,
+                          color: Colors.white,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -71,9 +73,10 @@ class ProfiloScreen extends ConsumerWidget {
             const Spacer(),
 
             // ── Logout ───────────────────────────────────────────────────
-            AppButton.danger(
+            VetroButton(
               label: 'Disconnetti',
               icon: const Icon(LucideIcons.logOut, size: 18),
+              gradientColors: const [AppColors.stopLight, AppColors.stopDark],
               onPressed: () async {
                 final confirmed = await _confirmLogout(context);
                 if (confirmed) {
