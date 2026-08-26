@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -77,7 +78,7 @@ class _LocationDetailBody extends StatelessWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: AppCard(
+            child: VetroCard(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
                 children: [

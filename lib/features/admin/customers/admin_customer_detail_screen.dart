@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
 import '../../../data/sync/sync_service.dart';
@@ -140,7 +141,7 @@ class _CustomerDetailBody extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: AppCard(
+            child: VetroCard(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
                 children: [
@@ -191,7 +192,7 @@ class _CustomerDetailBody extends ConsumerWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: AppCard(
+              child: VetroCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -209,7 +210,7 @@ class _CustomerDetailBody extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: AppCard(
+            child: VetroCard(
               child: Row(
                 children: [
                   Text(
@@ -248,7 +249,7 @@ class _OverviewCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final overviewAsync = ref.watch(clienteOverviewProvider(customerId));
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: overviewAsync.when(
         loading: () => const Padding(
@@ -634,7 +635,7 @@ class _TicketHistoryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ticketsAsync = ref.watch(ticketsForCustomerProvider(customerId));
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: ticketsAsync.when(
         loading: () => const Padding(
