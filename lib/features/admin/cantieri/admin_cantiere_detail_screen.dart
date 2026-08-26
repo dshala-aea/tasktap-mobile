@@ -9,6 +9,8 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/error_message.dart';
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -170,7 +172,7 @@ class _CantiereDetailBody extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: AppCard(
+            child: VetroCard(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
                 children: [
@@ -521,7 +523,7 @@ class _ContactFormSheetState extends State<_ContactFormSheet> {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: AppButton(
+              child: VetroButton(
                 label: _isSaving ? 'Salvataggio…' : 'Salva',
                 onPressed: _isSaving ? null : _save,
               ),
@@ -782,7 +784,7 @@ class _AddAssignmentSheetState extends State<_AddAssignmentSheet> {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: AppButton(
+            child: VetroButton(
               label: _isSaving ? 'Salvataggio…' : 'Aggiungi',
               onPressed: (_selectedUserId == null || _isSaving) ? null : _save,
             ),
