@@ -159,17 +159,27 @@ void main() {
     // Bypasses the drawing gesture entirely — this test is about what happens once
     // `_SigDialog` hands real bytes back, which is exactly what `saveCustomerSignature` receives
     // regardless of how those bytes were produced.
-    final dir = await Directory.systemTemp.createTemp('sig_unit_test_');
-    final file = File('${dir.path}/sig.png');
-    await file.writeAsBytes(Uint8List.fromList(List.generate(64, (i) => i)));
+    //
+    // Wrapped in tester.runAsync(): this is a direct, awaited call to a Drift-backed notifier
+    // method from inside testWidgets' fake-async zone. Every other place in this codebase that
+    // awaits a Drift-backed notifier method directly (timbra_providers_test.dart,
+    // auth_providers_test.dart) does so from a plain test(), not testWidgets() — this file is the
+    // first to do it from inside the fake-async zone, and without runAsync it hangs forever (real
+    // async I/O never resolves without escaping to the real zone), timing out the whole test after
+    // 10 minutes. Confirmed reproducible across two independent runs before this fix.
+    await tester.runAsync(() async {
+      final dir = await Directory.systemTemp.createTemp('sig_unit_test_');
+      final file = File('${dir.path}/sig.png');
+      await file.writeAsBytes(Uint8List.fromList(List.generate(64, (i) => i)));
 
-    await container
-        .read(reportEditorProvider(_reportId).notifier)
-        .saveCustomerSignature(
-          allegatoId: 'sig-cliente-test',
-          bytes: await file.readAsBytes(),
-          localPath: file.path,
-        );
+      await container
+          .read(reportEditorProvider(_reportId).notifier)
+          .saveCustomerSignature(
+            allegatoId: 'sig-cliente-test',
+            bytes: await file.readAsBytes(),
+            localPath: file.path,
+          );
+    });
 
     await tester.pumpAndSettle();
 
