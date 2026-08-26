@@ -11,6 +11,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/vetro_card.dart';
+import '../../../core/widgets/vetro_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -169,6 +170,28 @@ class _CantiereDetailBody extends ConsumerWidget {
             ],
           ),
         ),
+        // ── Map / Naviga ─────────────────────────────────────────────────
+        //
+        // A real gap the Vetro mockup's own `.mapcard` called for — an address shown with no way
+        // to act on it. Only when there's an address worth navigating to.
+        if (cantiere.address != null && cantiere.address!.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                0,
+              ),
+              child: VetroMapCard(
+                address: [
+                  cantiere.address,
+                  cantiere.city,
+                  cantiere.postalCode,
+                ].where((s) => s != null && s.isNotEmpty).join(', '),
+              ),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),

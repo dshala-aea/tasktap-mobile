@@ -14,6 +14,7 @@ import '../../core/theme/app_rack.dart';
 import '../../core/widgets/vetro_button.dart';
 import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/vetro_compartment_tile.dart';
+import '../../core/widgets/vetro_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
@@ -193,6 +194,11 @@ class _TicketDetailBody extends ConsumerWidget {
     final customerName =
         customerAsync.valueOrNull?.companyName ?? ticket.customerId;
     final locationName = locationAsync.valueOrNull?.name ?? ticket.locationId;
+    final locationAddress = [
+      locationAsync.valueOrNull?.address,
+      locationAsync.valueOrNull?.city,
+      locationAsync.valueOrNull?.postalCode,
+    ].where((s) => s != null && s.isNotEmpty).join(', ');
     // Was the raw `assignedUserId` — a GUID, rendered at a technician as the answer to "who has
     // this job". Resolved from the synced colleagues mirror, so it still reads offline; falls back
     // to the id when the mirror does not know it rather than showing nothing.
@@ -311,6 +317,24 @@ class _TicketDetailBody extends ConsumerWidget {
                     child: _TicketTimerBar(ticketId: ticket.id),
                   ),
                 ),
+
+                // Map / Naviga — a real gap the Vetro mockup's own `.mapcard` called for: an
+                // address shown with no way to act on it. Lives in the scrollable body, not the
+                // fixed header/status-row/bottom-action-stack chrome this file's own comments
+                // warn is already squeezed — this sliver just adds to the elastic scroll area
+                // the same way every other VetroCard here already does.
+                if (locationAddress.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: VetroMapCard(address: locationAddress),
+                    ),
+                  ),
 
                 // Now: just enough to know where you stand. Data, Chiusura, Descrizione and Note
                 // tecnico moved into the Dettagli compartment below — they're read once, not on
