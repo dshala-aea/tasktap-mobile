@@ -6,7 +6,6 @@ import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -14,6 +13,7 @@ import '../calendario_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// Calendario → Settimana view: 7-column day grid for the selected week with
 /// compact event chips per day. Columns are scrollable horizontally; chips
@@ -88,7 +88,7 @@ class SettimanaView extends ConsumerWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
                             color: isToday
-                                ? AppColors.Y
+                                ? context.vetro.tint
                                 : context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
