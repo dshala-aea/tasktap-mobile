@@ -434,15 +434,21 @@ class _TicketDetailBody extends ConsumerWidget {
                     onPressed: () => _createRapportino(context, ref, ticket),
                   ),
                   const SizedBox(height: 8),
-                  AppButton.secondary(
-                    label: 'Timbra cantiere',
-                    icon: const Icon(LucideIcons.mapPin),
-                    size: AppButtonSize.sm,
-                    fullWidth: true,
-                    onPressed: () => context.push(
-                      AppRoutes.cantiereTimbraPath(
-                        ticketId: ticket.id,
-                        customerId: ticket.customerId,
+                  // compact for the smaller type/padding "demoted" look the comment above calls
+                  // for, wrapped to force full width — VetroButton's compact flag is otherwise
+                  // never full-width (it's tuned for inline controls like a timer bar's buttons).
+                  SizedBox(
+                    width: double.infinity,
+                    child: VetroButton(
+                      label: 'Timbra cantiere',
+                      icon: const Icon(LucideIcons.mapPin),
+                      compact: true,
+                      secondary: true,
+                      onPressed: () => context.push(
+                        AppRoutes.cantiereTimbraPath(
+                          ticketId: ticket.id,
+                          customerId: ticket.customerId,
+                        ),
                       ),
                     ),
                   ),

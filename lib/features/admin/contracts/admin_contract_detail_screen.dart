@@ -10,6 +10,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/offline_guard.dart';
+import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
@@ -152,9 +153,9 @@ class AdminContractDetailScreen extends ConsumerWidget {
                   AppSpacing.pagePadding,
                   AppSpacing.base,
                 ),
-                child: AppButton(
+                child: VetroButton(
                   label: 'Genera pianificazione',
-                  variant: AppButtonVariant.secondary,
+                  secondary: true,
                   onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
                 ),
               ),
