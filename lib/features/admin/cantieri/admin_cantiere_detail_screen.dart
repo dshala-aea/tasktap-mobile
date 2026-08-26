@@ -206,7 +206,14 @@ class _CantiereDetailBody extends ConsumerWidget {
                   KeyVal(label: 'CAP', value: cantiere.postalCode ?? '—'),
                   KeyVal(label: 'Inizio', value: startLabel),
                   KeyVal(label: 'Fine', value: endLabel, showDivider: commessaLabel != null),
-                  if (commessaLabel != null) KeyVal(label: 'Commessa', value: commessaLabel),
+                  if (commessaLabel != null)
+                    KeyVal(
+                      label: 'Commessa',
+                      value: commessaLabel,
+                      onTap: commessaId == null
+                          ? null
+                          : () => context.push('/altro/commesse/$commessaId'),
+                    ),
                   KeyVal(
                     label: 'Note',
                     value: cantiere.notes?.isNotEmpty == true ? cantiere.notes! : '—',

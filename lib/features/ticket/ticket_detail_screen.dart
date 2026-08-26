@@ -379,6 +379,9 @@ class _TicketDetailBody extends ConsumerWidget {
                               label: 'Commessa',
                               value: commessaLabel,
                               showDivider: false,
+                              onTap: commessaId == null
+                                  ? null
+                                  : () => context.push('/altro/commesse/$commessaId'),
                             ),
                         ],
                       ),

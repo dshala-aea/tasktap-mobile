@@ -24,6 +24,7 @@ import '../../features/admin/locations/admin_location_detail_screen.dart';
 import '../../features/admin/locations/admin_location_form_screen.dart';
 import '../../features/admin/cantieri/admin_cantiere_list_screen.dart';
 import '../../features/admin/cantieri/admin_cantiere_detail_screen.dart';
+import '../../features/admin/commesse/admin_commessa_detail_screen.dart';
 import '../../features/admin/cantieri/admin_cantiere_form_screen.dart';
 import '../../features/admin/schedules/admin_schedule_list_screen.dart';
 import '../../features/admin/schedules/admin_schedule_detail_screen.dart';
@@ -334,6 +335,13 @@ GoRouter buildRouter(WidgetRef ref) {
                         ],
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'commesse/:id',
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => AdminCommessaDetailScreen(
+                      commessaId: state.pathParameters['id']!,
+                    ),
                   ),
                   GoRoute(
                     path: 'cantieri',
