@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
@@ -87,7 +88,7 @@ class AdminMagazzinoDetailScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                  AppCard(
+                  VetroCard(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                     child: Column(
                       children: [

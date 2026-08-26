@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/offline_guard.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -199,7 +200,7 @@ class _MaterialeDetailBody extends ConsumerWidget {
                       ),
                     ),
                   ),
-                AppCard(
+                VetroCard(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                   child: Column(
                     children: [
@@ -226,7 +227,7 @@ class _MaterialeDetailBody extends ConsumerWidget {
                 ),
                 if (materiale.description?.isNotEmpty == true) ...[
                   const SizedBox(height: AppSpacing.base),
-                  AppCard(
+                  VetroCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

@@ -10,6 +10,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/offline_guard.dart';
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
@@ -455,7 +457,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
             ],
             const SizedBox(height: 32),
 
-            AppButton(
+            VetroButton(
               label: _isEditing ? 'Salva modifiche' : 'Crea materiale',
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
@@ -574,7 +576,7 @@ class _BarcodesSection extends StatelessWidget {
         else if (barcodes.isEmpty)
           Text('Nessun barcode.', style: TextStyle(color: context.colors.inkMuted, fontSize: 12))
         else
-          AppCard(
+          VetroCard(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
