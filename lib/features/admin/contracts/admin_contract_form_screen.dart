@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -471,7 +473,7 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
             ),
             const SizedBox(height: 16),
 
-            AppCard(
+            VetroCard(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.base,
                 vertical: AppSpacing.xs,
@@ -503,7 +505,7 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
             AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
             const SizedBox(height: 32),
 
-            AppButton(
+            VetroButton(
               label: _isEditing ? 'Salva modifiche' : 'Crea contratto',
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
