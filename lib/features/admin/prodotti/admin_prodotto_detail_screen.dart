@@ -42,14 +42,18 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
     final um = prodotto['um'] as String? ?? '';
     final externalId = prodotto['externalId'] as String? ?? '';
     final contrattoId = prodotto['contrattoId'] as String?;
-    final purchasePrice = prodotto['prezzoAcquisto'];
-    final salePrice = prodotto['prezzoVendita'];
-    final purchasePriceLabel = purchasePrice is num ? '€${purchasePrice.toStringAsFixed(2)}' : '—';
-    final salePriceLabel = salePrice is num ? '€${salePrice.toStringAsFixed(2)}' : '—';
 
     String dateLabel(String? key) {
       final raw = prodotto[key] as String?;
       return raw != null ? DateFormat('dd/MM/yyyy').format(DateTime.parse(raw)) : '—';
+    }
+
+    // The one field a technician actually needs to act on immediately — highlighted, matching
+    // the Vetro mockup's own call: "Overdue maintenance highlighted in red".
+    bool isOverdue(String? key) {
+      final raw = prodotto[key] as String?;
+      if (raw == null) return false;
+      return DateTime.parse(raw).isBefore(DateTime.now());
     }
 
     final isActive = prodotto['isActive'] as bool? ?? true;
@@ -88,25 +92,32 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                     ],
             ),
           ),
+          // ── Stato ──────────────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                0,
+              ),
+              child: StatusPill(stato: isActive ? 'Attivo' : 'Inattivo', outlined: true),
+            ),
+          ),
+
+          // ── Dati tecnici — commercial fields (prezzo acquisto/vendita) deliberately left off
+          // this view, matching the Vetro mockup's own call; still editable from the form.
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: VetroCard(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
-                      child: Row(
-                        children: [
-                          StatusPill(
-                            stato: isActive ? 'Attivo' : 'Inattivo',
-                            outlined: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+                    const SectionTitle(title: 'Dati tecnici'),
+                    const SizedBox(height: 4),
                     KeyVal(label: 'Nome', value: name),
                     KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
                     KeyVal(label: 'Marca', value: marca.isNotEmpty ? marca : '—'),
@@ -114,31 +125,84 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                     KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
                     KeyVal(label: 'Categoria', value: categoria.isNotEmpty ? categoria : '—'),
                     KeyVal(label: 'Unità di misura', value: um.isNotEmpty ? um : '—'),
-                    KeyVal(label: 'Prezzo acquisto', value: purchasePriceLabel),
-                    KeyVal(label: 'Prezzo vendita', value: salePriceLabel),
                     KeyVal(
                       label: 'Numero di serie',
                       value: serialNumber.isNotEmpty ? serialNumber : '—',
                     ),
-                    KeyVal(
-                      label: 'Contratto',
-                      value: contrattoId != null && contrattoId.isNotEmpty ? contrattoId : '—',
-                    ),
-                    KeyVal(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
-                    KeyVal(label: 'Scadenza garanzia', value: dateLabel('warrantyExpiryDate')),
                     KeyVal(label: 'Data installazione', value: dateLabel('dataInstallazione')),
                     KeyVal(label: 'Ultima manutenzione', value: dateLabel('ultimaManutenzione')),
-                    KeyVal(label: 'Prossima manutenzione', value: dateLabel('prossimaManutenzione')),
-                    KeyVal(label: 'ID gestionale', value: externalId.isNotEmpty ? externalId : '—'),
-                    KeyVal(label: 'Note', value: notes.isNotEmpty ? notes : '—', showDivider: false),
+                    // The one field a technician needs to act on immediately — red when overdue.
+                    KeyVal(
+                      label: 'Prossima manutenzione',
+                      value: dateLabel('prossimaManutenzione'),
+                      valueColor: isOverdue('prossimaManutenzione') ? context.colors.red : null,
+                      showDivider: description.isNotEmpty || notes.isNotEmpty || externalId.isNotEmpty,
+                    ),
+                    if (description.isNotEmpty)
+                      KeyVal(
+                        label: 'Descrizione',
+                        value: description,
+                        showDivider: notes.isNotEmpty || externalId.isNotEmpty,
+                      ),
+                    if (notes.isNotEmpty)
+                      KeyVal(label: 'Note', value: notes, showDivider: externalId.isNotEmpty),
+                    if (externalId.isNotEmpty)
+                      KeyVal(label: 'ID gestionale', value: externalId, showDivider: false),
                   ],
                 ),
               ),
             ),
           ),
 
+          // ── Garanzia ───────────────────────────────────────────────────
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: VetroCard(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SectionTitle(title: 'Garanzia'),
+                    const SizedBox(height: 4),
+                    KeyVal(
+                      label: 'Scadenza',
+                      value: dateLabel('warrantyExpiryDate'),
+                      showDivider: false,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── Contratto collegato ────────────────────────────────────────
+          if (contrattoId != null && contrattoId.isNotEmpty) ...[
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                child: VetroCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle(title: 'Contratto collegato'),
+                      const SizedBox(height: 4),
+                      KeyVal(label: 'Contratto', value: contrattoId, showDivider: false),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+
           // ── Matricole (Gap 3) ────────────────────────────────────────────
-          if (id.isNotEmpty) SliverToBoxAdapter(child: _MatricoleSection(prodottoId: id)),
+          if (id.isNotEmpty) ...[
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            SliverToBoxAdapter(child: _MatricoleSection(prodottoId: id)),
+          ],
 
           SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],

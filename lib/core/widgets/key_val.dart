@@ -29,6 +29,7 @@ class KeyVal extends StatelessWidget {
     this.vertical = false,
     this.showDivider = true,
     this.onTap,
+    this.valueColor,
   });
 
   final String label;
@@ -36,6 +37,10 @@ class KeyVal extends StatelessWidget {
   final bool vertical;
   final bool showDivider;
   final VoidCallback? onTap;
+
+  /// Overrides the value's default `context.colors.ink` — e.g. a red overdue date. Rare: most
+  /// rows should read as plain facts, not warnings.
+  final Color? valueColor;
 
   static TextStyle _labelStyle(BuildContext context) => TextStyle(
     fontFamily: 'Manrope',
@@ -74,7 +79,7 @@ class KeyVal extends StatelessWidget {
                 fontFamily: 'Manrope',
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
-                color: context.colors.ink,
+                color: valueColor ?? context.colors.ink,
               ),
             ),
           ),

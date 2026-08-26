@@ -137,17 +137,23 @@ class _CustomerDetailBody extends ConsumerWidget {
             ),
           ),
         ),
-        // ── Anagrafica card ──────────────────────────────────────────────
+        // ── Contatti card ──────────────────────────────────────────────────
+        //
+        // Contact/site fields first, fiscal fields demoted to their own labelled section below
+        // (near Storico, matches the Vetro mockup's explicit call: "Contact + site first — what
+        // a technician needs — fiscal data demoted to its own labeled section rather than mixed
+        // in"). P.IVA used to sit second, right after the company name.
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: VetroCard(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const SectionTitle(title: 'Contatti'),
+                  const SizedBox(height: 4),
                   KeyVal(label: 'Ragione sociale', value: customer.companyName),
-                  if (customer.taxId != null && customer.taxId!.isNotEmpty)
-                    KeyVal(label: 'P.IVA', value: customer.taxId!),
                   if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
                     KeyVal(label: 'Referente', value: customer.contactPerson!),
                   if (customer.phone != null && customer.phone!.isNotEmpty)
@@ -224,6 +230,32 @@ class _CustomerDetailBody extends ConsumerWidget {
             ),
           ),
         ),
+        // ── Dati fiscali ─────────────────────────────────────────────────
+        //
+        // Demoted to its own labelled, last-in-scroll section — see the Contatti card's own
+        // comment. Only taxId (P.IVA) is captured locally today; SDI/PEC/Codice Fiscale appear in
+        // the mockup's copy but have no column in the Customers Drift table (backend `Customer.cs`
+        // may hold more than what mobile's mirror ever synced) — a real gap, out of scope for a
+        // layout-only pass, not silently invented here.
+        if (customer.taxId != null && customer.taxId!.isNotEmpty) ...[
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: VetroCard(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SectionTitle(title: 'Dati fiscali'),
+                    const SizedBox(height: 4),
+                    KeyVal(label: 'P.IVA', value: customer.taxId!, showDivider: false),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         // ── Storico interventi ─────────────────────────────────────────────
         const SliverToBoxAdapter(child: SizedBox(height: 16)),
         SliverToBoxAdapter(
