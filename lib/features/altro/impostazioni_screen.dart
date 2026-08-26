@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/config/app_info_provider.dart';
 import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
+import '../../core/router/app_router.dart';
 import '../../core/security/biometric_service.dart';
 import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
@@ -189,6 +191,30 @@ class ImpostazioniScreen extends ConsumerWidget {
                     subtitle: 'Richiedi impronta o Face ID all\'apertura',
                     value: settings.autenticazioneBiometrica,
                     onChanged: (_) => _toggleBiometrics(context, ref, settings),
+                    showDivider: false,
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Privacy ───────────────────────────────────────────────────
+            //
+            // A real gap the Vetro mockup called for: a Privacy entry point from Impostazioni.
+            // "I miei dati" already covers identity/categories/consents/rights on one combined
+            // screen (see i_miei_dati_screen.dart's own header comment) — one row here, not the
+            // mockup's separate "Esporta"/"Consensi" pair, since both would point at the same
+            // real screen.
+            const SliverToBoxAdapter(
+              child: _SettingsSectionTitle(title: 'Privacy'),
+            ),
+            SliverToBoxAdapter(
+              child: _SettingsGroup(
+                children: [
+                  _LinkRow(
+                    icon: LucideIcons.shieldCheck,
+                    title: 'I miei dati',
+                    subtitle: 'Cosa registra l\'azienda su di te',
+                    onTap: () => context.push(AppRoutes.altroIMieiDati),
                     showDivider: false,
                   ),
                 ],
@@ -548,6 +574,77 @@ class _ToggleRow extends StatelessWidget {
           ),
           AppToggle(value: value, onChanged: onChanged),
         ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Link row — same shape as _ToggleRow, navigates instead of toggling.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _LinkRow extends StatelessWidget {
+  const _LinkRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.showDivider = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppTappable(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.base,
+          vertical: 10,
+        ),
+        decoration: BoxDecoration(
+          border: showDivider
+              ? Border(bottom: BorderSide(color: context.colors.borderLight))
+              : null,
+        ),
+        child: Row(
+          children: [
+            RowIconTile(icon: icon, size: 34, iconSize: 17),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.ink,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      color: context.colors.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
+          ],
+        ),
       ),
     );
   }
