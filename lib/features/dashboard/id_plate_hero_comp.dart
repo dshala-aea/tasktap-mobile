@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_vetro_palette.dart';
+import '../../core/widgets/vetro_glass.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// The dashboard hero — cantiere safety-signage direction, approved.
+/// The dashboard hero — Vetro glass direction.
 ///
-/// A flat "ID plate" band, not a soft gradient hero: no shadow, no gradient, a stamped identity
-/// plate a technician reads once and knows exactly where they stand — who, when, how much is
-/// left. The accent appears exactly once, on the count that still needs doing; everything else is
-/// white-on-near-black. Proven against a real empty state and a real live-tracker state on
-/// device before being approved to replace the old DashboardHero/ActiveJobCard pair, which this
-/// superseded and which no longer exist in the tree.
+/// Was a flat "ID plate" band (no shadow, no gradient), approved after on-device testing for
+/// cantiere safety-signage legibility. Re-skinned to full Vetro glass — same call made for
+/// Timbra (Module #1), whose identical flat/no-glass rationale was overridden in favour of the
+/// app-wide Vetro identity. Fixed `AppVetroColors`, not flipping `context.vetro`: this hero is a
+/// permanently-dark ground regardless of app theme, same status as `AppColors.punchGround`.
 class IdPlateHeroComp extends StatelessWidget {
   const IdPlateHeroComp({
     super.key,
@@ -33,8 +34,14 @@ class IdPlateHeroComp extends StatelessWidget {
     final remaining = todayCount - completedCount;
     final dateLabel = DateFormat('EEEE d MMM', 'it').format(DateTime.now()).toUpperCase();
 
-    return ColoredBox(
-      color: AppColors.CHARCOAL,
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppVetroColors.tint, AppVetroColors.tintStrong],
+        ),
+      ),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -80,32 +87,32 @@ class IdPlateHeroComp extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              // The plate's readout line — a stamped ID plate, not a stat-grid card. One rule
-              // above and below, numerals doing the talking, the accent only where it's earned.
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border.symmetric(
-                    horizontal: BorderSide(color: AppColors.WHITE.withAlpha(60)),
-                  ),
+              // The plate's readout line — a glass panel over the gradient, numerals doing the
+              // talking. Was a bordered flat band; VetroGlass gives it the same real translucency
+              // every other Vetro secondary surface uses.
+              VetroGlass(
+                fill: AppVetroColors.glassFillOnDark,
+                border: AppVetroColors.glassBorderOnDark,
+                borderRadius: BorderRadius.circular(16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: AppSpacing.base,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Row(
-                    children: [
-                      _Readout(value: '$todayCount', label: 'JOB OGGI', accent: false),
-                      Container(
-                        width: 1,
-                        height: 32,
-                        margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                        color: AppColors.WHITE.withAlpha(40),
-                      ),
-                      _Readout(
-                        value: '$remaining',
-                        label: remaining == 1 ? 'DA FARE' : 'DA FARE',
-                        accent: remaining > 0,
-                      ),
-                    ],
-                  ),
+                child: Row(
+                  children: [
+                    _Readout(value: '$todayCount', label: 'JOB OGGI', accent: false),
+                    Container(
+                      width: 1,
+                      height: 32,
+                      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                      color: AppColors.WHITE.withAlpha(40),
+                    ),
+                    _Readout(
+                      value: '$remaining',
+                      label: remaining == 1 ? 'DA FARE' : 'DA FARE',
+                      accent: remaining > 0,
+                    ),
+                  ],
                 ),
               ),
               if (child != null) ...[const SizedBox(height: AppSpacing.base), child!],
@@ -126,7 +133,11 @@ class _Readout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ? AppColors.Y : AppColors.WHITE;
+    // Was AppColors.Y (safety-orange) for the accented readout — dropped on the gradient ground,
+    // where that accent no longer has the contrast it had against flat CHARCOAL. Full-opacity
+    // white for the accent, dimmed white for the calm one, same distinction the label already
+    // made.
+    const color = AppColors.WHITE;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -148,7 +159,7 @@ class _Readout extends StatelessWidget {
             fontFamily: 'Manrope',
             fontSize: 10,
             fontWeight: FontWeight.w700,
-            color: accent ? AppColors.Y : AppColors.WHITE.withAlpha(150),
+            color: accent ? AppColors.WHITE : AppColors.WHITE.withAlpha(150),
             letterSpacing: 0.8,
           ),
         ),

@@ -5,13 +5,15 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/widgets/vetro_button.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import 'dashboard_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// The dashboard's work queue: five named tiers, not a single ranked list.
 ///
@@ -135,12 +137,12 @@ class _FocusCard extends ConsumerWidget {
     // Da fare, the one tier that actually asks the technician to do something now. Conflating the
     // two would spend the accent on the ordinary state of most of a shift, the same reasoning
     // LiveDot exists for.
-    final badgeColor = tier == _Tier.live ? c.green : AppColors.Y;
+    final badgeColor = tier == _Tier.live ? c.green : context.vetro.tint;
     final ticketId = schedule.ticketId;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AppCard(
+      child: VetroCard(
         onTap: ticketId != null ? () => _open(context, schedule) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,13 +195,10 @@ class _FocusCard extends ConsumerWidget {
                 ),
                 const Spacer(),
                 if (ticketId != null)
-                  AppButton(
+                  VetroButton(
                     label: 'Apri',
-                    size: AppButtonSize.sm,
-                    fullWidth: false,
-                    variant: tier == _Tier.live
-                        ? AppButtonVariant.secondary
-                        : AppButtonVariant.primary,
+                    compact: true,
+                    gradientColors: tier == _Tier.live ? [c.green, c.green] : null,
                     onPressed: () => _open(context, schedule),
                   ),
               ],

@@ -189,7 +189,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                 child: SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
                 ),
               )
             else ...[
