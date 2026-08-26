@@ -108,8 +108,8 @@ class HeaderIconBtn extends StatelessWidget {
   }
 }
 
-/// Screen header — optional back chevron, Sora 700/18 title (ellipsis),
-/// optional Manrope 12 MUTED subtitle, trailing actions.
+/// Screen header — optional back chevron, Inter 700/18 title (ellipsis),
+/// optional Inter 12 MUTED subtitle, trailing actions.
 ///
 /// Spec padding: top 8 / horizontal 19 / bottom 12.
 ///
@@ -186,7 +186,7 @@ class ScreenHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Sora',
+                    fontFamily: 'Inter',
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: titleColor,
@@ -199,7 +199,7 @@ class ScreenHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
                       color: dark

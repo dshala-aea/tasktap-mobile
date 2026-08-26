@@ -284,7 +284,11 @@ void main() {
         r'asset:\s*(assets/fonts/[^\s]+)',
       ).allMatches(pubspec).map((m) => m.group(1)!).toList();
 
-      expect(assets, hasLength(7), reason: 'Sora 400/600/700 + Manrope 400/500/600/700');
+      expect(
+        assets,
+        hasLength(8),
+        reason: 'Sora 400/600/700 + Manrope 400/500/600/700 + Inter (variable, Vetro)',
+      );
       for (final a in assets) {
         expect(File(a).existsSync(), isTrue, reason: '$a is declared but missing');
         expect(File(a).lengthSync(), greaterThan(10000), reason: '$a looks truncated');
