@@ -7,6 +7,7 @@ import '../../core/config/app_info_provider.dart';
 import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/security/biometric_service.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
@@ -386,7 +387,7 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: AppCard(
+      child: VetroCard(
         child: Row(
           children: [
             AppAvatar(
@@ -474,7 +475,7 @@ class _SettingsGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: AppCard(
+      child: VetroCard(
         padding: EdgeInsets.zero,
         child: Column(children: children),
       ),

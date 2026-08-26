@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:tasktap_mobile/core/widgets/app_button.dart';
+import 'package:tasktap_mobile/core/widgets/vetro_button.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
@@ -24,9 +24,10 @@ Widget _buildLoginScreen(IAuthRepository repo) {
   );
 }
 
-/// The primary login CTA — the AppButton labelled 'Accedi' (distinct from the
+/// The primary login CTA — the VetroButton labelled 'Accedi' (distinct from the
 /// screen heading, which is also 'Accedi').
-Finder get _loginCta => find.descendant(of: find.byType(AppButton), matching: find.text('Accedi'));
+Finder get _loginCta =>
+    find.descendant(of: find.byType(VetroButton), matching: find.text('Accedi'));
 
 void main() {
   late MockAuthRepository repo;

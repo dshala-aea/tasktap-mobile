@@ -6,6 +6,8 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/widgets/vetro_compartment_tile.dart';
+import '../../core/widgets/vetro_glass.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/entitlements/entitlement_repository.dart';
@@ -172,7 +174,7 @@ class AltroHubScreen extends ConsumerWidget {
     return [
       for (final t in tiles)
         if (moduleIsOffered(t.module, entitlement))
-          CompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
+          VetroCompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
     ];
   }
 }
@@ -191,21 +193,17 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      // A RackCell, not a hand-rolled Container. This was the one card on the screen that bypassed
-      // the shared primitive, and it did so by reintroducing exactly what the world refuses: a
-      // rounded rectangle floating on a drop shadow. Depth here is a border, like everywhere else.
-      //
-      // ledgeColor is explicit rather than the theme default: this card is a fixed CHARCOAL plate
-      // regardless of light/dark mode, and the default border token is tuned for the bone label
-      // card it usually sits on — on a fixed dark ground it would read close to invisible, the
-      // same problem active_tracker_strip's own border already solved with translucent white. Not
-      // the accent: that means attention-required or selected, and this static identity plate is
-      // neither — same reasoning as the dashboard hero's own DA FARE readout staying white when
-      // nothing is outstanding.
-      child: RackCell(
-        flush: false,
-        background: AppColors.CHARCOAL,
-        ledgeColor: Colors.white.withAlpha(60),
+      // Was a RackCell — a fixed CHARCOAL plate, same reasoning IdPlateHeroComp's flat hero had
+      // (Module #5) before that went full Vetro glass. Different situation from that hero though:
+      // this card sits on the screen's own flipping bg2, not a full-width dark band, so
+      // AppVetroColors.glassFillOnDark (near-transparent white, meant to sit *over* an already-dark
+      // ground) would read as whatever's behind it in light mode. A dark, semi-opaque fill instead
+      // — still a real BackdropFilter blur/hairline edge, but the plate stays CHARCOAL regardless
+      // of app theme, matching what it always was.
+      child: VetroGlass(
+        fill: AppColors.CHARCOAL.withAlpha(235),
+        border: Colors.white.withAlpha(60),
+        borderRadius: BorderRadius.circular(20),
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [

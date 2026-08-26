@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_rack.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/gdpr/gdpr_api_client.dart';
 import '../../data/sync/connectivity_provider.dart';
@@ -101,7 +102,7 @@ class _Body extends ConsumerWidget {
         if (identity != null) ...[
           StepLabel(title: 'La tua anagrafica'),
           const SizedBox(height: 8),
-          AppCard(
+          VetroCard(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
@@ -122,7 +123,7 @@ class _Body extends ConsumerWidget {
 
         StepLabel(title: 'Cosa è registrato su di te'),
         const SizedBox(height: 8),
-        AppCard(
+        VetroCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
           child: Column(
             children: [
@@ -269,7 +270,7 @@ class _ConsentBlock extends ConsumerWidget {
     final consents = ref.watch(consentStatusProvider);
 
     return consents.when(
-      loading: () => const AppCard(
+      loading: () => const VetroCard(
         child: Center(
           child: Padding(
             padding: EdgeInsets.all(AppSpacing.md),
@@ -281,7 +282,7 @@ class _ConsentBlock extends ConsumerWidget {
           ),
         ),
       ),
-      error: (e, _) => AppCard(
+      error: (e, _) => VetroCard(
         child: Text(
           'Elenco consensi non disponibile in questo momento.',
           style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.inkMuted),
@@ -289,14 +290,14 @@ class _ConsentBlock extends ConsumerWidget {
       ),
       data: (list) {
         if (list.isEmpty) {
-          return AppCard(
+          return VetroCard(
             child: Text(
               'Nessun consenso risulta registrato a tuo nome.',
               style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.inkMuted),
             ),
           );
         }
-        return AppCard(
+        return VetroCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Column(
             children: [
