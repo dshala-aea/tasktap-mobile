@@ -24,6 +24,12 @@
 //     local queue — see cantiereActiveSessionProvider below — so the screen
 //     stays usable with no signal at all, matching the personal Timbra
 //     screen's own offline model.
+//
+// VETRO (2026-08-26, module #1) — this screen flips light/dark (`context.colors.bg2`), unlike
+// personal Timbra's permanently-dark ground, so it reads `context.vetro` rather than the fixed
+// `AppVetroColors`. Re-skinned so far: the cantiere picker (VetroCard) and the primary clock-in/
+// clock-out actions (VetroButton). `AppCard`/`AppButton` call sites elsewhere on this screen —
+// the progressive-disclosure detail forms — are next, not yet touched.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:async' show unawaited;
@@ -38,7 +44,10 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/utils/error_message.dart';
+import '../../core/widgets/vetro_button.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
@@ -552,7 +561,7 @@ class _CheckInBody extends StatelessWidget {
         children: [
           // Context banner (linked ticket)
           if (ticketId != null) ...[
-            AppCard(
+            VetroCard(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.base,
                 vertical: AppSpacing.md,
@@ -565,7 +574,7 @@ class _CheckInBody extends StatelessWidget {
                     child: Text(
                       'Collegato al ticket',
                       style: TextStyle(
-                        fontFamily: 'Manrope',
+                        fontFamily: 'Inter',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: context.colors.ink,
@@ -582,7 +591,7 @@ class _CheckInBody extends StatelessWidget {
           Text(
             'Seleziona cantiere',
             style: TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
@@ -602,7 +611,7 @@ class _CheckInBody extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
               child: Text(
                 'Impossibile caricare i cantieri.',
-                style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.red),
+                style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.red),
               ),
             ),
             data: (cantieri) {
@@ -624,7 +633,8 @@ class _CheckInBody extends StatelessWidget {
                 );
               }
 
-              return AppCard(
+              final v = context.vetro;
+              return VetroCard(
                 padding: EdgeInsets.zero,
                 child: Column(
                   children: ordered.asMap().entries.map((entry) {
@@ -636,9 +646,9 @@ class _CheckInBody extends StatelessWidget {
                     return InkWell(
                       onTap: () => onCantiereSelected(c),
                       borderRadius: i == 0
-                          ? BorderRadius.vertical(top: Radius.circular(AppRack.cellRadius))
+                          ? const BorderRadius.vertical(top: Radius.circular(20))
                           : (isLast
-                                ? BorderRadius.vertical(bottom: Radius.circular(AppRack.cellRadius))
+                                ? const BorderRadius.vertical(bottom: Radius.circular(20))
                                 : BorderRadius.zero),
                       child: Container(
                         constraints: const BoxConstraints(minHeight: 56),
@@ -647,15 +657,11 @@ class _CheckInBody extends StatelessWidget {
                           vertical: AppSpacing.md,
                         ),
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.YSoft : Colors.transparent,
-                          border: isLast
-                              ? null
-                              : Border(
-                                  bottom: BorderSide(
-                                    color: context.colors.borderMedium,
-                                    width: 0.5,
-                                  ),
-                                ),
+                          // Vetro's one accent for "selected", not AppColors.YSoft — the tint at
+                          // low alpha reads as the same "strapped/active" idea Cassetta's YSoft
+                          // signalled, in the new system's own colour.
+                          color: isSelected ? v.tint.withAlpha(31) : Colors.transparent,
+                          border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
                         ),
                         child: Row(
                           children: [
@@ -668,7 +674,7 @@ class _CheckInBody extends StatelessWidget {
                                   Text(
                                     c.name,
                                     style: TextStyle(
-                                      fontFamily: 'Manrope',
+                                      fontFamily: 'Inter',
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                       color: context.colors.ink,
@@ -678,7 +684,7 @@ class _CheckInBody extends StatelessWidget {
                                     Text(
                                       c.city!,
                                       style: TextStyle(
-                                        fontFamily: 'Manrope',
+                                        fontFamily: 'Inter',
                                         fontSize: 12,
                                         color: context.colors.inkMuted,
                                       ),
@@ -686,8 +692,7 @@ class _CheckInBody extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            if (isSelected)
-                              Icon(LucideIcons.checkCircle2, size: 18, color: context.colors.ink),
+                            if (isSelected) Icon(LucideIcons.checkCircle2, size: 18, color: v.tint),
                           ],
                         ),
                       ),
@@ -721,7 +726,7 @@ class _CheckInBody extends StatelessWidget {
                   Text(
                     hasDetails ? 'Altri dettagli aggiunti' : 'Altri dettagli',
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: hasDetails ? context.colors.green : context.colors.inkMuted,
@@ -743,12 +748,11 @@ class _CheckInBody extends StatelessWidget {
           // Clock-in button — disabled (not hidden) when there is nothing to
           // select, so the reason above stays visible instead of the row
           // just disappearing.
-          AppButton(
+          VetroButton(
             label: 'Timbra ingresso cantiere',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
             onPressed: (isLoading || noCantieriAvailable) ? null : onStart,
-            size: AppButtonSize.lg,
           ),
         ],
       ),
@@ -974,7 +978,7 @@ class _ActiveSessionBody extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Active session card
-          AppCard(
+          VetroCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -993,7 +997,7 @@ class _ActiveSessionBody extends ConsumerWidget {
                       child: Text(
                         'Sessione cantiere attiva',
                         style: TextStyle(
-                          fontFamily: 'Manrope',
+                          fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: context.colors.green,
@@ -1046,7 +1050,7 @@ class _ActiveSessionBody extends ConsumerWidget {
                   Text(
                     hasClosingDetails ? 'Note di chiusura aggiunte' : 'Note di chiusura',
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: hasClosingDetails ? context.colors.green : context.colors.inkMuted,
@@ -1065,13 +1069,15 @@ class _ActiveSessionBody extends ConsumerWidget {
             const SizedBox(height: 16),
           ],
 
-          // Clock-out button
-          AppButton.danger(
+          // Clock-out button — the same stop-red gradient TimbraScreen's punch button uses for
+          // "ending", not the default tint fill: this action is destructive/session-ending, same
+          // semantic as there.
+          VetroButton(
             label: 'Timbra uscita cantiere',
             icon: const Icon(LucideIcons.logOut),
             isLoading: isLoading,
             onPressed: isLoading ? null : onEnd,
-            size: AppButtonSize.lg,
+            gradientColors: const [AppColors.stopLight, AppColors.stopDark],
           ),
         ],
       ),

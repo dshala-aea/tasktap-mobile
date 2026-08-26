@@ -11,6 +11,9 @@ import 'package:intl/intl.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/widgets/vetro_button.dart';
+import '../../core/widgets/vetro_card.dart';
+import '../../core/widgets/vetro_compartment_tile.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
@@ -321,7 +324,7 @@ class _TicketDetailBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
-                    child: AppCard(
+                    child: VetroCard(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.base,
                       ),
@@ -380,7 +383,7 @@ class _TicketDetailBody extends ConsumerWidget {
                       childAspectRatio: 1.5,
                       children: [
                         for (final label in sectionLabels)
-                          CompartmentTile(
+                          VetroCompartmentTile(
                             icon: _sectionIcon(label),
                             label: label,
                             onTap: () => openCompartmentSheet(
@@ -426,9 +429,8 @@ class _TicketDetailBody extends ConsumerWidget {
               ),
               child: Column(
                 children: [
-                  AppButton(
+                  VetroButton(
                     label: 'Crea rapportino',
-                    fullWidth: true,
                     onPressed: () => _createRapportino(context, ref, ticket),
                   ),
                   const SizedBox(height: 8),
@@ -602,7 +604,7 @@ class _Prose extends StatelessWidget {
           Text(
             body,
             style: TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 13,
               color: context.colors.ink,
               height: 1.5,
@@ -889,7 +891,7 @@ class _TicketControlStatusCard extends StatelessWidget {
     };
     final valueLabel = _valueLabel(c);
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
         vertical: 10,
@@ -996,7 +998,7 @@ class _AllegatiTab extends ConsumerWidget {
                 Text(
                   'In sospeso (${pending.length})',
                   style: TextStyle(
-                    fontFamily: 'Sora',
+                    fontFamily: 'Inter',
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: context.colors.ink,
@@ -1252,7 +1254,7 @@ class _PendingAttachmentRow extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -1537,12 +1539,10 @@ class _AssignSheetState extends State<_AssignSheet> {
               ),
             ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: AppButton(
-              label: _isSaving ? 'Salvataggio…' : 'Salva',
-              onPressed: _isSaving ? null : _save,
-            ),
+          VetroButton(
+            label: _isSaving ? 'Salvataggio…' : 'Salva',
+            isLoading: _isSaving,
+            onPressed: _isSaving ? null : _save,
           ),
         ],
       ),
@@ -1603,7 +1603,7 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     // Offline is stated, not hidden behind a disabled button with no explanation. These writes
     // have no idempotent upsert to queue against, so there is nothing to promise here.
     if (async.hasError && async.error is TicketDetailOfflineException) {
-      return AppCard(
+      return VetroCard(
         child: Row(
           children: [
             Icon(LucideIcons.cloudOff, size: 16, color: c.inkMuted),
@@ -1622,7 +1622,7 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
     final isRunning = running != null;
 
-    return AppCard(
+    return VetroCard(
       child: Row(
         children: [
           if (isRunning) ...[const LiveDot(), const SizedBox(width: 10)],
@@ -1653,13 +1653,14 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
-            AppButton(
+            VetroButton(
               label: isRunning ? 'Ferma' : 'Avvia',
-              size: AppButtonSize.sm,
-              fullWidth: false,
-              variant: isRunning
-                  ? AppButtonVariant.dark
-                  : AppButtonVariant.primary,
+              compact: true,
+              // Same stop-red/tint split as TimbraScreen's punch button — "ending" a running
+              // clock reuses that colour, not a fresh red.
+              gradientColors: isRunning
+                  ? const [AppColors.stopLight, AppColors.stopDark]
+                  : null,
               onPressed: async.isLoading
                   ? null
                   : () => _run(() {
@@ -1800,7 +1801,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                     child: Text(
                       'Cambia stato',
                       style: TextStyle(
-                        fontFamily: 'Sora',
+                        fontFamily: 'Inter',
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: ctx.colors.ink,
@@ -1867,12 +1868,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         else if (unassigned)
-          AppButton(
-            label: 'Prendi in carico',
-            size: AppButtonSize.sm,
-            fullWidth: false,
-            onPressed: _selfAssign,
-          ),
+          VetroButton(label: 'Prendi in carico', compact: true, onPressed: _selfAssign),
       ],
     );
   }
@@ -1938,7 +1934,7 @@ class _OreTab extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppCard(
+              VetroCard(
                 child: Row(
                   children: [
                     if (running > 0) ...[const LiveDot(), const SizedBox(width: 8)],
@@ -1946,7 +1942,7 @@ class _OreTab extends ConsumerWidget {
                       child: Text(
                         'Totale registrato',
                         style: TextStyle(
-                          fontFamily: 'Manrope',
+                          fontFamily: 'Inter',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: context.colors.inkMuted,
@@ -1956,7 +1952,7 @@ class _OreTab extends ConsumerWidget {
                     Text(
                       _hhmm(total),
                       style: TextStyle(
-                        fontFamily: 'Sora',
+                        fontFamily: 'Inter',
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         color: context.colors.ink,
@@ -1974,7 +1970,7 @@ class _OreTab extends ConsumerWidget {
                         ? 'Un timer è ancora in corso e non è incluso nel totale.'
                         : '$running timer sono ancora in corso e non sono inclusi nel totale.',
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 11,
                       color: context.colors.inkMuted,
                     ),
@@ -2030,7 +2026,7 @@ class _WorklogRow extends StatelessWidget {
         // that the dashboard hero and TicketWorkLogDto.duration both make.
         entry.duration == null ? '—' : _hhmm(entry.duration!),
         style: TextStyle(
-          fontFamily: 'Sora',
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.w700,
           color: entry.isRunning ? c.inkMuted : c.ink,

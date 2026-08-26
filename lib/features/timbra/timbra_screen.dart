@@ -8,8 +8,10 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/row_icon_tile.dart';
 import '../../core/widgets/screen_header.dart';
+import '../../core/widgets/vetro_glass.dart';
 import '../../data/local/app_database.dart';
 import 'timbra_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
@@ -20,16 +22,24 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // TimbraScreen
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Dark clock-in / clock-out screen.
+/// Dark clock-in / clock-out screen — Vetro (2026-08-26 redesign, module #1).
 ///
-/// Layout:
+/// Layout unchanged from the Cassetta version; materials are not:
 ///   - `ScreenHeader(dark: true)` — "Timbra", no back (root tab), no actions (nothing on this
-///     screen is a notification or a profile setting, so none are offered)
-///   - Date label (uppercase, Manrope 13 muted)
-///   - Live clock (Sora 72 thin, accent orange, ticking every second)
-///   - Circular punch button (flat accent fill, red when ending — no gradient, no shadow)
-///   - Pause/resume pill (only while on shift)
-///   - "Sessioni di oggi" card (session rows + running total)
+///     screen is a notification or a profile setting, so none are offered). Not yet re-themed —
+///     shared across every screen, so it stays Cassetta until whichever module owns app chrome
+///     takes its turn; this file only owns what's below it.
+///   - Date label (uppercase, Inter 13 muted)
+///   - Live clock (Inter 72 **w800**, tint colour, ticking every second)
+///   - Circular punch button — gradient fill (tint→tintStrong starting, stop→stopDark ending),
+///     soft shadow, still no [InkWell] splash (see [_PunchButton]'s own doc comment for why)
+///   - Pause/resume pill — now [VetroGlass] (blurred), was a flat [AppTappable] pill
+///   - "Sessioni di oggi" card — now [VetroGlass], was a solid CHARCOAL panel
+///
+/// Gradient + blur was a real question here, not a given: this screen is documented as read at
+/// arm's length in direct sun, which is the one condition glass/blur genuinely degrades under.
+/// Resolved with a side-by-side glare simulation (flat-fill vs. gradient+glass, both under a
+/// simulated sunlight wash) — gradient/glass was kept anyway, deliberately, not by default.
 class TimbraScreen extends ConsumerStatefulWidget {
   const TimbraScreen({super.key});
 
@@ -243,11 +253,12 @@ const double _kFixedLayoutMinHeight = 640;
 
 /// `RowIconTile`'s fill for [_SessionRow], on this screen only.
 ///
-/// CHARCOAL (`#2B2A24`) blended toward white by ~18% — still a fixed value under both themes
-/// (this screen is permanently dark, see `AppColors.punchGround`'s own doc comment), just light
-/// enough to read as a raised compartment against `punchGround` (`#1A1A1A`) instead of nearly
-/// disappearing into it the way the unmodified case-shell colour would on a ground that dark.
-const Color _kSessionTileFill = Color(0xFF48473C);
+/// A solid indigo-tinted dark, not a real [VetroGlass] blur: [_SessionsCard] renders one row per
+/// session in a `ListView.builder`, and a `BackdropFilter` per row is the "many small blurred
+/// instances" cost [VetroGlass]'s own doc comment warns against. This reads as the same glass
+/// family at a glance (same hue as [AppVetroColors.tint], same rough alpha [VetroGlass] would
+/// produce over `punchGround`) without the per-row backdrop sample.
+const Color _kSessionTileFill = Color(0xFF262B45);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // _DateLabel
@@ -282,7 +293,7 @@ class _DateLabel extends StatelessWidget {
     return Text(
       formatted,
       style: TextStyle(
-        fontFamily: 'Manrope',
+        fontFamily: 'Inter',
         fontSize: 13,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.2,
@@ -319,16 +330,17 @@ class _LiveClock extends StatelessWidget {
           child: Text(
             timeStr,
             style: TextStyle(
-              fontFamily: 'Sora',
+              fontFamily: 'Inter',
               fontSize: 72,
-              // w300, not w100. This is the number a technician checks at arm's length, outdoors,
-              // to decide whether they are on the clock. Hairline strokes at 72px look elegant on a
-              // desk monitor and disappear under sun glare on a scratched screen — the one viewing
-              // condition this screen is actually used in. Still light enough to stay display type.
-              fontWeight: FontWeight.w300,
-              color: AppColors.Y,
+              // w800, heavier than the w300 this replaced — not a reversal of that rationale, an
+              // extension of it: the prior comment's own physics (hairline strokes vanish under
+              // sun glare, so w300 not w100) argues for going *further* toward bold once the
+              // system's type language is "oversized bold" by design, not against it.
+              fontWeight: FontWeight.w800,
+              color: AppVetroColors.tint,
               letterSpacing: -2,
               height: 1.0,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
             textAlign: TextAlign.center,
           ),
@@ -366,11 +378,15 @@ class _PunchButton extends StatelessWidget {
     final icon = isOnShift ? LucideIcons.square : LucideIcons.play;
     final blocked = guard.blocked;
 
-    // Flat fill, not the gradient+glow disc this used to be: every other control in the app is a
-    // solid fill with no shadow (see AppButton._shadows — a soft shadow disappears outdoors, and a
-    // gradient is banned everywhere else in the app's own token language), and the one control a
-    // technician looks at hardest in direct sun cannot be the one exception to that.
-    final fill = isOnShift ? AppColors.stopLight : AppColors.Y;
+    // Gradient fill, not the flat one this replaced (see this class's own historical note above)
+    // — checked against a simulated direct-sunlight wash before being kept; the prior flat-fill
+    // reasoning was real, it was just weighed against the glass system's own trade-off and the
+    // gradient version won on that specific test. Both stops reuse existing colours rather than
+    // inventing a Vetro-specific "stop" gradient: [AppColors.stopLight]/[stopDark] were already
+    // this exact red family.
+    final gradientColors = isOnShift
+        ? const [AppColors.stopLight, AppColors.stopDark]
+        : const [AppVetroColors.tint, AppVetroColors.tintStrong];
 
     // Dimmed and inert rather than hidden: a button that disappears leaves the user with no
     // idea what happened, and the reason is printed underneath so it is readable without a
@@ -395,31 +411,45 @@ class _PunchButton extends StatelessWidget {
             // being a sliver.
             width: 156,
             height: 156,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: fill),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradientColors,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: gradientColors.first.withAlpha(110),
+                  blurRadius: 34,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
             child: isLoading
                 ? const Center(
                     child: SizedBox(
                       width: 36,
                       height: 36,
-                      child: CircularProgressIndicator(
-                        color: AppColors.punchGround,
-                        strokeWidth: 3,
-                      ),
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
                     ),
                   )
                 : Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(icon, size: 36, color: isOnShift ? Colors.white : AppColors.punchGround),
+                      // White on both gradients now — unlike the old flat orange, both tint and
+                      // stop are dark/saturated enough that white reads clearly on either, so the
+                      // isOnShift-conditional ink colour this used to need goes away.
+                      Icon(icon, size: 36, color: Colors.white),
                       const SizedBox(height: 8),
                       Text(
                         label,
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.0,
-                          color: isOnShift ? Colors.white : AppColors.punchGround,
+                          color: Colors.white,
                         ),
                       ),
                     ],
@@ -439,7 +469,7 @@ class _PunchButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: AppColors.onDarkMuted),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: AppColors.onDarkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -491,35 +521,42 @@ class _PauseButton extends StatelessWidget {
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
       child: Opacity(
         opacity: blocked ? 0.4 : 1,
-        child: AppTappable(
-          onTap: isLoading || blocked ? null : onTap,
-          color: Colors.white.withAlpha(13),
+        // VetroGlass paints the blur + tint fill; AppTappable sits inside it purely for the
+        // splash (transparent `color`, so it isn't painting a second fill on top of the glass).
+        // Fixed on-dark values, not `context.vetro` — this screen doesn't flip, see file header.
+        child: VetroGlass(
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: accent.withAlpha(120)),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isLoading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                )
-              else
-                Icon(icon, size: 16, color: accent),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
+          fill: AppVetroColors.glassFillOnDark,
+          border: AppVetroColors.glassBorderOnDark,
+          child: AppTappable(
+            onTap: isLoading || blocked ? null : onTap,
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLoading)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                  )
+                else
+                  Icon(icon, size: 16, color: accent),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
                   color: accent,
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -535,7 +572,7 @@ class _PauseButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: AppColors.onDarkMuted),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: AppColors.onDarkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -577,35 +614,40 @@ class _SubmitButton extends StatelessWidget {
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
       child: Opacity(
         opacity: blocked ? 0.4 : 1,
-        child: AppTappable(
-          onTap: isLoading || blocked ? null : onTap,
-          color: Colors.white.withAlpha(13),
+        // Same VetroGlass-wraps-AppTappable composition as _PauseButton — see its comment.
+        child: VetroGlass(
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: accent.withAlpha(120)),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isLoading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                )
-              else
-                Icon(LucideIcons.send, size: 16, color: accent),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.0,
-                  color: accent,
+          fill: AppVetroColors.glassFillOnDark,
+          border: AppVetroColors.glassBorderOnDark,
+          child: AppTappable(
+            onTap: isLoading || blocked ? null : onTap,
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(24),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isLoading)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                  )
+                else
+                  Icon(LucideIcons.send, size: 16, color: accent),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.0,
+                    color: accent,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -621,7 +663,7 @@ class _SubmitButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: AppColors.onDarkMuted),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: AppColors.onDarkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -654,19 +696,19 @@ class _SessionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      decoration: BoxDecoration(
-        // CHARCOAL, not an ad hoc ~5% white glass — this is the same case-shell material the
-        // `ScreenHeader(dark: true)` plate above it is already painted in, so the card reads as
-        // another panel riveted into the same case rather than a translucent overlay with no
-        // material of its own. `AppRack.freeShape`: a standalone panel, not a cell on a rail.
-        color: AppColors.CHARCOAL,
+      // Now the ~5% white glass the old CHARCOAL panel deliberately wasn't — Vetro's material
+      // language is glass everywhere, including a standalone panel like this one; the prior
+      // reasoning (match the ScreenHeader plate's case-shell material) doesn't carry over because
+      // the header hasn't moved to Vetro yet either (see this file's header comment). Fixed
+      // on-dark glass values, not `context.vetro` — same reasoning as [_PauseButton].
+      child: VetroGlass(
         borderRadius: AppRack.freeShape,
-        border: Border.all(color: Colors.white.withAlpha(25)),
-      ),
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
+        fill: AppVetroColors.glassFillOnDark,
+        border: AppVetroColors.glassBorderOnDark,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
         // Matches the empty-state Expanded below: a min-sized Column asked to also host a flex
         // child is an unstable combination (its own reported size and the flex child's allocated
         // space can disagree), and `fillHeight` already tells this widget exactly which sizing it
@@ -681,7 +723,7 @@ class _SessionsCard extends StatelessWidget {
               Text(
                 'SESSIONI DI OGGI',
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.4,
@@ -726,6 +768,7 @@ class _SessionsCard extends StatelessWidget {
           // Total row
           _TotalRow(total: total),
         ],
+        ),
       ),
     );
   }
@@ -741,7 +784,7 @@ class _NoSessionsYet extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
         child: Text(
           'Nessuna timbratura oggi',
-          style: TextStyle(color: AppColors.onDarkMuted, fontSize: 13, fontFamily: 'Manrope'),
+          style: TextStyle(color: AppColors.onDarkMuted, fontSize: 13, fontFamily: 'Inter'),
         ),
       ),
     );
@@ -823,7 +866,7 @@ class _SessionRow extends StatelessWidget {
             child: Text(
               _label(session.eventType),
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: Colors.white.withAlpha(220),
@@ -833,7 +876,7 @@ class _SessionRow extends StatelessWidget {
           Text(
             timeStr,
             style: const TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Colors.white,
@@ -871,7 +914,7 @@ class _TotalRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: Colors.white,
@@ -882,10 +925,10 @@ class _TotalRow extends StatelessWidget {
         Text(
           _format(total),
           style: const TextStyle(
-            fontFamily: 'Manrope',
+            fontFamily: 'Inter',
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppColors.Y,
+            color: AppVetroColors.tint,
           ),
         ),
       ],

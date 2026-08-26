@@ -162,3 +162,12 @@ flutter:
           weight: 600
         - asset: assets/fonts/Manrope-700.ttf
           weight: 700
+    # Inter, for the Vetro redesign (2026-08-26). One variable-font file, not per-weight statics
+    # like Sora/Manrope above — upstream (rsms/inter v4.1) stopped shipping static TTFs; only a
+    # variable font and woff2 remain, and woff2 isn't a format `flutter:` fonts can declare at all.
+    # Flutter/Skia resolve `FontWeight` against the file's own `wght` axis, so every weight Vetro
+    # uses (400/500/600/700/800) comes from this single 860KB file — smaller than shipping five
+    # separate static files would have been anyway.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/InterVariable.ttf

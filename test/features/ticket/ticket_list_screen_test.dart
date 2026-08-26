@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders a ListRow per ticket', (tester) async {
+    testWidgets('renders a row per ticket, titled', (tester) async {
       await db
           .into(db.tickets)
           .insert(
@@ -112,7 +112,8 @@ void main() {
 
       await pump(tester);
 
-      expect(find.byType(ListRow), findsNWidgets(2));
+      // Vetro (module #2) replaced ListRow with a bespoke priority-striped row — the behaviour
+      // that matters is "one row per ticket, showing its title," not the widget type underneath.
       expect(find.text('Perdita idrica'), findsOneWidget);
       expect(find.text('Manutenzione caldaia'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());

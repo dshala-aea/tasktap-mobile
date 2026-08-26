@@ -99,6 +99,14 @@ class Tickets extends Table {
   TextColumn get prodottoAssistenzaId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
+  /// Wire form is the enum name ("Bassa"/"Media"/"Alta"/"Urgente" — backend `TicketPriorityEnum`
+  /// carries `[JsonConverter(typeof(JsonStringEnumConverter))]`), not an int. Stored as the same
+  /// string rather than parsed to an enum locally, matching how `statusId`/`typeId` are looked up
+  /// through `ticketStatusMapProvider` instead of a client-side enum.
+  TextColumn get priority => text().nullable()();
+
+  DateTimeColumn get dueDate => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -691,7 +699,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration {
@@ -810,6 +818,16 @@ class AppDatabase extends _$AppDatabase {
           // `CachedTicketControls`'s own doc comment.
           await m.createTable(cachedTicketControls);
         }
+        if (from < 20) {
+          // Vetro (module #2, Tickets): the list/detail redesign needs priority and due date to
+          // triage a ticket without opening it — both already arrive over the wire (sync returns
+          // the `Ticket` entity itself, same as `numero` before it), just never parsed or stored.
+          // Same two-part fix as `numero` (schema 12): the column alone leaves every ticket that
+          // predates this migration permanently null, because a delta sync only re-sends rows that
+          // changed — see `syncCursorGeneration`'s own doc comment, bumped to v4 alongside this.
+          await m.addColumn(tickets, tickets.priority);
+          await m.addColumn(tickets, tickets.dueDate);
+        }
       },
     );
   }
@@ -833,7 +851,8 @@ class AppDatabase extends _$AppDatabase {
   /// v3 — 2026-08-17, schema 12 added `tickets.numero`. The column arrives empty and a delta sync
   ///      would never refill it, because the tickets it needs are precisely the ones that have not
   ///      changed. Same reasoning as v2: a cursor can outlive its own correctness.
-  static const String syncCursorGeneration = 'v3';
+  /// v4 — 2026-08-26, schema 20 added `tickets.priority`/`tickets.dueDate`. Same reasoning as v3.
+  static const String syncCursorGeneration = 'v4';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

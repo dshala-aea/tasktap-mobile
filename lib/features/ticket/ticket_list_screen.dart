@@ -5,11 +5,13 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import '../../presentation/providers/schedule_providers.dart' show locationByIdProvider, customerByIdProvider;
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -232,7 +234,7 @@ class _PendingTicketsSection extends StatelessWidget {
           Text(
             'In sospeso (${pendingTickets.length})',
             style: TextStyle(
-              fontFamily: 'Sora',
+              fontFamily: 'Inter',
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -292,7 +294,7 @@ class _PendingTicketRow extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -303,7 +305,7 @@ class _PendingTicketRow extends ConsumerWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 11,
                     color: context.colors.inkMuted,
                   ),
@@ -326,6 +328,18 @@ class _PendingTicketRow extends ConsumerWidget {
   }
 }
 
+/// Vetro (module #2). Was a [ListRow] — icon avatar, title, reference-number subtitle, status
+/// pill and date off to the side. Replaced because that told you *what kind of thing* a row was,
+/// not what to do about it: title alone rarely says where to go or how urgent it is, and opening
+/// every row just to triage a list of thirty is the exact complaint that started this redesign.
+///
+/// A priority stripe (real `Ticket.priority`, synced since schema 20 — see `app_database.dart`)
+/// replaces the old leading icon tile; description, cliente/località (resolved the same way
+/// `work_queue_section.dart` already does, not a new lookup) and due date fill out the row. No
+/// `VetroGlass`/blur here on purpose: this list can run to hundreds of rows, and a per-row
+/// backdrop filter during scroll is exactly the "many small instances" cost that widget's own doc
+/// comment warns against — flat rows on the page ground, divided by `context.vetro.hairline`,
+/// read as the same system without paying for it.
 class _TicketRow extends ConsumerWidget {
   const _TicketRow({
     required this.ticket,
@@ -337,41 +351,139 @@ class _TicketRow extends ConsumerWidget {
   final String statusName;
   final bool isLast;
 
+  Color _priorityColor(AppVetroPalette v, String? priority) => switch (priority) {
+    'Urgente' => v.statusBad,
+    'Alta' => v.statusWarn,
+    'Media' => v.tint,
+    _ => const Color(0xFF98989D), // Bassa, or unset — neutral, not a fifth accent colour
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Was `#${id.substring(0, 8)}` — eight hex characters of a GUID under every row, which no
-    // technician can match to anything. Where the ticket has no number the subtitle is dropped
-    // rather than filled with the id, and the title carries the row on its own.
+    final v = context.vetro;
     final reference = ticketReference(ticket.numero);
-    final dateLabel = DateFormat(
-      'dd/MM/yy',
-      'it',
-    ).format(ticket.createdAt.toLocal());
+    final location = ref.watch(locationByIdProvider(ticket.locationId)).valueOrNull;
+    final customerName = location != null
+        ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
+        : null;
+    final where = [customerName, location?.city].where((s) => s != null && s.isNotEmpty).join(' · ');
 
-    return ListRow(
-      // The one ticket you are actually on gets the accent strap. This is a *selected/priority*
-      // mark, not the live-timer one — a running clock pulses green instead (see
-      // active_tracker_strip.dart) precisely so it doesn't spend the accent for eight hours a
-      // day. Scanning a list of thirty for "which one am I on" is the single most common thing a
-      // technician does on this screen.
-      strapped: statusName.toLowerCase() == 'in corso',
-      leading: const RowIconTile(icon: LucideIcons.ticket),
-      title: ticket.title,
-      subtitle: reference,
-      meta: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true, outlined: true),
-          const SizedBox(height: 2),
-          Text(
-            dateLabel,
-            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
-          ),
-        ],
-      ),
-      showDivider: !isLast,
+    final dueDate = ticket.dueDate;
+    final isOverdue = dueDate != null &&
+        dueDate.isBefore(DateTime.now()) &&
+        statusName.toLowerCase() != 'completato';
+    final dueLabel = dueDate == null ? null : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
+
+    return InkWell(
       onTap: () => context.push('/ticket/${ticket.id}'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        decoration: BoxDecoration(
+          border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
+        ),
+        // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
+        // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the
+        // Row no bounded height — `stretch` needs one to stretch the stripe into, and without
+        // IntrinsicHeight giving it one first, layout throws (RenderFlex._computeSizes, unbounded
+        // height) rather than silently doing something wrong.
+        child: IntrinsicHeight(
+          child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 3,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: _priorityColor(v, ticket.priority),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (reference != null)
+                        Text(
+                          reference,
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: context.colors.inkFaint,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      const Spacer(),
+                      if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true, outlined: true),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    ticket.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: context.colors.ink,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  if (ticket.description != null && ticket.description!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      ticket.description!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+                    ),
+                  ],
+                  if (where.isNotEmpty || dueLabel != null) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        if (where.isNotEmpty) ...[
+                          Icon(LucideIcons.mapPin, size: 11, color: context.colors.inkFaint),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              where,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: context.colors.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (dueLabel != null) ...[
+                          const Spacer(),
+                          Text(
+                            dueLabel,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 11,
+                              fontWeight: isOverdue ? FontWeight.w700 : FontWeight.w600,
+                              color: isOverdue ? v.statusBad : context.colors.inkMuted,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'app_palette.dart';
 import 'app_rack.dart';
 import 'app_spacing.dart';
 import 'app_text_styles.dart';
+import 'app_vetro_palette.dart';
 
 /// Builds the TaskTap [ThemeData] for one [Brightness].
 ///
@@ -63,7 +64,11 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     textTheme: textTheme,
     // Everything the ColorScheme has no slot for: the four background steps, the three border
     // weights, the card shadow, and the ink/surface pair that must not be confused for each other.
-    extensions: <ThemeExtension<dynamic>>[p],
+    //
+    // AppVetroPalette rides alongside `p`, additive — see that file's own doc comment. Registering
+    // it here makes `context.vetro` resolve correctly on every screen without requiring each
+    // Vetro-redesigned screen to wire its own theme extension.
+    extensions: <ThemeExtension<dynamic>>[p, isDark ? AppVetroPalette.dark : AppVetroPalette.light],
     scaffoldBackgroundColor: p.bg1,
 
     // ── AppBar ─────────────────────────────────────────────────────────────

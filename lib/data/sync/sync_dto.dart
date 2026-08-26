@@ -216,6 +216,10 @@ class TicketDto {
   final String? prodottoAssistenzaId;
   final String? commessaId;
 
+  /// Wire form is the enum name — see `Tickets.priority`'s own doc comment in `app_database.dart`.
+  final String? priority;
+  final DateTime? dueDate;
+
   const TicketDto({
     required this.id,
     required this.tenantId,
@@ -236,6 +240,8 @@ class TicketDto {
     this.contractId,
     this.prodottoAssistenzaId,
     this.commessaId,
+    this.priority,
+    this.dueDate,
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
@@ -258,6 +264,8 @@ class TicketDto {
     contractId: j['contractId'] as String?,
     prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
     commessaId: j['commessaId'] as String?,
+    priority: j['priority'] as String?,
+    dueDate: _dt(j['dueDate']),
   );
 }
 
