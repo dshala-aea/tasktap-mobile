@@ -3,6 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -476,7 +478,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
             // convention: `createProdottoAssistenza` has no isActive param, every new prodotto
             // starts active server-side, so there is nothing to toggle at creation.
             if (_isEditing) ...[
-              AppCard(
+              VetroCard(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.base,
                   vertical: AppSpacing.xs,
@@ -498,7 +500,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
 
             const SizedBox(height: 16),
 
-            AppButton(
+            VetroButton(
               label: _isEditing ? 'Salva modifiche' : 'Crea prodotto',
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
