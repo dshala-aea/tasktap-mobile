@@ -5,10 +5,14 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_vetro_palette.dart';
+import '../../core/widgets/vetro_glass.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../altro/notifiche_provider.dart';
+import '../timbra/timbra_providers.dart';
 import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
@@ -65,15 +69,18 @@ class DashboardScreen extends ConsumerWidget {
                     onTap: () => context.push(AppRoutes.altroProfilo),
                   ),
                 ],
-                // Only what is actually running, and nothing at all when nothing is.
+                // What is actually running — or, idle, the one thing to do about that.
                 //
-                // A placeholder here was still a placeholder: the hero drew a grey glass panel
-                // reading "Non hai interventi attivi al momento" for the ordinary condition of
-                // being between jobs, which is most of the morning. There is no information in
-                // it — the absence of rows already says it — and it was the first thing on the
-                // screen. Nothing running now costs nothing on screen.
+                // Used to draw nothing at all when idle, on the reasoning that an inert "Non hai
+                // interventi attivi al momento" panel carries no information the empty space
+                // doesn't already say. That reasoning holds for a passive status message; it
+                // doesn't for a real action. Idle is most of the morning, and "punch in" is the
+                // one thing a technician actually does from here before anything else is
+                // possible — leaving that as a second tap into the Timbra tab, on the one screen
+                // that already knows nothing is running, was the actual gap (the Vetro mockup's
+                // own "Home — idle" screen calls this out directly).
                 child: trackers.isEmpty
-                    ? null
+                    ? const _ClockInPrompt()
                     : ActiveTrackerStrip(trackers: trackers),
               ),
             ),
@@ -135,6 +142,63 @@ class DashboardScreen extends ConsumerWidget {
               padding: EdgeInsets.only(bottom: context.navClearance),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The idle hero's one action — punch in, right from Home. Reuses [punchNotifierProvider] rather
+/// than pushing to the Timbra tab: this screen already knows nothing is running, so a second
+/// navigation just to reach the same "ingresso" event this button can fire directly would be a
+/// tap this screen exists to save.
+class _ClockInPrompt extends ConsumerWidget {
+  const _ClockInPrompt();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final punchState = ref.watch(punchNotifierProvider);
+    final busy = punchState.isLoading;
+
+    return VetroGlass(
+      fill: AppVetroColors.glassFillOnDark,
+      border: AppVetroColors.glassBorderOnDark,
+      borderRadius: BorderRadius.circular(14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: busy
+              ? null
+              : () => ref
+                    .read(punchNotifierProvider.notifier)
+                    .punch(ref.read(timbraStateProvider)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
+            child: Row(
+              children: [
+                if (busy)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
+                  )
+                else
+                  const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
+                const SizedBox(width: 10),
+                const Text(
+                  'Timbra ingresso',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.WHITE,
+                  ),
+                ),
+                const Spacer(),
+                Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+              ],
+            ),
+          ),
         ),
       ),
     );

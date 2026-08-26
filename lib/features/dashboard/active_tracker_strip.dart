@@ -1,8 +1,10 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_rack.dart';
@@ -124,6 +126,43 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     final canPause = t.kind == ActiveTrackerKind.attendance;
     final pauseGuard = canPause ? ref.watch(pauseGuardProvider) : null;
 
+    // A running ticket clock is the mockup's "hero-task" chip — the job this elapsed time is
+    // for, one tap from its detail. Attendance/cantiere clocks have no single entity to open.
+    final ticketId = t.kind == ActiveTrackerKind.ticket ? t.entityId : null;
+
+    final labelColumn = Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            t.label ?? _title(t.kind),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Manrope',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.onDarkMuted,
+            ),
+          ),
+          Text(
+            formatElapsed(t.elapsedAt(widget.now)),
+            style: TextStyle(
+              fontFamily: 'Sora',
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              color: onBreak ? AppColors.onDarkMuted : AppColors.onDark,
+              // Tabular figures: without them the whole row shifts every second as digit
+              // widths change, which is unreadable on a clock you are watching.
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: -0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: AppColors.WHITE.withAlpha(40))),
@@ -138,38 +177,21 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
             const SizedBox(width: 10),
             Icon(_glyph(t.kind), size: 16, color: AppColors.onDarkMuted),
             const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    t.label ?? _title(t.kind),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Manrope',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.onDarkMuted,
-                    ),
+            if (ticketId != null)
+              Expanded(
+                child: InkWell(
+                  onTap: () => context.push(AppRoutes.ticketDetailPath(ticketId)),
+                  child: Row(
+                    children: [
+                      labelColumn,
+                      const SizedBox(width: 4),
+                      Icon(LucideIcons.chevronRight, size: 14, color: AppColors.onDarkMuted),
+                    ],
                   ),
-                  Text(
-                    formatElapsed(t.elapsedAt(widget.now)),
-                    style: TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      color: onBreak ? AppColors.onDarkMuted : AppColors.onDark,
-                      // Tabular figures: without them the whole row shifts every second as digit
-                      // widths change, which is unreadable on a clock you are watching.
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                ),
+              )
+            else
+              labelColumn,
             if (onBreak)
               Padding(
                 padding: const EdgeInsets.only(right: AppSpacing.xs),

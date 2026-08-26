@@ -89,13 +89,15 @@ void main() {
       // minHeight was 430 unconditionally: with no clock running that is most of a phone screen
       // given to an empty gradient with a name at the top, and the day's work starting below the
       // fold. The ID plate always shows its readout row (job count, even at zero), but stays a
-      // compact stamped band, not a near-full-screen hero.
+      // compact stamped band, not a near-full-screen hero. Idle now also carries a one-line
+      // "Timbra ingresso" prompt (a real action, not a placeholder) — a few points taller than a
+      // bare gradient, still nowhere near the old 430.
       await pumpDashboard(tester);
 
       final heroHeight = tester.getSize(find.byType(IdPlateHeroComp)).height;
       expect(
         heroHeight,
-        lessThan(260),
+        lessThan(280),
         reason: 'the plate should stay a compact identity band, not a tall panel',
       );
       await tester.pumpWidget(const SizedBox.shrink());
@@ -126,14 +128,18 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows nothing at all when no clock is running', (tester) async {
+    testWidgets('shows the clock-in prompt, not a placeholder, when no clock is running', (
+      tester,
+    ) async {
       await pumpDashboard(tester);
 
-      // Nothing at all, not a placeholder. The hero drew a grey glass panel reading "Non hai
-      // interventi attivi al momento" for the ordinary condition of being between jobs — most of
-      // the morning — and the absence of rows already says it.
+      // No ActiveTrackerStrip and no inert status text — the hero drew a grey glass panel reading
+      // "Non hai interventi attivi al momento" for the ordinary condition of being between jobs,
+      // and the absence of rows already said that on its own. What idle shows instead is a real
+      // action: "Timbra ingresso".
       expect(find.byType(ActiveTrackerStrip), findsNothing);
       expect(find.textContaining('attiv'), findsNothing);
+      expect(find.text('Timbra ingresso'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
