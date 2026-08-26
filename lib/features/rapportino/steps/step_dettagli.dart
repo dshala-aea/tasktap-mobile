@@ -8,7 +8,9 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/ai/ai_api_client.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_vetro_palette.dart';
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel (the padding-free sibling of SectionTitle) — these headings sit inside cards
 // that already carry their own padding.
 import '../../../presentation/providers/report_editor_providers.dart';
@@ -327,7 +329,7 @@ class _GpsCapture extends ConsumerWidget {
     final state = ref.watch(reportEditorProvider(reportId));
     final hasGps = state.gpsLatitude != null && state.gpsLongitude != null;
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: Row(
         children: [
@@ -441,7 +443,7 @@ class _LinkedChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(LucideIcons.link, size: 14, color: AppColors.Y),
+        Icon(LucideIcons.link, size: 14, color: context.vetro.tint),
         const SizedBox(width: 6),
         Text('$label · ', style: TextStyle(fontSize: 12, color: context.colors.inkMuted)),
         Expanded(
@@ -488,7 +490,7 @@ class _AiDraftButton extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: AppCard(
+      child: VetroCard(
         child: Row(
           children: [
             Icon(LucideIcons.penTool, size: 18, color: exhausted ? c.inkDisabled : c.ink),
@@ -530,10 +532,9 @@ class _AiDraftButton extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
-              AppButton(
+              VetroButton(
                 label: 'Genera',
-                size: AppButtonSize.sm,
-                fullWidth: false,
+                compact: true,
                 onPressed: exhausted ? null : () => onDraft(id, ticketId),
               ),
           ],

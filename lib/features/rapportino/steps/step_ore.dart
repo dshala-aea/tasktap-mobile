@@ -6,7 +6,8 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_vetro_palette.dart';
+import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -274,8 +275,9 @@ class _StaffTileState extends State<_StaffTile> {
   @override
   Widget build(BuildContext context) {
     final row = widget.row;
+    final v = context.vetro;
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.all(AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,8 +288,8 @@ class _StaffTileState extends State<_StaffTile> {
               Container(
                 width: 36,
                 height: 36,
-                decoration: const BoxDecoration(color: AppColors.YSoft, shape: BoxShape.circle),
-                child: Icon(LucideIcons.user, size: 18, color: context.colors.ink),
+                decoration: BoxDecoration(color: v.tint.withAlpha(31), shape: BoxShape.circle),
+                child: Icon(LucideIcons.user, size: 18, color: v.tint),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -412,11 +414,12 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
     final mm = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
     final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
 
+    final v = context.vetro;
     return AppTappable(
       onTap: widget.onStop,
-      color: AppColors.YSoft,
+      color: v.tint.withAlpha(31),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: AppColors.Y),
+      border: Border.all(color: v.tint),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Text(
         '$hh:$mm:$ss',
@@ -473,9 +476,22 @@ class _TotalOreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final v = context.vetro;
+    // Vetro gradient, not CHARCOAL/AppColors.Y — same "Compilazione N di 4" readout job as
+    // rapportino_form_screen.dart's own _CompletionCard, same reasoning for the switch.
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(color: AppColors.CHARCOAL, borderRadius: AppRack.freeShape),
+      decoration: BoxDecoration(
+        borderRadius: AppRack.freeShape,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [v.tint, v.tintStrong],
+        ),
+        boxShadow: [
+          BoxShadow(color: v.tint.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
+        ],
+      ),
       child: Row(
         children: [
           Column(
@@ -483,10 +499,9 @@ class _TotalOreCard extends StatelessWidget {
             children: [
               Text(
                 'Totale ore',
-                style: const TextStyle(
-                  // On CHARCOAL, which is dark in both themes. `inkMuted` measured 1.9:1 here in
-                  // light mode — the label above the headline figure of the hours step.
-                  color: AppColors.onDarkMuted,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  color: Colors.white.withAlpha(200),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -495,9 +510,10 @@ class _TotalOreCard extends StatelessWidget {
               Text(
                 '${totalOre.toStringAsFixed(1)} h',
                 style: const TextStyle(
-                  color: AppColors.Y,
+                  fontFamily: 'Inter',
+                  color: Colors.white,
                   fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
@@ -508,8 +524,9 @@ class _TotalOreCard extends StatelessWidget {
             children: [
               Text(
                 'Tecnici',
-                style: const TextStyle(
-                  color: AppColors.onDarkMuted,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  color: Colors.white.withAlpha(200),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -518,10 +535,10 @@ class _TotalOreCard extends StatelessWidget {
               Text(
                 '$staffCount',
                 style: const TextStyle(
-                  // `inkInverse` went near-black here the moment dark mode was on.
-                  color: AppColors.onDark,
+                  fontFamily: 'Inter',
+                  color: Colors.white,
                   fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],

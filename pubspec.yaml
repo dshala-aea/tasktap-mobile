@@ -89,6 +89,10 @@ dev_dependencies:
   # Fakes ImagePickerPlatform.instance in widget tests (ticket_detail_screen_test.dart) — a
   # transitive dep of image_picker already, declared directly because the test imports it.
   image_picker_platform_interface: ^2.11.1
+  # Fakes PathProviderPlatform.instance in widget tests (step_riepilogo_signature_test.dart) —
+  # a transitive dep of path_provider already, declared directly for the same reason as above.
+  path_provider_platform_interface: ^2.1.3
+  plugin_platform_interface: ^2.1.8
 
   # App icon + splash generation
   # Run: flutter pub run flutter_launcher_icons

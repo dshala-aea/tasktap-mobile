@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'create_draft.dart';
@@ -219,6 +220,16 @@ class _RapportiniListBody extends ConsumerWidget {
 // Row
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// Vetro (module #3). Was a [ListRow] — Cassetta's shared rack-cell primitive, used at 28 call
+/// sites app-wide, not touched here or anywhere else in this pass (see every other Vetro module's
+/// own note on this). Rebuilt in the same flat-row-with-stripe shape the ticket list already
+/// established: no [VetroGlass] blur, this list can run long and a per-row backdrop filter during
+/// scroll is a real cost, not a style choice (see `_TicketRow`'s own doc comment).
+///
+/// The stripe replaces `strapped` — Cassetta's brand-accent ledge for "still needs finishing" —
+/// with the same Vetro tint used everywhere else for "this one needs you," so a technician reads
+/// one accent language across the whole app, not the safety-orange strap on this list and the
+/// indigo tint on Tickets.
 class _RapportinoRow extends ConsumerWidget {
   const _RapportinoRow({required this.draft, required this.isLast});
 
@@ -227,6 +238,7 @@ class _RapportinoRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final v = context.vetro;
     final staffAsync = ref.watch(rapportinoStaffProvider(draft.id));
     final materialiAsync = ref.watch(rapportinoMaterialiProvider(draft.id));
     final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
@@ -257,44 +269,7 @@ class _RapportinoRow extends ConsumerWidget {
     ];
     final subtitle = subParts.join(' · ');
 
-    return ListRow(
-      // The draft you are still filling in gets the accent strap — still-needs-finishing, the
-      // same selected/priority mark the in-corso ticket carries (not the live-timer green pulse,
-      // which is a different state — see active_tracker_strip.dart). A submitted report is done
-      // and reads as settled instead.
-      strapped: !isSubmitted,
-      leading: Stack(
-        children: [
-          const RowIconTile(icon: LucideIcons.fileText),
-          if (hasBothSigs)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: context.colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.colors.surface, width: 1.5),
-                ),
-                child: Icon(LucideIcons.penTool, size: 8, color: AppColors.WHITE),
-              ),
-            ),
-        ],
-      ),
-      title: draft.title,
-      subtitle: subtitle,
-      meta: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          StatusPill(stato: statusLabel, small: true, outlined: true),
-          const SizedBox(height: 2),
-          Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
-        ],
-      ),
-      showDivider: !isLast,
+    return InkWell(
       onTap: () {
         if (isSubmitted) {
           context.push(AppRoutes.rapportiniView(draft.id));
@@ -302,6 +277,91 @@ class _RapportinoRow extends ConsumerWidget {
           context.push(AppRoutes.rapportiniEditor(draft.id));
         }
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        decoration: BoxDecoration(
+          border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
+        ),
+        // IntrinsicHeight for the stripe — same reasoning as `_TicketRow`'s own comment: this row
+        // sits in a SliverChildBuilderDelegate item with no bounded height for a bare
+        // `crossAxisAlignment: stretch` to stretch into.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 3,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(
+                  color: isSubmitted ? const Color(0xFF98989D) : v.tint,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              Stack(
+                children: [
+                  const RowIconTile(icon: LucideIcons.fileText),
+                  if (hasBothSigs)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: context.colors.green,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: context.colors.surface, width: 1.5),
+                        ),
+                        child: Icon(LucideIcons.penTool, size: 8, color: AppColors.WHITE),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      draft.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: context.colors.ink,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StatusPill(stato: statusLabel, small: true, outlined: true),
+                  const SizedBox(height: 2),
+                  Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
+                ],
+              ),
+              const SizedBox(width: 6),
+              Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkDisabled),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

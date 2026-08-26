@@ -70,17 +70,17 @@ void main() {
   tearDown(() async => db.close());
 
   group('RapportiniListScreen — row rendering', () {
-    testWidgets('renders one ListRow per seeded draft', (tester) async {
+    testWidgets('renders one row per seeded draft, titled', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Intervento idraulico');
       await _seedDraft(db, id: 'draft-2', title: 'Revisione caldaia');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
+      // Vetro (module #3) replaced ListRow with a bespoke priority-striped row, same as the
+      // ticket list — the behaviour that matters is "one row per draft, showing its title."
       expect(find.text('Intervento idraulico'), findsOneWidget);
       expect(find.text('Revisione caldaia'), findsOneWidget);
-      // Two ListRows rendered
-      expect(find.byType(ListRow), findsNWidgets(2));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

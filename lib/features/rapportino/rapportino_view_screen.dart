@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/widgets/vetro_button.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'create_draft.dart';
@@ -118,7 +120,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
-                    child: AppCard(
+                    child: VetroCard(
                       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,7 +137,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                                 Text(
                                   dateLabel,
                                   style: TextStyle(
-                                    fontFamily: 'Manrope',
+                                    fontFamily: 'Inter',
                                     fontSize: 12,
                                     color: context.colors.inkMuted,
                                   ),
@@ -189,7 +191,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: AppCard(
+                      child: VetroCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -198,7 +200,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                             Text(
                               draft.details!,
                               style: TextStyle(
-                                fontFamily: 'Manrope',
+                                fontFamily: 'Inter',
                                 fontSize: 13,
                                 color: context.colors.ink,
                                 height: 1.5,
@@ -220,7 +222,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: AppCard(
+                      child: VetroCard(
                         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -272,7 +274,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: AppCard(
+                      child: VetroCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -306,7 +308,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.xl,
                     ),
-                    child: AppButton(
+                    child: VetroButton(
                       label: 'Scarica PDF',
                       icon: const Icon(LucideIcons.download, size: 16),
                       onPressed: () {
@@ -403,7 +405,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
             style: TextStyle(color: context.colors.ink, fontSize: 13),
           ),
           const SizedBox(height: 12),
-          AppButton(
+          VetroButton(
             label: 'Rilavora',
             icon: const Icon(LucideIcons.penTool),
             onPressed: _busy ? null : _rilavora,
@@ -452,7 +454,7 @@ class _SignatureBlock extends ConsumerWidget {
           const SizedBox(height: 6),
           Text(
             'Firmato il $signedLabel',
-            style: TextStyle(fontFamily: 'Manrope', fontSize: 12, color: context.colors.inkMuted),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
           ),
         ],
       ),

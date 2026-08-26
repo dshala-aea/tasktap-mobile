@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_vetro_palette.dart';
+import '../../core/widgets/vetro_compartment_tile.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -31,6 +33,7 @@ class RapportinoFormScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final v = context.vetro;
     final editorState = ref.watch(reportEditorProvider(reportId));
     final subtitle = editorState.title.isEmpty ? null : editorState.title;
 
@@ -56,12 +59,12 @@ class RapportinoFormScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: editorState.isSaving
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
                   )
-                : const Icon(LucideIcons.cloud, size: 20, color: AppColors.Y),
+                : Icon(LucideIcons.cloud, size: 20, color: v.tint),
           ),
         ],
       ),
@@ -145,11 +148,12 @@ class RapportinoFormScreen extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// _CompletionCard — dark summary anchoring the checklist
+// _CompletionCard — Vetro gradient summary anchoring the checklist
 //
 // The grid alone left the rest of the screen a dead void with nothing telling the technician
-// where they stood. Same CHARCOAL/AppColors.Y language as Ore's "Totale ore" card: the checklist
-// is the input, this is the readout.
+// where they stood. Was the CHARCOAL/AppColors.Y card Ore's own "Totale ore" card used —
+// Vetro's tint gradient carries the same "readout" job now (see _TicketRow's own note on why
+// the strap language moved from brand-orange to tint across every module).
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _CompletionCard extends StatelessWidget {
@@ -161,19 +165,31 @@ class _CompletionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final v = context.vetro;
     final ready = completed == _total;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(color: AppColors.CHARCOAL, borderRadius: AppRack.freeShape),
+      decoration: BoxDecoration(
+        borderRadius: AppRack.freeShape,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [v.tint, v.tintStrong],
+        ),
+        boxShadow: [
+          BoxShadow(color: v.tint.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
+        ],
+      ),
       child: Row(
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Compilazione',
                 style: TextStyle(
-                  color: AppColors.onDarkMuted,
+                  fontFamily: 'Inter',
+                  color: Colors.white.withAlpha(200),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -182,9 +198,10 @@ class _CompletionCard extends StatelessWidget {
               Text(
                 '$completed di $_total',
                 style: const TextStyle(
-                  color: AppColors.Y,
+                  fontFamily: 'Inter',
+                  color: Colors.white,
                   fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
@@ -193,13 +210,14 @@ class _CompletionCard extends StatelessWidget {
           Icon(
             ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
             size: 18,
-            color: ready ? context.colors.green : AppColors.onDarkMuted,
+            color: Colors.white,
           ),
           const SizedBox(width: 8),
           Text(
             ready ? 'Pronto per l\'invio' : 'Da completare',
             style: const TextStyle(
-              color: AppColors.onDark,
+              fontFamily: 'Inter',
+              color: Colors.white,
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -214,9 +232,9 @@ class _CompletionCard extends StatelessWidget {
 // _StepTile — CompartmentTile plus a completion mark
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// A [CompartmentTile] with a filled/hollow completion dot — the "what's left" read a stepper's
-/// numbered discs used to give for free. No forced order and no discs to number, so this is the
-/// one piece of state the grid still needs to carry per tile.
+/// A [VetroCompartmentTile] with a filled/hollow completion dot — the "what's left" read a
+/// stepper's numbered discs used to give for free. No forced order and no discs to number, so
+/// this is the one piece of state the grid still needs to carry per tile.
 class _StepTile extends StatelessWidget {
   const _StepTile({
     required this.icon,
@@ -232,13 +250,13 @@ class _StepTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // fit: expand — a bare Stack gives CompartmentTile loose constraints, so it shrinks to
-    // content width and leaves the badge floating at the grid cell's corner instead of the
-    // tile's own corner (visible as a detached circle to the right of each tile).
+    // fit: expand — a bare Stack gives the tile loose constraints, so it shrinks to content
+    // width and leaves the badge floating at the grid cell's corner instead of the tile's own
+    // corner (visible as a detached circle to the right of each tile).
     return Stack(
       fit: StackFit.expand,
       children: [
-        CompartmentTile(icon: icon, label: label, onTap: onTap),
+        VetroCompartmentTile(icon: icon, label: label, onTap: onTap),
         Positioned(
           top: 10,
           right: 10,

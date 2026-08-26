@@ -12,6 +12,8 @@ import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/widgets/vetro_button.dart';
+import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/draft_submission_state.dart';
@@ -125,7 +127,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           // `Cliente  3f2a1c8e-…`, and separate `Ticket` / `Ticket (lib.)` rows for what is one
           // fact stored two ways. Nobody can check a rapportino against a GUID, so the step that
           // exists to be checked could not be.
-          AppCard(
+          VetroCard(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
@@ -221,12 +223,12 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       subtitle: draft?.submissionError,
                     ),
                     const SizedBox(height: 12),
-                    AppButton.danger(
+                    VetroButton(
                       label: 'Riprova invio',
                       icon: const Icon(LucideIcons.refreshCw),
                       onPressed: _submitting ? null : _onInvia,
                       isLoading: _submitting,
-                      size: AppButtonSize.lg,
+                      gradientColors: const [AppColors.stopLight, AppColors.stopDark],
                     ),
                   ],
                 );
@@ -248,12 +250,11 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     Text(_submitError!, style: TextStyle(color: context.colors.red, fontSize: 12)),
                   ],
                   const SizedBox(height: 12),
-                  AppButton(
+                  VetroButton(
                     label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
                     icon: _submitting ? null : const Icon(LucideIcons.send),
                     onPressed: validation.isValid && !_submitting ? _onInvia : null,
                     isLoading: _submitting,
-                    size: AppButtonSize.lg,
                   ),
                 ],
               );
@@ -406,7 +407,7 @@ class _SignatureBlock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final captured = localPath != null && allegatoId != null;
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.all(AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -458,11 +459,10 @@ class _SignatureBlock extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            AppButton(
+            VetroButton(
               label: 'Acquisisci firma $label',
               icon: const Icon(LucideIcons.penTool),
               onPressed: () => _captureSig(context, ref),
-              size: AppButtonSize.lg,
             ),
           ],
         ],
@@ -516,9 +516,20 @@ class _SigDialogState extends State<_SigDialog> {
   @override
   void initState() {
     super.initState();
+    // Fixed ink, not `context.colors.ink` — that used to throw: `Theme.of(context)` (what
+    // `context.colors` resolves through) establishes an InheritedWidget dependency, and Flutter
+    // asserts against doing that before initState() completes ("dependOnInheritedWidgetOfExact
+    // Type<_InheritedTheme>() ... was called before _SigDialogState.initState() completed").
+    // Reproduced with a real drawn stroke in step_riepilogo_signature_test.dart — every capture
+    // attempt hit this before a single pixel could be signed.
+    //
+    // A fixed value is also the more consistent choice, not just the fix: this dialog's AppBar is
+    // already fixed CHARCOAL/onDark regardless of theme, for the exact same "captures a signature,
+    // must not go near-invisible if the ink also flipped" reasoning (see this class's own AppBar
+    // comment) — the pen should not have been the one themed thing on an otherwise fixed surface.
     _ctrl = SignatureController(
       penStrokeWidth: 3,
-      penColor: context.colors.ink,
+      penColor: AppColors.DARK,
       exportBackgroundColor: Colors.white,
     );
   }

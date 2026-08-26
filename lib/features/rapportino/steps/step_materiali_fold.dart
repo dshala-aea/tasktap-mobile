@@ -10,8 +10,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_vetro_palette.dart';
 import '../../../core/utils/error_message.dart';
+import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
@@ -67,7 +68,7 @@ class StepMaterialiFold extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── "Nessun materiale" toggle ──────────────────────────────────────
-          AppCard(
+          VetroCard(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.base,
               AppSpacing.xs,
@@ -180,8 +181,8 @@ class StepMaterialiFold extends ConsumerWidget {
                   icon: const Icon(LucideIcons.camera),
                   label: const Text('Fotocamera'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    foregroundColor: context.colors.brandOn,
+                    backgroundColor: context.vetro.tint,
+                    foregroundColor: Colors.white,
                     minimumSize: const Size(0, 52),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -428,7 +429,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
       child: Row(
         children: [
@@ -743,7 +744,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
     final rows = ref.watch(reportEditorProvider(widget.reportId).select((s) => s.controlloRows));
     final existing = _findExisting(rows);
 
-    return AppCard(
+    return VetroCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
