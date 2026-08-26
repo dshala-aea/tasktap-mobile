@@ -3,6 +3,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_palette.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_vetro_palette.dart';
 import 'screen_header.dart';
 
 /// Opens a compartment's content as a bottom sheet over the current screen, rather than growing
@@ -39,7 +40,7 @@ void openCompartmentSheet(BuildContext context, {required String label, required
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontFamily: 'Sora',
+                      fontFamily: 'Inter',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: ctx.colors.ink,
@@ -54,7 +55,7 @@ void openCompartmentSheet(BuildContext context, {required String label, required
               ],
             ),
           ),
-          Divider(height: 1, thickness: 1, color: ctx.colors.borderLight),
+          Divider(height: 1, thickness: 1, color: ctx.vetro.hairline),
           Expanded(
             child: SingleChildScrollView(
               controller: scrollController,
@@ -73,12 +74,14 @@ class SheetHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A muted tint tone, not full-saturation accent — this is a drag affordance, not a call to
+    // action, so it stays quiet while still carrying the one Vetro hue rather than plain grey.
     return Center(
       child: Container(
         width: 36,
         height: 4,
         decoration: BoxDecoration(
-          color: context.colors.borderMedium,
+          color: context.vetro.tint.withAlpha(60),
           borderRadius: BorderRadius.circular(2),
         ),
       ),
