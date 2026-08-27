@@ -360,6 +360,15 @@ class _RapportinoRow extends ConsumerWidget {
                   Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
                 ],
               ),
+              // A swipe is the only way a mouse/keyboard/TalkBack/VoiceOver user cannot perform —
+              // this button reaches the exact same delete path (_confirmDeleteDraft) so both ways
+              // to delete a draft agree on what "delete" does, not just on how you trigger it.
+              if (statusLabel == 'Bozza')
+                IconButton(
+                  icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.inkMuted),
+                  tooltip: 'Elimina bozza',
+                  onPressed: () => _confirmDeleteDraft(context, ref, draft),
+                ),
               const SizedBox(width: 6),
               Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkDisabled),
             ],

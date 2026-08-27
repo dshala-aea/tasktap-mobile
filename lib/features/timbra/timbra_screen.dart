@@ -1,6 +1,4 @@
 // dart format width=100
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +11,7 @@ import '../../core/widgets/row_icon_tile.dart';
 import '../../core/widgets/screen_header.dart';
 import '../../core/widgets/vetro_glass.dart';
 import '../../data/local/app_database.dart';
+import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -48,9 +47,6 @@ class TimbraScreen extends ConsumerStatefulWidget {
 }
 
 class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProviderStateMixin {
-  late Timer _clockTimer;
-  DateTime _now = DateTime.now();
-
   // Pulse animation for the clock dot while on shift.
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
@@ -58,10 +54,6 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
   @override
   void initState() {
     super.initState();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
-    });
-
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -74,7 +66,6 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
 
   @override
   void dispose() {
-    _clockTimer.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -152,9 +143,9 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                   builder: (context, constraints) {
                     final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
                     final content = <Widget>[
-                      _DateLabel(now: _now),
+                      const _DateLabel(),
                       const SizedBox(height: 6),
-                      _LiveClock(now: _now, pulseAnim: _pulseAnim),
+                      _LiveClock(pulseAnim: _pulseAnim),
                       const SizedBox(height: 28),
                       _PunchButton(
                         shiftState: shiftState,
@@ -215,7 +206,6 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                       data: (list) => _SessionsCard(
                         sessions: list,
                         total: total,
-                        now: _now,
                         hasPendingSync: ref.watch(hasPendingSyncProvider),
                         fillHeight: fits,
                       ),
@@ -265,11 +255,13 @@ const Color _kSessionTileFill = Color(0xFF262B45);
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _DateLabel extends StatelessWidget {
-  const _DateLabel({required this.now});
-  final DateTime now;
+  const _DateLabel();
 
   @override
   Widget build(BuildContext context) {
+    // The calendar date, not the clock — this never needs the per-second tick _LiveClock does,
+    // so it reads DateTime.now() once per rebuild rather than watching nowProvider.
+    final now = DateTime.now();
     // Use locale-neutral format to avoid requiring initializeDateFormatting.
     // Displays as e.g. "LUN 22 GIU 2026"
     final dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
@@ -308,13 +300,18 @@ class _DateLabel extends StatelessWidget {
 // _LiveClock
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _LiveClock extends StatelessWidget {
-  const _LiveClock({required this.now, required this.pulseAnim});
-  final DateTime now;
+class _LiveClock extends ConsumerWidget {
+  const _LiveClock({required this.pulseAnim});
   final Animation<double> pulseAnim;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Scoped to this one widget, not the whole screen: TimbraScreen used to hold `now` in its
+    // own State and `setState` it from a local Timer every second, which reran the entire
+    // screen's build() — LayoutBuilder, the sessions list, all of it — to update three digits.
+    // nowProvider (shared with the dashboard's ActiveTrackerStrip) ticks once for whoever is
+    // listening; only this widget rebuilds now.
+    final now = ref.watch(nowProvider).valueOrNull?.toLocal() ?? DateTime.now();
     final timeStr = DateFormat('HH:mm:ss').format(now);
     return Semantics(
       label: 'Ora corrente $timeStr',
@@ -680,14 +677,12 @@ class _SessionsCard extends StatelessWidget {
   const _SessionsCard({
     required this.sessions,
     required this.total,
-    required this.now,
     required this.hasPendingSync,
     required this.fillHeight,
   });
 
   final List<WorkSession> sessions;
   final Duration total;
-  final DateTime now;
   final bool hasPendingSync;
 
   /// True when the card was given a bounded box to fill, so its rows scroll inside it. False in

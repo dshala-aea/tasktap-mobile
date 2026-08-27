@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/notifications/notification_service.dart';
-import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/widgets/widgets.dart';
@@ -104,14 +104,15 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                       ),
                       child: Text(
                         'Segna tutte',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          // Fixed white, not context.colors.blue: the header is CHARCOAL under
-                          // both app themes now, and a flipping token tuned for a light ground is
-                          // exactly the bug onDark/onDarkMuted exist to prevent.
-                          color: AppColors.WHITE,
+                          // The header is a flipping ScreenHeader now, not a permanently-dark
+                          // CHARCOAL plate — fixed white here was unreadable (white-on-white) in
+                          // light mode. context.vetro.tint matches every other tinted header
+                          // action in the app and flips correctly with the theme.
+                          color: context.vetro.tint,
                         ),
                       ),
                     ),

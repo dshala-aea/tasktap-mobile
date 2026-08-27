@@ -95,7 +95,11 @@ class KeyVal extends StatelessWidget {
     return AppTappable(
       onTap: onTap,
       semanticLabel: '$label: $value. Tocca per aprire.',
-      child: row,
+      // A tappable row is a control, and this one's 10dp vertical padding alone lands well under
+      // the 44pt/48dp floor every other control in the app enforces (see the status pill's own
+      // ConstrainedBox on ticket detail) — this is the shared shape every tappable KeyVal on
+      // ticket/rapportino detail goes through, so the fix belongs here, once.
+      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: row),
     );
   }
 

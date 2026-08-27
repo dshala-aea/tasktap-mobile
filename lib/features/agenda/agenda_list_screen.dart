@@ -169,7 +169,10 @@ class _AgendaRowState extends ConsumerState<_AgendaRow> {
           onTap: _complete,
           child: RowIconTile(
             icon: item.isCompleted ? LucideIcons.checkCircle2 : LucideIcons.circle,
-            color: item.isCompleted ? context.colors.green : AppVetroColors.tint,
+            // context.vetro.tint, not the fixed AppVetroColors.tint — this row sits on the
+            // normal flipping page ground, not a permanently-dark surface, so it needs the
+            // theme-appropriate tint (the fixed light-mode value read lower-contrast in dark).
+            color: item.isCompleted ? context.colors.green : context.vetro.tint,
           ),
         ),
         title: item.title,

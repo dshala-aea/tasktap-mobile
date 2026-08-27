@@ -119,9 +119,12 @@ class _Segment extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         // The bar is 4dp but the target is a finger. Transparent padding rather than a taller
-        // bar, so the chrome stays thin and the tap still lands.
+        // bar, so the chrome stays thin and the tap still lands. 22 a side (not the original 10,
+        // which only reached ~24px total — half the 44pt/48dp floor for the control that jumps
+        // back to an earlier wizard step) makes the full hit target 48dp; the visible bar itself
+        // is unchanged.
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 22),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,

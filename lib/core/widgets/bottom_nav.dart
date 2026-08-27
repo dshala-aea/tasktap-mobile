@@ -154,7 +154,10 @@ class _NavTab extends StatelessWidget {
           // keeps sliding through it is the single most noticeable place to ignore the setting.
           duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
           curve: AppRack.slideOut,
-          constraints: const BoxConstraints(minHeight: 40),
+          // 48dp, not 40 — this is the app's single global navigation control, tapped constantly
+          // by a gloved technician one-handed, and 40 sat under both the 44pt (iOS) and 48dp
+          // (Android) touch-target floors.
+          constraints: const BoxConstraints(minHeight: 48),
           padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
           decoration: BoxDecoration(
             gradient: active

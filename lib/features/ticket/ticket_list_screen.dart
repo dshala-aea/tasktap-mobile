@@ -11,7 +11,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
-import '../../presentation/providers/schedule_providers.dart' show locationByIdProvider, customerByIdProvider;
+import '../../presentation/providers/schedule_providers.dart' show allLocationsProvider, allCustomersProvider;
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -109,6 +109,16 @@ class _TicketListBody extends ConsumerWidget {
     final statusMap = statusMapAsync.valueOrNull ?? {};
     final allTickets = ticketsAsync.valueOrNull ?? [];
 
+    // One stream each for the whole list, not one per row: this list can run to hundreds of
+    // tickets, and a per-row locationByIdProvider/customerByIdProvider watch opened (and tore
+    // down, on scroll-out) two live Drift subscriptions per visible row.
+    final locationsById = {
+      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[]) l.id: l,
+    };
+    final customersById = {
+      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[]) c.id: c,
+    };
+
     // Compute counts for subtitle.
     final inCorsoCount = allTickets.where((t) {
       final name = statusMap[t.statusId]?.toLowerCase() ?? '';
@@ -198,9 +208,16 @@ class _TicketListBody extends ConsumerWidget {
               delegate: SliverChildBuilderDelegate((context, i) {
                 final ticket = filtered[i];
                 final statusName = statusMap[ticket.statusId] ?? '';
+                final location = locationsById[ticket.locationId];
+                final customerName = location != null ? customersById[location.customerId]?.companyName : null;
+                final where = [
+                  customerName,
+                  location?.city,
+                ].where((s) => s != null && s.isNotEmpty).join(' · ');
                 return _TicketRow(
                   ticket: ticket,
                   statusName: statusName,
+                  where: where,
                   isLast: i == filtered.length - 1,
                 );
               }, childCount: filtered.length),
@@ -340,15 +357,20 @@ class _PendingTicketRow extends ConsumerWidget {
 /// backdrop filter during scroll is exactly the "many small instances" cost that widget's own doc
 /// comment warns against — flat rows on the page ground, divided by `context.vetro.hairline`,
 /// read as the same system without paying for it.
-class _TicketRow extends ConsumerWidget {
+class _TicketRow extends StatelessWidget {
   const _TicketRow({
     required this.ticket,
     required this.statusName,
+    required this.where,
     required this.isLast,
   });
 
   final Ticket ticket;
   final String statusName;
+
+  /// Cliente · città, resolved once for the whole list — see `_TicketListBody`'s own comment on
+  /// why this is no longer a per-row provider watch.
+  final String where;
   final bool isLast;
 
   Color _priorityColor(AppVetroPalette v, String? priority) => switch (priority) {
@@ -358,15 +380,19 @@ class _TicketRow extends ConsumerWidget {
     _ => const Color(0xFF98989D), // Bassa, or unset — neutral, not a fifth accent colour
   };
 
+  /// The stripe's own colour is invisible to a colorblind technician or a screen reader —
+  /// spoken/announced priority instead of relying on hue alone to triage a list of thirty tickets.
+  String _priorityLabel(String? priority) => switch (priority) {
+    'Urgente' => 'Priorità urgente',
+    'Alta' => 'Priorità alta',
+    'Media' => 'Priorità media',
+    _ => 'Priorità bassa',
+  };
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final v = context.vetro;
     final reference = ticketReference(ticket.numero);
-    final location = ref.watch(locationByIdProvider(ticket.locationId)).valueOrNull;
-    final customerName = location != null
-        ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
-        : null;
-    final where = [customerName, location?.city].where((s) => s != null && s.isNotEmpty).join(' · ');
 
     final dueDate = ticket.dueDate;
     final isOverdue = dueDate != null &&
@@ -374,7 +400,12 @@ class _TicketRow extends ConsumerWidget {
         statusName.toLowerCase() != 'completato';
     final dueLabel = dueDate == null ? null : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
 
-    return InkWell(
+    return Semantics(
+      // The stripe colour is a sighted-only cue; this is the same information for TalkBack/
+      // VoiceOver, and for a sighted colorblind technician who can't tell the hues apart either.
+      label: '${_priorityLabel(ticket.priority)}. ${ticket.title}${statusName.isNotEmpty ? ', $statusName' : ''}',
+      button: true,
+      child: InkWell(
       onTap: () => context.push('/ticket/${ticket.id}'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
@@ -483,6 +514,7 @@ class _TicketRow extends ConsumerWidget {
           ],
           ),
         ),
+      ),
       ),
     );
   }

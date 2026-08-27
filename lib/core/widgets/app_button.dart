@@ -173,7 +173,11 @@ class AppButton extends StatelessWidget {
     AppButtonVariant.secondary => context.colors.inkMuted,
     AppButtonVariant.dark => context.colors.inkInverse,
     AppButtonVariant.ghost => context.colors.ink,
-    AppButtonVariant.danger => const Color(0xFFB80000),
+    // context.colors.red, not a fixed hex — the fixed value paired fine with redSoft in light
+    // mode but measured ~1.96:1 in dark mode, far under the 4.5:1 AA floor; the themed token is
+    // tuned against both themes already (it's the same red every other destructive label in the
+    // app uses).
+    AppButtonVariant.danger => context.colors.red,
   };
 
   // No shadow on primary/dark, deliberately. This button sits in normal page flow, not as a

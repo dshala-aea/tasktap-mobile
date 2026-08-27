@@ -392,11 +392,17 @@ class _FilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = activeCount > 0;
+    final tint = context.vetro.tint;
+    // White clears contrast on the light-theme tint but not on dark mode's lighter tint
+    // (#7C93FF measures ~2.8:1 with white — well under the 4.5:1 AA floor); computed from the
+    // active tint's own luminance rather than a fixed foreground, so this stays correct if either
+    // palette's tint value ever moves.
+    final activeFg = tint.computeLuminance() > 0.3 ? Colors.black : Colors.white;
     return AppTappable(
       onTap: onTap,
-      color: active ? context.vetro.tint : context.colors.surface,
+      color: active ? tint : context.colors.surface,
       border: Border.all(
-        color: active ? context.vetro.tint : context.colors.borderMedium,
+        color: active ? tint : context.colors.borderMedium,
       ),
       borderRadius: AppRack.insetShape,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -407,14 +413,14 @@ class _FilterButton extends StatelessWidget {
           Icon(
             LucideIcons.filter,
             size: 16,
-            color: active ? Colors.white : context.colors.ink,
+            color: active ? activeFg : context.colors.ink,
           ),
           if (active) ...[
             const SizedBox(width: 6),
             Text(
               '$activeCount',
               style: AppTextStyles.labelMedium.copyWith(
-                color: Colors.white,
+                color: activeFg,
                 fontWeight: FontWeight.w700,
               ),
             ),

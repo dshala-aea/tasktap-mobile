@@ -20,7 +20,7 @@ class RowIconTile extends StatelessWidget {
     this.size = 40,
     this.iconSize = 20,
     this.radius,
-    this.color = AppVetroColors.tint,
+    this.color,
   }) : assert(icon != null || child != null, 'RowIconTile needs an icon or a child');
 
   final IconData? icon;
@@ -38,18 +38,25 @@ class RowIconTile extends StatelessWidget {
   /// Drives both the tile's fill (this colour at ~12% alpha) and the icon (this colour, solid) —
   /// pass a semantic colour (e.g. [BuildContext.colors]`.green`) for a state icon; the default is
   /// the one Vetro accent, matching a plain, non-semantic row.
-  final Color color;
+  ///
+  /// Resolved in [build], not a constructor default: this tile is the leading icon on 20+ list
+  /// rows app-wide, and a compile-time-constant default can only ever be the fixed
+  /// [AppVetroColors.tint] — the light-mode value, painted unchanged in dark mode. Every one of
+  /// those call sites inherited measurably worse dark-mode contrast than the rest of the design
+  /// system until this read `context.vetro.tint` instead.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedColor = color ?? context.vetro.tint;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: color.withAlpha(31),
+        color: resolvedColor.withAlpha(31),
         borderRadius: BorderRadius.circular(radius ?? AppRack.insetRadius),
       ),
-      child: child ?? Icon(icon, size: iconSize, color: color),
+      child: child ?? Icon(icon, size: iconSize, color: resolvedColor),
     );
   }
 }

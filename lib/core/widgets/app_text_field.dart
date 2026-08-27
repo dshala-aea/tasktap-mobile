@@ -104,7 +104,14 @@ class AppTextField extends StatelessWidget {
     // Static labels read the same whether the field is empty, focused or full — which matters on
     // a form being filled in a van — and they let the field itself be quiet: a filled inset with
     // a hairline, and the accent only when it has focus.
-    return Column(
+    // MergeSemantics, not a bare Column: the label above is a plain Text, invisible to
+    // TalkBack/VoiceOver as this field's *name* even though it's the field's only visible label
+    // (see the doc comment above on why this isn't InputDecoration.labelText). Merging the
+    // label's sibling semantics into the field's own node is what makes a screen reader announce
+    // "Email, edit text" instead of just "edit text" — this is the primary data-entry primitive
+    // used on essentially every form in the app, so every one of those forms inherits the fix.
+    return MergeSemantics(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -135,6 +142,7 @@ class AppTextField extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }
