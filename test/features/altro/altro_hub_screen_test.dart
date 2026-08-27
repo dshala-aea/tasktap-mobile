@@ -93,6 +93,14 @@ void main() {
   /// Defaults to the unconfirmed state — a device the server has not answered on yet — because
   /// that is what a fresh install is, and it is the case the gating rule is riskiest in.
   Future<void> pump(WidgetTester tester, {AuthUser? user, Entitlement? entitlement}) async {
+    // A childAspectRatio overflow in the Gestione grid (real regression, caught only on-device)
+    // never reproduced here at the test runner's default ~800dp-wide surface — the grid cells
+    // were simply too wide to hit it. 360dp is Android's own minimum-supported-width baseline,
+    // narrow enough to actually exercise the same layout math a real phone runs.
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(_buildHub(repo, entitlement: entitlement));
     await tester.pump();
     authStream.add(user);
@@ -101,6 +109,13 @@ void main() {
   }
 
   Future<void> drain(WidgetTester tester) async {
+    // Catches a real regression this file's tests missed: a childAspectRatio short enough to
+    // overflow VetroCompartmentTile's label by a couple of pixels rendered fine here (Flutter's
+    // test renderer doesn't fail a test just because a RenderFlex logged an overflow) and only
+    // showed up on-device as the red-and-black overflow banner. Checked before teardown, not
+    // after — takeException() only returns what fired since the last call, and pumpWidget(
+    // SizedBox.shrink()) unmounts the tree being asserted on.
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   }

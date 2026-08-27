@@ -62,8 +62,12 @@ class AltroHubScreen extends ConsumerWidget {
                   // layout (a deliberate "drawer" composition, not a mistake — see that widget's
                   // own doc comment) had to stretch across mostly empty middle, since a
                   // MainAxisAlignment.spaceBetween Column fills whatever height the grid cell
-                  // hands it. Shorter cell, same layout, no more dead air between the two.
-                  childAspectRatio: 1.9,
+                  // hands it. 1.9 and 1.7 both overflowed a two-line label — confirmed on a real
+                  // narrow phone, not just the test runner's default wide surface (see the
+                  // 360dp-viewport regression test this fix added). 1.5, paired with
+                  // VetroCompartmentTile's own tightened internal spacing, is the shortest that
+                  // clears it with real margin at that width.
+                  childAspectRatio: 1.5,
                 ),
                 delegate: SliverChildListDelegate(
                   _buildGestioneTiles(

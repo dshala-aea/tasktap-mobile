@@ -32,14 +32,14 @@ class VetroCompartmentTile extends StatelessWidget {
           onTap: onTap,
           borderRadius: const BorderRadius.all(Radius.circular(16)),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, size: 20, color: v.tint),
-                const SizedBox(height: 14),
+                const SizedBox(height: 8),
                 Text(
                   label,
                   maxLines: 2,
