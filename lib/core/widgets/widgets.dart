@@ -23,7 +23,6 @@ export 'rack.dart';
 export 'row_icon_tile.dart';
 export 'screen_header.dart';
 export 'section_title.dart';
-export 'signature_pad.dart';
 export 'stats_grid.dart';
 export 'status_badge.dart';
 export 'status_pill.dart';
