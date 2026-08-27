@@ -36,7 +36,7 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
         child: AppFab(
           icon: LucideIcons.userPlus,
           tooltip: 'Aggiungi membro',
@@ -220,7 +220,7 @@ class _SquadraDetailBody extends ConsumerWidget {
               }, childCount: membri.length),
             ),
           ),
-        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }

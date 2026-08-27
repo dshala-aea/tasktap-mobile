@@ -72,3 +72,12 @@ extension NavClearance on BuildContext {
   double get navClearance =>
       MediaQuery.viewPaddingOf(this).bottom + AppRack.navBarHeight + AppRack.navGap;
 }
+
+/// Bottom clearance for a FAB on a route the shell's floating nav never reaches — every
+/// `parentNavigatorKey: rootNavigatorKey` detail screen (see `app_router.dart`'s own comment on
+/// why those are full-screen). Nine of them borrowed [NavClearance.navClearance] instead, which
+/// reserves the pill's own 74px even though it is never drawn there — the FAB floated in a dead
+/// gap well clear of the screen edge. Just the device's own inset plus a standard Material margin.
+extension FabSafeBottom on BuildContext {
+  double get fabSafeBottom => MediaQuery.viewPaddingOf(this).bottom + 16;
+}

@@ -31,7 +31,7 @@ class AdminLocationDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
         child: AppFab(
           icon: LucideIcons.pencil,
           tooltip: 'Modifica',
@@ -105,7 +105,7 @@ class _LocationDetailBody extends StatelessWidget {
           ),
         ),
 
-        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }

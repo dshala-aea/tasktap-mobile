@@ -53,7 +53,7 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
         child: AppFab(
           icon: LucideIcons.pencil,
           tooltip: 'Modifica',
@@ -262,7 +262,7 @@ class _CantiereDetailBody extends ConsumerWidget {
         SliverToBoxAdapter(child: _TicketsSection(cantiereId: cantiereId)),
         SliverToBoxAdapter(child: _ReportsSection(cantiereId: cantiereId)),
 
-        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }
