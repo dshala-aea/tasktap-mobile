@@ -42,6 +42,7 @@ Map<String, dynamic> _syncPayload({
   List<Map<String, dynamic>> ticketStatuses = const [],
   List<Map<String, dynamic>> ticketTypes = const [],
   List<Map<String, dynamic>> materiali = const [],
+  List<Map<String, dynamic>> materialiBarcodes = const [],
   List<Map<String, dynamic>> cantieri = const [],
   List<Map<String, dynamic>> colleagues = const [],
 }) {
@@ -57,6 +58,7 @@ Map<String, dynamic> _syncPayload({
     'ticketStatuses': ticketStatuses,
     'ticketTypes': ticketTypes,
     'materiali': materiali,
+    'materialiBarcodes': materialiBarcodes,
     'cantieri': cantieri,
     'colleagues': colleagues,
   };
@@ -979,6 +981,58 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.first.name, 'Tubo rame 15mm');
       expect(rows.first.salePrice, 6.0);
+    });
+
+    test('materiale barcodes arrive in the local mirror, for offline scan-to-lookup', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          materialiBarcodes: [
+            {
+              'id': 'bc-1',
+              'tenantId': 'ten-1',
+              'createdAt': '2026-06-01T00:00:00Z',
+              'updatedAt': null,
+              'materialeId': 'mat-1',
+              'barcode': '8001234567890',
+              'barcodeType': 'EAN13',
+              'isPrimary': true,
+            },
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.materialeBarcodes).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.materialeId, 'mat-1');
+      expect(rows.first.barcode, '8001234567890');
+      expect(rows.first.barcodeType, 'EAN13');
+      expect(rows.first.isPrimary, isTrue);
+    });
+
+    test('a re-synced materiale barcode updates in place rather than duplicating', () async {
+      Map<String, dynamic> barcode(String value) => {
+        'id': 'bc-1',
+        'tenantId': 'ten-1',
+        'createdAt': '2026-06-01T00:00:00Z',
+        'updatedAt': null,
+        'materialeId': 'mat-1',
+        'barcode': value,
+        'barcodeType': 'EAN13',
+        'isPrimary': true,
+      };
+
+      _stubDioGet(mockDio, _syncPayload(materialiBarcodes: [barcode('8001111111111')]));
+      await svc.sync();
+
+      _stubDioGet(mockDio, _syncPayload(materialiBarcodes: [barcode('8002222222222')]));
+      await svc.sync();
+
+      final rows = await db.select(db.materialeBarcodes).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.barcode, '8002222222222');
     });
 
     test('cantieri arrive in the local catalogue', () async {

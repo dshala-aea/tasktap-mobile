@@ -273,6 +273,26 @@ class Materiali extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── materiale_barcodes ──────────────────────────────────────────────────────
+//
+// Local mirror of MaterialeBarcode (backend), synced alongside its parent Materiali row so a
+// barcode scan can resolve to a material offline. See SyncMaterialeBarcodeDto's own doc comment
+// (backend) for why this is delta-filtered independently of Materiali's own UpdatedAt.
+class MaterialeBarcodes extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get materialeId => text()();
+  TextColumn get barcode => text()();
+  TextColumn get barcodeType => text().nullable()();
+  BoolColumn get isPrimary => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── draft_reports ─────────────────────────────────────────────────────────────
 /// Mirrors Report entity. Holds both server-synced drafts and locally-created ones.
 class DraftReports extends Table {
@@ -685,6 +705,7 @@ class PendingTicketAttachments extends Table {
     TicketStatuses,
     TicketTypes,
     Materiali,
+    MaterialeBarcodes,
     DraftReports,
     ReportStaffTable,
     ReportMateriali,
@@ -704,7 +725,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration {
@@ -839,6 +860,15 @@ class AppDatabase extends _$AppDatabase {
           // authored locally by the mobile client, never delta-synced from the server.
           await m.addColumn(draftReports, draftReports.cantiereId);
         }
+        if (from < 22) {
+          // Barcode scan-to-lookup for the materiali catalog — see MaterialeBarcodes' own doc
+          // comment. Unlike schema 21's cantiereId (client-authored, no server rows to backfill),
+          // MaterialeBarcode rows already exist on the backend for materials a device may have
+          // synced long ago — a delta sync past an old cursor would only pick up barcodes updated
+          // after this point forward, never backfilling the rest. Same reasoning as tickets.numero
+          // (schema 12) / tickets.priority (schema 20): syncCursorGeneration bumped to v5 below.
+          await m.createTable(materialeBarcodes);
+        }
       },
     );
   }
@@ -863,7 +893,10 @@ class AppDatabase extends _$AppDatabase {
   ///      would never refill it, because the tickets it needs are precisely the ones that have not
   ///      changed. Same reasoning as v2: a cursor can outlive its own correctness.
   /// v4 — 2026-08-26, schema 20 added `tickets.priority`/`tickets.dueDate`. Same reasoning as v3.
-  static const String syncCursorGeneration = 'v4';
+  /// v5 — 2026-08-27, schema 22 added `materiale_barcodes` (new table, not a column, but the
+  ///      same delta blind spot: existing MaterialeBarcode rows on the backend would never
+  ///      backfill for a device whose cursor is already past their (unrelated) last change).
+  static const String syncCursorGeneration = 'v5';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

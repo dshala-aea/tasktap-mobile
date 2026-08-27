@@ -17,6 +17,7 @@ class SyncResultDto {
   final List<LocationDto> locations;
   final List<TicketDto> tickets;
   final List<MaterialeDto> materiali;
+  final List<MaterialeBarcodeDto> materialiBarcodes;
   final List<CantiereDto> cantieri;
   final List<TicketStatusDto> ticketStatuses;
   final List<TicketTypeDto> ticketTypes;
@@ -32,6 +33,7 @@ class SyncResultDto {
     required this.locations,
     required this.tickets,
     required this.materiali,
+    this.materialiBarcodes = const [],
     required this.cantieri,
     required this.ticketStatuses,
     required this.ticketTypes,
@@ -49,6 +51,7 @@ class SyncResultDto {
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),
       materiali: _list(j['materiali'], MaterialeDto.fromJson),
+      materialiBarcodes: _list(j['materialiBarcodes'], MaterialeBarcodeDto.fromJson),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
@@ -319,6 +322,44 @@ class MaterialeDto {
     purchasePrice: _dbl(j['purchasePrice']),
     salePrice: _dbl(j['salePrice']),
     isActive: j['isActive'] as bool? ?? true,
+  );
+}
+
+// ── MaterialeBarcode ─────────────────────────────────────────────────────────
+//
+// Mirrors the backend's SyncMaterialeBarcodeDto — a barcode/QR code tied to a Materiale, for
+// offline scan-to-lookup. See MaterialeBarcodes (local Drift table) for why this is delta-synced
+// independently of its parent MaterialeDto.
+class MaterialeBarcodeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String materialeId;
+  final String barcode;
+  final String? barcodeType;
+  final bool isPrimary;
+
+  const MaterialeBarcodeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.materialeId,
+    required this.barcode,
+    this.barcodeType,
+    this.isPrimary = false,
+  });
+
+  factory MaterialeBarcodeDto.fromJson(Map<String, dynamic> j) => MaterialeBarcodeDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    materialeId: j['materialeId'] as String,
+    barcode: j['barcode'] as String,
+    barcodeType: j['barcodeType'] as String?,
+    isPrimary: j['isPrimary'] as bool? ?? false,
   );
 }
 

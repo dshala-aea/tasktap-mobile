@@ -53,6 +53,9 @@ dependencies:
   # Opens the device's own maps app for turn-by-turn directions — no in-app map SDK, no API key.
   url_launcher: ^6.3.1
 
+  # Barcode/QR scanning (materiali lookup) — camera + on-device ML Kit, no cloud call per scan.
+  mobile_scanner: ^6.0.2
+
   # Icons
   lucide_icons: ^0.257.0
 

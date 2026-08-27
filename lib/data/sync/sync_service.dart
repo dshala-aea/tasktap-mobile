@@ -51,6 +51,7 @@ class SyncService {
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
+      await _upsertMaterialeBarcodes(payload.materialiBarcodes);
       await _upsertCantieri(payload.cantieri);
       await _replaceColleagues(payload.colleagues);
     });
@@ -109,6 +110,25 @@ class SyncService {
               purchasePrice: Value(m.purchasePrice),
               salePrice: Value(m.salePrice),
               isActive: Value(m.isActive),
+            ),
+          );
+    }
+  }
+
+  Future<void> _upsertMaterialeBarcodes(List<MaterialeBarcodeDto> list) async {
+    for (final b in list) {
+      await db
+          .into(db.materialeBarcodes)
+          .insertOnConflictUpdate(
+            MaterialeBarcodesCompanion.insert(
+              id: b.id,
+              tenantId: b.tenantId,
+              createdAt: b.createdAt,
+              updatedAt: Value(b.updatedAt),
+              materialeId: b.materialeId,
+              barcode: b.barcode,
+              barcodeType: Value(b.barcodeType),
+              isPrimary: Value(b.isPrimary),
             ),
           );
     }
