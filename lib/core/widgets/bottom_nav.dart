@@ -3,6 +3,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
+import '../theme/app_vetro_palette.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -23,17 +24,20 @@ class AppBottomNavItem {
   final String label;
 }
 
-/// Floating latch-row bottom navigation — the case's own row of compartment latches.
+/// Floating bottom navigation — Vetro's tint→tintStrong gradient marks the active tab, on the
+/// same permanently-dark CHARCOAL plate every other Operational surface in the app carries
+/// (headers, the signature capture dialog): this bar was never the Cassetta thing about itself,
+/// only its old latch styling was.
 ///
-/// This replaced a white floating pill with a 23 px radius and a fully-rounded active sub-pill —
-/// recoloring that shape orange still reads as "the old pill, repainted," not a latch. A latch is
-/// squared off, not round: the bar itself is machined at 10 px (not 23), each tab is a near-square
-/// compartment at 6 px (not 19, which was pill-rounded enough to disappear into the bar), and the
-/// active one shows a small tick engaged above it — the physical detail of a case latch actually
-/// clicking down, not just a colour change. Case-shell (permanently dark, like the punch-clock
-/// screens) ground, safety-orange active fill. Inactive tabs are icon-only in `onDarkMuted` — a
-/// fixed dark surface needs the fixed-ink tokens, not the flipping ones (see
-/// `AppColors.onDark`/`onDarkMuted` doc comment).
+/// Replaced: safety-orange (`AppColors.Y`) active fill → the Vetro gradient every other active/
+/// primary surface in the app uses (VetroButton, the rapportino completion card, ...); the
+/// "machined latch" 4px corner + tick-engaged-above indicator → a single 12px pill (VetroButton's
+/// own compact radius) whose gradient fill *is* the state, the way a VetroCompartmentTile's or
+/// VetroButton's does — a second indicator on top of a colour change was the Cassetta metaphor's
+/// own idea, not one Vetro's state language needs. Sora → Inter, matching every other Vetro
+/// surface. `AppVetroColors` (fixed), not `context.vetro` (flips with theme): CHARCOAL never
+/// flips, so neither should the gradient painted on it — same reasoning as `AppColors.onDark`/
+/// `onDarkMuted` for the icon colours below.
 ///
 /// ```dart
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
@@ -114,76 +118,59 @@ class _NavTab extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // The tick a latch shows when it's actually engaged, not just a colour swap. Space
-            // reserved either way so the row below never shifts when a tab (de)activates.
-            AnimatedContainer(
-              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
-              curve: AppRack.slideOut,
-              width: 16,
-              height: 3,
-              margin: const EdgeInsets.only(bottom: 5),
-              decoration: BoxDecoration(
-                color: active ? AppColors.Y : Colors.transparent,
-                borderRadius: BorderRadius.circular(2),
+        child: AnimatedContainer(
+          // Both platforms require the reduced-motion guard: "Remove animations" on Android and
+          // Reduce Motion on iOS both surface as MediaQuery.disableAnimations, and a nav bar that
+          // keeps sliding through it is the single most noticeable place to ignore the setting.
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
+          curve: AppRack.slideOut,
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: active
+                ? const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppVetroColors.tint, AppVetroColors.tintStrong],
+                  )
+                : null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                item.icon,
+                size: 18,
+                // The bar is CHARCOAL, permanently dark regardless of app theme (see the
+                // punch-clock screens' own reasoning) — a flipping token like `inkMuted` is
+                // tuned against a light ground and goes near-invisible here. `onDarkMuted` is
+                // white at 75%, built for exactly this surface, and still clears AA against
+                // CHARCOAL.
+                color: active ? Colors.white : AppColors.onDarkMuted,
               ),
-            ),
-            AnimatedContainer(
-              // The rack's own drawer movement, and it stops when the OS says stop. Both platforms
-              // require this: "Remove animations" on Android and Reduce Motion on iOS both surface
-              // as MediaQuery.disableAnimations, and a nav bar that keeps sliding through it is the
-              // single most noticeable place to ignore the setting.
-              duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
-              curve: AppRack.slideOut,
-              constraints: const BoxConstraints(minHeight: 40),
-              padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: active ? AppColors.Y : Colors.transparent,
-                // AppRack.insetRadius (4, derived from cellRadius), not the near-pill 19 this
-                // used to carry — a latch is machined square, not rounded into a pill. Matches
-                // every other "compartment inside a compartment" in the app rather than inventing
-                // a fourth radius.
-                borderRadius: BorderRadius.circular(AppRack.insetRadius),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    item.icon,
-                    size: 18,
-                    // The bar is CHARCOAL now, permanently dark regardless of app theme (see the
-                    // punch-clock screens' own reasoning) — a flipping token like `inkMuted` is
-                    // tuned against a light ground and goes near-invisible here. `onDarkMuted` is
-                    // white at 75%, built for exactly this surface, and still clears AA against
-                    // CHARCOAL.
-                    color: active ? context.colors.brandOn : AppColors.onDarkMuted,
-                  ),
-                  if (active) ...[
-                    const SizedBox(width: 8),
-                    // The label is what gives when space runs out — an icon nobody can read is
-                    // worse than a word that ends in an ellipsis, and the icon is what marks the
-                    // tab.
-                    Flexible(
-                      child: Text(
-                        item.label,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Sora',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.brandOn,
-                        ),
-                      ),
+              if (active) ...[
+                const SizedBox(width: 8),
+                // The label is what gives when space runs out — an icon nobody can read is
+                // worse than a word that ends in an ellipsis, and the icon is what marks the
+                // tab.
+                Flexible(
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/bottom_nav.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -74,17 +74,22 @@ void main() {
       expect(tapped, equals(3));
     });
 
-    testWidgets('active tab background is brand yellow', (tester) async {
+    testWidgets('active tab background is the Vetro tint gradient', (tester) async {
       await tester.pumpWidget(_wrap(AppBottomNav(currentIndex: 0, onTap: (_) {})));
       await tester.pumpAndSettle();
 
-      final hasYellow = tester.widgetList<AnimatedContainer>(find.byType(AnimatedContainer)).any((
-        c,
-      ) {
-        final d = c.decoration;
-        return d is BoxDecoration && d.color == AppColors.Y;
-      });
-      expect(hasYellow, isTrue);
+      final hasVetroGradient = tester
+          .widgetList<AnimatedContainer>(find.byType(AnimatedContainer))
+          .any((c) {
+            final d = c.decoration;
+            if (d is! BoxDecoration) return false;
+            final gradient = d.gradient;
+            return gradient is LinearGradient &&
+                gradient.colors.length == 2 &&
+                gradient.colors[0] == AppVetroColors.tint &&
+                gradient.colors[1] == AppVetroColors.tintStrong;
+          });
+      expect(hasVetroGradient, isTrue);
     });
   });
 }
