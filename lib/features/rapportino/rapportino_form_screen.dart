@@ -19,11 +19,13 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoFormScreen
 //
-// A checklist of four compartments (Dettagli / Ore / Materiali / Riepilogo), not a stepper —
-// see _openStep's own doc comment for why this replaced the sequential wizard. Reuses the M4/M5
-// reportEditorProvider backbone unchanged, and each step widget unchanged: the same
-// StepDettagli/StepOre/StepMaterialiFold/StepRiepilogo the stepper rendered inline now render
-// inside a bottom sheet instead.
+// A checklist of three compartments (Dettagli / Ore / Materiali), not a stepper — see
+// _openStep's own doc comment for why this replaced the sequential wizard. Riepilogo is not a
+// fourth peer tile: it is what the completion card itself opens, because reviewing the draft and
+// fixing whatever's missing is one action, not a checklist item you tick off in advance of doing
+// it. Reuses the M4/M5 reportEditorProvider backbone unchanged, and each step widget unchanged:
+// the same StepDettagli/StepOre/StepMaterialiFold/StepRiepilogo the stepper rendered inline now
+// render inside a bottom sheet instead.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class RapportinoFormScreen extends ConsumerWidget {
@@ -40,13 +42,6 @@ class RapportinoFormScreen extends ConsumerWidget {
     final dettagliDone = editorState.title.isNotEmpty;
     final oreDone = editorState.staffRows.isNotEmpty;
     final materialiDone = editorState.materialeRows.isNotEmpty || editorState.materialiNotRequired;
-    // A proxy for "ready to submit," not "submitted" — both signatures are the last thing
-    // Riepilogo asks for before Invia unlocks, and reading the real submission state would mean
-    // a second provider just to draw a checkmark. Good enough: it tells the truth about whether
-    // there is still something to do in here.
-    final riepilogoDone =
-        editorState.customerSignatureAllegatoId != null &&
-        editorState.technicianSignatureAllegatoId != null;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -81,12 +76,12 @@ class RapportinoFormScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               GridView.count(
-                crossAxisCount: 2,
+                crossAxisCount: 3,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 10,
                 crossAxisSpacing: 10,
-                childAspectRatio: 1.5,
+                childAspectRatio: 1.0,
                 children: [
                   _StepTile(
                     icon: LucideIcons.fileText,
@@ -118,26 +113,16 @@ class RapportinoFormScreen extends ConsumerWidget {
                       content: StepMaterialiFold(reportId: reportId),
                     ),
                   ),
-                  _StepTile(
-                    icon: LucideIcons.send,
-                    label: 'Riepilogo',
-                    done: riepilogoDone,
-                    onTap: () => openCompartmentSheet(
-                      context,
-                      label: 'Riepilogo',
-                      content: StepRiepilogo(reportId: reportId),
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 20),
               _CompletionCard(
-                completed: [
-                  dettagliDone,
-                  oreDone,
-                  materialiDone,
-                  riepilogoDone,
-                ].where((d) => d).length,
+                completed: [dettagliDone, oreDone, materialiDone].where((d) => d).length,
+                onTap: () => openCompartmentSheet(
+                  context,
+                  label: 'Riepilogo',
+                  content: StepRiepilogo(reportId: reportId),
+                ),
               ),
             ],
           ),
@@ -148,81 +133,120 @@ class RapportinoFormScreen extends ConsumerWidget {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// _CompletionCard — Vetro gradient summary anchoring the checklist
+// _CompletionCard — Vetro gradient summary anchoring the checklist, and its tap target
 //
 // The grid alone left the rest of the screen a dead void with nothing telling the technician
 // where they stood. Was the CHARCOAL/AppColors.Y card Ore's own "Totale ore" card used —
 // Vetro's tint gradient carries the same "readout" job now (see _TicketRow's own note on why
 // the strap language moved from brand-orange to tint across every module).
+//
+// It is also the only way into Riepilogo. Riepilogo used to sit in the grid as a fourth
+// checklist item, ticked once both signatures existed — which asked the technician to treat
+// "review the draft" as a box to check before they had reviewed anything. It is the pre-confirm
+// step, not a peer of Dettagli/Ore/Materiali: tapping this card always opens it, complete or not,
+// because seeing what's still missing — and filling it in — is what that screen is for.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _CompletionCard extends StatelessWidget {
-  const _CompletionCard({required this.completed});
+  const _CompletionCard({required this.completed, required this.onTap});
 
   final int completed;
+  final VoidCallback onTap;
 
-  static const _total = 4;
+  static const _total = 3;
 
   @override
   Widget build(BuildContext context) {
     final v = context.vetro;
     final ready = completed == _total;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
+    return Material(
+      color: Colors.transparent,
+      borderRadius: AppRack.freeShape,
+      child: InkWell(
         borderRadius: AppRack.freeShape,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [v.tint, v.tintStrong],
-        ),
-        boxShadow: [
-          BoxShadow(color: v.tint.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
-        ],
-      ),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: AppRack.freeShape,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [v.tint, v.tintStrong],
+            ),
+            boxShadow: [
+              BoxShadow(color: v.tint.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
+            ],
+          ),
+          child: Row(
             children: [
-              Text(
-                'Compilazione',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  color: Colors.white.withAlpha(200),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Compilazione',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      color: Colors.white.withAlpha(200),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$completed di $_total',
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '$completed di $_total',
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        ready ? 'Pronto per l\'invio' : 'Da completare',
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        'Rivedi e invia',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          color: Colors.white.withAlpha(200),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronRight, size: 14, color: Colors.white.withAlpha(200)),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
-          const Spacer(),
-          Icon(
-            ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
-            size: 18,
-            color: Colors.white,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            ready ? 'Pronto per l\'invio' : 'Da completare',
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

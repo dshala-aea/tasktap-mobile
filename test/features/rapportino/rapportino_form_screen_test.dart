@@ -1,13 +1,15 @@
 // dart format width=100
 // test/features/rapportino/rapportino_form_screen_test.dart
 //
-// Widget tests for the rapportino checklist (Dettagli/Ore/Materiali/Riepilogo tiles + sheets).
+// Widget tests for the rapportino checklist (Dettagli/Ore/Materiali tiles + the completion
+// card that opens Riepilogo as the pre-confirm review, not a fourth peer tile).
 //
 // Covers:
-//   1. All 4 tiles render.
+//   1. All 3 tiles render.
 //   2. Each tile opens its step's content in a bottom sheet.
-//   3. Submit blocks when validation not satisfied.
-//   4. Submit calls the queue when the draft is valid.
+//   3. The completion card opens Riepilogo.
+//   4. Submit blocks when validation not satisfied.
+//   5. Submit calls the queue when the draft is valid.
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -64,6 +66,11 @@ Future<void> _openTile(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openRiepilogo(WidgetTester tester) async {
+  await tester.tap(find.text('Rivedi e invia'));
+  await tester.pumpAndSettle();
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -79,7 +86,7 @@ void main() {
   const reportId = 'draft-test-1';
 
   group('RapportinoFormScreen — checklist tiles', () {
-    testWidgets('renders all four tiles', (tester) async {
+    testWidgets('renders all three tiles + the review-and-send completion card', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
@@ -87,7 +94,7 @@ void main() {
       expect(find.text('Dettagli'), findsOneWidget);
       expect(find.text('Ore'), findsOneWidget);
       expect(find.text('Materiali'), findsOneWidget);
-      expect(find.text('Riepilogo'), findsOneWidget);
+      expect(find.text('Rivedi e invia'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -134,14 +141,14 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Riepilogo tile opens a sheet with firma blocks + validation panel', (
+    testWidgets('completion card opens Riepilogo with firma blocks + validation panel', (
       tester,
     ) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      await _openTile(tester, 'Riepilogo');
+      await _openRiepilogo(tester);
 
       // Invia button present but disabled (missing sigs)
       expect(find.text('Invia rapportino'), findsOneWidget);
@@ -162,7 +169,7 @@ void main() {
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId, fakeQueue: fakeQueue));
       await tester.pumpAndSettle();
 
-      await _openTile(tester, 'Riepilogo');
+      await _openRiepilogo(tester);
 
       // Tap "Invia rapportino" — should be no-op because validation fails
       final inviaBtn = find.text('Invia rapportino');
@@ -258,7 +265,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await _openTile(tester, 'Riepilogo');
+      await _openRiepilogo(tester);
 
       // Invia button present + enabled
       final inviaBtn = find.text('Invia rapportino');
