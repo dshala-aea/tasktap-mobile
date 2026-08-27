@@ -58,7 +58,12 @@ class AltroHubScreen extends ConsumerWidget {
                   crossAxisCount: 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: 1.4,
+                  // Was 1.4 — tall enough that VetroCompartmentTile's icon-top/label-bottom
+                  // layout (a deliberate "drawer" composition, not a mistake — see that widget's
+                  // own doc comment) had to stretch across mostly empty middle, since a
+                  // MainAxisAlignment.spaceBetween Column fills whatever height the grid cell
+                  // hands it. Shorter cell, same layout, no more dead air between the two.
+                  childAspectRatio: 1.9,
                 ),
                 delegate: SliverChildListDelegate(
                   _buildGestioneTiles(
@@ -197,16 +202,12 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      // Was a RackCell — a fixed CHARCOAL plate, same reasoning IdPlateHeroComp's flat hero had
-      // (Module #5) before that went full Vetro glass. Different situation from that hero though:
-      // this card sits on the screen's own flipping bg2, not a full-width dark band, so
-      // AppVetroColors.glassFillOnDark (near-transparent white, meant to sit *over* an already-dark
-      // ground) would read as whatever's behind it in light mode. A dark, semi-opaque fill instead
-      // — still a real BackdropFilter blur/hairline edge, but the plate stays CHARCOAL regardless
-      // of app theme, matching what it always was.
+      // Was a fixed CHARCOAL plate regardless of app theme — the one dark, saturated block on an
+      // otherwise all-light screen (the Gestione tiles below it, the page background), with none
+      // of the dashboard hero's or the header's excuse for it: it isn't a nav anchor or a primary
+      // action surface, just identity info, and being the odd dark thing on the page made it
+      // compete for attention it doesn't need. Flips with the app theme like every other card now.
       child: VetroGlass(
-        fill: AppColors.CHARCOAL.withAlpha(235),
-        border: Colors.white.withAlpha(60),
         borderRadius: BorderRadius.circular(20),
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
@@ -229,7 +230,7 @@ class _UserCard extends StatelessWidget {
                       fontFamily: 'Inter',
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.WHITE,
+                      color: context.colors.ink,
                     ),
                   ),
                   if (displayName.isNotEmpty && email != null) ...[
@@ -241,7 +242,7 @@ class _UserCard extends StatelessWidget {
                       style: TextStyle(
                         fontFamily: 'Inter',
                         fontSize: 12,
-                        color: AppColors.WHITE.withAlpha(153),
+                        color: context.colors.inkMuted,
                       ),
                     ),
                   ],
