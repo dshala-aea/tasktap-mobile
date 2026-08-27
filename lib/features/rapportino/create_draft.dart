@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -47,9 +49,11 @@ Future<String?> createLocalDraft(
   required String title,
   String locationId = '',
   String? ticketId,
+  String? cantiereId,
   String? customerId,
   String? scheduleId,
   String? tenantId,
+  String? workAddress,
 }) async {
   final user = ref.read(currentUserProvider);
   if (user == null) return null;
@@ -76,8 +80,14 @@ Future<String?> createLocalDraft(
           insertedUserId: user.id,
           locationId: locationId,
           ticketId: Value(ticketId),
+          cantiereId: Value(cantiereId),
           customerId: Value(customerId),
           scheduleId: Value(scheduleId),
+          // Same shape ReportEditorNotifier._buildMetadataJson/._parseMetadataJson round-trip —
+          // workAddress has no column of its own (see DraftReports.metadataJson's doc comment).
+          metadataJson: Value(
+            (workAddress?.isNotEmpty ?? false) ? jsonEncode({'workAddress': workAddress}) : null,
+          ),
           isLocalOnly: const Value(true),
           stato: const Value('Bozza'),
         ),
@@ -124,8 +134,8 @@ Future<String> resolveDeviceTenantId(AppDatabase db) async {
 /// what happened and when.
 ///
 /// Copies the header fields the mobile editor tracks (title/details/technicianNotes/
-/// ticket-schedule-customer-location links, materialiNotRequired) plus every staff/materiali/
-/// controlli row. Deliberately does NOT copy the signatures or the customer sign-off text — those
+/// ticket-cantiere-schedule-customer-location links, materialiNotRequired) plus every
+/// staff/materiali/controlli row. Deliberately does NOT copy the signatures or the customer sign-off text — those
 /// attest to a specific version of the report the office already rejected, and must be recaptured
 /// for the reworked one.
 Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
@@ -144,6 +154,7 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
       title: source.title,
       scheduleId: Value(source.scheduleId),
       ticketId: Value(source.ticketId),
+      cantiereId: Value(source.cantiereId),
       customerId: Value(source.customerId),
       details: Value(source.details),
       metadataJson: Value(source.metadataJson),

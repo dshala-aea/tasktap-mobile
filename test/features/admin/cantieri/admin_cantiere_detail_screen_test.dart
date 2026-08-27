@@ -25,6 +25,7 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/cantieri/admin_cantiere_detail_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,9 @@ Widget _buildScreen({
       appDatabaseProvider.overrideWithValue(db),
       adminApiClientProvider.overrideWithValue(api),
       isOnlineProvider.overrideWithValue(isOnline),
+      // Explicit null (not left unoverridden) so "Crea rapportino" — the only control that reads
+      // this — has a deterministic, unauthenticated starting point.
+      currentUserProvider.overrideWithValue(null),
     ],
     child: MaterialApp(home: AdminCantiereDetailScreen(cantiereId: id)),
   );
@@ -464,6 +468,34 @@ void main() {
 
       expect(find.text('Caricamento…'), findsNothing);
       expect(find.text('COMMESSA'), findsOneWidget);
+      await _teardown(tester);
+    });
+  });
+
+  group('Crea rapportino', () {
+    // Only exercised up to (not through) context.push here: this harness's MaterialApp has no
+    // GoRouter installed, matching ticket_detail_screen_test.dart's own "Crea rapportino" test —
+    // it renders the button but never taps it, for the same reason. The prefill payload itself
+    // (cantiereId/customerId/tenantId/workAddress) is verified directly against createLocalDraft
+    // in create_draft_test.dart, without needing a router at all.
+    testWidgets('renders the button', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
+
+      expect(find.text('Crea rapportino'), findsOneWidget);
+      await _teardown(tester);
+    });
+
+    testWidgets('refuses with a snackbar when not signed in', (tester) async {
+      await _seedCantiere(db);
+      await _pumpScreen(tester, db: db, api: _FakeAdminApiClient());
+
+      await tester.tap(find.text('Crea rapportino'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Accedi per creare un rapportino.'), findsOneWidget);
+      // Nothing was created — createLocalDraft refuses before ever reaching the repository.
+      expect(await db.select(db.draftReports).get(), isEmpty);
       await _teardown(tester);
     });
   });

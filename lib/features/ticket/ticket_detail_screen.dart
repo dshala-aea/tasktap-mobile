@@ -458,7 +458,8 @@ class _TicketDetailBody extends ConsumerWidget {
                 children: [
                   VetroButton(
                     label: 'Crea rapportino',
-                    onPressed: () => _createRapportino(context, ref, ticket),
+                    onPressed: () =>
+                        _createRapportino(context, ref, ticket, locationAddress),
                   ),
                   const SizedBox(height: 8),
                   // compact for the smaller type/padding "demoted" look the comment above calls
@@ -493,6 +494,7 @@ class _TicketDetailBody extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Ticket ticket,
+    String locationAddress,
   ) async {
     final id = await createLocalDraft(
       ref,
@@ -502,6 +504,10 @@ class _TicketDetailBody extends ConsumerWidget {
       customerId: ticket.customerId,
       // The ticket's own tenant, rather than whatever row the mirror lookup finds first.
       tenantId: ticket.tenantId,
+      // Same address VetroMapCard already shows on this screen — a technician who needed it
+      // typed by hand every single time is exactly the friction "prefill everything possible"
+      // is about.
+      workAddress: locationAddress.isEmpty ? null : locationAddress,
     );
     if (!context.mounted) return;
     if (id == null) {

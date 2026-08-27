@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/vetro_card.dart';
@@ -16,6 +17,7 @@ import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../rapportino/create_draft.dart';
 import '../../ticket/ticket_providers.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -225,6 +227,28 @@ class _CantiereDetailBody extends ConsumerWidget {
           ),
         ),
 
+        // ── Crea rapportino ──────────────────────────────────────────────
+        //
+        // Cantiere had no path into a rapportino at all — a technician on-site had to back out
+        // to Rapportini and start blank, typing the customer/address/cantiere link by hand. Same
+        // prefill contract as Ticket detail's own "Crea rapportino" (createLocalDraft): every
+        // field this screen already knows goes straight into the draft.
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.pagePadding,
+            ),
+            child: VetroButton(
+              label: 'Crea rapportino',
+              icon: const Icon(LucideIcons.fileText),
+              onPressed: () => _createRapportino(context, ref, cantiere),
+            ),
+          ),
+        ),
+
         // ── Contatti (Gap 1) ────────────────────────────────────────────
         SliverToBoxAdapter(child: _ContactsSection(cantiereId: cantiereId)),
 
@@ -239,6 +263,35 @@ class _CantiereDetailBody extends ConsumerWidget {
         SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
+  }
+
+  Future<void> _createRapportino(
+    BuildContext context,
+    WidgetRef ref,
+    CantieriData cantiere,
+  ) async {
+    final address = [
+      cantiere.address,
+      cantiere.city,
+      cantiere.postalCode,
+    ].where((s) => s != null && s.isNotEmpty).join(', ');
+
+    final id = await createLocalDraft(
+      ref,
+      title: 'Rapportino — ${cantiere.name}',
+      cantiereId: cantiere.id,
+      customerId: cantiere.customerId,
+      tenantId: cantiere.tenantId,
+      workAddress: address.isEmpty ? null : address,
+    );
+    if (!context.mounted) return;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Accedi per creare un rapportino.')),
+      );
+      return;
+    }
+    context.push(AppRoutes.rapportiniEditor(id));
   }
 }
 

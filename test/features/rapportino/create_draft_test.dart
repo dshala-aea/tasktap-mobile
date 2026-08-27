@@ -76,6 +76,11 @@ Future<String?> _callCreateLocalDraft(
   WidgetTester tester,
   ProviderContainer container, {
   required String title,
+  String? ticketId,
+  String? cantiereId,
+  String? customerId,
+  String? tenantId,
+  String? workAddress,
 }) async {
   String? result;
   await tester.pumpWidget(
@@ -86,7 +91,15 @@ Future<String?> _callCreateLocalDraft(
           builder: (context, ref, _) {
             return ElevatedButton(
               onPressed: () async {
-                result = await createLocalDraft(ref, title: title);
+                result = await createLocalDraft(
+                  ref,
+                  title: title,
+                  ticketId: ticketId,
+                  cantiereId: cantiereId,
+                  customerId: customerId,
+                  tenantId: tenantId,
+                  workAddress: workAddress,
+                );
               },
               child: const Text('go'),
             );
@@ -155,6 +168,53 @@ void main() {
             'string never matches that route',
       );
     });
+
+    testWidgets('persists cantiereId — a cantiere-created rapportino keeps its link', (
+      tester,
+    ) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateLocalDraft(
+        tester,
+        container,
+        title: 'Rapportino — Cantiere Via Roma',
+        cantiereId: 'cant-1',
+        customerId: 'cust-1',
+        tenantId: 'tenant-1',
+      );
+
+      final draft = await repo.getDraft(id!);
+      expect(draft!.cantiereId, 'cant-1');
+      expect(draft.ticketId, isNull, reason: 'a cantiere-originated draft has no ticket link');
+    });
+
+    testWidgets('persists workAddress into metadataJson, readable back through the editor state', (
+      tester,
+    ) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateLocalDraft(
+        tester,
+        container,
+        title: 'Rapportino — Cantiere Via Roma',
+        workAddress: 'Via Roma 10, Milano, 20100',
+      );
+
+      final draft = await repo.getDraft(id!);
+      expect(draft!.metadataJson, contains('Via Roma 10, Milano, 20100'));
+    });
+
+    testWidgets('leaves metadataJson null when no workAddress is given', (tester) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
+
+      final draft = await repo.getDraft(id!);
+      expect(draft!.metadataJson, isNull);
+    });
   });
 
   group('createReworkDraft', () {
@@ -169,6 +229,26 @@ void main() {
 
       expect(newId, isNotNull);
       expect(_guidPattern.hasMatch(newId!), isTrue);
+    });
+
+    testWidgets('carries cantiereId over — a cantiere-linked rework keeps its link', (
+      tester,
+    ) async {
+      await repo.createDraft(
+        _rejectedReportCompanion(id: 'report-cant').copyWith(
+          ticketId: const Value(null),
+          cantiereId: const Value('cant-1'),
+        ),
+      );
+      final source = (await repo.getDraft('report-cant'))!;
+
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final newId = await _callCreateReworkDraft(tester, container, source);
+      final newDraft = await repo.getDraft(newId!);
+
+      expect(newDraft!.cantiereId, 'cant-1');
     });
 
     testWidgets('clones header fields into a new draft id, starting fresh as Bozza', (
