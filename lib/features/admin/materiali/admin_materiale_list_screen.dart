@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/materiali/materiale_barcode_lookup.dart';
 import '../../../data/sync/sync_service.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -147,10 +148,32 @@ class _AdminMaterialeListBody extends ConsumerWidget {
             ),
           ),
           SliverToBoxAdapter(
-            child: AppSearchBar(
-              controller: searchCtrl,
-              hint: 'Cerca per nome, codice o descrizione…',
-              onChanged: onQueryChanged,
+            child: Row(
+              children: [
+                Expanded(
+                  child: AppSearchBar(
+                    controller: searchCtrl,
+                    hint: 'Cerca per nome, codice o descrizione…',
+                    onChanged: onQueryChanged,
+                    // Own right margin dropped to a small gap — the scan button follows it now,
+                    // rather than the field sitting flush against the screen edge.
+                    margin: const EdgeInsets.fromLTRB(19, 0, 8, 12),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, bottom: 12),
+                  child: IconButton(
+                    icon: const Icon(LucideIcons.scanLine),
+                    tooltip: 'Scansiona codice',
+                    onPressed: () async {
+                      final match = await scanForMateriale(context, ref, title: 'Cerca materiale');
+                      if (match == null) return;
+                      searchCtrl.text = match.code;
+                      onQueryChanged(match.code);
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
           // ── Category filter ──────────────────────────────────────────────

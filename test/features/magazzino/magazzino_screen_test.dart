@@ -208,6 +208,13 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets('shows a barcode scan button next to the search bar', (tester) async {
+      await pump(tester);
+      expect(find.byTooltip('Scansiona codice'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   // ── Gap 3/4 of the feature audit: carico/scarico/trasferimento + stock-minimo actions ────────
