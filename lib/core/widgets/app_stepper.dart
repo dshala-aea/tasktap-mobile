@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_vetro_palette.dart';
 
 /// A single stepper step.
 class StepperStep {
@@ -51,7 +52,7 @@ class AppStepper extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontFamily: 'Sora',
+                  fontFamily: 'Inter',
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onDark,
@@ -61,7 +62,7 @@ class AppStepper extends StatelessWidget {
             Text(
               '${currentIndex + 1} di ${steps.length}',
               style: const TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.4,
@@ -126,7 +127,7 @@ class _Segment extends StatelessWidget {
             curve: Curves.easeOut,
             height: 4,
             decoration: BoxDecoration(
-              color: reached ? AppColors.Y : Colors.white.withAlpha(46),
+              color: reached ? context.vetro.tint : Colors.white.withAlpha(46),
               borderRadius: BorderRadius.circular(2),
             ),
           ),

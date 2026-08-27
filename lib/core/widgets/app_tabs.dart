@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// A single tab descriptor with an optional count pill.
 class AppTab {
@@ -12,7 +12,7 @@ class AppTab {
   final int? count;
 }
 
-/// Horizontal scrolling tabs — Manrope 700/12, active DARK + 2 px Y underline
+/// Horizontal scrolling tabs — Inter 700/12, active DARK + 2 px tint underline
 /// (inactive MUTED), 12/14 padding, optional count pill.
 ///
 /// ```dart
@@ -225,7 +225,10 @@ class _AppTabsState extends State<AppTabs> {
                 onTap: () => onSelected(i),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 border: Border(
-                  bottom: BorderSide(color: active ? AppColors.Y : Colors.transparent, width: 2),
+                  bottom: BorderSide(
+                    color: active ? context.vetro.tint : Colors.transparent,
+                    width: 2,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -233,7 +236,7 @@ class _AppTabsState extends State<AppTabs> {
                     Text(
                       tab.label,
                       style: TextStyle(
-                        fontFamily: 'Manrope',
+                        fontFamily: 'Inter',
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: active ? context.colors.ink : context.colors.inkMuted,
@@ -243,7 +246,9 @@ class _AppTabsState extends State<AppTabs> {
                       const SizedBox(width: 6),
                       DecoratedBox(
                         decoration: BoxDecoration(
-                          color: active ? context.colors.surfaceInverse : context.colors.bg3,
+                          color: active
+                              ? context.vetro.tint.withAlpha(31)
+                              : context.colors.bg3,
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Padding(
@@ -251,10 +256,10 @@ class _AppTabsState extends State<AppTabs> {
                           child: Text(
                             '${tab.count}',
                             style: TextStyle(
-                              fontFamily: 'Manrope',
+                              fontFamily: 'Inter',
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
-                              color: active ? context.colors.inkInverse : context.colors.inkMuted,
+                              color: active ? context.vetro.tint : context.colors.inkMuted,
                             ),
                           ),
                         ),

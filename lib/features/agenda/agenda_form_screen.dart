@@ -181,7 +181,7 @@ class _AgendaFormScreenState extends ConsumerState<AgendaFormScreen> {
             Text(
               'Priorità',
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: context.colors.inkMuted,

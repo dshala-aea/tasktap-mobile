@@ -651,7 +651,7 @@ class _SectionError extends StatelessWidget {
           Expanded(
             child: Text(
               'Impossibile caricare. Riprova.',
-              style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: context.colors.red),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.red),
             ),
           ),
           TextButton(onPressed: onRetry, child: const Text('Riprova')),

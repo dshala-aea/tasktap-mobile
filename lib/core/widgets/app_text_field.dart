@@ -189,7 +189,7 @@ class AppFieldLabel extends StatelessWidget {
     final required = label.trimRight().endsWith('*');
     final text = required ? label.trimRight().substring(0, label.trimRight().length - 1).trim() : label;
     final style = TextStyle(
-      fontFamily: 'Manrope',
+      fontFamily: 'Inter',
       fontSize: 11,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.6,

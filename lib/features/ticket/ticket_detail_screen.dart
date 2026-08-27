@@ -1224,22 +1224,11 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: ElevatedButton.icon(
+          child: VetroButton(
+            label: 'Fotocamera',
+            icon: const Icon(LucideIcons.camera),
+            isLoading: _busy,
             onPressed: _busy ? null : () => _pickImage(ImageSource.camera),
-            icon: _busy
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(LucideIcons.camera),
-            label: const Text('Fotocamera'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              foregroundColor: context.colors.brandOn,
-              minimumSize: const Size(0, 52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
           ),
         ),
       ],

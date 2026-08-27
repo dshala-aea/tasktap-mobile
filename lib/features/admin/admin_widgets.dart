@@ -44,7 +44,7 @@ class AdminDateField extends StatelessWidget {
             Expanded(
               child: Text(
                 value,
-                style: TextStyle(fontFamily: 'Manrope', fontSize: 14, color: c.ink),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: c.ink),
               ),
             ),
             Icon(icon, size: 18, color: c.inkMuted),

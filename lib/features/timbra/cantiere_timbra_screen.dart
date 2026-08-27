@@ -1104,7 +1104,7 @@ class _ErrorBanner extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 13,
                 color: context.colors.red,
                 fontWeight: FontWeight.w500,
@@ -1141,7 +1141,7 @@ class _ErrorBody extends StatelessWidget {
             Text(
               message,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 14,
                 color: context.colors.ink,
                 height: 1.5,

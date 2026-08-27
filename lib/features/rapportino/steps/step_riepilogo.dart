@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_vetro_palette.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/vetro_card.dart';
@@ -591,7 +592,12 @@ class _SigDialogState extends State<_SigDialog> {
                 },
                 child: const Text(
                   'Conferma',
-                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
+                  // Fixed AppVetroColors.tint, not context.vetro.tint: this AppBar is CHARCOAL
+                  // under both themes (see the doc comment above), so its accent shouldn't flip
+                  // with the theme either — same reasoning as the onDark/onDarkMuted colours used
+                  // elsewhere on this permanently-dark bar (and in AppBottomNav, which documents
+                  // this very dialog as one of the app's fixed-CHARCOAL surfaces).
+                  style: TextStyle(color: AppVetroColors.tint, fontWeight: FontWeight.bold),
                 ),
               ),
             ],

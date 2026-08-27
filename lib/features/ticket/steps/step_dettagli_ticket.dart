@@ -151,7 +151,7 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontFamily: 'Sora',
+        fontFamily: 'Inter',
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.colors.ink,

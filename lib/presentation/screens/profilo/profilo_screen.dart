@@ -36,14 +36,8 @@ class ProfiloScreen extends ConsumerWidget {
           children: [
             // ── User card ────────────────────────────────────────────────
             if (user != null) ...[
-              Container(
-                width: double.infinity,
+              AppCard(
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                decoration: BoxDecoration(
-                  color: context.colors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.colors.borderMedium),
-                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

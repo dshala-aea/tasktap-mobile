@@ -105,7 +105,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                       child: Text(
                         'Segna tutte',
                         style: const TextStyle(
-                          fontFamily: 'Manrope',
+                          fontFamily: 'Inter',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           // Fixed white, not context.colors.blue: the header is CHARCOAL under
@@ -235,7 +235,7 @@ class _NotificaRow extends StatelessWidget {
       meta: Text(
         _formatTime(notifica.timestamp),
         style: TextStyle(
-          fontFamily: 'Manrope',
+          fontFamily: 'Inter',
           fontSize: 10,
           color: context.colors.inkMuted,
         ),

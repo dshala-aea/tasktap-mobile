@@ -21,6 +21,7 @@ import '../admin_widgets.dart';
 import '../squadre/admin_squadra_list_screen.dart' show adminSquadreProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 /// Who a schedule is assigned to — the three assignment kinds this form offers, matching the
 /// backend's own model (ADR-0009: `Direct`, `TeamLead`(+legacy `StaffIds`), `Squadra`). Legacy
@@ -484,12 +485,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
             // ── Assignment ────────────────────────────────────────────────
             Text(
               'Assegnazione *',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: context.colors.inkMuted,
-              ),
+              style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
             ),
             const SizedBox(height: 6),
             AppTabs(
@@ -637,12 +633,7 @@ class _AssignmentPicker extends ConsumerWidget {
               const SizedBox(height: 12),
               Text(
                 'Staff aggiuntivo',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.inkMuted,
-                ),
+                style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
               ),
               const SizedBox(height: 6),
               Wrap(

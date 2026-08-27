@@ -222,7 +222,7 @@ class _UserCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Sora',
+                      fontFamily: 'Inter',
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: AppColors.WHITE,
@@ -235,7 +235,7 @@ class _UserCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: 'Manrope',
+                        fontFamily: 'Inter',
                         fontSize: 12,
                         color: AppColors.WHITE.withAlpha(153),
                       ),

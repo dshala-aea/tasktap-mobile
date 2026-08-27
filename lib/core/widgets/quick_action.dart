@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
-/// Quick action — 50 px accent circle + icon (20) + centered Manrope 700/10
+/// Quick action — 50 px accent circle + icon (20) + centered Inter 700/10
 /// label.
 ///
 /// ```dart
@@ -37,13 +37,17 @@ class QuickAction extends StatelessWidget {
               Container(
                 width: 50,
                 height: 50,
-                decoration: const BoxDecoration(
-                  color: AppColors.Y,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [context.vetro.tint, context.vetro.tintStrong],
+                  ),
                   shape: BoxShape.circle,
                   // No shadow, same rule as AppButton: a static in-flow control, not an overlay,
                   // and a soft shadow is invisible outdoors — see app_button.dart's _shadows().
                 ),
-                child: Icon(icon, size: 20, color: context.colors.ink),
+                child: Icon(icon, size: 20, color: Colors.white),
               ),
               const SizedBox(height: 6),
               Text(
@@ -52,7 +56,7 @@ class QuickAction extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   color: context.colors.ink,

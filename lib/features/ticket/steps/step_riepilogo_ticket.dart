@@ -2,8 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/key_val.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
@@ -61,49 +62,39 @@ class StepRiepilogoTicket extends ConsumerWidget {
         AppSpacing.xl,
       ),
       children: [
-        // ── Title ──────────────────────────────────────────────────────────
-        if (state.title != null && state.title!.isNotEmpty) ...[
-          _SummaryRow(label: 'Titolo', value: state.title!),
-          const SizedBox(height: 12),
-        ],
-
-        // ── Customer ───────────────────────────────────────────────────────
-        _SummaryRow(
-          label: 'Cliente',
-          value: customerName ?? '—',
-          isMissing: state.customerId == null,
-        ),
-        const SizedBox(height: 12),
-
-        // ── Location ───────────────────────────────────────────────────────
-        _SummaryRow(label: 'Sede', value: locationName ?? '—', isMissing: state.locationId == null),
-        const SizedBox(height: 12),
-
-        // ── Type ───────────────────────────────────────────────────────────
-        _SummaryRow(label: 'Tipo', value: typeName ?? '—', isMissing: state.typeId == null),
-        const SizedBox(height: 12),
-
-        // ── Status ─────────────────────────────────────────────────────────
-        if (statusName != null) ...[
-          _SummaryRow(label: 'Stato', value: statusName),
-          const SizedBox(height: 12),
-        ],
-
-        // ── Priority ───────────────────────────────────────────────────────
-        _SummaryRow(label: 'Priorità', value: state.priority),
-        const SizedBox(height: 12),
-
-        // ── Description ────────────────────────────────────────────────────
-        if (state.description != null && state.description!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _SummaryRow(label: 'Descrizione', value: state.description!),
-        ],
-
-        // ── Assignment ─────────────────────────────────────────────────────
-        const SizedBox(height: 12),
-        _SummaryRow(
-          label: 'Assegnato a',
-          value: state.assignedUserId != null ? 'Tecnico selezionato' : 'Nessuna assegnazione',
+        // ── Summary ────────────────────────────────────────────────────────
+        VetroCard(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+          child: Column(
+            children: [
+              if (state.title != null && state.title!.isNotEmpty)
+                KeyVal(label: 'Titolo', value: state.title!),
+              KeyVal(
+                label: 'Cliente',
+                value: customerName ?? '—',
+                valueColor: state.customerId == null ? context.colors.red : null,
+              ),
+              KeyVal(
+                label: 'Sede',
+                value: locationName ?? '—',
+                valueColor: state.locationId == null ? context.colors.red : null,
+              ),
+              KeyVal(
+                label: 'Tipo',
+                value: typeName ?? '—',
+                valueColor: state.typeId == null ? context.colors.red : null,
+              ),
+              if (statusName != null) KeyVal(label: 'Stato', value: statusName),
+              KeyVal(label: 'Priorità', value: state.priority),
+              if (state.description != null && state.description!.isNotEmpty)
+                KeyVal(label: 'Descrizione', value: state.description!),
+              KeyVal(
+                label: 'Assegnato a',
+                value: state.assignedUserId != null ? 'Tecnico selezionato' : 'Nessuna assegnazione',
+                showDivider: false,
+              ),
+            ],
+          ),
         ),
 
         // ── Submit ─────────────────────────────────────────────────────────
@@ -114,42 +105,6 @@ class StepRiepilogoTicket extends ConsumerWidget {
           isLoading: isSubmitting,
         ),
       ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Summary row
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value, this.isMissing = false});
-
-  final String label;
-  final String value;
-  final bool isMissing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: AppSpacing.md),
-      decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        children: [
-          Text(label, style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              style: AppTextStyles.bodyLarge.copyWith(
-                color: isMissing ? context.colors.red : context.colors.ink,
-                fontWeight: FontWeight.w600,
-              ),
-              textAlign: TextAlign.end,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

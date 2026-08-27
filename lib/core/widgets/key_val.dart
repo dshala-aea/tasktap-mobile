@@ -43,7 +43,7 @@ class KeyVal extends StatelessWidget {
   final Color? valueColor;
 
   static TextStyle _labelStyle(BuildContext context) => TextStyle(
-    fontFamily: 'Manrope',
+    fontFamily: 'Inter',
     fontSize: 10,
     fontWeight: FontWeight.w700,
     color: context.colors.inkMuted,
@@ -76,7 +76,7 @@ class KeyVal extends StatelessWidget {
               textAlign: TextAlign.end,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
                 color: valueColor ?? context.colors.ink,
@@ -111,7 +111,7 @@ class KeyVal extends StatelessWidget {
             value,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: context.colors.ink,

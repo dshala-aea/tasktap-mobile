@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_vetro_palette.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
@@ -50,7 +50,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
         Text(
           'Assegnazione',
           style: TextStyle(
-            fontFamily: 'Sora',
+            fontFamily: 'Inter',
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: context.colors.ink,
@@ -143,10 +143,10 @@ class _AssignmentOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppTappable(
       onTap: onTap,
-      color: isSelected ? AppColors.Y.withValues(alpha: 0.12) : context.colors.surface,
+      color: isSelected ? context.vetro.tint.withValues(alpha: 0.12) : context.colors.surface,
       borderRadius: BorderRadius.circular(12),
       border: Border.all(
-        color: isSelected ? AppColors.Y : context.colors.borderStrong,
+        color: isSelected ? context.vetro.tint : context.colors.borderStrong,
         width: isSelected ? 2 : 1,
       ),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
@@ -155,7 +155,7 @@ class _AssignmentOption extends StatelessWidget {
           Icon(
             isSelected ? LucideIcons.circleDot : LucideIcons.circle,
             size: 20,
-            color: isSelected ? AppColors.Y : context.colors.inkMuted,
+            color: isSelected ? context.vetro.tint : context.colors.inkMuted,
           ),
           const SizedBox(width: 12),
           Expanded(

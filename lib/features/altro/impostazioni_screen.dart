@@ -259,7 +259,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     data: (info) => Text(
                       'TaskTap v${info.displayVersion}',
                       style: TextStyle(
-                        fontFamily: 'Manrope',
+                        fontFamily: 'Inter',
                         fontSize: 11,
                         color: context.colors.inkDisabled,
                       ),
@@ -431,7 +431,7 @@ class _ProfileCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: context.colors.ink,
@@ -443,7 +443,7 @@ class _ProfileCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: 'Manrope',
+                        fontFamily: 'Inter',
                         fontSize: 12,
                         color: context.colors.inkMuted,
                       ),
@@ -478,7 +478,7 @@ class _SettingsSectionTitle extends StatelessWidget {
       child: Text(
         title.toUpperCase(),
         style: TextStyle(
-          fontFamily: 'Manrope',
+          fontFamily: 'Inter',
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: context.colors.inkMuted,
@@ -555,7 +555,7 @@ class _ToggleRow extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -564,7 +564,7 @@ class _ToggleRow extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 11,
                     color: context.colors.inkMuted,
                   ),
@@ -625,7 +625,7 @@ class _LinkRow extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: context.colors.ink,
@@ -634,7 +634,7 @@ class _LinkRow extends StatelessWidget {
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 11,
                       color: context.colors.inkMuted,
                     ),
@@ -736,7 +736,7 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
                   ? 'Dettatura disponibile'
                   : 'Dettatura non disponibile',
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: context.colors.ink,
@@ -769,7 +769,7 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               Text(
                 c.unavailableMessage!,
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 11,
                   height: 1.4,
                   color: context.colors.inkMuted,
@@ -779,7 +779,7 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               Text(
                 'Puoi comunque compilare il rapportino scrivendo normalmente.',
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 11,
                   height: 1.4,
                   color: context.colors.inkMuted,
@@ -818,7 +818,7 @@ class _DictationLine extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 12,
                 color: context.colors.inkMuted,
               ),

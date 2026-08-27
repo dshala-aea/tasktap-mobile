@@ -48,7 +48,7 @@ class AppSearchBar extends StatelessWidget {
                 child: TextField(
                   controller: controller,
                   onChanged: onChanged,
-                  style: TextStyle(fontFamily: 'Manrope', fontSize: 14, color: context.colors.ink),
+                  style: TextStyle(fontSize: 14, color: context.colors.ink),
                   cursorColor: context.colors.ink,
                   decoration: InputDecoration(
                     isDense: true,
@@ -56,7 +56,6 @@ class AppSearchBar extends StatelessWidget {
                     border: InputBorder.none,
                     hintText: hint,
                     hintStyle: TextStyle(
-                      fontFamily: 'Manrope',
                       fontSize: 14,
                       color: context.colors.inkDisabled,
                     ),

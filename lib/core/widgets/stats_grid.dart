@@ -67,7 +67,7 @@ class _Cell extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 9,
               fontWeight: FontWeight.w700,
               color: c.inkMuted,
@@ -76,11 +76,11 @@ class _Cell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          // Sora, and only 20pt. This is the label stamped on the drawer, not a headline.
+          // Inter, and only 20pt. This is the label stamped on the drawer, not a headline.
           Text(
             item.value,
             style: TextStyle(
-              fontFamily: 'Sora',
+              fontFamily: 'Inter',
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: c.ink,

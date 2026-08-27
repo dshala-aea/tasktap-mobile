@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -17,13 +18,13 @@ void main() {
       expect(decoration.color, equals(AppColors.BM));
     });
 
-    testWidgets('renders in on state (Y track color)', (tester) async {
+    testWidgets('renders in on state (Vetro tint track color)', (tester) async {
       await tester.pumpWidget(_wrap(AppToggle(value: true, onChanged: (_) {})));
       await tester.pump();
 
       final track = tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
       final decoration = track.decoration as BoxDecoration;
-      expect(decoration.color, equals(AppColors.Y));
+      expect(decoration.color, equals(AppVetroPalette.light.tint));
     });
 
     testWidgets('tap calls onChanged(true) when off', (tester) async {
@@ -84,7 +85,7 @@ void main() {
 
       final track = tester.widget<AnimatedContainer>(find.byType(AnimatedContainer).first);
       final decoration = track.decoration as BoxDecoration;
-      expect(decoration.color, equals(AppColors.Y));
+      expect(decoration.color, equals(AppVetroPalette.light.tint));
     });
   });
 }

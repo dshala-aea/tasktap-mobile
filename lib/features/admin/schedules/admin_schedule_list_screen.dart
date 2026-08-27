@@ -2,6 +2,8 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
+import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_vetro_palette.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -392,9 +394,9 @@ class _FilterButton extends StatelessWidget {
     final active = activeCount > 0;
     return AppTappable(
       onTap: onTap,
-      color: active ? context.colors.surfaceInverse : context.colors.surface,
+      color: active ? context.vetro.tint : context.colors.surface,
       border: Border.all(
-        color: active ? context.colors.surfaceInverse : context.colors.borderMedium,
+        color: active ? context.vetro.tint : context.colors.borderMedium,
       ),
       borderRadius: AppRack.insetShape,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -405,17 +407,15 @@ class _FilterButton extends StatelessWidget {
           Icon(
             LucideIcons.filter,
             size: 16,
-            color: active ? context.colors.inkInverse : context.colors.ink,
+            color: active ? Colors.white : context.colors.ink,
           ),
           if (active) ...[
             const SizedBox(width: 6),
             Text(
               '$activeCount',
-              style: TextStyle(
-                fontFamily: 'Manrope',
-                fontSize: 12,
+              style: AppTextStyles.labelMedium.copyWith(
+                color: Colors.white,
                 fontWeight: FontWeight.w700,
-                color: context.colors.inkInverse,
               ),
             ),
           ],
@@ -463,8 +463,7 @@ class _CalendarSliver extends StatelessWidget {
                   child: Text(
                     monthLabel,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: 'Sora',
+                    style: AppTextStyles.titleMedium.copyWith(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       color: context.colors.ink,

@@ -35,7 +35,7 @@ class SectionTitle extends StatelessWidget {
             child: Text(
               title,
               style: TextStyle(
-                fontFamily: 'Sora',
+                fontFamily: 'Inter',
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: context.colors.ink,
@@ -46,7 +46,7 @@ class SectionTitle extends StatelessWidget {
             Text(
               trailing!,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: context.colors.inkMuted,
@@ -79,7 +79,7 @@ class StepLabel extends StatelessWidget {
     return Text(
       title,
       style: TextStyle(
-        fontFamily: 'Sora',
+        fontFamily: 'Inter',
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.colors.ink,

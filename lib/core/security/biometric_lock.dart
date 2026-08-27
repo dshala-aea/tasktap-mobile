@@ -6,6 +6,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../presentation/providers/auth_providers.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_vetro_palette.dart';
 import '../widgets/widgets.dart';
 import 'biometric_service.dart';
 
@@ -298,12 +299,12 @@ class _LockScreen extends StatelessWidget {
                 ? Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(LucideIcons.fingerprint, size: 40, color: AppColors.Y),
+                      const Icon(LucideIcons.fingerprint, size: 40, color: AppVetroColors.tint),
                       const SizedBox(height: 20),
                       const Text(
                         'TaskTap è bloccato',
                         style: TextStyle(
-                          fontFamily: 'Sora',
+                          fontFamily: 'Inter',
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: AppColors.onDark,
@@ -315,7 +316,7 @@ class _LockScreen extends StatelessWidget {
                         'interventi.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontFamily: 'Manrope',
+                          fontFamily: 'Inter',
                           fontSize: 13,
                           color: AppColors.onDarkMuted,
                         ),
@@ -334,7 +335,7 @@ class _LockScreen extends StatelessWidget {
                       ),
                     ],
                   )
-                : const Icon(LucideIcons.fingerprint, size: 40, color: AppColors.Y),
+                : const Icon(LucideIcons.fingerprint, size: 40, color: AppVetroColors.tint),
           ),
         ),
       ),
