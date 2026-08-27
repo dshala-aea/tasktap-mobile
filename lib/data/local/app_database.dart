@@ -285,6 +285,11 @@ class DraftReports extends Table {
   TextColumn get scheduleId => text().nullable()();
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
+  /// The cantiere this rapportino is about, when it was created from a Cantiere rather than a
+  /// Ticket. Was tracked only in `ReportEditorState.cantiereId` — never a DB column — so it
+  /// never survived an autosave: `_buildHeaderCompanion()` had no column to put it in, and
+  /// only `cantiereFreeText` (the display fallback) made it into `metadataJson`. See schema v21.
+  TextColumn get cantiereId => text().nullable()();
   TextColumn get details => text().nullable()();
 
   /// GPS/free-text fallback metadata (customerFreeText, locationFreeText, ticketFreeText,
@@ -699,7 +704,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration {
@@ -827,6 +832,12 @@ class AppDatabase extends _$AppDatabase {
           // changed — see `syncCursorGeneration`'s own doc comment, bumped to v4 alongside this.
           await m.addColumn(tickets, tickets.priority);
           await m.addColumn(tickets, tickets.dueDate);
+        }
+        if (from < 21) {
+          // See `DraftReports.cantiereId`'s own doc comment — this was client-only state that
+          // never had anywhere to persist to. No syncCursorGeneration bump needed: this column is
+          // authored locally by the mobile client, never delta-synced from the server.
+          await m.addColumn(draftReports, draftReports.cantiereId);
         }
       },
     );

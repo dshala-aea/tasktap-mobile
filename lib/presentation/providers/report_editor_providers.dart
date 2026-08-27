@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -224,6 +226,7 @@ class ReportEditorState {
     this.saveError,
     this.tenantId = '',
     this.insertedUserId = '',
+    this.isLoading = false,
   });
 
   final String reportId;
@@ -277,6 +280,14 @@ class ReportEditorState {
   final String? saveError;
   final String tenantId;
   final String insertedUserId;
+
+  /// True until the notifier has finished loading an existing draft's saved data from Drift.
+  ///
+  /// Defaults to `false` — a manually-constructed `ReportEditorState` (every widget test that
+  /// overrides `reportEditorProvider` with hand-built data) is "already loaded" by definition.
+  /// `ReportEditorNotifier`'s own constructor flips this to `true` for exactly as long as its
+  /// real hydration read takes.
+  final bool isLoading;
 
   // ── Validation ────────────────────────────────────────────────────────────
 
@@ -356,6 +367,7 @@ class ReportEditorState {
     String? saveError,
     String? tenantId,
     String? insertedUserId,
+    bool? isLoading,
     bool clearCustomerId = false,
     bool clearLocationId = false,
     bool clearTicketId = false,
@@ -408,6 +420,7 @@ class ReportEditorState {
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
       tenantId: tenantId ?? this.tenantId,
       insertedUserId: insertedUserId ?? this.insertedUserId,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
@@ -421,9 +434,155 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     required ReportEditorState initialState,
     required DraftReportRepository repo,
   }) : _repo = repo,
-       super(initialState);
+       super(initialState) {
+    ready = _hydrate();
+  }
 
   final DraftReportRepository _repo;
+
+  /// Resolves once hydration has either applied the draft's saved data or given up.
+  ///
+  /// Production code doesn't need this: `state.isLoading` drives the UI reactively (see
+  /// RapportinoFormScreen's spinner). It exists for callers that need a stable starting state
+  /// before doing anything else — every test in report_editor_providers_test.dart awaits this
+  /// before calling setters, so a test's own state changes can't race hydration and get
+  /// silently reverted by it.
+  late final Future<void> ready;
+
+  // ── Hydration ─────────────────────────────────────────────────────────────
+  //
+  // `initialState` is a placeholder, not the draft's actual saved data — the family provider has
+  // no way to read Drift synchronously at construction time. Without this, every reopened draft
+  // (leave the screen and come back, or restart the app) started from a blank editor, and the
+  // very next autosave — `_buildHeaderCompanion()` writes every column from `state` — overwrote
+  // the real row's tenantId/ticketId/customerId/cantiereId/locationId/title back to blank. This
+  // was silent: nothing crashed, nothing errored, a rapportino just quietly lost the ticket/
+  // cantiere it was linked to and the customer it was for.
+  //
+  // `createLocalDraft` always inserts the row before navigating here, so a missing row (`draft ==
+  // null`) only happens in tests that construct a `ReportEditorState` by hand with no matching
+  // DB row — hydration is a no-op then, leaving that hand-built state exactly as given.
+  //
+  // Guarded by `mounted` throughout and never lets an exception escape: `.autoDispose` can tear
+  // this notifier down mid-read (the screen closed before the load finished), and a database can
+  // close mid-test — either would otherwise throw from a bare `state = ...` after disposal, or an
+  // unhandled async error that fails a test that never even touches this notifier.
+  Future<void> _hydrate() async {
+    try {
+      await _hydrateBody();
+    } catch (_) {
+      // Best-effort load. A failed hydration leaves `initialState` in place rather than crashing
+      // the editor — the same "don't lose the session over a background read" reasoning as
+      // `_autosaveHeader`'s own swallowed catch.
+      if (mounted && state.isLoading) state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> _hydrateBody() async {
+    final draft = await _repo.getDraft(state.reportId);
+    if (!mounted) return;
+    if (draft == null) {
+      // No matching row: either a test-constructed state with nothing seeded (leave it exactly
+      // as given), or — defensively — a reportId nothing ever created. Either way, stop spinning.
+      if (state.isLoading) state = state.copyWith(isLoading: false);
+      return;
+    }
+
+    final staff = await _repo.getStaff(draft.id);
+    final materiali = await _repo.getMateriali(draft.id);
+    final controlli = await _repo.getControlli(draft.id);
+    final allegati = await _repo.getAllegati(draft.id);
+    final signatureIds = {
+      draft.customerSignatureAllegatoId,
+      draft.technicianSignatureAllegatoId,
+    }.whereType<String>().toSet();
+    final metadata = _parseMetadataJson(draft.metadataJson);
+    if (!mounted) return;
+
+    state = state.copyWith(
+      title: draft.title,
+      details: draft.details ?? '',
+      customerId: draft.customerId,
+      locationId: draft.locationId,
+      ticketId: draft.ticketId,
+      cantiereId: draft.cantiereId,
+      scheduleId: draft.scheduleId,
+      customerFreeText: metadata['customerFreeText'] as String?,
+      locationFreeText: metadata['locationFreeText'] as String?,
+      ticketFreeText: metadata['ticketFreeText'] as String?,
+      cantiereFreeText: metadata['cantiereFreeText'] as String?,
+      workAddress: metadata['workAddress'] as String?,
+      gpsLatitude: (metadata['gpsLatitude'] as num?)?.toDouble(),
+      gpsLongitude: (metadata['gpsLongitude'] as num?)?.toDouble(),
+      createdAt: draft.createdAt,
+      staffRows: [
+        for (final s in staff)
+          StaffRow(
+            id: s.id,
+            userId: s.userId,
+            hoursWorked: s.hoursWorked,
+            kmTraveled: s.kmTraveled,
+            vehicle: s.vehicle,
+            notes: s.notes,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            pauseMinutes: s.pauseMinutes,
+          ),
+      ],
+      materialeRows: [
+        for (final m in materiali)
+          MaterialeRow(
+            id: m.id,
+            reportId: m.reportId,
+            materialeId: m.materialeId,
+            freeTextName: m.freeTextName,
+            quantity: m.quantity,
+            unitOfMeasure: m.unitOfMeasure,
+            notes: m.notes,
+            magazzinoId: m.magazzinoId,
+          ),
+      ],
+      controlloRows: [
+        for (final c in controlli)
+          ControlloRow(
+            id: c.id,
+            reportId: c.reportId,
+            controlId: c.controlId,
+            stringValue: c.stringValue,
+            boolValue: c.boolValue,
+            dateValue: c.dateValue,
+          ),
+      ],
+      allegatoRows: [
+        for (final a in allegati)
+          AllegatoRow(
+            id: a.id,
+            localPath: a.storagePath,
+            fileName: a.fileName,
+            contentType: a.contentType,
+            sizeBytes: a.sizeBytes,
+            isSignature: signatureIds.contains(a.id),
+          ),
+      ],
+      materialiNotRequired: draft.materialiNotRequired,
+      isAiAssisted: draft.isAiAssisted,
+      customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
+      technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
+      tenantId: draft.tenantId,
+      insertedUserId: draft.insertedUserId,
+      isLoading: false,
+    );
+  }
+
+  static Map<String, dynamic> _parseMetadataJson(String? json) {
+    if (json == null || json.isEmpty) return const {};
+    try {
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (_) {
+      // Malformed metadata is not worth losing the rest of the draft over.
+      return const {};
+    }
+  }
 
   // ── Step navigation ────────────────────────────────────────────────────────
 
@@ -751,6 +910,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       title: Value(state.title),
       scheduleId: Value(state.scheduleId),
       ticketId: Value(state.ticketId),
+      cantiereId: Value(state.cantiereId),
       customerId: Value(state.customerId),
       // The technician's actual typed description — NOT the GPS/free-text metadata blob. These
       // used to collide in this same column (see `metadataJson` doc comment on
@@ -888,7 +1048,7 @@ final reportEditorProvider = StateNotifierProvider.autoDispose
     .family<ReportEditorNotifier, ReportEditorState, String>((ref, reportId) {
       final repo = ref.watch(draftReportRepositoryProvider);
       return ReportEditorNotifier(
-        initialState: ReportEditorState(reportId: reportId),
+        initialState: ReportEditorState(reportId: reportId, isLoading: true),
         repo: repo,
       );
     });

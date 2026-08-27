@@ -30,12 +30,18 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 /// Build an editor notifier backed by an in-memory DB.
-(ReportEditorNotifier notifier, DraftReportRepository repo) _makeEditor(
+///
+/// Awaits [ReportEditorNotifier.ready] before returning: the notifier's constructor kicks off an
+/// async hydration read from Drift (loads an existing draft's saved data, if any — see
+/// ReportEditorNotifier._hydrate's own doc comment), and every test in this file calls setter
+/// methods immediately after construction. Without waiting, hydration completing later than a
+/// test's own setter calls would silently revert them back to whatever was already in the DB.
+Future<(ReportEditorNotifier notifier, DraftReportRepository repo)> _makeEditor(
   AppDatabase db, {
   String reportId = 'draft-1',
   String tenantId = 'tenant-1',
   String userId = 'user-1',
-}) {
+}) async {
   final repo = DraftReportRepository(db);
   final state = ReportEditorState(
     reportId: reportId,
@@ -44,6 +50,7 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
     createdAt: DateTime.utc(2026, 6, 21, 10),
   );
   final notifier = ReportEditorNotifier(initialState: state, repo: repo);
+  await notifier.ready;
   return (notifier, repo);
 }
 
@@ -80,7 +87,7 @@ void main() {
   group('autosave — dati step', () {
     test('setTitle persists title to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.setTitle('Manutenzione pompa');
 
@@ -91,7 +98,7 @@ void main() {
 
     test('setDetails persists details to Drift verbatim (not the metadata blob)', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.setDetails('Intervento ordinario');
 
@@ -105,7 +112,7 @@ void main() {
 
     test('setCustomerFromCache sets customerId and clears freeText', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setCustomerFreeText('vecchio nome');
       await notifier.setCustomerFromCache('cust-42');
@@ -116,7 +123,7 @@ void main() {
 
     test('setCustomerFreeText sets freeText and clears customerId', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setCustomerFromCache('cust-old');
       await notifier.setCustomerFreeText('ACME Srl (non in lista)');
@@ -127,7 +134,7 @@ void main() {
 
     test('setWorkAddress persists address', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setWorkAddress('Via Roma 10, Milano');
 
@@ -136,7 +143,7 @@ void main() {
 
     test('setTicketFromCache clears cantiere fields', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setCantiereFromCache('cant-1');
       await notifier.setTicketFromCache('ticket-99');
@@ -147,7 +154,7 @@ void main() {
 
     test('setCantiereFromCache clears ticket fields', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setTicketFromCache('ticket-1');
       await notifier.setCantiereFromCache('cant-99');
@@ -158,7 +165,7 @@ void main() {
 
     test('setGps stores lat/lng in state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       notifier.setGps(45.4654, 9.1859);
 
@@ -172,7 +179,7 @@ void main() {
   group('staff step', () {
     test('addStaff adds a row and persists to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addStaff(
         const StaffRow(
@@ -194,7 +201,7 @@ void main() {
 
     test('updateStaff updates the row in state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       const original = StaffRow(id: 's-1', userId: 'user-2', hoursWorked: 4.0, kmTraveled: 40.0);
       await notifier.addStaff(original);
@@ -209,7 +216,7 @@ void main() {
 
     test('removeStaff removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
       await notifier.removeStaff('s-1');
@@ -220,7 +227,7 @@ void main() {
 
     test('multiple staff rows all persisted', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
       await notifier.addStaff(const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0));
@@ -263,7 +270,7 @@ void main() {
 
     test('startTimer sets timerRunning=true and records startTime', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
       await notifier.startTimer('s-1');
@@ -276,7 +283,7 @@ void main() {
 
     test('stopTimer sets timerRunning=false and endTime', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
       await notifier.startTimer('s-1');
@@ -293,7 +300,7 @@ void main() {
   group('materiali step', () {
     test('addMateriale with free-text persists to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
         const MaterialeRow(
@@ -314,7 +321,7 @@ void main() {
 
     test('addMateriale with cache materialeId persists correctly', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
         const MaterialeRow(id: 'm-2', reportId: 'draft-1', materialeId: 'mat-42', quantity: 2.0),
@@ -329,7 +336,7 @@ void main() {
     // fine but silently never depletes stock — StockMovementService no-ops on a null MagazzinoId.
     test('addMateriale persists magazzinoId to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
         const MaterialeRow(
@@ -347,7 +354,7 @@ void main() {
 
     test('a materiale row with no magazzinoId persists it as null, not lost silently', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
         const MaterialeRow(id: 'm-4', reportId: 'draft-1', materialeId: 'mat-1', quantity: 1.0),
@@ -359,7 +366,7 @@ void main() {
 
     test('updateMateriale (quantity change via the qty stepper) preserves magazzinoId', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
         const MaterialeRow(
@@ -380,7 +387,7 @@ void main() {
 
     test('removeMateriale removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addMateriale(
         const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Test', quantity: 1.0),
@@ -393,7 +400,7 @@ void main() {
 
     test('setMaterialiNotRequired updates state and autosaves', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.setMaterialiNotRequired(true);
 
@@ -408,7 +415,7 @@ void main() {
   group('signature attachment', () {
     test('saveCustomerSignature sets customerSignatureAllegatoId in state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
       final bytes = Uint8List.fromList([0, 1, 2, 3]);
 
       await notifier.saveCustomerSignature(
@@ -430,7 +437,7 @@ void main() {
 
     test('saveTechnicianSignature sets technicianSignatureAllegatoId in state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
       final bytes = Uint8List.fromList([10, 20, 30]);
 
       await notifier.saveTechnicianSignature(
@@ -446,7 +453,7 @@ void main() {
 
     test('clearCustomerSignature removes allegatoId from state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
       final bytes = Uint8List.fromList([0]);
 
       await notifier.saveCustomerSignature(
@@ -465,7 +472,7 @@ void main() {
   group('photo allegati', () {
     test('addAllegato stores photo path in state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addAllegato(
         const AllegatoRow(
@@ -485,7 +492,7 @@ void main() {
 
     test('removeAllegato removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.addAllegato(
         const AllegatoRow(
@@ -508,14 +515,14 @@ void main() {
   group('step navigation', () {
     test('starts on dati step', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       expect(notifier.state.currentStep, RapportinoStep.dati);
     });
 
     test('nextStep advances to staff', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.nextStep();
 
@@ -524,7 +531,7 @@ void main() {
 
     test('nextStep cycles through all steps', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       final steps = RapportinoStep.values;
       for (var i = 1; i < steps.length; i++) {
@@ -535,7 +542,7 @@ void main() {
 
     test('prevStep goes back to dati from staff', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.nextStep(); // → staff
       await notifier.prevStep(); // → dati
@@ -545,7 +552,7 @@ void main() {
 
     test('prevStep does nothing when already on dati', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.prevStep();
 
@@ -554,7 +561,7 @@ void main() {
 
     test('goToStep jumps directly to any step', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.goToStep(RapportinoStep.firme);
 
@@ -566,17 +573,18 @@ void main() {
 
   group('state.validation — mirrors server state machine', () {
     test('isReadyToSubmit=false for empty draft', () async {
-      await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      // No _seedDraft here, deliberately: it seeds title: 'init', which is a title. A genuinely
+      // titleless draft is one with no DB row at all yet — hydration finds nothing and leaves
+      // the notifier's own blank initialState exactly as constructed.
+      final (notifier, _) = await _makeEditor(db);
 
-      // Fresh draft: no title, no customer, no staff, no materiali, no firme
       expect(notifier.state.isReadyToSubmit, isFalse);
       expect(notifier.state.validation.issues, contains(DraftValidationIssue.missingTitle));
     });
 
     test('isReadyToSubmit=true when all requirements met', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setTitle('Test');
       await notifier.setCustomerFromCache('cust-1');
@@ -602,7 +610,7 @@ void main() {
 
     test('noMateriali not flagged when materialiNotRequired=true', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setTitle('T');
       await notifier.setCustomerFromCache('c');
@@ -678,7 +686,7 @@ void main() {
           );
 
       await _seedDraft(db, 'draft-prefill');
-      final (notifier, _) = _makeEditor(db, reportId: 'draft-prefill');
+      final (notifier, _) = await _makeEditor(db, reportId: 'draft-prefill');
 
       // Simulate prefill: caller reads schedule and calls notifier methods
       final sched = await (db.select(
@@ -699,7 +707,7 @@ void main() {
 
     test('prefill sets scheduleId', () async {
       await _seedDraft(db, 'draft-prefill2');
-      final (notifier, _) = _makeEditor(db, reportId: 'draft-prefill2');
+      final (notifier, _) = await _makeEditor(db, reportId: 'draft-prefill2');
 
       // Directly test setTitle with schedule info
       await notifier.setTitle('Da schedule');
@@ -746,7 +754,7 @@ void main() {
   group('rapportino data-loss regression — details vs metadata', () {
     test('a description typed then autosaved is preserved, not overwritten by metadata', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       // Metadata (GPS + free-text) captured first, as it often is on-site before the technician
       // writes up what they did.
@@ -768,7 +776,7 @@ void main() {
 
     test('metadata captured after the description does not clobber it on a later autosave', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       // The order that actually triggered the bug: description typed first, metadata captured
       // afterwards (e.g. GPS acquired at the end of the visit) — every autosave in between,
@@ -786,7 +794,7 @@ void main() {
 
     test('a realistic keystroke-by-keystroke typing sequence survives every intermediate autosave', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       const typed = 'Verificata pressione impianto, nessuna anomalia riscontrata';
       // Mirrors StepDettagli's AppTextField.onChanged, which calls setDetails (and therefore

@@ -194,6 +194,13 @@ void main() {
 
       // Pre-populate editor state with customer + signatures using the repo
       // so validateDraft() returns isValid=true.
+      //
+      // This is the seed the real ReportEditorNotifier hydrates from (see
+      // ReportEditorNotifier._hydrate) — the ProviderScope override below is only the state's
+      // starting point for the brief window before hydration completes and replaces it, so this
+      // row has to be complete on its own, not just enough to make the override look right.
+      // materialiNotRequired must be true here for the same reason the override sets it: without
+      // it, hydration would reload a draft that still needs a materiali row.
       final repo = DraftReportRepository(db);
       // Update draft to have customer, staff, and mark sigs
       await repo.saveDraft(
@@ -208,6 +215,7 @@ void main() {
           customerId: const Value('cust-1'),
           customerSignatureAllegatoId: const Value('sig-c-1'),
           technicianSignatureAllegatoId: const Value('sig-t-1'),
+          materialiNotRequired: const Value(true),
           stato: const Value('Bozza'),
           isLocalOnly: const Value(true),
         ),

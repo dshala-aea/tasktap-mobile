@@ -63,16 +63,22 @@ class RapportinoFormScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.lg,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          child: Column(
+      // While the draft's saved data is still loading from Drift, the grid's done/not-done dots
+      // and the completion count would read as blank/incomplete regardless of what's actually
+      // saved — a flash of wrong information is worse than a brief spinner. See
+      // ReportEditorNotifier._hydrate's own doc comment for why this load exists at all.
+      body: editorState.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.lg,
+                  AppSpacing.pagePadding,
+                  context.navClearance,
+                ),
+                child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               GridView.count(
