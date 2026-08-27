@@ -20,7 +20,7 @@ class HeaderIconBtn extends StatelessWidget {
     required this.label,
     this.onTap,
     this.showDot = false,
-    this.glass = false,
+    this.glass = true,
   });
 
   final IconData icon;
@@ -35,6 +35,14 @@ class HeaderIconBtn extends StatelessWidget {
   final bool showDot;
 
   /// Glass styling for placement on a dark hero.
+  ///
+  /// Defaults true because every `ScreenHeader` in the app is `dark: true` — there is no screen
+  /// today with the light header this button's other branch was built for (see `ScreenHeader.
+  /// dark`'s own doc comment). Before this default flipped, 19 of the app's 20 header-action call
+  /// sites left `glass` unset and got the squared, `bg3`-filled machined button anyway: a
+  /// light-theme-flipping fill on a permanently-dark CHARCOAL plate, and a squared shape next to
+  /// the header's own back chevron, which already opted into glass. Pass `false` explicitly for
+  /// the light-header case, if one is ever built.
   final bool glass;
 
   @override
