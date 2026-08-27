@@ -39,23 +39,25 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: customerAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            ErrorState(onRetry: () => ref.invalidate(customerDetailProvider(customerId))),
-        data: (customer) {
-          if (customer == null) {
-            return const UnavailableState(
-              icon: LucideIcons.users,
-              titolo: 'Cliente non disponibile',
-              motivo:
-                  "L'elenco clienti non è ancora sincronizzato sul "
-                  'dispositivo, quindi questo cliente non può essere '
-                  'letto dalla cache locale anche se esiste sul server.',
-            );
-          }
-          return _CustomerDetailBody(customer: customer, customerId: customerId);
-        },
+      body: SafeArea(
+        child: customerAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              ErrorState(onRetry: () => ref.invalidate(customerDetailProvider(customerId))),
+          data: (customer) {
+            if (customer == null) {
+              return const UnavailableState(
+                icon: LucideIcons.users,
+                titolo: 'Cliente non disponibile',
+                motivo:
+                    "L'elenco clienti non è ancora sincronizzato sul "
+                    'dispositivo, quindi questo cliente non può essere '
+                    'letto dalla cache locale anche se esiste sul server.',
+              );
+            }
+            return _CustomerDetailBody(customer: customer, customerId: customerId);
+          },
+        ),
       ),
     );
   }

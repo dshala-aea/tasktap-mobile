@@ -43,25 +43,27 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
           onPressed: () => _showAddMemberSheet(context, ref),
         ),
       ),
-      body: detailAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ErrorState(
-          onRetry: () => ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String)),
+      body: SafeArea(
+        child: detailAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => ErrorState(
+            onRetry: () => ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String)),
+          ),
+          data: (detail) {
+            // GET /api/squadre/{id} wraps the squadra's own fields under a "squadra" key
+            // (backend record SquadraDetailResponse(Squadra Squadra, List<SquadraMembro> Membri) —
+            // see SquadraDetailResponse.cs), with "membri" as the sibling key holding the member
+            // list. Reading squadra fields off the un-unwrapped envelope left nome/descrizione/
+            // specializzazione/note (and capSquadraNome, added below) blank on every real fetch;
+            // only "membri" happened to work because it is genuinely top-level.
+            //
+            // The `?? squadra` fallback is the flat row the list screen already has in hand
+            // (`extra: squadra` in admin_squadra_list_screen.dart) — no such wrapper there.
+            final data = (detail?['squadra'] as Map<String, dynamic>?) ?? squadra;
+            final membri = (detail?['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            return _SquadraDetailBody(squadra: data, membri: membri);
+          },
         ),
-        data: (detail) {
-          // GET /api/squadre/{id} wraps the squadra's own fields under a "squadra" key
-          // (backend record SquadraDetailResponse(Squadra Squadra, List<SquadraMembro> Membri) —
-          // see SquadraDetailResponse.cs), with "membri" as the sibling key holding the member
-          // list. Reading squadra fields off the un-unwrapped envelope left nome/descrizione/
-          // specializzazione/note (and capSquadraNome, added below) blank on every real fetch;
-          // only "membri" happened to work because it is genuinely top-level.
-          //
-          // The `?? squadra` fallback is the flat row the list screen already has in hand
-          // (`extra: squadra` in admin_squadra_list_screen.dart) — no such wrapper there.
-          final data = (detail?['squadra'] as Map<String, dynamic>?) ?? squadra;
-          final membri = (detail?['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          return _SquadraDetailBody(squadra: data, membri: membri);
-        },
       ),
     );
   }

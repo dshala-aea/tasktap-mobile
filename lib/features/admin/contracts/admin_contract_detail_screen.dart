@@ -77,92 +77,104 @@ class AdminContractDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(
-              title: name,
-              showBack: true,
-              actions: id.isEmpty
-                  ? const []
-                  : [
-                      HeaderIconBtn(
-                        icon: LucideIcons.trash2,
-                        label: 'Elimina contratto',
-                        glass: true,
-                        onTap: () => _deleteContract(context, ref, id, name),
-                      ),
-                    ],
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              child: VetroCard(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
-                      child: Row(
-                        children: [
-                          StatusPill(
-                            stato: isActive ? 'Attivo' : 'Inattivo',
-                            outlined: true,
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(height: 1, thickness: 1, color: context.colors.borderLight),
-                    KeyVal(label: 'Nome', value: name),
-                    KeyVal(label: 'Numero contratto', value: numero.isNotEmpty ? numero : '—'),
-                    KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
-                    KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
-                    KeyVal(
-                      label: 'Prodotto in assistenza',
-                      value: prodottoAssistenzaId != null && prodottoAssistenzaId.isNotEmpty
-                          ? prodottoAssistenzaId
-                          : '—',
-                    ),
-                    KeyVal(label: 'Descrizione', value: description.isNotEmpty ? description : '—'),
-                    KeyVal(label: 'Data inizio', value: startLabel),
-                    KeyVal(label: 'Data fine', value: endLabel),
-                    KeyVal(label: 'Frequenza', value: freqLabel),
-                    KeyVal(label: 'Prezzo', value: priceLabel),
-                    KeyVal(
-                      label: 'Preavviso scadenza',
-                      value: scadenzaGiorni != null ? '$scadenzaGiorni giorni' : '—',
-                    ),
-                    KeyVal(label: 'Rinnovo automatico', value: autoRenewal ? 'Sì' : 'No'),
-                    KeyVal(label: 'Condizioni', value: condizioni.isNotEmpty ? condizioni : '—'),
-                    KeyVal(label: 'ID esterno', value: externalId.isNotEmpty ? externalId : '—'),
-                    KeyVal(label: 'Note', value: notes.isNotEmpty ? notes : '—', showDivider: false),
-                  ],
-                ),
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: ScreenHeader(
+                title: name,
+                showBack: true,
+                actions: id.isEmpty
+                    ? const []
+                    : [
+                        HeaderIconBtn(
+                          icon: LucideIcons.trash2,
+                          label: 'Elimina contratto',
+                          glass: true,
+                          onTap: () => _deleteContract(context, ref, id, name),
+                        ),
+                      ],
               ),
             ),
-          ),
-
-          // ── Genera pianificazione (Gap C) ───────────────────────────────
-          if (id.isNotEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.pagePadding,
-                  0,
-                  AppSpacing.pagePadding,
-                  AppSpacing.base,
-                ),
-                child: VetroButton(
-                  label: 'Genera pianificazione',
-                  secondary: true,
-                  onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
+                padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                child: VetroCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
+                        child: Row(
+                          children: [
+                            StatusPill(
+                              stato: isActive ? 'Attivo' : 'Inattivo',
+                              outlined: true,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+                      KeyVal(label: 'Nome', value: name),
+                      KeyVal(label: 'Numero contratto', value: numero.isNotEmpty ? numero : '—'),
+                      KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
+                      KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
+                      KeyVal(
+                        label: 'Prodotto in assistenza',
+                        value: prodottoAssistenzaId != null && prodottoAssistenzaId.isNotEmpty
+                            ? prodottoAssistenzaId
+                            : '—',
+                      ),
+                      KeyVal(
+                        label: 'Descrizione',
+                        value: description.isNotEmpty ? description : '—',
+                      ),
+                      KeyVal(label: 'Data inizio', value: startLabel),
+                      KeyVal(label: 'Data fine', value: endLabel),
+                      KeyVal(label: 'Frequenza', value: freqLabel),
+                      KeyVal(label: 'Prezzo', value: priceLabel),
+                      KeyVal(
+                        label: 'Preavviso scadenza',
+                        value: scadenzaGiorni != null ? '$scadenzaGiorni giorni' : '—',
+                      ),
+                      KeyVal(label: 'Rinnovo automatico', value: autoRenewal ? 'Sì' : 'No'),
+                      KeyVal(label: 'Condizioni', value: condizioni.isNotEmpty ? condizioni : '—'),
+                      KeyVal(
+                        label: 'ID esterno',
+                        value: externalId.isNotEmpty ? externalId : '—',
+                      ),
+                      KeyVal(
+                        label: 'Note',
+                        value: notes.isNotEmpty ? notes : '—',
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
 
-          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-        ],
+            // ── Genera pianificazione (Gap C) ───────────────────────────────
+            if (id.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    0,
+                    AppSpacing.pagePadding,
+                    AppSpacing.base,
+                  ),
+                  child: VetroButton(
+                    label: 'Genera pianificazione',
+                    secondary: true,
+                    onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
+                  ),
+                ),
+              ),
+
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+          ],
+        ),
       ),
     );
   }

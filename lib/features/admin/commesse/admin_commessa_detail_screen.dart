@@ -32,32 +32,36 @@ class AdminCommessaDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      body: commessaAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Column(
-          children: [
-            ScreenHeader(title: 'Commessa', showBack: true),
-            Expanded(
-              child: ErrorState(onRetry: () => ref.invalidate(commessaByIdProvider(commessaId))),
-            ),
-          ],
-        ),
-        data: (commessa) {
-          if (commessa == null) {
-            return Column(
-              children: [
-                ScreenHeader(title: 'Commessa', showBack: true),
-                const Expanded(
-                  child: UnavailableState(
-                    titolo: 'Commessa non disponibile',
-                    motivo: 'La commessa richiesta non è stata trovata sul server.',
-                  ),
+      body: SafeArea(
+        child: commessaAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Column(
+            children: [
+              ScreenHeader(title: 'Commessa', showBack: true),
+              Expanded(
+                child: ErrorState(
+                  onRetry: () => ref.invalidate(commessaByIdProvider(commessaId)),
                 ),
-              ],
-            );
-          }
-          return _CommessaDetailBody(commessa: commessa, commessaId: commessaId);
-        },
+              ),
+            ],
+          ),
+          data: (commessa) {
+            if (commessa == null) {
+              return Column(
+                children: [
+                  ScreenHeader(title: 'Commessa', showBack: true),
+                  const Expanded(
+                    child: UnavailableState(
+                      titolo: 'Commessa non disponibile',
+                      motivo: 'La commessa richiesta non è stata trovata sul server.',
+                    ),
+                  ),
+                ],
+              );
+            }
+            return _CommessaDetailBody(commessa: commessa, commessaId: commessaId);
+          },
+        ),
       ),
     );
   }

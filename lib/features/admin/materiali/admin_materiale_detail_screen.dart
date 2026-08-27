@@ -47,22 +47,24 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: materialeAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            ErrorState(onRetry: () => ref.invalidate(adminMaterialeDetailProvider(materialeId))),
-        data: (materiale) {
-          if (materiale == null) {
-            return const UnavailableState(
-              titolo: 'Materiale non disponibile',
-              motivo:
-                  'Il catalogo materiali non è ancora sincronizzato sul '
-                  'dispositivo, quindi questo materiale non può essere '
-                  'letto dalla cache locale anche se esiste sul server.',
-            );
-          }
-          return _MaterialeDetailBody(materiale: materiale);
-        },
+      body: SafeArea(
+        child: materialeAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              ErrorState(onRetry: () => ref.invalidate(adminMaterialeDetailProvider(materialeId))),
+          data: (materiale) {
+            if (materiale == null) {
+              return const UnavailableState(
+                titolo: 'Materiale non disponibile',
+                motivo:
+                    'Il catalogo materiali non è ancora sincronizzato sul '
+                    'dispositivo, quindi questo materiale non può essere '
+                    'letto dalla cache locale anche se esiste sul server.',
+              );
+            }
+            return _MaterialeDetailBody(materiale: materiale);
+          },
+        ),
       ),
     );
   }

@@ -43,23 +43,25 @@ class AdminScheduleDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: scheduleAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            ErrorState(onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId))),
-        data: (schedule) {
-          if (schedule == null) {
-            return const UnavailableState(
-              icon: LucideIcons.calendarDays,
-              titolo: 'Pianificazione non disponibile',
-              motivo:
-                  "L'elenco pianificazioni non è ancora sincronizzato sul "
-                  'dispositivo, quindi questa pianificazione non può essere '
-                  'letta dalla cache locale anche se esiste sul server.',
-            );
-          }
-          return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
-        },
+      body: SafeArea(
+        child: scheduleAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              ErrorState(onRetry: () => ref.invalidate(adminScheduleDetailProvider(scheduleId))),
+          data: (schedule) {
+            if (schedule == null) {
+              return const UnavailableState(
+                icon: LucideIcons.calendarDays,
+                titolo: 'Pianificazione non disponibile',
+                motivo:
+                    "L'elenco pianificazioni non è ancora sincronizzato sul "
+                    'dispositivo, quindi questa pianificazione non può essere '
+                    'letta dalla cache locale anche se esiste sul server.',
+              );
+            }
+            return _ScheduleDetailBody(schedule: schedule, scheduleId: scheduleId);
+          },
+        ),
       ),
     );
   }

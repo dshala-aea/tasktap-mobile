@@ -40,23 +40,25 @@ class AdminLocationDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: locationAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            ErrorState(onRetry: () => ref.invalidate(adminLocationDetailProvider(locationId))),
-        data: (location) {
-          if (location == null) {
-            return const UnavailableState(
-              icon: LucideIcons.mapPin,
-              titolo: 'Sede non disponibile',
-              motivo:
-                  "L'elenco sedi non è ancora sincronizzato sul "
-                  'dispositivo, quindi questa sede non può essere '
-                  'letta dalla cache locale anche se esiste sul server.',
-            );
-          }
-          return _LocationDetailBody(location: location, locationId: locationId);
-        },
+      body: SafeArea(
+        child: locationAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              ErrorState(onRetry: () => ref.invalidate(adminLocationDetailProvider(locationId))),
+          data: (location) {
+            if (location == null) {
+              return const UnavailableState(
+                icon: LucideIcons.mapPin,
+                titolo: 'Sede non disponibile',
+                motivo:
+                    "L'elenco sedi non è ancora sincronizzato sul "
+                    'dispositivo, quindi questa sede non può essere '
+                    'letta dalla cache locale anche se esiste sul server.',
+              );
+            }
+            return _LocationDetailBody(location: location, locationId: locationId);
+          },
+        ),
       ),
     );
   }

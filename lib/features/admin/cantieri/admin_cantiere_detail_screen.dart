@@ -62,22 +62,24 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: cantiereAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) =>
-            ErrorState(onRetry: () => ref.invalidate(adminCantiereDetailProvider(cantiereId))),
-        data: (cantiere) {
-          if (cantiere == null) {
-            return const UnavailableState(
-              titolo: 'Cantiere non disponibile',
-              motivo:
-                  "L'elenco cantieri non è ancora sincronizzato sul "
-                  'dispositivo, quindi questo cantiere non può essere '
-                  'letto dalla cache locale anche se esiste sul server.',
-            );
-          }
-          return _CantiereDetailBody(cantiere: cantiere, cantiereId: cantiereId);
-        },
+      body: SafeArea(
+        child: cantiereAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) =>
+              ErrorState(onRetry: () => ref.invalidate(adminCantiereDetailProvider(cantiereId))),
+          data: (cantiere) {
+            if (cantiere == null) {
+              return const UnavailableState(
+                titolo: 'Cantiere non disponibile',
+                motivo:
+                    "L'elenco cantieri non è ancora sincronizzato sul "
+                    'dispositivo, quindi questo cantiere non può essere '
+                    'letto dalla cache locale anche se esiste sul server.',
+              );
+            }
+            return _CantiereDetailBody(cantiere: cantiere, cantiereId: cantiereId);
+          },
+        ),
       ),
     );
   }
