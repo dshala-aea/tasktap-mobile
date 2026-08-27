@@ -36,7 +36,11 @@ class AltroHubScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: ScreenHeader(title: 'Altro')),
+            // No ScreenHeader here — this is a top-level tab, not a pushed route (no back
+            // chevron to draw), and a flat CHARCOAL "Altro" bar sitting directly above the same
+            // dark user card below it doubled up two dark bands with nothing between them and no
+            // second thing for the label to say. The user card already opens the screen.
+            const SliverPadding(padding: EdgeInsets.only(top: AppSpacing.base)),
 
             // ── Dark user card ─────────────────────────────────────────────
             SliverToBoxAdapter(
