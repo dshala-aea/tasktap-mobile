@@ -21243,6 +21243,9 @@
       "SyncMaterialeBarcodeDto": {
         "required": [
           "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
           "materialeId",
           "barcode",
           "barcodeType",
@@ -21254,6 +21257,24 @@
             "type": "string",
             "description": "The barcode row\u0027s own id.",
             "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Carried the same way Materiale\u0027s own sync DTO carries it \u2014\n            the local Drift mirror stores it on every row, not just the ones nested under a tenant-scoped\n            parent object.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Matches the local table\u0027s own non-nullable column.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null until first edited, same as every other synced entity here.",
+            "format": "date-time"
           },
           "materialeId": {
             "type": "string",
