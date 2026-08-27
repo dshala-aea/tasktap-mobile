@@ -1,10 +1,14 @@
 // dart format width=100
 // test/core/widgets/screen_header_test.dart
 //
-// Both `HeaderIconBtn.glass` and `ScreenHeader.dark` default to false: the fixed-CHARCOAL plate
-// they used to assume was under every header/nav surface was never part of the Vetro design the
-// app actually agreed on (light frosted glass throughout) — it was a leftover of the pre-Vetro
-// "Cassetta" shell metaphor. This locks the light defaults in.
+// `ScreenHeader.dark` defaults to false: the fixed-CHARCOAL plate it used to assume was under
+// every header/nav surface was never part of the Vetro design the app actually agreed on (light
+// frosted glass throughout) — it was a leftover of the pre-Vetro "Cassetta" shell metaphor. This
+// locks the light default in.
+//
+// `HeaderIconBtn.glass` defaults to true — every header action in the app (back chevron, bell,
+// profile, a sheet's close button) renders as the real frosted disc; it is not tied to the header
+// being dark, since the header itself now flips light/dark rather than staying permanently dark.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,13 +16,29 @@ import 'package:tasktap_mobile/core/widgets/screen_header.dart';
 
 void main() {
   group('HeaderIconBtn', () {
-    testWidgets('glass defaults to false — the squared bg3 fill, not the glass disc', (
+    testWidgets('glass defaults to true — the frosted disc, not the squared bg3 fill', (
       tester,
     ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: HeaderIconBtn(icon: Icons.close, label: 'Chiudi', onTap: () {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final btn = tester.widget<HeaderIconBtn>(find.byType(HeaderIconBtn));
+      expect(btn.glass, isTrue);
+    });
+
+    testWidgets('glass: false renders the squared bg3 variant when explicitly asked for', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HeaderIconBtn(icon: Icons.close, label: 'Chiudi', glass: false, onTap: () {}),
           ),
         ),
       );
@@ -33,22 +53,6 @@ void main() {
       final decoration = container.decoration as BoxDecoration;
       // AppRack.insetShape's machined square (radius 8) rather than glass mode's disc radius.
       expect((decoration.borderRadius as BorderRadius?)?.topLeft, const Radius.circular(8));
-    });
-
-    testWidgets('glass: true renders the glass variant when explicitly asked for', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: HeaderIconBtn(icon: Icons.close, label: 'Chiudi', glass: true, onTap: () {}),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final btn = tester.widget<HeaderIconBtn>(find.byType(HeaderIconBtn));
-      expect(btn.glass, isTrue);
     });
   });
 

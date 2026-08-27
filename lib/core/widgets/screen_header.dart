@@ -24,7 +24,7 @@ class HeaderIconBtn extends StatelessWidget {
     required this.label,
     this.onTap,
     this.showDot = false,
-    this.glass = false,
+    this.glass = true,
   });
 
   final IconData icon;
