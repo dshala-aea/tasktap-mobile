@@ -130,10 +130,13 @@ class AppButton extends StatelessWidget {
     AppButtonSize.sm => 10,
   };
 
+  // Matches VetroButton's own two-tier scale (16 full-size, 12 compact) rather than a third,
+  // independent radius set — a form still on AppButton and a Vetro screen next to it used to
+  // round their buttons by two unrelated amounts.
   double get _radius => switch (size) {
-    AppButtonSize.lg => 10,
-    AppButtonSize.md => 8,
-    AppButtonSize.sm => 6,
+    AppButtonSize.lg => 16,
+    AppButtonSize.md => 16,
+    AppButtonSize.sm => 12,
   };
 
   double get _iconSize => switch (size) {

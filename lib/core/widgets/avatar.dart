@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-
 /// Initials avatar circle.
 ///
-/// Spec: default size 36, colour cycle [Y, #A8DADC, #FFE66D, #06AED5, #F4A261, #FFB200],
-/// DARK text, Manrope 700, fontSize = size × 0.36.
+/// Spec: default size 36, white text, Inter 700, fontSize = size × 0.36.
 ///
-/// Colour is deterministic — it is selected by the hash of [name].
+/// Colour is deterministic — it is selected by the hash of [name], from a palette that stays
+/// inside Vetro's own cool blue→violet family (built around the tint/tintStrong gradient every
+/// other accent in the app uses) instead of the old warm, unrelated multi-hue set (safety orange,
+/// mustard yellow, tan) that had nothing to do with the rest of the palette. Text went from DARK
+/// to white for the same reason every other tint-filled surface in the app (AppChip active,
+/// AppButton primary, a status pill's saturated fill) uses white foreground, not dark ink — these
+/// backgrounds are saturated enough that dark text loses contrast on some of them.
 ///
 /// ```dart
 /// AppAvatar(name: 'Mario Rossi');
@@ -21,12 +23,12 @@ class AppAvatar extends StatelessWidget {
   final double size;
 
   static const List<Color> _palette = [
-    AppColors.Y,
-    Color(0xFFA8DADC),
-    Color(0xFFFFE66D),
-    Color(0xFF06AED5),
-    Color(0xFFF4A261),
-    Color(0xFFFFB200),
+    Color(0xFF4F6BFF), // Vetro tint
+    Color(0xFF8A5CF6), // Vetro tintStrong
+    Color(0xFF06AED5), // cyan
+    Color(0xFF3DA9FC), // sky blue
+    Color(0xFF7C6FF2), // indigo
+    Color(0xFFB57BFF), // soft violet
   ];
 
   Color _bgColor() {
@@ -56,7 +58,7 @@ class AppAvatar extends StatelessWidget {
               fontFamily: 'Inter',
               fontSize: size * 0.36,
               fontWeight: FontWeight.w700,
-              color: context.colors.ink,
+              color: Colors.white,
               height: 1,
             ),
           ),

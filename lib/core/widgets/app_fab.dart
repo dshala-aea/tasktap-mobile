@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_rack.dart';
 import '../theme/app_vetro_palette.dart';
 
 /// Floating action button — 56 px circle, Vetro tint→tintStrong gradient, white icon.
@@ -29,10 +28,10 @@ class AppFab extends StatelessWidget {
       label: tooltip,
       child: Material(
         color: Colors.transparent,
-        borderRadius: AppRack.freeShape,
+        shape: const CircleBorder(),
         child: InkWell(
           onTap: onPressed,
-          borderRadius: AppRack.freeShape,
+          customBorder: const CircleBorder(),
           child: Container(
             width: 56,
             height: 56,
@@ -42,7 +41,10 @@ class AppFab extends StatelessWidget {
                 end: Alignment.bottomRight,
                 colors: [context.vetro.tint, context.vetro.tintStrong],
               ),
-              borderRadius: AppRack.freeShape,
+              // A true circle, not a 12px-cornered square — the doc comment above already
+              // promised one; AppRack.freeShape (the app's general card-corner radius) never
+              // delivered it at this size.
+              shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
                   color: context.vetro.tint.withAlpha(90),

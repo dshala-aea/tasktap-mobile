@@ -3,7 +3,9 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
+import '../theme/app_vetro_palette.dart';
 import 'app_tappable.dart';
+import 'vetro_glass.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass on dark),
@@ -62,34 +64,33 @@ class HeaderIconBtn extends StatelessWidget {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: glass
-                        ? Colors.white.withAlpha(46)
-                        : context.colors.bg3,
-                    // A machined square, not a moulded disc — except in glass mode. Glass marks a
-                    // dark/hero-style surface (the dashboard hero, and `ScreenHeader(dark: true)`'s
-                    // back chevron); the Figma reference draws that pairing as a round glass disc.
-                    // This is a shape exception scoped to glass surfaces specifically, not a
-                    // reversal of the machined language the other light-header screens keep.
-                    borderRadius: glass
-                        ? BorderRadius.circular(19)
-                        : AppRack.insetShape,
-                    border: Border.all(
-                      color: glass
-                          ? Colors.white.withAlpha(128)
-                          : context.colors.borderMedium,
-                      width: glass ? 0.5 : 1,
+                if (glass)
+                  // A real frosted disc — VetroGlass's own BackdropFilter blur, not a flat
+                  // translucent-white Container standing in for one. This used to be the one
+                  // "glass" surface in the app that wasn't actually glass: every card blurs what's
+                  // behind it, this button only tinted it, and the mismatch was visible wherever a
+                  // header sat over anything but a flat colour.
+                  VetroGlass(
+                    borderRadius: BorderRadius.circular(19),
+                    fill: AppVetroColors.glassFillOnDark,
+                    border: AppVetroColors.glassBorderOnDark,
+                    child: SizedBox(
+                      width: 38,
+                      height: 38,
+                      child: Icon(icon, size: 17, color: AppColors.WHITE),
                     ),
+                  )
+                else
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: context.colors.bg3,
+                      borderRadius: AppRack.insetShape,
+                      border: Border.all(color: context.colors.borderMedium),
+                    ),
+                    child: Icon(icon, size: 17, color: context.colors.ink),
                   ),
-                  child: Icon(
-                    icon,
-                    size: 17,
-                    color: glass ? AppColors.WHITE : context.colors.ink,
-                  ),
-                ),
                 if (showDot)
                   Positioned(
                     right: 1,

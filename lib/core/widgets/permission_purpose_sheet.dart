@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'app_button.dart';
 import 'vetro_card.dart';
 
@@ -80,7 +79,6 @@ class _PurposeSheet extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: VetroCard(
-          borderRadius: AppRack.freeShape,
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
