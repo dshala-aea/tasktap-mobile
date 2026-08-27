@@ -2,21 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
-import 'rack.dart';
-
-/// A row in a list, now a drawer front rather than a divided line.
+/// A row in a list — flat, hairline-separated, full-bleed.
 ///
-/// Twenty-eight call sites across twenty-one screens keep their exact API. What changed is what a
-/// list *is*: rows were separated by a 1px hairline and shared one flat ground, so a list of eight
-/// read as one undifferentiated slab. Cells are separate objects on a constant pitch
-/// ([AppRack.cellGap]), which is how a rack reads and how a thumb finds the right one without
-/// looking twice.
+/// Was a bordered "drawer front" cell (RackCell) on its own pitch of vertical gap between rows.
+/// Replaced with the shape ticket_list_screen's `_TicketRow` and rapportini_list_screen's
+/// `_RapportinoRow` already proved out for real content: no per-row card, border or radius — a
+/// bottom hairline (`context.vetro.hairline`) between rows, same as Files, Settings, and every
+/// other flat list these two screens were themselves modeled on. A per-row glass card
+/// (`VetroGlass`'s own `BackdropFilter`) was considered and rejected for the same reason those two
+/// screens rejected it: a list can run to dozens of rows, and a blur sigma per row is a real,
+/// measured cost a flat row with one border paint is not.
 ///
-/// [showDivider] is retained for API compatibility and is now a no-op: the gap between cells is
-/// the separation, and drawing a line as well would be saying it twice. It is not deprecated
-/// because removing it would touch every call site to no visual effect.
+/// [strapped]/[ledgeColor] keep their meaning — "this one needs you" / a state that is neither
+/// ordinary nor live — but the mechanism moves from a recolored cell border to the same 3px
+/// leading stripe `_TicketRow`'s priority marker and `_RapportinoRow`'s draft marker already use,
+/// tinted with the Vetro gradient's own accent rather than invented separately for this widget.
+///
+/// [showDivider] used to be a no-op, kept only for call-site compatibility with the cell-gap
+/// layout that made a divider redundant. It is live again now that a divider is genuinely what
+/// separates one row from the next — callers already pass it correctly (typically `false` on a
+/// list's last row), so this needed no call-site changes to take effect.
 class ListRow extends StatelessWidget {
   const ListRow({
     super.key,
@@ -36,11 +44,12 @@ class ListRow extends StatelessWidget {
   final Widget? meta;
   final VoidCallback? onTap;
 
-  /// Retained for compatibility. The pitch between cells is the separator now.
+  /// Whether this row draws the hairline separating it from the next one — pass `false` on a
+  /// list's last row.
   final bool showDivider;
 
-  /// Selected, priority, or still-needs-finishing — turns the ledge the brand accent. Not for a
-  /// live/running state: see [LiveDot].
+  /// Selected, priority, or still-needs-finishing — turns the leading stripe the Vetro tint. Not
+  /// for a live/running state: see `LiveDot`.
   final bool strapped;
 
   /// For a row whose state is neither ordinary nor live: overdue, rejected, queued.
@@ -48,62 +57,66 @@ class ListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final v = context.vetro;
     final c = context.colors;
+    final stripeColor = strapped ? v.tint : (ledgeColor ?? Colors.transparent);
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppRack.cellGap),
-      child: RackCell(
-        onTap: onTap,
-        strapped: strapped,
-        ledgeColor: ledgeColor,
-        padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
-        child: Row(
-          children: [
-            if (leading != null) ...[leading!, const SizedBox(width: 12)],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    // Sora, not Manrope. The title is the label on the drawer front — the thing
-                    // read at arm's length to decide whether this is the right cell — and the
-                    // subtitle below it is what you read once you have decided. Two faces doing
-                    // two jobs is the only reason this app carries two faces.
-                    style: TextStyle(
-                      fontFamily: 'Sora',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        decoration: BoxDecoration(
+          border: showDivider ? Border(bottom: BorderSide(color: v.hairline)) : null,
+        ),
+        // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: a caller may size
+        // this row from a SliverChildBuilderDelegate item with no bounded height for `stretch` to
+        // stretch the leading stripe into — same reasoning as `_TicketRow`'s own comment.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 3,
+                margin: const EdgeInsets.only(right: 12),
+                decoration: BoxDecoration(color: stripeColor, borderRadius: BorderRadius.circular(3)),
+              ),
+              if (leading != null) ...[leading!, const SizedBox(width: 12)],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      subtitle!,
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: c.inkMuted,
+                        fontFamily: 'Inter',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: c.ink,
+                        letterSpacing: -0.1,
                       ),
                     ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: c.inkMuted),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            if (meta != null) ...[const SizedBox(width: 12), meta!],
-            if (onTap != null) ...[
-              const SizedBox(width: 6),
-              Icon(LucideIcons.chevronRight, size: 16, color: c.inkDisabled),
+              if (meta != null) ...[const SizedBox(width: 12), meta!],
+              if (onTap != null) ...[
+                const SizedBox(width: 6),
+                Icon(LucideIcons.chevronRight, size: 16, color: c.inkDisabled),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

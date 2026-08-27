@@ -122,29 +122,24 @@ void main() {
   });
 
   group('Rack', () {
-    testWidgets('draws the rail inside the existing page gutter', (tester) async {
-      await tester.pumpWidget(_wrap(const Rack(child: SizedBox.expand())));
+    // Vetro has no rail-and-drawer shell to bolt content to — Rack is a passthrough now. Kept as
+    // a class only because home_shell.dart's one call site wraps its content in it; these tests
+    // guard that the wrapper genuinely adds nothing, under every constructor param it still
+    // accepts, rather than the rail geometry that used to live here.
+    testWidgets('renders exactly its child, nothing added', (tester) async {
+      await tester.pumpWidget(_wrap(const Rack(child: Text('x'))));
 
-      final rail = tester.getRect(
-        find.descendant(of: find.byType(Rack), matching: find.byType(DecoratedBox)).first,
-      );
-
-      expect(rail.left, AppRack.railInset);
-      expect(rail.width, AppRack.railWidth);
-      // The whole reason the rail costs no layout: it ends before the 19dp gutter every screen
-      // already indents its content by.
-      expect(rail.right + AppRack.railToCell, AppRack.railColumn);
-      expect(AppRack.railColumn, 19);
+      expect(find.text('x'), findsOneWidget);
+      expect(find.byType(Rack), findsOneWidget);
     });
 
-    testWidgets('draws nothing when the surface holds no rack', (tester) async {
-      await tester.pumpWidget(_wrap(const Rack(visible: false, child: Text('x'))));
-
-      expect(
-        find.descendant(of: find.byType(Rack), matching: find.byType(DecoratedBox)),
-        findsNothing,
+    testWidgets('top/bottom/visible are accepted but change nothing', (tester) async {
+      await tester.pumpWidget(
+        _wrap(const Rack(top: 40, bottom: 80, visible: false, child: Text('x'))),
       );
+
       expect(find.text('x'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 

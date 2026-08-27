@@ -16,66 +16,27 @@ import 'package:tasktap_mobile/core/theme/app_rack.dart';
 /// nothing sideways and reflows nothing — it is a decoration, not a container. That property is
 /// the whole reason this world could be adopted across forty-six screens instead of six.
 
-/// Paints the aluminium extrusion behind a screen's content.
-///
-/// Fixed, not scrolling: in a van the rail is bolted to the body and the drawers move past it.
-/// Wrap the scrollable, not the individual list.
+/// Was the aluminium-rail decoration painted behind the app shell's content — the van-racking
+/// metaphor's own fixed backdrop. Vetro has no rail-and-drawer shell to bolt content to, so this
+/// is a passthrough now: kept as a class (one call site, `home_shell.dart`, wraps its content in
+/// it) purely so that site needs no change, not because anything still renders here.
 class Rack extends StatelessWidget {
   const Rack({super.key, required this.child, this.top = 0, this.bottom = 0, this.visible = true});
 
   final Widget child;
 
-  /// Inset from the top of the rack area — set this to clear a fixed header so the rail starts
-  /// where the content does.
+  /// No longer consulted — nothing is painted behind [child] to inset around. Kept on the
+  /// constructor so `home_shell.dart`'s call site needs no change.
   final double top;
 
-  /// Inset from the bottom — set this to clear the floating nav pill.
+  /// No longer consulted, for the same reason as [top].
   final double bottom;
 
-  /// A screen with no rack content (a full-bleed hero, a signature capture) turns the rail off
-  /// rather than drawing structure that holds nothing.
+  /// No longer consulted, for the same reason as [top].
   final bool visible;
 
   @override
-  Widget build(BuildContext context) {
-    if (!visible) return child;
-
-    return Stack(
-      children: [
-        Positioned(
-          left: AppRack.railInset,
-          top: top,
-          bottom: bottom,
-          width: AppRack.railWidth,
-          child: const _RailBar(),
-        ),
-        child,
-      ],
-    );
-  }
-}
-
-class _RailBar extends StatelessWidget {
-  const _RailBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        // Anodized alu is not a flat grey: it carries a machined highlight down one edge and
-        // falls away across its width. Four device-independent pixels is enough to show it, and
-        // showing it is what stops the rail reading as a stray 4dp divider.
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [c.railHighlight, c.railSurface, c.railSurface],
-          stops: const [0.0, 0.45, 1.0],
-        ),
-        borderRadius: BorderRadius.circular(AppRack.railHighlight),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => child;
 }
 
 /// A drawer front on the rail: the app's universal container.
