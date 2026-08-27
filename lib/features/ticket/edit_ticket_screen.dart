@@ -191,7 +191,11 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                       AppSpacing.base,
                       AppSpacing.base,
                     ),
-                    child: AppStepper(steps: _kEditSteps, currentIndex: _stepIndex),
+                    child: AppStepper(
+                      steps: _kEditSteps,
+                      currentIndex: _stepIndex,
+                      onStepSelected: (i) => setState(() => _step = _EditStep.values[i]),
+                    ),
                   ),
               ],
             ),
@@ -200,7 +204,9 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
             child: s == null
                 ? const Center(child: CircularProgressIndicator())
                 : AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 200),
                     switchInCurve: Curves.easeInOut,
                     switchOutCurve: Curves.easeInOut,
                     child: switch (_step) {

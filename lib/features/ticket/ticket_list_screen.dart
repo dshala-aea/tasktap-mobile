@@ -373,11 +373,11 @@ class _TicketRow extends StatelessWidget {
   final String where;
   final bool isLast;
 
-  Color _priorityColor(AppVetroPalette v, String? priority) => switch (priority) {
+  Color _priorityColor(BuildContext context, AppVetroPalette v, String? priority) => switch (priority) {
     'Urgente' => v.statusBad,
     'Alta' => v.statusWarn,
     'Media' => v.tint,
-    _ => const Color(0xFF98989D), // Bassa, or unset — neutral, not a fifth accent colour
+    _ => context.colors.inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
   };
 
   /// The stripe's own colour is invisible to a colorblind technician or a screen reader —
@@ -425,7 +425,7 @@ class _TicketRow extends StatelessWidget {
               width: 3,
               margin: const EdgeInsets.only(right: 12),
               decoration: BoxDecoration(
-                color: _priorityColor(v, ticket.priority),
+                color: _priorityColor(context, v, ticket.priority),
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
@@ -440,7 +440,7 @@ class _TicketRow extends StatelessWidget {
                           reference,
                           style: TextStyle(
                             fontFamily: 'Inter',
-                            fontSize: 10.5,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: context.colors.inkFaint,
                             letterSpacing: 0.3,

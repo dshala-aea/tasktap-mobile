@@ -218,7 +218,7 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
 Future<void> _deleteProdotto(BuildContext context, WidgetRef ref, String prodottoId, String name) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => AlertDialog.adaptive(
       title: const Text('Eliminare il prodotto?'),
       content: Text('Il prodotto "$name" verrà eliminato definitivamente. L\'operazione non può '
           'essere annullata.'),
@@ -357,7 +357,7 @@ class _MatricoleSection extends ConsumerWidget {
   }) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog.adaptive(
         title: const Text('Rimuovere la matricola?'),
         content: Text('Vuoi rimuovere la matricola "$numero" da questo prodotto?'),
         actions: [

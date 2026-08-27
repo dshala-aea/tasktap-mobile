@@ -1,7 +1,6 @@
 // dart format width=100
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -266,8 +265,10 @@ class _AdminMaterialeRow extends StatelessWidget {
                 child: Image.network(
                   materiale.imageUrl!,
                   fit: BoxFit.cover,
+                  cacheWidth: 80,
+                  cacheHeight: 80,
                   errorBuilder: (_, _, _) =>
-                      Icon(LucideIcons.package, size: 20, color: AppColors.onDarkMuted),
+                      Icon(LucideIcons.package, size: 20, color: context.colors.inkMuted),
                 ),
               )
             : null,
@@ -285,14 +286,9 @@ class _AdminMaterialeRow extends StatelessWidget {
             ).textTheme.bodySmall?.copyWith(color: context.colors.ink, fontWeight: FontWeight.w600),
           ),
           if (!materiale.isActive)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              margin: const EdgeInsets.only(top: 2),
-              decoration: BoxDecoration(
-                color: context.colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text('Inattivo', style: TextStyle(fontSize: 10, color: context.colors.red)),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: StatusPill(stato: 'Inattivo', small: true, outlined: true),
             ),
         ],
       ),

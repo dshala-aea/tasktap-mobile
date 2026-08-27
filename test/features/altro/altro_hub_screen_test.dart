@@ -249,7 +249,9 @@ void main() {
     await tester.tap(logoutFinder);
     await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsOneWidget);
+    // Vetro chrome (a Dialog wrapping VetroCard), not a stock AlertDialog — see
+    // altro_hub_screen.dart's own _confirmLogout comment.
+    expect(find.byType(Dialog), findsOneWidget);
     expect(find.text('Annulla'), findsOneWidget);
 
     // Dismiss dialog.

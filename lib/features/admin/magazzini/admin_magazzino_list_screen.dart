@@ -103,16 +103,7 @@ class _MagazzinoRow extends StatelessWidget {
       leading: const RowIconTile(icon: LucideIcons.warehouse),
       title: magazzino.nome,
       subtitle: magazzino.tipo,
-      meta: !magazzino.isActive
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: context.colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text('Inattivo', style: TextStyle(fontSize: 10, color: context.colors.red)),
-            )
-          : null,
+      meta: !magazzino.isActive ? const StatusPill(stato: 'Inattivo', small: true, outlined: true) : null,
       showDivider: !isLast,
       onTap: () => context.push('/altro/magazzino/magazzini/${magazzino.id}', extra: magazzino),
     );

@@ -5,6 +5,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/lookup_field.dart';
 import '../../../core/widgets/vetro_card.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -56,27 +57,35 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         // ── Customer ──────────────────────────────────────────────────────
         _SectionLabel(text: 'Cliente *'),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          // initialValue only applies on first build; this field's value can
-          // be reset externally (e.g. wizard back-navigation), so key it by
-          // the value to force a fresh widget — and thus a fresh
-          // initialValue — whenever it changes underneath us.
+        AppLookupField(
+          // Value can be reset externally (e.g. wizard back-navigation); key it by the value to
+          // force a fresh widget — same reasoning the plain dropdown this replaces used to key
+          // itself by, so an external reset is picked up via a fresh initialText/selectedId.
           key: ValueKey('cliente-${widget.state.customerId}'),
-          initialValue: widget.state.customerId,
-          isExpanded: true,
-          decoration: const InputDecoration(hintText: 'Seleziona cliente…'),
-          items: customers
-              .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
-              .toList(),
-          onChanged: (id) {
-            widget.onChanged(
-              widget.state.copyWith(
-                customerId: id,
-                locationId: null, // reset location when customer changes
-              ),
-            );
+          label: 'Cliente *',
+          hint: 'Cerca cliente…',
+          items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
+          selectedId: widget.state.customerId,
+          onSelected: (id) => widget.onChanged(
+            widget.state.copyWith(
+              customerId: id,
+              locationId: null, // reset location when customer changes
+            ),
+          ),
+          // The customer here must resolve to a real cached record — unlike the rapportino's
+          // Cliente field, NewTicketFormState has no free-text fallback (customerId is a plain
+          // FK sent straight to the server). Cleared only when the field is actually emptied, not
+          // on every keystroke of an in-progress edit: this field is keyed by customerId (above),
+          // so clearing eagerly on a non-empty keystroke changed the key mid-edit and destroyed/
+          // recreated the widget on every character typed — losing whatever had just been typed
+          // and making it impossible to type over an already-resolved value at all.
+          onFreeText: (text) {
+            if (text.isEmpty) {
+              widget.onChanged(
+                widget.state.copyWith(clearCustomerId: true, clearLocationId: true),
+              );
+            }
           },
-          validator: (v) => v == null ? 'Campo obbligatorio' : null,
         ),
 
         const SizedBox(height: 12),
@@ -96,23 +105,23 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         const SizedBox(height: 24),
         _SectionLabel(text: 'Sede *'),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          // Same reasoning as the customer field above — the customer
-          // dropdown's onChanged resets locationId externally (line ~78),
-          // so this must be rekeyed to pick up the reset.
+        AppLookupField(
+          // Same reasoning as the customer field above — the customer field's onSelected/
+          // onFreeText reset locationId externally, so this must be rekeyed to pick up the reset.
           key: ValueKey('sede-${widget.state.locationId}'),
-          initialValue: widget.state.locationId,
-          isExpanded: true,
-          decoration: InputDecoration(
-            hintText: widget.state.customerId != null
-                ? 'Seleziona sede…'
-                : 'Prima seleziona un cliente',
-          ),
-          items: locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))).toList(),
-          onChanged: widget.state.customerId != null
-              ? (id) => widget.onChanged(widget.state.copyWith(locationId: id))
-              : null,
-          validator: (v) => v == null ? 'Campo obbligatorio' : null,
+          label: 'Sede *',
+          hint: widget.state.customerId != null ? 'Cerca sede…' : 'Prima seleziona un cliente',
+          items: [for (final l in locations) LookupItem(id: l.id, name: l.name)],
+          selectedId: widget.state.locationId,
+          emptyCacheHint: widget.state.customerId == null ? 'Seleziona prima un cliente.' : null,
+          onSelected: (id) => widget.onChanged(widget.state.copyWith(locationId: id)),
+          // No free-text fallback for the same reason as Cliente above — locationId is a plain FK.
+          // Same "only clear on empty" reasoning as Cliente's own onFreeText too.
+          onFreeText: (text) {
+            if (text.isEmpty) {
+              widget.onChanged(widget.state.copyWith(clearLocationId: true));
+            }
+          },
         ),
 
         const SizedBox(height: 12),

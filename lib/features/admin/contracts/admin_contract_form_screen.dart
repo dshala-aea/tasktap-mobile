@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -318,7 +319,9 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
                   ),
                 ),
                 const SizedBox(width: 16),
-                Expanded(child: AppTextField(label: 'Codice', controller: _codiceCtrl)),
+                Expanded(
+                  child: AppTextField(label: 'Codice', controller: _codiceCtrl),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -419,11 +422,7 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: AdminDateField(
-                    label: 'Data fine',
-                    value: endLabel,
-                    onTap: _pickEndDate,
-                  ),
+                  child: AdminDateField(label: 'Data fine', value: endLabel, onTap: _pickEndDate),
                 ),
               ],
             ),
@@ -483,10 +482,13 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
                   Expanded(
                     child: Text(
                       'Rinnovo automatico',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                      style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
                     ),
                   ),
-                  AppToggle(value: _autoRenewal, onChanged: (v) => setState(() => _autoRenewal = v)),
+                  AppToggle(
+                    value: _autoRenewal,
+                    onChanged: (v) => setState(() => _autoRenewal = v),
+                  ),
                 ],
               ),
             ),

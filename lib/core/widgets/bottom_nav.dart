@@ -61,11 +61,22 @@ class AppBottomNav extends StatelessWidget {
     AppBottomNavItem(icon: AppBottomNavIcons.altro, label: 'Altro'),
   ];
 
+  /// Above this window width (a tablet/expanded window, not a phone in any orientation this app
+  /// otherwise targets) the shell switches to [_buildRail]. [HomeShell] checks the same constant
+  /// to decide whether this widget goes in `Scaffold.bottomNavigationBar` (phone) or a side `Row`
+  /// (wide) — the two must agree, or the shell would place a vertical rail into the bottom slot.
+  static const double wideBreakpoint = 600;
+
   @override
   Widget build(BuildContext context) {
     final tabs = items ?? defaultItems;
     final v = context.vetro;
+    final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
+    return wide ? _buildRail(context, tabs, v) : _buildBar(context, tabs, v);
+  }
 
+  /// Compact width (phone) — pixel-identical to this widget's pre-breakpoint implementation.
+  Widget _buildBar(BuildContext context, List<AppBottomNavItem> tabs, AppVetroPalette v) {
     return SafeArea(
       top: false,
       child: Padding(
@@ -125,17 +136,94 @@ class AppBottomNav extends StatelessWidget {
       ),
     );
   }
+
+  /// ≥[wideBreakpoint] (tablet/expanded window) — same tabs, same gradient-active-state, laid out
+  /// as a fixed vertical rail along the leading edge instead of a floating horizontal pill. Placed
+  /// by [HomeShell] in a `Row` beside the page content rather than `Scaffold.bottomNavigationBar`,
+  /// which only ever puts a widget at the bottom regardless of what that widget renders internally.
+  Widget _buildRail(BuildContext context, List<AppBottomNavItem> tabs, AppVetroPalette v) {
+    return SafeArea(
+      right: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: context.colors.shadow,
+          ),
+          child: RepaintBoundary(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: AppVetroColors.blurSigma,
+                  sigmaY: AppVetroColors.blurSigma,
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: v.glassFill,
+                    border: Border.all(color: v.glassBorder, width: 0.5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < tabs.length; i++)
+                          Padding(
+                            padding: EdgeInsets.only(bottom: i == tabs.length - 1 ? 0 : 14),
+                            child: _NavTab(
+                              item: tabs[i],
+                              active: i == currentIndex,
+                              onTap: () => onTap(i),
+                              vertical: true,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _NavTab extends StatelessWidget {
-  const _NavTab({required this.item, required this.active, required this.onTap});
+  const _NavTab({
+    required this.item,
+    required this.active,
+    required this.onTap,
+    this.vertical = false,
+  });
 
   final AppBottomNavItem item;
   final bool active;
   final VoidCallback onTap;
 
+  /// The wide-window rail's orientation — icon-above-label instead of icon-beside-label. Same
+  /// tab, same active-state gradient/logic either way; only the [Flex] direction and the padding
+  /// axis it needs change.
+  final bool vertical;
+
   @override
   Widget build(BuildContext context) {
+    final label = Text(
+      item.label,
+      maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
+      ),
+    );
+
     return Semantics(
       button: true,
       selected: active,
@@ -157,8 +245,12 @@ class _NavTab extends StatelessWidget {
           // 48dp, not 40 — this is the app's single global navigation control, tapped constantly
           // by a gloved technician one-handed, and 40 sat under both the 44pt (iOS) and 48dp
           // (Android) touch-target floors.
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
+          constraints: vertical
+              ? const BoxConstraints(minHeight: 48, minWidth: 48)
+              : const BoxConstraints(minHeight: 48),
+          padding: vertical
+              ? EdgeInsets.symmetric(horizontal: 10, vertical: active ? 10 : 12)
+              : EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
           decoration: BoxDecoration(
             gradient: active
                 ? const LinearGradient(
@@ -169,7 +261,8 @@ class _NavTab extends StatelessWidget {
                 : null,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Row(
+          child: Flex(
+            direction: vertical ? Axis.vertical : Axis.horizontal,
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
@@ -181,24 +274,11 @@ class _NavTab extends StatelessWidget {
                 color: active ? Colors.white : context.colors.inkMuted,
               ),
               if (active) ...[
-                const SizedBox(width: 8),
+                vertical ? const SizedBox(height: 4) : const SizedBox(width: 8),
                 // The label is what gives when space runs out — an icon nobody can read is
                 // worse than a word that ends in an ellipsis, and the icon is what marks the
                 // tab.
-                Flexible(
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+                vertical ? label : Flexible(child: label),
               ],
             ],
           ),

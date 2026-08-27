@@ -204,7 +204,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
     showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) => AlertDialog.adaptive(
           title: const Text('Aggiungi barcode'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -356,14 +356,17 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                context.navClearance,
+              ),
+              children: [
             AppTextField(
               label: 'Codice *',
               controller: _codeCtrl,
@@ -462,7 +465,9 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

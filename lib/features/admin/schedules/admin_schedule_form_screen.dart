@@ -376,7 +376,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   Future<bool?> _showConflictDialog(List<ScheduleConflict> conflicts) {
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog.adaptive(
         title: const Text('Conflitti rilevati'),
         content: SizedBox(
           width: double.maxFinite,
@@ -442,14 +442,17 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                context.navClearance,
+              ),
+              children: [
             AppTextField(label: 'Titolo', controller: _titleCtrl),
             const SizedBox(height: 16),
 
@@ -547,7 +550,9 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -90,6 +90,7 @@ class _ScanOverlay extends StatelessWidget {
               children: [
                 IconButton(
                   icon: const Icon(LucideIcons.x, color: Colors.white),
+                  tooltip: 'Chiudi',
                   onPressed: onClose,
                 ),
                 Expanded(

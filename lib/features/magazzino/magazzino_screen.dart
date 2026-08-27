@@ -8,6 +8,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/utils/offline_guard.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
@@ -492,67 +493,71 @@ class _GiacenzaRow extends ConsumerWidget {
   }
 
   void _showActions(BuildContext context, WidgetRef ref) {
+    final hasStockMinimo = giacenza.stockMinimo != null;
     showModalBottomSheet<void>(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(
-                LucideIcons.arrowDownToLine,
-                color: ctx.colors.green,
-              ),
-              title: const Text('Carico'),
-              subtitle: const Text('Aggiungi quantità a questo magazzino'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showMovimentoDialog(context, ref, MovimentoKind.carico);
-              },
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          // VetroCard as the sheet shell, ListRow for each action — same vocabulary the rest of
+          // the app's action lists use (ticket_detail_screen's attachment/report rows), rather
+          // than the plain ListTiles this sheet used to hand-roll.
+          child: VetroCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListRow(
+                  leading: Icon(LucideIcons.arrowDownToLine, size: 20, color: ctx.colors.green),
+                  title: 'Carico',
+                  subtitle: 'Aggiungi quantità a questo magazzino',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showMovimentoDialog(context, ref, MovimentoKind.carico);
+                  },
+                ),
+                ListRow(
+                  leading: Icon(LucideIcons.arrowUpFromLine, size: 20, color: ctx.colors.amber),
+                  title: 'Scarico',
+                  subtitle: 'Rimuovi quantità da questo magazzino',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showMovimentoDialog(context, ref, MovimentoKind.scarico);
+                  },
+                ),
+                ListRow(
+                  leading: Icon(LucideIcons.arrowLeftRight, size: 20, color: ctx.colors.inkMuted),
+                  title: 'Trasferisci',
+                  subtitle: 'Sposta quantità verso un altro magazzino',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showTrasferimentoDialog(context, ref);
+                  },
+                ),
+                ListRow(
+                  leading: Icon(LucideIcons.alertTriangle, size: 20, color: ctx.colors.inkMuted),
+                  title: hasStockMinimo ? 'Modifica soglia minima' : 'Imposta soglia minima',
+                  showDivider: hasStockMinimo,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showStockMinimoDialog(context, ref);
+                  },
+                ),
+                if (hasStockMinimo)
+                  ListRow(
+                    leading: Icon(LucideIcons.x, size: 20, color: ctx.colors.red),
+                    title: 'Rimuovi soglia minima',
+                    showDivider: false,
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await _clearStockMinimo(context, ref);
+                    },
+                  ),
+              ],
             ),
-            ListTile(
-              leading: Icon(
-                LucideIcons.arrowUpFromLine,
-                color: ctx.colors.amber,
-              ),
-              title: const Text('Scarico'),
-              subtitle: const Text('Rimuovi quantità da questo magazzino'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showMovimentoDialog(context, ref, MovimentoKind.scarico);
-              },
-            ),
-            ListTile(
-              leading: const Icon(LucideIcons.arrowLeftRight),
-              title: const Text('Trasferisci'),
-              subtitle: const Text('Sposta quantità verso un altro magazzino'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showTrasferimentoDialog(context, ref);
-              },
-            ),
-            ListTile(
-              leading: const Icon(LucideIcons.alertTriangle),
-              title: Text(
-                giacenza.stockMinimo != null
-                    ? 'Modifica soglia minima'
-                    : 'Imposta soglia minima',
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showStockMinimoDialog(context, ref);
-              },
-            ),
-            if (giacenza.stockMinimo != null)
-              ListTile(
-                leading: Icon(LucideIcons.x, color: ctx.colors.red),
-                title: const Text('Rimuovi soglia minima'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await _clearStockMinimo(context, ref);
-                },
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -572,106 +577,134 @@ class _GiacenzaRow extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          return AlertDialog(
-            title: Text(isCarico ? 'Carico' : 'Scarico'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(giacenza.materialeNome ?? giacenza.materialeId),
-                const SizedBox(height: 12),
-                AppFieldShell(
-                  label: 'Quantità',
-                  child: TextField(
-                    controller: qtyCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: VetroCard(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    isCarico ? 'Carico' : 'Scarico',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: ctx.colors.ink,
                     ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    giacenza.materialeNome ?? giacenza.materialeId,
+                    style: TextStyle(fontSize: 13, color: ctx.colors.inkMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  AppFieldShell(
+                    label: 'Quantità',
+                    child: TextField(
+                      controller: qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  AppFieldShell(
+                    label: 'Note',
+                    child: TextField(controller: noteCtrl),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton.secondary(
+                          label: 'Annulla',
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Conferma',
+                          isLoading: isSaving,
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  final qty = double.tryParse(qtyCtrl.text);
+                                  if (qty == null || qty <= 0) return;
+                                  if (!ensureOnlineOrWarn(context, ref)) return;
+
+                                  setDialogState(() => isSaving = true);
+                                  try {
+                                    final client = ref.read(magazzinoApiClientProvider);
+                                    final note = noteCtrl.text.trim().isEmpty
+                                        ? null
+                                        : noteCtrl.text.trim();
+                                    if (isCarico) {
+                                      await client.carico(
+                                        magazzinoId: giacenza.magazzinoId,
+                                        materialeId: giacenza.materialeId,
+                                        quantita: qty,
+                                        note: note,
+                                      );
+                                    } else {
+                                      await client.scarico(
+                                        magazzinoId: giacenza.magazzinoId,
+                                        materialeId: giacenza.materialeId,
+                                        quantita: qty,
+                                        note: note,
+                                      );
+                                    }
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    _refresh(ref);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            isCarico
+                                                ? 'Carico registrato'
+                                                : 'Scarico registrato',
+                                          ),
+                                          backgroundColor: context.colors.green,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isSaving = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            _movimentoErrorMessage(e, isCarico: isCarico),
+                                          ),
+                                          backgroundColor: context.colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                AppFieldShell(
-                  label: 'Note',
-                  child: TextField(controller: noteCtrl),
-                ),
-              ],
+                ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        final qty = double.tryParse(qtyCtrl.text);
-                        if (qty == null || qty <= 0) return;
-                        if (!ensureOnlineOrWarn(context, ref)) return;
-
-                        setDialogState(() => isSaving = true);
-                        try {
-                          final client = ref.read(magazzinoApiClientProvider);
-                          final note = noteCtrl.text.trim().isEmpty
-                              ? null
-                              : noteCtrl.text.trim();
-                          if (isCarico) {
-                            await client.carico(
-                              magazzinoId: giacenza.magazzinoId,
-                              materialeId: giacenza.materialeId,
-                              quantita: qty,
-                              note: note,
-                            );
-                          } else {
-                            await client.scarico(
-                              magazzinoId: giacenza.magazzinoId,
-                              materialeId: giacenza.materialeId,
-                              quantita: qty,
-                              note: note,
-                            );
-                          }
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          _refresh(ref);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  isCarico
-                                      ? 'Carico registrato'
-                                      : 'Scarico registrato',
-                                ),
-                                backgroundColor: context.colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          setDialogState(() => isSaving = false);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  _movimentoErrorMessage(e, isCarico: isCarico),
-                                ),
-                                backgroundColor: context.colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                child: isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Conferma'),
-              ),
-            ],
           );
         },
       ),
+      // Not disposed here: showDialog's returned Future completes at Navigator.pop() — the call
+      // site above — not when the dialog's widget tree is actually unmounted, which happens later,
+      // after the exit transition finishes. Disposing in a `.then()` here made both text fields
+      // access their (already-disposed) controllers while still mid-transition, a real crash this
+      // batch introduced and then caught on-device: "A TextEditingController was used after being
+      // disposed." Correctly fixing the underlying real (if minor) controller leak needs these
+      // dialogs to own their controllers in a dedicated StatefulWidget instead, so `dispose()` runs
+      // exactly when Flutter unmounts the widget — not attempted in this pass.
     );
   }
 
@@ -685,139 +718,175 @@ class _GiacenzaRow extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          return AlertDialog(
-            title: const Text('Trasferisci'),
-            content: SingleChildScrollView(
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: VetroCard(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(giacenza.materialeNome ?? giacenza.materialeId),
-                  const SizedBox(height: 4),
                   Text(
-                    'Da: ${giacenza.magazzinoNome ?? giacenza.magazzinoId}',
-                    style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
+                    'Trasferisci',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: ctx.colors.ink,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Consumer(
-                    builder: (ctx, ref, _) {
-                      final async = ref.watch(magazziniProvider);
-                      return async.when(
-                        loading: () => const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  // Not wrapped in Flexible: a plain SingleChildScrollView shrink-wraps to its
+                  // child's actual height when the incoming constraint is loose (the case here,
+                  // as a normal — not flex — child of this `mainAxisSize.min` Column), and only
+                  // becomes scroll-constrained if content genuinely overflows the dialog's bounded
+                  // max height. Same nesting the original AlertDialog's own `content:` used.
+                  SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          giacenza.materialeNome ?? giacenza.materialeId,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: ctx.colors.ink,
+                          ),
                         ),
-                        error: (e, _) => Text(
-                          humanErrorMessage(e, azione: 'caricare i magazzini'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Da: ${giacenza.magazzinoNome ?? giacenza.magazzinoId}',
+                          style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
                         ),
-                        data: (list) {
-                          final options = list
-                              .where((m) => m.id != giacenza.magazzinoId)
-                              .toList();
-                          return AppFieldShell(
-                            label: 'Magazzino destinazione',
-                            child: DropdownButtonFormField<String>(
-                              // ignore: deprecated_member_use — controlled field
-                              value: destinationId,
-                              decoration: const InputDecoration(isDense: true),
-                              isExpanded: true,
-                              items: [
-                                for (final m in options)
-                                  DropdownMenuItem(
-                                    value: m.id,
-                                    child: Text(m.nome),
+                        const SizedBox(height: 12),
+                        Consumer(
+                          builder: (ctx, ref, _) {
+                            final async = ref.watch(magazziniProvider);
+                            return async.when(
+                              loading: () => const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: CircularProgressIndicator(),
+                              ),
+                              error: (e, _) => Text(
+                                humanErrorMessage(e, azione: 'caricare i magazzini'),
+                              ),
+                              data: (list) {
+                                final options = list
+                                    .where((m) => m.id != giacenza.magazzinoId)
+                                    .toList();
+                                return AppFieldShell(
+                                  label: 'Magazzino destinazione',
+                                  child: DropdownButtonFormField<String>(
+                                    // ignore: deprecated_member_use — controlled field
+                                    value: destinationId,
+                                    decoration: const InputDecoration(isDense: true),
+                                    isExpanded: true,
+                                    items: [
+                                      for (final m in options)
+                                        DropdownMenuItem(
+                                          value: m.id,
+                                          child: Text(m.nome),
+                                        ),
+                                    ],
+                                    onChanged: (v) =>
+                                        setDialogState(() => destinationId = v),
                                   ),
-                              ],
-                              onChanged: (v) =>
-                                  setDialogState(() => destinationId = v),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        AppFieldShell(
+                          label: 'Quantità',
+                          child: TextField(
+                            controller: qtyCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
                             ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  AppFieldShell(
-                    label: 'Quantità',
-                    child: TextField(
-                      controller: qtyCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        AppFieldShell(
+                          label: 'Note',
+                          child: TextField(controller: noteCtrl),
+                        ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  AppFieldShell(
-                    label: 'Note',
-                    child: TextField(controller: noteCtrl),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton.secondary(
+                          label: 'Annulla',
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: AppButton(
+                          label: 'Conferma',
+                          isLoading: isSaving,
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  final qty = double.tryParse(qtyCtrl.text);
+                                  final dest = destinationId;
+                                  if (qty == null || qty <= 0 || dest == null) return;
+                                  if (!ensureOnlineOrWarn(context, ref)) return;
+
+                                  setDialogState(() => isSaving = true);
+                                  try {
+                                    final client = ref.read(magazzinoApiClientProvider);
+                                    await client.trasferimento(
+                                      magazzinoId: giacenza.magazzinoId,
+                                      materialeId: giacenza.materialeId,
+                                      quantita: qty,
+                                      magazzinoDestinazioneId: dest,
+                                      note: noteCtrl.text.trim().isEmpty
+                                          ? null
+                                          : noteCtrl.text.trim(),
+                                    );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    _refresh(ref);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: const Text('Trasferimento registrato'),
+                                          backgroundColor: context.colors.green,
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setDialogState(() => isSaving = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            _movimentoErrorMessage(e, isCarico: false),
+                                          ),
+                                          backgroundColor: context.colors.red,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annulla'),
-              ),
-              ElevatedButton(
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        final qty = double.tryParse(qtyCtrl.text);
-                        final dest = destinationId;
-                        if (qty == null || qty <= 0 || dest == null) return;
-                        if (!ensureOnlineOrWarn(context, ref)) return;
-
-                        setDialogState(() => isSaving = true);
-                        try {
-                          final client = ref.read(magazzinoApiClientProvider);
-                          await client.trasferimento(
-                            magazzinoId: giacenza.magazzinoId,
-                            materialeId: giacenza.materialeId,
-                            quantita: qty,
-                            magazzinoDestinazioneId: dest,
-                            note: noteCtrl.text.trim().isEmpty
-                                ? null
-                                : noteCtrl.text.trim(),
-                          );
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          _refresh(ref);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Trasferimento registrato'),
-                                backgroundColor: context.colors.green,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          setDialogState(() => isSaving = false);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  _movimentoErrorMessage(e, isCarico: false),
-                                ),
-                                backgroundColor: context.colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                child: isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Conferma'),
-              ),
-            ],
           );
         },
       ),
+      // See _showMovimentoDialog's own comment: not disposed here for the same reason.
     );
   }
 
@@ -828,63 +897,92 @@ class _GiacenzaRow extends ConsumerWidget {
 
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Soglia minima'),
-        content: AppFieldShell(
-          label: 'Quantità minima',
-          child: TextField(
-            controller: ctrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: VetroCard(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Soglia minima',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: ctx.colors.ink,
+                ),
+              ),
+              const SizedBox(height: 16),
+              AppFieldShell(
+                label: 'Quantità minima',
+                child: TextField(
+                  controller: ctrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  autofocus: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton.secondary(
+                      label: 'Annulla',
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppButton(
+                      label: 'Salva',
+                      onPressed: () async {
+                        final value = double.tryParse(ctrl.text);
+                        if (value == null || value < 0) return;
+                        if (!ensureOnlineOrWarn(context, ref)) return;
+                        Navigator.pop(ctx);
+                        try {
+                          await ref
+                              .read(magazzinoApiClientProvider)
+                              .setStockMinimo(stockId: giacenza.id, stockMinimo: value);
+                          _refresh(ref);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Soglia minima aggiornata'),
+                                backgroundColor: context.colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  humanErrorMessage(
+                                    e,
+                                    azione: 'salvare la soglia minima',
+                                  ),
+                                ),
+                                backgroundColor: context.colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ],
-            autofocus: true,
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final value = double.tryParse(ctrl.text);
-              if (value == null || value < 0) return;
-              if (!ensureOnlineOrWarn(context, ref)) return;
-              Navigator.pop(ctx);
-              try {
-                await ref
-                    .read(magazzinoApiClientProvider)
-                    .setStockMinimo(stockId: giacenza.id, stockMinimo: value);
-                _refresh(ref);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Soglia minima aggiornata'),
-                      backgroundColor: context.colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        humanErrorMessage(
-                          e,
-                          azione: 'salvare la soglia minima',
-                        ),
-                      ),
-                      backgroundColor: context.colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Salva'),
-          ),
-        ],
       ),
+      // See _showMovimentoDialog's own comment: not disposed here for the same reason — this one
+      // pops before its async call even starts, so `.then()` fired sooner than the others did.
     );
   }
 

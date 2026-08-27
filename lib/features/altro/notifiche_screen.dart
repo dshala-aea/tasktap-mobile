@@ -94,25 +94,31 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                   if (unread > 0)
                     // A bare text action, so the splash is the only thing that confirms the
                     // press at all — the list it clears is below the fold on a full inbox.
-                    AppTappable(
-                      onTap: () =>
-                          ref.read(notificheProvider.notifier).segnaLette(),
-                      borderRadius: BorderRadius.circular(6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm,
-                        vertical: AppSpacing.md,
-                      ),
-                      child: Text(
-                        'Segna tutte',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          // The header is a flipping ScreenHeader now, not a permanently-dark
-                          // CHARCOAL plate — fixed white here was unreadable (white-on-white) in
-                          // light mode. context.vetro.tint matches every other tinted header
-                          // action in the app and flips correctly with the theme.
-                          color: context.vetro.tint,
+                    // ConstrainedBox guarantees the 44dp touch-target floor the padding alone
+                    // (sm/md around 12px text) falls short of — same guarantee HeaderIconBtn
+                    // gives its own action buttons.
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: AppTappable(
+                        onTap: () =>
+                            ref.read(notificheProvider.notifier).segnaLette(),
+                        borderRadius: BorderRadius.circular(6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
+                          vertical: AppSpacing.md,
+                        ),
+                        child: Text(
+                          'Segna tutte',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            // The header is a flipping ScreenHeader now, not a permanently-dark
+                            // CHARCOAL plate — fixed white here was unreadable (white-on-white) in
+                            // light mode. context.vetro.tint matches every other tinted header
+                            // action in the app and flips correctly with the theme.
+                            color: context.vetro.tint,
+                          ),
                         ),
                       ),
                     ),

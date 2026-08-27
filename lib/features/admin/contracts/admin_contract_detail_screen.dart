@@ -78,102 +78,114 @@ class AdminContractDetailScreen extends ConsumerWidget {
         ),
       ),
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: ScreenHeader(
-                title: name,
-                showBack: true,
-                actions: id.isEmpty
-                    ? const []
-                    : [
-                        HeaderIconBtn(
-                          icon: LucideIcons.trash2,
-                          label: 'Elimina contratto',
-                          glass: true,
-                          onTap: () => _deleteContract(context, ref, id, name),
-                        ),
-                      ],
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                child: VetroCard(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
-                        child: Row(
-                          children: [
-                            StatusPill(
-                              stato: isActive ? 'Attivo' : 'Inattivo',
-                              outlined: true,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: ScreenHeader(
+                    title: name,
+                    showBack: true,
+                    actions: id.isEmpty
+                        ? const []
+                        : [
+                            HeaderIconBtn(
+                              icon: LucideIcons.trash2,
+                              label: 'Elimina contratto',
+                              glass: true,
+                              onTap: () => _deleteContract(context, ref, id, name),
                             ),
                           ],
-                        ),
-                      ),
-                      Divider(height: 1, thickness: 1, color: context.colors.borderLight),
-                      KeyVal(label: 'Nome', value: name),
-                      KeyVal(label: 'Numero contratto', value: numero.isNotEmpty ? numero : '—'),
-                      KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
-                      KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
-                      KeyVal(
-                        label: 'Prodotto in assistenza',
-                        value: prodottoAssistenzaId != null && prodottoAssistenzaId.isNotEmpty
-                            ? prodottoAssistenzaId
-                            : '—',
-                      ),
-                      KeyVal(
-                        label: 'Descrizione',
-                        value: description.isNotEmpty ? description : '—',
-                      ),
-                      KeyVal(label: 'Data inizio', value: startLabel),
-                      KeyVal(label: 'Data fine', value: endLabel),
-                      KeyVal(label: 'Frequenza', value: freqLabel),
-                      KeyVal(label: 'Prezzo', value: priceLabel),
-                      KeyVal(
-                        label: 'Preavviso scadenza',
-                        value: scadenzaGiorni != null ? '$scadenzaGiorni giorni' : '—',
-                      ),
-                      KeyVal(label: 'Rinnovo automatico', value: autoRenewal ? 'Sì' : 'No'),
-                      KeyVal(label: 'Condizioni', value: condizioni.isNotEmpty ? condizioni : '—'),
-                      KeyVal(
-                        label: 'ID esterno',
-                        value: externalId.isNotEmpty ? externalId : '—',
-                      ),
-                      KeyVal(
-                        label: 'Note',
-                        value: notes.isNotEmpty ? notes : '—',
-                        showDivider: false,
-                      ),
-                    ],
                   ),
                 ),
-              ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                    child: VetroCard(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: AppSpacing.md,
+                              bottom: AppSpacing.sm,
+                            ),
+                            child: Row(
+                              children: [
+                                StatusPill(stato: isActive ? 'Attivo' : 'Inattivo', outlined: true),
+                              ],
+                            ),
+                          ),
+                          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+                          KeyVal(label: 'Nome', value: name),
+                          KeyVal(
+                            label: 'Numero contratto',
+                            value: numero.isNotEmpty ? numero : '—',
+                          ),
+                          KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
+                          KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
+                          KeyVal(
+                            label: 'Prodotto in assistenza',
+                            value: prodottoAssistenzaId != null && prodottoAssistenzaId.isNotEmpty
+                                ? prodottoAssistenzaId
+                                : '—',
+                          ),
+                          KeyVal(
+                            label: 'Descrizione',
+                            value: description.isNotEmpty ? description : '—',
+                          ),
+                          KeyVal(label: 'Data inizio', value: startLabel),
+                          KeyVal(label: 'Data fine', value: endLabel),
+                          KeyVal(label: 'Frequenza', value: freqLabel),
+                          KeyVal(label: 'Prezzo', value: priceLabel),
+                          KeyVal(
+                            label: 'Preavviso scadenza',
+                            value: scadenzaGiorni != null ? '$scadenzaGiorni giorni' : '—',
+                          ),
+                          KeyVal(label: 'Rinnovo automatico', value: autoRenewal ? 'Sì' : 'No'),
+                          KeyVal(
+                            label: 'Condizioni',
+                            value: condizioni.isNotEmpty ? condizioni : '—',
+                          ),
+                          KeyVal(
+                            label: 'ID esterno',
+                            value: externalId.isNotEmpty ? externalId : '—',
+                          ),
+                          KeyVal(
+                            label: 'Note',
+                            value: notes.isNotEmpty ? notes : '—',
+                            showDivider: false,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ── Genera pianificazione (Gap C) ───────────────────────────────
+                if (id.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: VetroButton(
+                        label: 'Genera pianificazione',
+                        secondary: true,
+                        onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
+                      ),
+                    ),
+                  ),
+
+                SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
+              ],
             ),
-
-            // ── Genera pianificazione (Gap C) ───────────────────────────────
-            if (id.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.pagePadding,
-                    0,
-                    AppSpacing.pagePadding,
-                    AppSpacing.base,
-                  ),
-                  child: VetroButton(
-                    label: 'Genera pianificazione',
-                    secondary: true,
-                    onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
-                  ),
-                ),
-              ),
-
-            SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-          ],
+          ),
         ),
       ),
     );
@@ -186,8 +198,7 @@ class AdminContractDetailScreen extends ConsumerWidget {
   };
 }
 
-/// Delete confirmation dialog + API call — mirrors `_deleteProdotto` in
-/// admin_prodotto_detail_screen.dart (no shared confirm-dialog widget exists yet in this app).
+/// Delete confirmation dialog + API call — dialog itself is the shared `confirmDeleteDialog`.
 /// `humanErrorMessage` already surfaces the backend's 409 message
 /// ("Impossibile eliminare: il contratto ha prodotti, pianificazioni o interventi collegati")
 /// verbatim when every foreign key referencing this contract is `DeleteBehavior.Restrict`.
@@ -197,21 +208,14 @@ Future<void> _deleteContract(
   String contractId,
   String name,
 ) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Eliminare il contratto?'),
-      content: Text(
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il contratto?',
+    message:
         'Il contratto "$name" verrà eliminato definitivamente. L\'operazione non può essere '
         'annullata.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
-      ],
-    ),
   );
-  if (confirmed != true || !context.mounted) return;
+  if (!confirmed || !context.mounted) return;
 
   try {
     await ref.read(adminApiClientProvider).deleteContract(contractId);
@@ -326,9 +330,7 @@ class _GeneraScheduleDialogState extends ConsumerState<_GeneraScheduleDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Verranno create le pianificazioni ricorrenti del contratto. ${widget.rangeLabel}.',
-          ),
+          Text('Verranno create le pianificazioni ricorrenti del contratto. ${widget.rangeLabel}.'),
           const SizedBox(height: 16),
           AppFieldShell(
             label: 'Tecnico *',
@@ -349,14 +351,9 @@ class _GeneraScheduleDialogState extends ConsumerState<_GeneraScheduleDialog> {
         ],
       ),
       actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Annulla'),
-        ),
-        TextButton(
-          onPressed: _selectedUserId == null
-              ? null
-              : () => Navigator.pop(context, _selectedUserId),
+          onPressed: _selectedUserId == null ? null : () => Navigator.pop(context, _selectedUserId),
           child: const Text('Genera'),
         ),
       ],

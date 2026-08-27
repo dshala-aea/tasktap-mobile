@@ -245,7 +245,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   };
 }
 
-/// A 44dp action on the hero's glass.
+/// A 48dp action on the hero's glass.
 ///
 /// Icon-only to keep the row dense, so the semantic label carries the whole meaning — and when the
 /// server refuses the action, the reason is spoken rather than the control silently doing nothing.
@@ -281,8 +281,8 @@ class _GlassAction extends StatelessWidget {
             child: Opacity(
               opacity: blocked ? 0.4 : 1,
               child: SizedBox(
-                width: 44,
-                height: 44,
+                width: 48,
+                height: 48,
                 child: Icon(icon, size: 18, color: AppColors.onDark),
               ),
             ),

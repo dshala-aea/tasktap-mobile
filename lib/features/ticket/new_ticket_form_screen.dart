@@ -198,7 +198,11 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
                     AppSpacing.base,
                     AppSpacing.base,
                   ),
-                  child: AppStepper(steps: _kSteps, currentIndex: _stepIndex),
+                  child: AppStepper(
+                    steps: _kSteps,
+                    currentIndex: _stepIndex,
+                    onStepSelected: (i) => setState(() => _step = _FormStep.values[i]),
+                  ),
                 ),
               ],
             ),
@@ -207,7 +211,9 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
           // ── Step content ─────────────────────────────────────────────────
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
               switchInCurve: Curves.easeInOut,
               switchOutCurve: Curves.easeInOut,
               child: _buildStep(key: ValueKey(_step)),

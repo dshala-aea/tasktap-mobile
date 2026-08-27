@@ -655,6 +655,13 @@ class _PhotoThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The grid renders these three-up (see the `SliverGridDelegateWithFixedCrossAxisCount`
+    // above) at a small square tile, but a camera photo decodes at full sensor resolution —
+    // easily 3000+ px on a side. Without cacheWidth/cacheHeight, Flutter decodes and holds every
+    // thumbnail at that full size, which is a lot of memory for a grid of tiles this small.
+    final tileWidth =
+        (MediaQuery.sizeOf(context).width - AppSpacing.pagePadding * 2 - 8 * 2) / 3;
+    final cachePx = (tileWidth * MediaQuery.devicePixelRatioOf(context)).round();
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -663,6 +670,8 @@ class _PhotoThumb extends StatelessWidget {
           child: Image.file(
             File(row.localPath),
             fit: BoxFit.cover,
+            cacheWidth: cachePx,
+            cacheHeight: cachePx,
             errorBuilder: (ctx, e, _) => Container(
               color: context.colors.bg3,
               child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),

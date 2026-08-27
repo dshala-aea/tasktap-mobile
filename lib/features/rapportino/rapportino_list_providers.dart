@@ -70,6 +70,37 @@ final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, 
   );
 });
 
+/// Combines staff count, materiali count, and the ore label for one report into a single
+/// watch — see `_RapportinoRow.build` (rapportini_list_screen.dart), which used to `ref.watch`
+/// [rapportinoStaffProvider], [rapportinoMaterialiProvider], and [rapportinoOreProvider]
+/// separately per row. Purely additive: the three providers above are untouched, so
+/// `RapportinoViewScreen` (which still watches them individually) is unaffected.
+class RapportinoRowSummary {
+  const RapportinoRowSummary({
+    required this.staffCount,
+    required this.materialiCount,
+    required this.oreLabel,
+  });
+
+  final int staffCount;
+  final int materialiCount;
+  final String oreLabel;
+}
+
+final rapportinoRowSummaryProvider = Provider.autoDispose.family<RapportinoRowSummary, String>((
+  ref,
+  reportId,
+) {
+  final staffAsync = ref.watch(rapportinoStaffProvider(reportId));
+  final materialiAsync = ref.watch(rapportinoMaterialiProvider(reportId));
+  final oreLabel = ref.watch(rapportinoOreProvider(reportId));
+  return RapportinoRowSummary(
+    staffCount: staffAsync.valueOrNull?.length ?? 0,
+    materialiCount: materialiAsync.valueOrNull?.length ?? 0,
+    oreLabel: oreLabel,
+  );
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Status-name resolver
 //

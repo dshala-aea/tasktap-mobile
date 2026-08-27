@@ -139,14 +139,17 @@ class _AdminMagazzinoFormScreenState extends ConsumerState<AdminMagazzinoFormScr
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                context.navClearance,
+              ),
+              children: [
             AppTextField(
               label: 'Nome *',
               controller: _nomeCtrl,
@@ -233,7 +236,9 @@ class _AdminMagazzinoFormScreenState extends ConsumerState<AdminMagazzinoFormScr
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

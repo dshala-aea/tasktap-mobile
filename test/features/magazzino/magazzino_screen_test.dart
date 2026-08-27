@@ -401,7 +401,9 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-        find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+        // A Dialog wrapping VetroCard now, not AlertDialog — see magazzino_screen.dart's own
+        // _showStockMinimoDialog.
+        find.descendant(of: find.byType(Dialog), matching: find.byType(TextField)),
         '2',
       );
       await tester.tap(find.text('Salva'));

@@ -8,6 +8,7 @@ import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
@@ -149,12 +150,12 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: const Text('Impossibile salvare. Riprova.'),
             backgroundColor: context.colors.red,
-          ));
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -251,7 +252,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
                     Expanded(
                       child: Text(
                         'Attivo',
-                        style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                        style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
                       ),
                     ),
                     AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),

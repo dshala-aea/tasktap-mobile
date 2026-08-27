@@ -85,24 +85,16 @@ class AdminCantiereDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Delete confirmation dialog + API call — mirrors `_deleteCustomer` in
-/// admin_customer_detail_screen.dart (no shared confirm-dialog widget exists yet in this app).
+/// Delete confirmation dialog + API call — dialog itself is the shared `confirmDeleteDialog`.
 Future<void> _deleteCantiere(BuildContext context, WidgetRef ref, String cantiereId) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Eliminare il cantiere?'),
-      content: const Text(
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il cantiere?',
+    message:
         "L'eliminazione è definitiva. Interventi e log collegati non saranno più raggiungibili "
         'da qui.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
-      ],
-    ),
   );
-  if (confirmed != true || !context.mounted) return;
+  if (!confirmed || !context.mounted) return;
 
   try {
     await ref.read(adminApiClientProvider).deleteCantiere(cantiereId);
@@ -148,9 +140,7 @@ class _CantiereDetailBody extends ConsumerWidget {
     // nowhere. Resolved the same way as the ticket detail screen's own commessa row — live-
     // fetched via the shared commessaByIdProvider, no local mirror exists for commesse.
     final commessaId = cantiere.commessaId;
-    final commessaAsync = commessaId == null
-        ? null
-        : ref.watch(commessaByIdProvider(commessaId));
+    final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
     final commessaLabel = commessaAsync?.when(
       data: (c) => c?['codice'] as String? ?? '—',
       loading: () => 'Caricamento…',
@@ -267,11 +257,7 @@ class _CantiereDetailBody extends ConsumerWidget {
     );
   }
 
-  Future<void> _createRapportino(
-    BuildContext context,
-    WidgetRef ref,
-    CantieriData cantiere,
-  ) async {
+  Future<void> _createRapportino(BuildContext context, WidgetRef ref, CantieriData cantiere) async {
     final address = [
       cantiere.address,
       cantiere.city,
@@ -288,9 +274,9 @@ class _CantiereDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Accedi per creare un rapportino.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Accedi per creare un rapportino.')));
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
@@ -394,18 +380,19 @@ class _ContactsSection extends ConsumerWidget {
                         IconButton(
                           icon: const Icon(LucideIcons.pencil, size: 18),
                           tooltip: 'Modifica contatto',
-                          onPressed: () => _openContactSheet(
-                            context,
-                            ref,
-                            cantiereId: cantiereId,
-                            contact: c,
-                          ),
+                          onPressed: () =>
+                              _openContactSheet(context, ref, cantiereId: cantiereId, contact: c),
                         ),
                         IconButton(
                           icon: const Icon(LucideIcons.trash2, size: 18),
                           tooltip: 'Elimina contatto',
-                          onPressed: () => _deleteContact(context, ref, cantiereId: cantiereId,
-                              contactId: c['id'] as String, name: name),
+                          onPressed: () => _deleteContact(
+                            context,
+                            ref,
+                            cantiereId: cantiereId,
+                            contactId: c['id'] as String,
+                            name: name,
+                          ),
                         ),
                       ],
                     ),
@@ -427,18 +414,12 @@ class _ContactsSection extends ConsumerWidget {
     required String contactId,
     required String name,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminare il contatto?'),
-        content: Text('Vuoi eliminare "$name" dai contatti del cantiere?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
-        ],
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Eliminare il contatto?',
+      message: 'Vuoi eliminare "$name" dai contatti del cantiere?',
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     try {
       await ref.read(adminApiClientProvider).deleteCantiereContact(cantiereId, contactId);
@@ -704,18 +685,13 @@ class _CrewSection extends ConsumerWidget {
     required String assignmentId,
     required String nome,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rimuovere dal cantiere?'),
-        content: Text('Vuoi rimuovere $nome dal personale assegnato a questo cantiere?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
-        ],
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Rimuovere dal cantiere?',
+      message: 'Vuoi rimuovere $nome dal personale assegnato a questo cantiere?',
+      confirmLabel: 'Rimuovi',
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     try {
       await ref.read(adminApiClientProvider).removeCantiereAssignment(cantiereId, assignmentId);
@@ -909,8 +885,9 @@ class _WorkLogsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) =>
-              _SectionError(onRetry: () => ref.invalidate(adminCantiereWorkLogsProvider(cantiereId))),
+          error: (e, _) => _SectionError(
+            onRetry: () => ref.invalidate(adminCantiereWorkLogsProvider(cantiereId)),
+          ),
           data: (logs) {
             if (logs.isEmpty) {
               return const EmptyState(
@@ -978,8 +955,9 @@ class _TicketsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) =>
-              _SectionError(onRetry: () => ref.invalidate(adminCantiereTicketsProvider(cantiereId))),
+          error: (e, _) => _SectionError(
+            onRetry: () => ref.invalidate(adminCantiereTicketsProvider(cantiereId)),
+          ),
           data: (tickets) {
             if (tickets.isEmpty) {
               return const EmptyState(
@@ -1050,8 +1028,9 @@ class _ReportsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) =>
-              _SectionError(onRetry: () => ref.invalidate(adminCantiereReportsProvider(cantiereId))),
+          error: (e, _) => _SectionError(
+            onRetry: () => ref.invalidate(adminCantiereReportsProvider(cantiereId)),
+          ),
           data: (reports) {
             if (reports.isEmpty) {
               return const EmptyState(
@@ -1067,8 +1046,8 @@ class _ReportsSection extends ConsumerWidget {
                   final r = entry.value;
                   final title = r['title'] as String? ?? 'Rapportino';
                   final stato = r['stato'];
-                  final statoLabel = _statoLabels[stato is int ? stato : int.tryParse('$stato')] ??
-                      'Bozza';
+                  final statoLabel =
+                      _statoLabels[stato is int ? stato : int.tryParse('$stato')] ?? 'Bozza';
                   final createdAt = DateTime.tryParse(r['createdAt'] as String? ?? '');
                   final dateLabel = createdAt != null
                       ? DateFormat('dd/MM/yyyy', 'it').format(createdAt.toLocal())
@@ -1105,7 +1084,10 @@ class _SectionError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.pagePadding,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         children: [
           Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),

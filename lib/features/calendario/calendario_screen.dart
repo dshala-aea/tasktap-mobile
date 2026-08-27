@@ -309,7 +309,10 @@ class _WeekDayScroller extends ConsumerWidget {
     );
 
     return Container(
-      height: 74,
+      // 80, not the original 74: raising the day-abbreviation label from 9pt to the 11pt platform
+      // floor added a few px the fixed-height cell no longer had room for (a real overflow, caught
+      // by the test suite after that fix landed).
+      height: 80,
       decoration: BoxDecoration(
         color: context.colors.surface,
         border: Border(bottom: BorderSide(color: context.vetro.hairline)),
@@ -330,69 +333,85 @@ class _WeekDayScroller extends ConsumerWidget {
             // below is an AnimatedContainer that moves on every selection, so the tap is already
             // answered. The three calendar *views* were converted, because an appointment block
             // does nothing visible when tapped until the next screen renders.
-            child: GestureDetector(
-              onTap: () => onDateSelected(day),
-              behavior: HitTestBehavior.opaque,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    dayAbbr.format(day).toUpperCase(),
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? context.vetro.tint : context.colors.inkMuted,
-                      letterSpacing: 0.5,
+            child: Semantics(
+              button: true,
+              selected: isSelected,
+              label:
+                  '${dayAbbr.format(day).toUpperCase()} ${day.day}'
+                  '${hasDots ? ', con appuntamenti' : ''}',
+              child: GestureDetector(
+                onTap: () => onDateSelected(day),
+                behavior: HitTestBehavior.opaque,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      dayAbbr.format(day).toUpperCase(),
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isSelected ? context.vetro.tint : context.colors.inkMuted,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      gradient: isSelected
-                          ? LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [context.vetro.tint, context.vetro.tintStrong],
-                            )
-                          : null,
-                      color: isSelected
-                          ? null
-                          : isToday
-                          ? context.vetro.tint.withAlpha(31)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${day.day}',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: isSelected ? Colors.white : context.colors.ink,
+                    const SizedBox(height: 4),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: isSelected
+                            ? LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [context.vetro.tint, context.vetro.tintStrong],
+                              )
+                            : null,
+                        color: isSelected
+                            ? null
+                            : isToday
+                            ? context.vetro.tint.withAlpha(31)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        // Clamped so a boosted system text size can't grow the digit past the
+                        // fixed 32x32 disc and overlap the event dot below it.
+                        child: MediaQuery(
+                          data: MediaQuery.of(context).copyWith(
+                            textScaler: MediaQuery.textScalerOf(
+                              context,
+                            ).clamp(maxScaleFactor: 1.3),
+                          ),
+                          child: Text(
+                            '${day.day}',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? Colors.white : context.colors.ink,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  // Event dot
-                  AnimatedOpacity(
-                    opacity: hasDots ? 1 : 0,
-                    duration: const Duration(milliseconds: 150),
-                    child: Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: isSelected ? context.vetro.tint : context.colors.amber,
-                        shape: BoxShape.circle,
+                    const SizedBox(height: 4),
+                    // Event dot
+                    AnimatedOpacity(
+                      opacity: hasDots ? 1 : 0,
+                      duration: const Duration(milliseconds: 150),
+                      child: Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: isSelected ? context.vetro.tint : context.colors.amber,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           );

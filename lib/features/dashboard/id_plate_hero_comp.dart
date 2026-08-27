@@ -98,21 +98,29 @@ class IdPlateHeroComp extends StatelessWidget {
                   vertical: 14,
                   horizontal: AppSpacing.base,
                 ),
-                child: Row(
-                  children: [
-                    _Readout(value: '$todayCount', label: 'JOB OGGI', accent: false),
-                    Container(
-                      width: 1,
-                      height: 32,
-                      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                      color: AppColors.WHITE.withAlpha(40),
-                    ),
-                    _Readout(
-                      value: '$remaining',
-                      label: remaining == 1 ? 'DA FARE' : 'DA FARE',
-                      accent: remaining > 0,
-                    ),
-                  ],
+                // Scales down rather than overflowing, same treatment as _LiveClock in
+                // timbra_screen.dart: at large accessibility text sizes the two readouts'
+                // 32px numerals no longer fit side by side in the available width.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _Readout(value: '$todayCount', label: 'JOB OGGI', accent: false),
+                      Container(
+                        width: 1,
+                        height: 32,
+                        margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                        color: AppColors.WHITE.withAlpha(40),
+                      ),
+                      _Readout(
+                        value: '$remaining',
+                        label: remaining == 1 ? 'DA FARE' : 'DA FARE',
+                        accent: remaining > 0,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (child != null) ...[const SizedBox(height: AppSpacing.base), child!],

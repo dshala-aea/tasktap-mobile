@@ -85,7 +85,6 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
           hint: 'Es. Manutenzione periodica',
           controller: _titleCtrl,
           onChanged: (v) => widget.onChanged(widget.state.copyWith(title: v)),
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
         ),
 
         const SizedBox(height: 20),
@@ -118,7 +117,6 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
               .toList(),
           onChanged: (id) =>
               id != null ? widget.onChanged(widget.state.copyWith(typeId: id)) : null,
-          validator: (v) => v == null ? 'Campo obbligatorio' : null,
         ),
 
         if (widget.showPriority) ...[

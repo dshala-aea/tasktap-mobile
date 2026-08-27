@@ -51,13 +51,17 @@ class RapportinoFormScreen extends ConsumerWidget {
           // Autosave indicator
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-            child: editorState.isSaving
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
-                  )
-                : Icon(LucideIcons.cloud, size: 20, color: v.tint),
+            child: Semantics(
+              label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapportino salvato',
+              liveRegion: true,
+              child: editorState.isSaving
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
+                    )
+                  : Icon(LucideIcons.cloud, size: 20, color: v.tint),
+            ),
           ),
         ],
       ),
@@ -80,7 +84,9 @@ class RapportinoFormScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               GridView.count(
-                crossAxisCount: 3,
+                // Wider than a phone (tablet, foldable unfolded) gets a fourth column instead of
+                // stretching the same three tiles across the extra width.
+                crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 3,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 mainAxisSpacing: 10,

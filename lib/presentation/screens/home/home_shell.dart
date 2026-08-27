@@ -144,19 +144,29 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
+    // Rack is a passthrough now (see its own doc comment) — kept only so this one call site
+    // needs no change from when it painted the van-racking rail behind every tab.
+    final content = Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell);
+    final nav = AppBottomNav(
+      currentIndex: widget.navigationShell.currentIndex,
+      onTap: _onDestinationSelected,
+    );
+
+    // ≥AppBottomNav.wideBreakpoint (tablet/expanded window): AppBottomNav itself switches to a
+    // vertical rail shape at this same width (see its own doc comment on `_buildRail`), and a
+    // vertical rail placed in `Scaffold.bottomNavigationBar` would still render at the bottom of
+    // the screen regardless — that slot only ever puts a widget along the bottom edge. Laying it
+    // out beside the content in a `Row` instead is the minimal restructuring that actually lets it
+    // sit at the side.
+    if (MediaQuery.sizeOf(context).width >= AppBottomNav.wideBreakpoint) {
+      return Scaffold(body: Row(children: [nav, Expanded(child: content)]));
+    }
+
     return Scaffold(
-      // Rack is a passthrough now (see its own doc comment) — kept only so this one call site
-      // needs no change from when it painted the van-racking rail behind every tab.
-      //
-      // SuspendedBanner used to live here; it now lives in MaterialApp's `builder` (main.dart) so
-      // it covers pushed routes too, not just the 5 tab branches.
-      body: Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell),
+      body: content,
       // Extend body behind the floating pill so the hero/content scrolls under it.
       extendBody: true,
-      bottomNavigationBar: AppBottomNav(
-        currentIndex: widget.navigationShell.currentIndex,
-        onTap: _onDestinationSelected,
-      ),
+      bottomNavigationBar: nav,
     );
   }
 }

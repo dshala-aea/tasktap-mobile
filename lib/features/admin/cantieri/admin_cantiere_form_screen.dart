@@ -208,7 +208,9 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
     // If the cached value isn't in the fetched (first-page) list — e.g. an inactive or
     // otherwise-filtered commessa — keep it selectable rather than silently blanking the field on
     // open, which would let an unrelated save clear a real link.
-    final commessaCodici = {for (final c in commesse) c['id'] as String: c['codice'] as String? ?? ''};
+    final commessaCodici = {
+      for (final c in commesse) c['id'] as String: c['codice'] as String? ?? '',
+    };
     final missingCommessaId =
         _selectedCommessaId != null && !commessaCodici.containsKey(_selectedCommessaId);
 
@@ -227,124 +229,130 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          children: [
-            AppTextField(
-              label: 'Nome *',
-              controller: _nameCtrl,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
-
-            AppFieldShell(
-              label: 'Cliente',
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedCustomerId,
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Nessun cliente')),
-                  ...customers.map(
-                    (c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _selectedCustomerId = v),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                context.navClearance,
               ),
-            ),
-            const SizedBox(height: 16),
+              children: [
+                AppTextField(
+                  label: 'Nome *',
+                  controller: _nameCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+                ),
+                const SizedBox(height: 16),
 
-            AppFieldShell(
-              label: 'Commessa',
-              child: DropdownButtonFormField<String?>(
-                initialValue: _selectedCommessaId,
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Nessuna commessa')),
-                  if (missingCommessaId)
-                    DropdownMenuItem(
-                      value: _selectedCommessaId,
-                      child: Text(_selectedCommessaId!),
+                AppFieldShell(
+                  label: 'Cliente',
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedCustomerId,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Nessun cliente')),
+                      ...customers.map(
+                        (c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)),
+                      ),
+                    ],
+                    onChanged: (v) => setState(() => _selectedCustomerId = v),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                AppFieldShell(
+                  label: 'Commessa',
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: _selectedCommessaId,
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Nessuna commessa')),
+                      if (missingCommessaId)
+                        DropdownMenuItem(
+                          value: _selectedCommessaId,
+                          child: Text(_selectedCommessaId!),
+                        ),
+                      ...commesse.map((c) {
+                        final codice = c['codice'] as String? ?? '';
+                        final descrizione = c['descrizione'] as String?;
+                        final label = descrizione != null && descrizione.isNotEmpty
+                            ? '$codice ($descrizione)'
+                            : codice;
+                        return DropdownMenuItem(value: c['id'] as String, child: Text(label));
+                      }),
+                    ],
+                    onChanged: (v) => setState(() => _selectedCommessaId = v),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Indirizzo', controller: _addressCtrl),
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(label: 'Città', controller: _cityCtrl),
                     ),
-                  ...commesse.map((c) {
-                    final codice = c['codice'] as String? ?? '';
-                    final descrizione = c['descrizione'] as String?;
-                    final label = descrizione != null && descrizione.isNotEmpty
-                        ? '$codice ($descrizione)'
-                        : codice;
-                    return DropdownMenuItem(value: c['id'] as String, child: Text(label));
-                  }),
-                ],
-                onChanged: (v) => setState(() => _selectedCommessaId = v),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Indirizzo', controller: _addressCtrl),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: AppTextField(label: 'Città', controller: _cityCtrl),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppTextField(label: 'CAP', controller: _postalCodeCtrl),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppTextField(label: 'CAP', controller: _postalCodeCtrl),
+                const SizedBox(height: 16),
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: AdminDateField(
+                        label: 'Data inizio',
+                        value: startLabel,
+                        onTap: _pickStartDate,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AdminDateField(
+                        label: 'Data fine',
+                        value: endLabel,
+                        onTap: _pickEndDate,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+                const SizedBox(height: 16),
+
+                // CantiereStatusEnum (WorkEnums.cs): every cantiere created from mobile used to be
+                // silently forced to Active (status: 0) with no way to pick anything else.
+                AppFieldShell(
+                  label: 'Stato',
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _status,
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('Attivo')),
+                      DropdownMenuItem(value: 1, child: Text('Completato')),
+                      DropdownMenuItem(value: 2, child: Text('Annullato')),
+                    ],
+                    onChanged: (v) => setState(() => _status = v ?? 0),
+                  ),
+                ),
+                const SizedBox(height: 32),
+
+                VetroButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea cantiere',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: AdminDateField(
-                    label: 'Data inizio',
-                    value: startLabel,
-                    onTap: _pickStartDate,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AdminDateField(
-                    label: 'Data fine',
-                    value: endLabel,
-                    onTap: _pickEndDate,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
-            const SizedBox(height: 16),
-
-            // CantiereStatusEnum (WorkEnums.cs): every cantiere created from mobile used to be
-            // silently forced to Active (status: 0) with no way to pick anything else.
-            AppFieldShell(
-              label: 'Stato',
-              child: DropdownButtonFormField<int>(
-                initialValue: _status,
-                items: const [
-                  DropdownMenuItem(value: 0, child: Text('Attivo')),
-                  DropdownMenuItem(value: 1, child: Text('Completato')),
-                  DropdownMenuItem(value: 2, child: Text('Annullato')),
-                ],
-                onChanged: (v) => setState(() => _status = v ?? 0),
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            VetroButton(
-              label: _isEditing ? 'Salva modifiche' : 'Crea cantiere',
-              onPressed: _isSaving ? null : _save,
-              isLoading: _isSaving,
-            ),
-          ],
+          ),
         ),
       ),
     );

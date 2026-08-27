@@ -707,32 +707,35 @@ class _CheckInBody extends StatelessWidget {
 
           // Progressive disclosure: occasional/optional fields, off the primary flow.
           Center(
-            child: AppTappable(
-              onTap: onOpenDetails,
-              borderRadius: AppRack.insetShape,
-              // Vertical padding sized so the tap target clears 44dp even though the visible
-              // content (a 14px icon + 13px text) is much smaller — PRODUCT.md's touch-target
-              // floor, same reasoning as HeaderIconBtn's 44×44 box around its 38px visible disc.
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.base),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    hasDetails ? LucideIcons.checkCircle2 : LucideIcons.plus,
-                    size: 14,
-                    color: hasDetails ? context.colors.green : context.colors.inkMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    hasDetails ? 'Altri dettagli aggiunti' : 'Altri dettagli',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+            child: ConstrainedBox(
+              // A 48dp floor, not padding alone: the visible content (a 14px icon + 13px text)
+              // is much smaller than Android's touch-target minimum — same reasoning as
+              // HeaderIconBtn's box around its own smaller visible disc.
+              constraints: const BoxConstraints(minHeight: 48),
+              child: AppTappable(
+                onTap: onOpenDetails,
+                borderRadius: AppRack.insetShape,
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.base),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasDetails ? LucideIcons.checkCircle2 : LucideIcons.plus,
+                      size: 14,
                       color: hasDetails ? context.colors.green : context.colors.inkMuted,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      hasDetails ? 'Altri dettagli aggiunti' : 'Altri dettagli',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: hasDetails ? context.colors.green : context.colors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1031,32 +1034,35 @@ class _ActiveSessionBody extends ConsumerWidget {
 
           // Progressive disclosure for the closing note/safety fields.
           Center(
-            child: AppTappable(
-              onTap: onOpenClosingDetails,
-              borderRadius: AppRack.insetShape,
-              // Vertical padding sized so the tap target clears 44dp even though the visible
-              // content (a 14px icon + 13px text) is much smaller — PRODUCT.md's touch-target
-              // floor, same reasoning as HeaderIconBtn's 44×44 box around its 38px visible disc.
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.base),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    hasClosingDetails ? LucideIcons.checkCircle2 : LucideIcons.plus,
-                    size: 14,
-                    color: hasClosingDetails ? context.colors.green : context.colors.inkMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    hasClosingDetails ? 'Note di chiusura aggiunte' : 'Note di chiusura',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
+            child: ConstrainedBox(
+              // A 48dp floor, not padding alone: the visible content (a 14px icon + 13px text)
+              // is much smaller than Android's touch-target minimum — same reasoning as
+              // HeaderIconBtn's box around its own smaller visible disc.
+              constraints: const BoxConstraints(minHeight: 48),
+              child: AppTappable(
+                onTap: onOpenClosingDetails,
+                borderRadius: AppRack.insetShape,
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.base),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasClosingDetails ? LucideIcons.checkCircle2 : LucideIcons.plus,
+                      size: 14,
                       color: hasClosingDetails ? context.colors.green : context.colors.inkMuted,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      hasClosingDetails ? 'Note di chiusura aggiunte' : 'Note di chiusura',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: hasClosingDetails ? context.colors.green : context.colors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

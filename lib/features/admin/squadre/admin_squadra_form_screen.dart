@@ -38,6 +38,15 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
 
   bool get _isEditing => widget.squadra != null;
 
+  // Same fallback logic as _SquadraRow._parseColor in admin_squadra_list_screen.dart, so the
+  // live swatch preview here matches what the list row will actually render.
+  Color _parseColor(BuildContext context, String? hex) {
+    if (hex == null || hex.isEmpty) return context.colors.inkMuted;
+    final clean = hex.replaceFirst('#', '');
+    if (clean.length != 6) return context.colors.inkMuted;
+    return Color(int.parse('FF$clean', radix: 16));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -131,14 +140,17 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                context.navClearance,
+              ),
+              children: [
             AppTextField(
               label: 'Nome *',
               controller: _nomeCtrl,
@@ -152,10 +164,31 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
             AppTextField(label: 'Specializzazione', controller: _specializzazioneCtrl),
             const SizedBox(height: 16),
 
-            AppTextField(
-              label: 'Colore calendario (hex)',
-              hint: '#FF5722',
-              controller: _coloreCtrl,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: AppTextField(
+                    label: 'Colore calendario (hex)',
+                    hint: '#FF5722',
+                    controller: _coloreCtrl,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                AnimatedBuilder(
+                  animation: _coloreCtrl,
+                  builder: (context, _) => Container(
+                    width: 36,
+                    height: 36,
+                    margin: const EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(
+                      color: _parseColor(context, _coloreCtrl.text),
+                      borderRadius: AppRack.insetShape,
+                      border: Border.all(color: context.colors.divider),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -184,7 +217,9 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

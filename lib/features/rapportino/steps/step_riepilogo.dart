@@ -46,6 +46,14 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   bool _submitting = false;
   String? _submitError;
 
+  // Opened once, not re-called from build() — build() runs on every setState during submit
+  // (_submitting flips twice per _onInvia), and calling repo.watchDraft(...) inline there tore
+  // down and reopened the underlying DB stream on each of those, instead of just re-subscribing
+  // a StreamBuilder to the stream already in flight.
+  late final Stream<DraftReport?> _draftStream = ref
+      .read(draftReportRepositoryProvider)
+      .watchDraft(widget.reportId);
+
   Future<void> _onInvia() async {
     final queue = ref.read(realSubmissionQueueProvider);
     setState(() {
@@ -103,7 +111,6 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(reportEditorProvider(widget.reportId));
-    final repo = ref.watch(draftReportRepositoryProvider);
     final validation = state.validation;
 
     return SingleChildScrollView(
@@ -188,7 +195,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
 
           // ── Submission state + Invia button ────────────────────────────────
           StreamBuilder<DraftReport?>(
-            stream: repo.watchDraft(widget.reportId),
+            stream: _draftStream,
             builder: (context, snap) {
               final draft = snap.data;
               final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');

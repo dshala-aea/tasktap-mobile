@@ -241,8 +241,19 @@ void main() {
 
       await openEditor(tester);
 
-      // Step 1: same cliente, different sede.
+      // Step 1: same cliente, different sede. The field opens already resolved (locationId:
+      // 'loc-1'), and AppLookupField shows no suggestions for an already-resolved field until
+      // its text actually changes (see lookup_field.dart's own _suggestions getter) — a tap alone
+      // doesn't surface the list the way it does on the new-ticket form's empty fields.
       await tester.tap(find.byKey(const ValueKey('sede-loc-1')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('sede-loc-1')),
+          matching: find.byType(TextFormField),
+        ),
+        'Torino',
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sede Torino').last);
       await tester.pumpAndSettle();

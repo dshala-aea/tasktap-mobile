@@ -47,6 +47,7 @@ StatusColorPair statusColor(BuildContext context, String stato) {
     'scaduta' => bad,
     'sospeso' => bad,
     'attivo' => good,
+    'inattivo' => bad,
     // ── Report lifecycle, masculine ─────────────────────────────────────────
     //
     // A rapportino is masculine, so the backend sends 'Inviato' / 'Fatturato' where the invoice

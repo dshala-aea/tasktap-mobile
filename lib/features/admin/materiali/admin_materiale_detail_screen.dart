@@ -78,7 +78,7 @@ Future<void> _toggleActive(BuildContext context, WidgetRef ref, MaterialiData ma
   final deactivating = materiale.isActive;
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => AlertDialog.adaptive(
       title: Text(deactivating ? 'Disattiva materiale' : 'Riattiva materiale'),
       content: Text(
         deactivating
@@ -186,21 +186,9 @@ class _MaterialeDetailBody extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!materiale.isActive)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    margin: const EdgeInsets.only(bottom: AppSpacing.base),
-                    decoration: BoxDecoration(
-                      color: context.colors.red.withValues(alpha: 0.1),
-                      borderRadius: AppRack.insetShape,
-                    ),
-                    child: Text(
-                      'INATTIVO',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: context.colors.red,
-                      ),
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                    child: StatusPill(stato: 'Inattivo'),
                   ),
                 VetroCard(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),

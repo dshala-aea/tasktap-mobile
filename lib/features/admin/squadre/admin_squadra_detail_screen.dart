@@ -228,7 +228,7 @@ class _SquadraDetailBody extends ConsumerWidget {
   Future<void> _removeMember(BuildContext context, String userId) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog.adaptive(
         title: const Text('Rimuovi membro'),
         content: const Text('Vuoi rimuovere questo membro dalla squadra?'),
         actions: [

@@ -201,7 +201,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                       loading: () => const SizedBox.shrink(),
                       error: (e, _) => Text(
                         'Errore sessioni: $e',
-                        style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                        style: TextStyle(color: context.colors.red, fontSize: 12),
                       ),
                       data: (list) => _SessionsCard(
                         sessions: list,
@@ -428,7 +428,7 @@ class _PunchButton extends StatelessWidget {
                     child: SizedBox(
                       width: 36,
                       height: 36,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                      child: CircularProgressIndicator(color: AppColors.WHITE, strokeWidth: 3),
                     ),
                   )
                 : Column(
@@ -437,7 +437,7 @@ class _PunchButton extends StatelessWidget {
                       // White on both gradients now — unlike the old flat orange, both tint and
                       // stop are dark/saturated enough that white reads clearly on either, so the
                       // isOnShift-conditional ink colour this used to need goes away.
-                      Icon(icon, size: 36, color: Colors.white),
+                      Icon(icon, size: 36, color: AppColors.WHITE),
                       const SizedBox(height: 8),
                       Text(
                         label,
@@ -446,7 +446,7 @@ class _PunchButton extends StatelessWidget {
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.0,
-                          color: Colors.white,
+                          color: AppColors.WHITE,
                         ),
                       ),
                     ],
@@ -758,7 +758,8 @@ class _SessionsCard extends StatelessWidget {
                 itemBuilder: (context, i) => _SessionRow(session: sessions[i]),
               ),
             ),
-          if (sessions.isNotEmpty) const Divider(color: Colors.white12, height: 24),
+          if (sessions.isNotEmpty)
+            const Divider(color: AppVetroColors.glassBorderOnDark, height: 24),
 
           // Total row
           _TotalRow(total: total),
@@ -864,7 +865,7 @@ class _SessionRow extends StatelessWidget {
                 fontFamily: 'Inter',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: Colors.white.withAlpha(220),
+                color: AppColors.WHITE.withAlpha(220),
               ),
             ),
           ),
@@ -874,7 +875,7 @@ class _SessionRow extends StatelessWidget {
               fontFamily: 'Inter',
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Colors.white,
+              color: AppColors.WHITE,
             ),
           ),
         ],
@@ -912,7 +913,7 @@ class _TotalRow extends StatelessWidget {
               fontFamily: 'Inter',
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColors.WHITE,
             ),
           ),
         ),

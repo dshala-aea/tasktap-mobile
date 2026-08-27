@@ -6,6 +6,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/vetro_compartment_tile.dart';
 import '../../core/widgets/vetro_glass.dart';
 import '../../core/widgets/widgets.dart';
@@ -54,8 +55,11 @@ class AltroHubScreen extends ConsumerWidget {
                 horizontal: AppSpacing.pagePadding,
               ),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  // 2 on a phone, more on a tablet/wide window — same width-driven breakpoint
+                  // rapportino_form_screen.dart's materiali grid already uses, so a fixed count
+                  // doesn't stretch two tiles across a much wider viewport.
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   // Was 1.4 — tall enough that VetroCompartmentTile's icon-top/label-bottom
@@ -411,22 +415,55 @@ class _LogoutRow extends StatelessWidget {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
+    // Vetro chrome, not a stock AlertDialog — the app's own glass card + AppButton pair, so a
+    // confirmation this consequential still reads as part of the app rather than a bare Material
+    // dialog. Same confirm/cancel logic as before, only the surface changed.
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Esci dall\'account'),
-        content: const Text('Sei sicuro di voler uscire dall\'account?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        child: VetroCard(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Esci dall\'account',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: ctx.colors.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Sei sicuro di voler uscire dall\'account?',
+                style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.inkMuted),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton.ghost(
+                      label: 'Annulla',
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppButton.danger(
+                      label: 'Esci',
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.colors.red),
-            child: const Text('Esci'),
-          ),
-        ],
+        ),
       ),
     );
     if (confirmed == true) {

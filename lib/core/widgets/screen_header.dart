@@ -152,8 +152,9 @@ class ScreenHeader extends StatelessWidget {
   /// surface, headers included, as light frosted glass over the page's own colour, not a
   /// permanently-dark plate riveted on top of it. Default is now `false`: a flipping
   /// [VetroGlass] bar, same material as every card in the app. Kept as a param, not removed
-  /// outright, only for a screen that genuinely needs a fixed-dark header (none do today — Timbra
-  /// and the other truly always-dark screens don't use `ScreenHeader` at all).
+  /// outright, only for a screen that genuinely needs a fixed-dark header — `timbra_screen.dart`
+  /// calls `ScreenHeader(dark: true)` directly, for the one screen that stays a permanently-dark
+  /// plate regardless of app theme (see `AppVetroColors`'s own doc comment on why).
   final bool dark;
 
   @override

@@ -243,12 +243,11 @@ class _RapportinoRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final v = context.vetro;
-    final staffAsync = ref.watch(rapportinoStaffProvider(draft.id));
-    final materialiAsync = ref.watch(rapportinoMaterialiProvider(draft.id));
-    final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
+    final summary = ref.watch(rapportinoRowSummaryProvider(draft.id));
 
-    final staffCount = staffAsync.valueOrNull?.length ?? 0;
-    final materialiCount = materialiAsync.valueOrNull?.length ?? 0;
+    final staffCount = summary.staffCount;
+    final materialiCount = summary.materialiCount;
+    final oreLabel = summary.oreLabel;
 
     final statusLabel = rapportinoStatusLabel(draft);
     final isSubmitted = rapportinoIsSubmitted(draft);
@@ -297,7 +296,7 @@ class _RapportinoRow extends ConsumerWidget {
                 width: 3,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
-                  color: isSubmitted ? const Color(0xFF98989D) : v.tint,
+                  color: isSubmitted ? context.colors.inkDisabled : v.tint,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -407,7 +406,11 @@ Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftRepor
       content: Text('"${draft.title}" verrà eliminato definitivamente.'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          style: TextButton.styleFrom(foregroundColor: context.colors.red),
+          child: const Text('Elimina'),
+        ),
       ],
     ),
   );

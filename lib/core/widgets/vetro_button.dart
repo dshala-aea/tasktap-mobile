@@ -53,9 +53,16 @@ class VetroButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = context.vetro;
     final enabled = onPressed != null && !isLoading;
+    // Loading keeps full-opacity content (matches the old `enabled || isLoading ? 1 : 0.45`) —
+    // only a genuinely inert button (no onPressed, not loading) dims.
+    final disabled = !enabled && !isLoading;
     final colors = gradientColors ?? [v.tint, v.tintStrong];
     final radius = compact ? 12.0 : 16.0;
-    final contentColor = secondary ? v.tint : Colors.white;
+    final baseContentColor = secondary ? v.tint : Colors.white;
+    // Pre-alpha'd instead of wrapping the whole button in an `Opacity`, which forced an offscreen
+    // compositing pass for every disabled VetroButton. Same alpha AppButton's own disabled
+    // treatment uses for its foreground (`_fg(context).withAlpha(100)`).
+    final contentColor = disabled ? baseContentColor.withAlpha(100) : baseContentColor;
 
     final textStyle = TextStyle(
       fontFamily: 'Inter',
@@ -92,14 +99,16 @@ class VetroButton extends StatelessWidget {
       decoration: secondary
           ? BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
-              color: v.tint.withAlpha(31),
+              // Same alpha AppButton's own disabled bg uses (`.withAlpha(120)`) applied on top of
+              // this fill's own ~12% tint-on-tint alpha, rather than a second, unrelated constant.
+              color: v.tint.withAlpha(disabled ? (31 * 120) ~/ 255 : 31),
             )
           : BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: colors,
+                colors: disabled ? [for (final c in colors) c.withAlpha(120)] : colors,
               ),
               boxShadow: enabled
                   ? [
@@ -111,22 +120,19 @@ class VetroButton extends StatelessWidget {
                     ]
                   : const [],
             ),
-      child: Opacity(
-        opacity: enabled || isLoading ? 1 : 0.45,
-        child: Material(
-          color: Colors.transparent,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(radius),
+        child: InkWell(
+          onTap: isLoading ? null : onPressed,
           borderRadius: BorderRadius.circular(radius),
-          child: InkWell(
-            onTap: isLoading ? null : onPressed,
-            borderRadius: BorderRadius.circular(radius),
-            splashColor: contentColor.withAlpha(secondary ? 20 : 30),
-            highlightColor: contentColor.withAlpha(secondary ? 10 : 15),
-            child: Padding(
-              padding: compact
-                  ? const EdgeInsets.symmetric(horizontal: 14, vertical: 9)
-                  : const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
-              child: Center(widthFactor: 1, heightFactor: 1, child: content),
-            ),
+          splashColor: contentColor.withAlpha(secondary ? 20 : 30),
+          highlightColor: contentColor.withAlpha(secondary ? 10 : 15),
+          child: Padding(
+            padding: compact
+                ? const EdgeInsets.symmetric(horizontal: 14, vertical: 9)
+                : const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+            child: Center(widthFactor: 1, heightFactor: 1, child: content),
           ),
         ),
       ),

@@ -63,27 +63,17 @@ class AdminCustomerDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Delete confirmation dialog + API call, shared by the header trash action.
-///
-/// Mirrors the confirm-then-call pattern already used for destructive actions elsewhere in the
-/// app (e.g. `_removeMember` in admin_squadra_detail_screen.dart): a plain `AlertDialog` via
-/// `showDialog<bool>`, no shared dialog widget exists yet in this codebase to reuse.
+/// Delete confirmation dialog + API call, shared by the header trash action — dialog itself is
+/// the shared `confirmDeleteDialog`.
 Future<void> _deleteCustomer(BuildContext context, WidgetRef ref, String customerId) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Eliminare il cliente?'),
-      content: const Text(
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il cliente?',
+    message:
         'Il cliente verrà disattivato. Sedi, contratti e interventi collegati '
         'restano consultabili ma non sarà più selezionabile per nuovi lavori.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
-      ],
-    ),
   );
-  if (confirmed != true || !context.mounted) return;
+  if (!confirmed || !context.mounted) return;
 
   try {
     await ref.read(adminApiClientProvider).deleteCustomer(customerId);
@@ -113,161 +103,167 @@ class _CustomerDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Cliente',
-            subtitle: customer.companyName,
-            showBack: true,
-            actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.trash2,
-                label: 'Elimina cliente',
-                glass: true,
-                onTap: () => _deleteCustomer(context, ref, customerId),
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: ScreenHeader(
+                title: 'Cliente',
+                subtitle: customer.companyName,
+                showBack: true,
+                actions: [
+                  HeaderIconBtn(
+                    icon: LucideIcons.trash2,
+                    label: 'Elimina cliente',
+                    glass: true,
+                    onTap: () => _deleteCustomer(context, ref, customerId),
+                  ),
+                ],
+              ),
+            ),
+            // ── Avatar hero ──────────────────────────────────────────────────
+            SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                  child: AppAvatar(name: customer.companyName, size: 64),
+                ),
+              ),
+            ),
+            // ── Contatti card ──────────────────────────────────────────────────
+            //
+            // Contact/site fields first, fiscal fields demoted to their own labelled section below
+            // (near Storico, matches the Vetro mockup's explicit call: "Contact + site first — what
+            // a technician needs — fiscal data demoted to its own labeled section rather than mixed
+            // in"). P.IVA used to sit second, right after the company name.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                child: VetroCard(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SectionTitle(title: 'Contatti'),
+                      const SizedBox(height: 4),
+                      KeyVal(label: 'Ragione sociale', value: customer.companyName),
+                      if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
+                        KeyVal(label: 'Referente', value: customer.contactPerson!),
+                      if (customer.phone != null && customer.phone!.isNotEmpty)
+                        KeyVal(label: 'Telefono', value: customer.phone!),
+                      if (customer.email != null && customer.email!.isNotEmpty)
+                        KeyVal(label: 'Email', value: customer.email!),
+                      if (customer.address != null && customer.address!.isNotEmpty)
+                        KeyVal(label: 'Indirizzo', value: customer.address!),
+                      if (customer.city != null && customer.city!.isNotEmpty)
+                        KeyVal(label: 'Città', value: customer.city!),
+                      if (customer.postalCode != null && customer.postalCode!.isNotEmpty)
+                        KeyVal(label: 'CAP', value: customer.postalCode!),
+                      KeyVal(
+                        label: 'Paese',
+                        value: customer.country != null && customer.country!.isNotEmpty
+                            ? customer.country!
+                            : '—',
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // ── Panoramica (sedi/contratti/interventi) ────────────────────────
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                child: _OverviewCard(customerId: customerId),
+              ),
+            ),
+            // ── Sedi (Gap 3) ─────────────────────────────────────────────────
+            SliverToBoxAdapter(child: _SediSection(customerId: customerId)),
+            // ── Contratti (Gap 7, read-only + create) ───────────────────────
+            SliverToBoxAdapter(child: _ContrattiSection(customerId: customerId)),
+            // ── Prodotti assistenza (Gap 8, read-only + create) ─────────────
+            SliverToBoxAdapter(child: _ProdottiSection(customerId: customerId)),
+            // ── Note ─────────────────────────────────────────────────────────
+            if (customer.notes != null && customer.notes!.isNotEmpty) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: VetroCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle(title: 'Note'),
+                        const SizedBox(height: 4),
+                        Text(customer.notes!, style: AppTextStyles.bodyMedium),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
-          ),
-        ),
-        // ── Avatar hero ──────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-              child: AppAvatar(name: customer.companyName, size: 64),
-            ),
-          ),
-        ),
-        // ── Contatti card ──────────────────────────────────────────────────
-        //
-        // Contact/site fields first, fiscal fields demoted to their own labelled section below
-        // (near Storico, matches the Vetro mockup's explicit call: "Contact + site first — what
-        // a technician needs — fiscal data demoted to its own labeled section rather than mixed
-        // in"). P.IVA used to sit second, right after the company name.
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: VetroCard(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionTitle(title: 'Contatti'),
-                  const SizedBox(height: 4),
-                  KeyVal(label: 'Ragione sociale', value: customer.companyName),
-                  if (customer.contactPerson != null && customer.contactPerson!.isNotEmpty)
-                    KeyVal(label: 'Referente', value: customer.contactPerson!),
-                  if (customer.phone != null && customer.phone!.isNotEmpty)
-                    KeyVal(label: 'Telefono', value: customer.phone!),
-                  if (customer.email != null && customer.email!.isNotEmpty)
-                    KeyVal(label: 'Email', value: customer.email!),
-                  if (customer.address != null && customer.address!.isNotEmpty)
-                    KeyVal(label: 'Indirizzo', value: customer.address!),
-                  if (customer.city != null && customer.city!.isNotEmpty)
-                    KeyVal(label: 'Città', value: customer.city!),
-                  if (customer.postalCode != null && customer.postalCode!.isNotEmpty)
-                    KeyVal(label: 'CAP', value: customer.postalCode!),
-                  KeyVal(
-                    label: 'Paese',
-                    value: customer.country != null && customer.country!.isNotEmpty
-                        ? customer.country!
-                        : '—',
-                    showDivider: false,
+            // ── Status ───────────────────────────────────────────────────────
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                child: VetroCard(
+                  child: Row(
+                    children: [
+                      Text(
+                        'Stato',
+                        style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
+                      ),
+                      const Spacer(),
+                      StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo', outlined: true),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // ── Panoramica (sedi/contratti/interventi) ────────────────────────
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: _OverviewCard(customerId: customerId),
-          ),
-        ),
-        // ── Sedi (Gap 3) ─────────────────────────────────────────────────
-        SliverToBoxAdapter(child: _SediSection(customerId: customerId)),
-        // ── Contratti (Gap 7, read-only + create) ───────────────────────
-        SliverToBoxAdapter(child: _ContrattiSection(customerId: customerId)),
-        // ── Prodotti assistenza (Gap 8, read-only + create) ─────────────
-        SliverToBoxAdapter(child: _ProdottiSection(customerId: customerId)),
-        // ── Note ─────────────────────────────────────────────────────────
-        if (customer.notes != null && customer.notes!.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: VetroCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SectionTitle(title: 'Note'),
-                    const SizedBox(height: 4),
-                    Text(customer.notes!, style: AppTextStyles.bodyMedium),
-                  ],
                 ),
               ),
             ),
-          ),
-        ],
-        // ── Status ───────────────────────────────────────────────────────
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: VetroCard(
-              child: Row(
-                children: [
-                  Text(
-                    'Stato',
-                    style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
+            // ── Dati fiscali ─────────────────────────────────────────────────
+            //
+            // Demoted to its own labelled, last-in-scroll section — see the Contatti card's own
+            // comment. Only taxId (P.IVA) is captured locally today; SDI/PEC/Codice Fiscale appear in
+            // the mockup's copy but have no column in the Customers Drift table (backend `Customer.cs`
+            // may hold more than what mobile's mirror ever synced) — a real gap, out of scope for a
+            // layout-only pass, not silently invented here.
+            if (customer.taxId != null && customer.taxId!.isNotEmpty) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  child: VetroCard(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SectionTitle(title: 'Dati fiscali'),
+                        const SizedBox(height: 4),
+                        KeyVal(label: 'P.IVA', value: customer.taxId!, showDivider: false),
+                      ],
+                    ),
                   ),
-                  const Spacer(),
-                  StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo', outlined: true),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // ── Dati fiscali ─────────────────────────────────────────────────
-        //
-        // Demoted to its own labelled, last-in-scroll section — see the Contatti card's own
-        // comment. Only taxId (P.IVA) is captured locally today; SDI/PEC/Codice Fiscale appear in
-        // the mockup's copy but have no column in the Customers Drift table (backend `Customer.cs`
-        // may hold more than what mobile's mirror ever synced) — a real gap, out of scope for a
-        // layout-only pass, not silently invented here.
-        if (customer.taxId != null && customer.taxId!.isNotEmpty) ...[
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-              child: VetroCard(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SectionTitle(title: 'Dati fiscali'),
-                    const SizedBox(height: 4),
-                    KeyVal(label: 'P.IVA', value: customer.taxId!, showDivider: false),
-                  ],
                 ),
               ),
+            ],
+            // ── Storico interventi ─────────────────────────────────────────────
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                child: _TicketHistoryCard(customerId: customerId),
+              ),
             ),
-          ),
-        ],
-        // ── Storico interventi ─────────────────────────────────────────────
-        const SliverToBoxAdapter(child: SizedBox(height: 16)),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: _TicketHistoryCard(customerId: customerId),
-          ),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
+          ],
         ),
-        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-      ],
+      ),
     );
   }
 }
@@ -294,7 +290,7 @@ class _OverviewCard extends ConsumerWidget {
           e is ClienteOverviewOfflineException
               ? 'Panoramica non disponibile offline'
               : 'Panoramica non disponibile',
-          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+          style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
         ),
         data: (overview) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,10 +306,7 @@ class _OverviewCard extends ConsumerWidget {
                   child: _OverviewStat(label: 'Contratti', value: '${overview.contratti}'),
                 ),
                 Expanded(
-                  child: _OverviewStat(
-                    label: 'Interventi',
-                    value: '${overview.interventiTotali}',
-                  ),
+                  child: _OverviewStat(label: 'Interventi', value: '${overview.interventiTotali}'),
                 ),
                 Expanded(
                   child: _OverviewStat(label: 'Aperti', value: '${overview.interventiAperti}'),
@@ -336,15 +329,12 @@ class _OverviewStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(
-          value,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.colors.ink),
-        ),
+        Text(value, style: AppTextStyles.headlineMedium.copyWith(color: context.colors.ink)),
         const SizedBox(height: 2),
         Text(
           label,
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 11, color: context.colors.inkMuted),
+          style: AppTextStyles.caption.copyWith(color: context.colors.inkMuted),
         ),
       ],
     );
@@ -386,8 +376,9 @@ class _SediSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) =>
-              _SectionError(onRetry: () => ref.invalidate(locationsForCustomerProvider(customerId))),
+          error: (e, _) => _SectionError(
+            onRetry: () => ref.invalidate(locationsForCustomerProvider(customerId)),
+          ),
           data: (locations) {
             if (locations.isEmpty) {
               return const EmptyState(
@@ -416,7 +407,8 @@ class _SediSection extends ConsumerWidget {
                         IconButton(
                           icon: const Icon(LucideIcons.trash2, size: 18),
                           tooltip: 'Elimina sede',
-                          onPressed: () => _deleteLocation(context, ref, id: loc.id, name: loc.name),
+                          onPressed: () =>
+                              _deleteLocation(context, ref, id: loc.id, name: loc.name),
                         ),
                       ],
                     ),
@@ -438,18 +430,12 @@ class _SediSection extends ConsumerWidget {
     required String id,
     required String name,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminare la sede?'),
-        content: Text('Vuoi eliminare "$name" dalle sedi di questo cliente?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
-        ],
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Eliminare la sede?',
+      message: 'Vuoi eliminare "$name" dalle sedi di questo cliente?',
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     try {
       await ref.read(adminApiClientProvider).deleteLocation(id);
@@ -607,9 +593,7 @@ class _ProdottiSection extends ConsumerWidget {
                   return ListRow(
                     leading: const RowIconTile(icon: LucideIcons.wrench),
                     title: name,
-                    subtitle: serialNumber != null && serialNumber.isNotEmpty
-                        ? serialNumber
-                        : null,
+                    subtitle: serialNumber != null && serialNumber.isNotEmpty ? serialNumber : null,
                     meta: isActive
                         ? null
                         : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
@@ -678,7 +662,7 @@ class _TicketHistoryCard extends ConsumerWidget {
         ),
         error: (e, _) => Text(
           'Storico interventi non disponibile',
-          style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+          style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
         ),
         data: (tickets) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -690,7 +674,7 @@ class _TicketHistoryCard extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'Nessun intervento registrato per questo cliente.',
-                  style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               )
             else

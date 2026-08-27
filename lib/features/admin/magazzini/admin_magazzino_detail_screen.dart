@@ -72,21 +72,9 @@ class AdminMagazzinoDetailScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (!mag.isActive)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      margin: const EdgeInsets.only(bottom: AppSpacing.base),
-                      decoration: BoxDecoration(
-                        color: context.colors.red.withValues(alpha: 0.1),
-                        borderRadius: AppRack.insetShape,
-                      ),
-                      child: Text(
-                        'INATTIVO',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: context.colors.red,
-                        ),
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                      child: StatusPill(stato: 'Inattivo'),
                     ),
                   VetroCard(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),

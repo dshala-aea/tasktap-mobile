@@ -23,6 +23,12 @@ class VetroCompartmentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = context.vetro;
+    // The grid's fixed childAspectRatio (see ticket_detail_screen.dart) sizes this tile to a
+    // constant cell — it doesn't grow with text. At large accessibility text sizes the 2-line
+    // label can overflow that cell, so the scale actually applied inside the tile is clamped
+    // rather than left to grow unbounded.
+    final systemScale = MediaQuery.textScalerOf(context).scale(100) / 100;
+    final clampedScaler = TextScaler.linear(systemScale > 1.3 ? 1.3 : systemScale);
     return VetroGlass(
       borderRadius: const BorderRadius.all(Radius.circular(16)),
       child: Material(
@@ -31,28 +37,31 @@ class VetroCompartmentTile extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: const BorderRadius.all(Radius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 20, color: v.tint),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.ink,
-                    letterSpacing: -0.1,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: clampedScaler),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 20, color: v.tint),
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.ink,
+                      letterSpacing: -0.1,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
