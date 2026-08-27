@@ -131,10 +131,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
   }
 }
 
-/// The dark CHARCOAL plate every Operational surface (Timbra, the wizards) already carries —
-/// Ticket detail was the one screen in that family still wearing the light Browsing header.
-/// Local to this file rather than a change to [ScreenHeader] itself: only this screen needed it,
-/// and [ScreenHeader]'s `dark` flag already covers the rest (see `new_ticket_form_screen.dart`).
 class _TicketDetailHeader extends StatelessWidget {
   const _TicketDetailHeader({required this.title, this.subtitle, this.actions = const []});
 
@@ -144,18 +140,9 @@ class _TicketDetailHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.CHARCOAL,
-      child: SafeArea(
-        bottom: false,
-        child: ScreenHeader(
-          title: title,
-          subtitle: subtitle,
-          showBack: true,
-          dark: true,
-          actions: actions,
-        ),
-      ),
+    return SafeArea(
+      bottom: false,
+      child: ScreenHeader(title: title, subtitle: subtitle, showBack: true, actions: actions),
     );
   }
 }

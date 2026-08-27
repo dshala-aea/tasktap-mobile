@@ -6,8 +6,7 @@ import 'package:tasktap_mobile/core/widgets/app_stepper.dart';
 ///
 /// The stepper used to be numbered discs joined by connector lines, with all four step names
 /// printed underneath at 10px. Two rows of chrome to communicate "2 of 4", none of the labels
-/// readable, and the labels took `context.colors.ink` while only ever rendering on CHARCOAL — so
-/// in light mode they were near-black on near-black.
+/// readable.
 Widget _wrap(Widget child) => MaterialApp(
   home: Scaffold(
     backgroundColor: const Color(0xFF272727),
@@ -70,13 +69,13 @@ void main() {
       expect(jumped, -1);
     });
 
-    testWidgets('paints on-dark colours explicitly rather than through the theme', (tester) async {
-      // This bar only ever renders on CHARCOAL. A theme-flipping token here is the bug that has
-      // now appeared six times in this codebase, so there is no token to get wrong.
+    testWidgets('reads the theme-flipping ink token, not a fixed on-dark colour', (tester) async {
+      // This used to sit on a fixed CHARCOAL plate and paint AppColors.onDark explicitly; that
+      // plate is gone, so the label now reads context.colors.ink like everything else around it.
       await tester.pumpWidget(_wrap(const AppStepper(steps: _steps, currentIndex: 1)));
 
       final label = tester.widget<Text>(find.text('Staff'));
-      expect(label.style?.color, const Color(0xFFFFFFFF));
+      expect(label.style?.color, const Color(0xFF363636));
     });
   });
 }

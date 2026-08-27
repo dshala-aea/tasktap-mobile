@@ -562,13 +562,9 @@ class _SigDialogState extends State<_SigDialog> {
           // Stays an AppBar, unlike the ten screen headers converted to ScreenHeaderBar. This is a
           // full-screen modal dismissed with an X, not a screen navigated back from, and
           // ScreenHeader draws a back chevron — the wrong affordance for a sheet you cancel.
-          //
-          // Its ink is fixed rather than themed for the usual reason: the bar is CHARCOAL under
-          // both themes, and `inkInverse` flipped to near-black, taking the title and the close
-          // button off the dialog that captures the customer's signature.
           AppBar(
-            backgroundColor: AppColors.CHARCOAL,
-            foregroundColor: AppColors.onDark,
+            backgroundColor: context.colors.bg1,
+            foregroundColor: context.colors.ink,
             title: const Text('Acquisisci firma'),
             leading: IconButton(
               icon: const Icon(LucideIcons.x),
@@ -590,14 +586,9 @@ class _SigDialogState extends State<_SigDialog> {
                     Navigator.pop(context, bytes);
                   }
                 },
-                child: const Text(
+                child: Text(
                   'Conferma',
-                  // Fixed AppVetroColors.tint, not context.vetro.tint: this AppBar is CHARCOAL
-                  // under both themes (see the doc comment above), so its accent shouldn't flip
-                  // with the theme either — same reasoning as the onDark/onDarkMuted colours used
-                  // elsewhere on this permanently-dark bar (and in AppBottomNav, which documents
-                  // this very dialog as one of the app's fixed-CHARCOAL surfaces).
-                  style: TextStyle(color: AppVetroColors.tint, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: context.vetro.tint, fontWeight: FontWeight.bold),
                 ),
               ),
             ],

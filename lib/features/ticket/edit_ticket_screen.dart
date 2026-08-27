@@ -3,7 +3,6 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -179,25 +178,22 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
       backgroundColor: context.colors.bg2,
       body: Column(
         children: [
-          ColoredBox(
-            color: AppColors.CHARCOAL,
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  const ScreenHeader(title: 'Modifica ticket', showBack: true, dark: true),
-                  if (s != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.base,
-                        0,
-                        AppSpacing.base,
-                        AppSpacing.base,
-                      ),
-                      child: AppStepper(steps: _kEditSteps, currentIndex: _stepIndex),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                const ScreenHeader(title: 'Modifica ticket', showBack: true),
+                if (s != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.base,
+                      0,
+                      AppSpacing.base,
+                      AppSpacing.base,
                     ),
-                ],
-              ),
+                    child: AppStepper(steps: _kEditSteps, currentIndex: _stepIndex),
+                  ),
+              ],
             ),
           ),
           Expanded(

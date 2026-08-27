@@ -1,7 +1,7 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_vetro_palette.dart';
 
 /// A single stepper step.
@@ -17,10 +17,10 @@ class StepperStep {
 /// plus a caption under each — to say "step 2 of 4", printed four step names at 10px so none of
 /// them was readable, and had to shrink every label to fit a phone.
 ///
-/// It also carried the sixth instance of this project's recurring fixed-dark-surface bug: the
-/// labels and the unfilled discs took `context.colors.ink`, but this bar only ever renders on
-/// CHARCOAL, so in light mode they were near-black on near-black. Painting on-dark colours
-/// explicitly is what stops that recurring — there is no theme-flipping token here to get wrong.
+/// Sat on a fixed-CHARCOAL plate under the header for one round of this project's recurring
+/// fixed-dark-surface bug and was painted with `onDark`/`onDarkMuted` to match. That plate is
+/// gone — every screen using this now sits directly on the page's own flipping background — so
+/// this reads `context.colors` like everything else around it.
 ///
 /// Steps already visited are tappable. A technician who wants to correct the cliente from the
 /// summary should not have to press Indietro three times.
@@ -51,22 +51,22 @@ class AppStepper extends StatelessWidget {
                 steps[currentIndex].label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.onDark,
+                  color: context.colors.ink,
                 ),
               ),
             ),
             Text(
               '${currentIndex + 1} di ${steps.length}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.4,
-                color: AppColors.onDarkMuted,
+                color: context.colors.inkMuted,
               ),
             ),
           ],
@@ -127,7 +127,7 @@ class _Segment extends StatelessWidget {
             curve: Curves.easeOut,
             height: 4,
             decoration: BoxDecoration(
-              color: reached ? context.vetro.tint : Colors.white.withAlpha(46),
+              color: reached ? context.vetro.tint : context.colors.borderMedium,
               borderRadius: BorderRadius.circular(2),
             ),
           ),

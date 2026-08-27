@@ -4,7 +4,6 @@ import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/vetro_compartment_tile.dart';
@@ -48,7 +47,6 @@ class RapportinoFormScreen extends ConsumerWidget {
       appBar: ScreenHeaderBar(
         title: 'Rapportino',
         subtitle: subtitle,
-        backgroundColor: AppColors.CHARCOAL,
         actions: [
           // Autosave indicator
           Padding(

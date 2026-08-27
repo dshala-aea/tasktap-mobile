@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_stepper.dart';
 import '../../core/widgets/screen_header.dart';
@@ -183,35 +182,25 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       backgroundColor: context.colors.bg2,
       body: Column(
         children: [
-          // ── Dark top plate: header + stepper on one charcoal ground ──────
-          //
           // This was a Material AppBar, which made this the one screen in the ticket flow whose
           // chrome changed the moment a technician started entering data — the list beside it
-          // uses ScreenHeader. It also carried the same dark-mode bug as the dashboard hero: the
-          // bar is CHARCOAL under both themes, but its foreground was `inkInverse`, which flips
-          // to near-black. Title and back arrow both went unreadable in dark mode.
-          //
-          // ScreenHeader's `dark` variant already paints a fixed white title and a glass back
-          // button, so adopting it fixes the bug and the inconsistency in the same move. Header
-          // and stepper now share one plate rather than two abutting charcoal blocks.
-          ColoredBox(
-            color: AppColors.CHARCOAL,
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  ScreenHeader(title: 'Nuovo ticket', showBack: true, dark: true),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.base,
-                      0,
-                      AppSpacing.base,
-                      AppSpacing.base,
-                    ),
-                    child: AppStepper(steps: _kSteps, currentIndex: _stepIndex),
+          // uses ScreenHeader. Now the same flipping ScreenHeader every other screen uses, header
+          // and stepper sharing the page's own background rather than a charcoal plate.
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                ScreenHeader(title: 'Nuovo ticket', showBack: true),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.base,
+                    0,
+                    AppSpacing.base,
+                    AppSpacing.base,
                   ),
-                ],
-              ),
+                  child: AppStepper(steps: _kSteps, currentIndex: _stepIndex),
+                ),
+              ],
             ),
           ),
 

@@ -1,7 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_vetro_palette.dart';
 
@@ -24,10 +25,11 @@ class AppBottomNavItem {
   final String label;
 }
 
-/// Floating bottom navigation — Vetro's tint→tintStrong gradient marks the active tab, on the
-/// same permanently-dark CHARCOAL plate every other Operational surface in the app carries
-/// (headers, the signature capture dialog): this bar was never the Cassetta thing about itself,
-/// only its old latch styling was.
+/// Floating bottom navigation — Vetro's tint→tintStrong gradient marks the active tab, on a
+/// frosted [VetroGlass]-style bar that flips with the app theme, the same material every card and
+/// the header now share. This used to self-paint a permanently-dark CHARCOAL plate — a leftover
+/// of the pre-Vetro "Cassetta" shell metaphor, not something the actual approved Vetro reference
+/// (light frosted glass throughout, no dark chrome) ever called for.
 ///
 /// Replaced: safety-orange (`AppColors.Y`) active fill → the Vetro gradient every other active/
 /// primary surface in the app uses (VetroButton, the rapportino completion card, ...); the
@@ -35,9 +37,9 @@ class AppBottomNavItem {
 /// own compact radius) whose gradient fill *is* the state, the way a VetroCompartmentTile's or
 /// VetroButton's does — a second indicator on top of a colour change was the Cassetta metaphor's
 /// own idea, not one Vetro's state language needs. Sora → Inter, matching every other Vetro
-/// surface. `AppVetroColors` (fixed), not `context.vetro` (flips with theme): CHARCOAL never
-/// flips, so neither should the gradient painted on it — same reasoning as `AppColors.onDark`/
-/// `onDarkMuted` for the icon colours below.
+/// surface. The active gradient itself still reads from `AppVetroColors` (fixed): the pill's own
+/// colours are the one deliberately-saturated accent in the system and must not desaturate for
+/// dark mode the way `context.vetro.dark`'s tint does.
 ///
 /// ```dart
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
@@ -62,33 +64,48 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tabs = items ?? defaultItems;
+    final v = context.vetro;
 
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppColors.CHARCOAL,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withAlpha(20), width: 0.5),
-            boxShadow: context.colors.shadow,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Flexible, so the bar fits the phone rather than the phone fitting the bar. The
-                // tabs' natural width is padding + icon + the active label, which came to two
-                // pixels more than a 5.9" screen has and drew the striped overflow bar across the
-                // bottom of every screen. Turn the system font size up and it is far more than
-                // two. Loose fit: a tab still takes only what it needs when there is room.
-                for (var i = 0; i < tabs.length; i++)
-                  Flexible(
-                    child: _NavTab(item: tabs[i], active: i == currentIndex, onTap: () => onTap(i)),
-                  ),
-              ],
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(
+              sigmaX: AppVetroColors.blurSigma,
+              sigmaY: AppVetroColors.blurSigma,
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: v.glassFill,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: v.glassBorder, width: 0.5),
+                boxShadow: context.colors.shadow,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Flexible, so the bar fits the phone rather than the phone fitting the bar.
+                    // The tabs' natural width is padding + icon + the active label, which came to
+                    // two pixels more than a 5.9" screen has and drew the striped overflow bar
+                    // across the bottom of every screen. Turn the system font size up and it is
+                    // far more than two. Loose fit: a tab still takes only what it needs when
+                    // there is room.
+                    for (var i = 0; i < tabs.length; i++)
+                      Flexible(
+                        child: _NavTab(
+                          item: tabs[i],
+                          active: i == currentIndex,
+                          onTap: () => onTap(i),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -142,12 +159,10 @@ class _NavTab extends StatelessWidget {
               Icon(
                 item.icon,
                 size: 18,
-                // The bar is CHARCOAL, permanently dark regardless of app theme (see the
-                // punch-clock screens' own reasoning) — a flipping token like `inkMuted` is
-                // tuned against a light ground and goes near-invisible here. `onDarkMuted` is
-                // white at 75%, built for exactly this surface, and still clears AA against
-                // CHARCOAL.
-                color: active ? Colors.white : AppColors.onDarkMuted,
+                // The active tab sits on its own saturated gradient pill regardless of theme, so
+                // its icon stays white either way. Inactive sits directly on the flipping glass
+                // bar, so it reads `inkMuted` like every other secondary icon in the app.
+                color: active ? Colors.white : context.colors.inkMuted,
               ),
               if (active) ...[
                 const SizedBox(width: 8),

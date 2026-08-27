@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -8,8 +10,8 @@ import 'app_tappable.dart';
 import 'vetro_glass.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass on dark),
-/// icon 17 DARK, optional red dot badge.
+/// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass), icon 17, optional red dot
+/// badge.
 ///
 /// ```dart
 /// HeaderIconBtn(icon: LucideIcons.bell, showDot: true, onTap: () {});
@@ -22,7 +24,7 @@ class HeaderIconBtn extends StatelessWidget {
     required this.label,
     this.onTap,
     this.showDot = false,
-    this.glass = true,
+    this.glass = false,
   });
 
   final IconData icon;
@@ -36,15 +38,11 @@ class HeaderIconBtn extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showDot;
 
-  /// Glass styling for placement on a dark hero.
-  ///
-  /// Defaults true because every `ScreenHeader` in the app is `dark: true` — there is no screen
-  /// today with the light header this button's other branch was built for (see `ScreenHeader.
-  /// dark`'s own doc comment). Before this default flipped, 19 of the app's 20 header-action call
-  /// sites left `glass` unset and got the squared, `bg3`-filled machined button anyway: a
-  /// light-theme-flipping fill on a permanently-dark CHARCOAL plate, and a squared shape next to
-  /// the header's own back chevron, which already opted into glass. Pass `false` explicitly for
-  /// the light-header case, if one is ever built.
+  /// Real `VetroGlass` styling, reading `context.vetro` so the disc flips with the app theme —
+  /// every `ScreenHeader` is itself a flipping glass bar now (see `ScreenHeader.dark`'s own doc
+  /// comment), not a permanently-dark plate. Default true: this is the button every header action
+  /// in the app uses. Pass `false` only for a caller that genuinely needs the squared, `bg3`-filled
+  /// machined look instead (none do today).
   final bool glass;
 
   @override
@@ -69,15 +67,15 @@ class HeaderIconBtn extends StatelessWidget {
                   // translucent-white Container standing in for one. This used to be the one
                   // "glass" surface in the app that wasn't actually glass: every card blurs what's
                   // behind it, this button only tinted it, and the mismatch was visible wherever a
-                  // header sat over anything but a flat colour.
+                  // header sat over anything but a flat colour. Fill/border omitted so VetroGlass
+                  // reads them from `context.vetro` and flips with the app theme, same as the bar
+                  // it sits on.
                   VetroGlass(
                     borderRadius: BorderRadius.circular(19),
-                    fill: AppVetroColors.glassFillOnDark,
-                    border: AppVetroColors.glassBorderOnDark,
                     child: SizedBox(
                       width: 38,
                       height: 38,
-                      child: Icon(icon, size: 17, color: AppColors.WHITE),
+                      child: Icon(icon, size: 17, color: context.colors.ink),
                     ),
                   )
                 else
@@ -139,7 +137,7 @@ class ScreenHeader extends StatelessWidget {
     this.showBack = false,
     this.onBack,
     this.actions = const [],
-    this.dark = true,
+    this.dark = false,
   });
 
   final String title;
@@ -148,31 +146,22 @@ class ScreenHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final List<Widget> actions;
 
-  /// The case-shell top plate: dark ground, white title. Default, not an opt-in — this is what
-  /// makes the header read as part of the same shell as the bottom nav rather than a five-screen
-  /// exception. Screens that genuinely need a light header (none do today) can still pass `false`.
+  /// The old case-shell top plate: solid CHARCOAL ground, white title, painted regardless of app
+  /// theme. This was never in the Vetro design the app actually agreed on — the reference mockups
+  /// (the "Vetro" system artifact and the ticket/rapportino layouts built from it) show every
+  /// surface, headers included, as light frosted glass over the page's own colour, not a
+  /// permanently-dark plate riveted on top of it. Default is now `false`: a flipping
+  /// [VetroGlass] bar, same material as every card in the app. Kept as a param, not removed
+  /// outright, only for a screen that genuinely needs a fixed-dark header (none do today — Timbra
+  /// and the other truly always-dark screens don't use `ScreenHeader` at all).
   final bool dark;
 
   @override
   Widget build(BuildContext context) {
+    final v = context.vetro;
     final titleColor = dark ? AppColors.WHITE : context.colors.ink;
-    return Container(
+    final row = Padding(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
-      // The top plate of the load bay. Headers used to float with no edge at all, so a scrolled
-      // list ran up underneath the title with nothing marking where the rack began; the rail now
-      // starts at this line. Self-painted CHARCOAL when dark, rather than relying on the Scaffold
-      // behind it: the header is the plate riveted to the case lid, not a transparent label
-      // floating over whatever colour the page happens to be.
-      decoration: BoxDecoration(
-        color: dark ? AppColors.CHARCOAL : null,
-        border: Border(
-          bottom: BorderSide(
-            color: dark
-                ? Colors.white.withAlpha(38)
-                : context.colors.borderMedium,
-          ),
-        ),
-      ),
       child: Row(
         children: [
           if (showBack)
@@ -181,7 +170,6 @@ class ScreenHeader extends StatelessWidget {
               child: HeaderIconBtn(
                 icon: LucideIcons.chevronLeft,
                 label: 'Indietro',
-                glass: dark,
                 onTap: onBack ?? () => Navigator.of(context).maybePop(),
               ),
             ),
@@ -223,6 +211,35 @@ class ScreenHeader extends StatelessWidget {
         ],
       ),
     );
+
+    if (dark) {
+      return DecoratedBox(
+        decoration: const BoxDecoration(
+          color: AppColors.CHARCOAL,
+          border: Border(bottom: BorderSide(color: Color(0x26FFFFFF))),
+        ),
+        child: row,
+      );
+    }
+
+    // A real frosted bar, not a flat tint standing in for one — same reasoning as VetroGlass's
+    // own doc comment. Border radius zero: this spans the full screen width, so the only edge
+    // that reads is the bottom hairline the artifact's own `.tabbar`/status bar draws.
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(
+          sigmaX: AppVetroColors.blurSigma,
+          sigmaY: AppVetroColors.blurSigma,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: v.glassFill,
+            border: Border(bottom: BorderSide(color: v.hairline)),
+          ),
+          child: row,
+        ),
+      ),
+    );
   }
 }
 
@@ -253,9 +270,10 @@ class ScreenHeaderBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onBack;
   final List<Widget> actions;
 
-  /// Defaults to the case-shell CHARCOAL, matching every other header in the app — a form screen
-  /// is still light content under a dark plate, same grammar as a list screen. Override for a
-  /// caller that genuinely needs something else (none do today).
+  /// Unset by default — the header paints its own flipping [VetroGlass] bar, matching every list
+  /// screen's [ScreenHeader], so a form screen and the rapportino wizard read as the same shell
+  /// instead of the CHARCOAL plate this used to force on them. Override for a caller that
+  /// genuinely needs a fixed-colour ground (none do today).
   final Color? backgroundColor;
 
   /// 8 + 12 padding around a 44dp target, plus the subtitle's line when there is one.
@@ -264,27 +282,25 @@ class ScreenHeaderBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? AppColors.CHARCOAL;
-
-    // Derived, not passed. `ScreenHeader.dark` decides whether the title and back button are
-    // painted for a dark ground, and leaving that to the caller is precisely how this app
-    // produced five separate "dark surface, light-theme ink" bugs. A header cannot be given a
-    // CHARCOAL background and near-black text here, because nobody is asked.
-    final isDark = ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
-
-    return ColoredBox(
-      color: bg,
-      child: SafeArea(
-        bottom: false,
-        child: ScreenHeader(
-          title: title,
-          subtitle: subtitle,
-          showBack: showBack,
-          onBack: onBack,
-          actions: actions,
-          dark: isDark,
-        ),
+    final header = SafeArea(
+      bottom: false,
+      child: ScreenHeader(
+        title: title,
+        subtitle: subtitle,
+        showBack: showBack,
+        onBack: onBack,
+        actions: actions,
+        // Derived, not passed, when a fixed background is given. `ScreenHeader.dark` decides
+        // whether the title and back button are painted for a dark ground, and leaving that to
+        // the caller is precisely how this app produced five separate "dark surface, light-theme
+        // ink" bugs. A header cannot be given a CHARCOAL background and near-black text here,
+        // because nobody is asked.
+        dark: backgroundColor != null
+            ? ThemeData.estimateBrightnessForColor(backgroundColor!) == Brightness.dark
+            : false,
       ),
     );
+    if (backgroundColor == null) return header;
+    return ColoredBox(color: backgroundColor!, child: header);
   }
 }

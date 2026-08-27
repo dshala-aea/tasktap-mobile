@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/agenda/agenda_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -169,7 +169,7 @@ class _AgendaRowState extends ConsumerState<_AgendaRow> {
           onTap: _complete,
           child: RowIconTile(
             icon: item.isCompleted ? LucideIcons.checkCircle2 : LucideIcons.circle,
-            color: item.isCompleted ? context.colors.green : AppColors.CHARCOAL,
+            color: item.isCompleted ? context.colors.green : AppVetroColors.tint,
           ),
         ),
         title: item.title,
