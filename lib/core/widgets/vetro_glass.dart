@@ -44,18 +44,25 @@ class VetroGlass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = context.vetro;
-    return ClipRRect(
-      borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: fill ?? v.glassFill,
-            borderRadius: borderRadius,
-            border: Border.all(color: border ?? v.glassBorder),
+    // RepaintBoundary around the clip+blur: on-device, a BackdropFilter with no compositing
+    // layer of its own leaked an unclipped second copy of its content past the ClipRRect bounds
+    // (caught on the bottom nav and the header, which hand-roll this same clip+blur shape rather
+    // than going through this widget — same fix belongs here so every glass surface gets it,
+    // not just the two that happened to get checked on a real device).
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: fill ?? v.glassFill,
+              borderRadius: borderRadius,
+              border: Border.all(color: border ?? v.glassBorder),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );

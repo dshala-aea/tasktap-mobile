@@ -70,40 +70,53 @@ class AppBottomNav extends StatelessWidget {
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(
-              sigmaX: AppVetroColors.blurSigma,
-              sigmaY: AppVetroColors.blurSigma,
-            ),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: v.glassFill,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: v.glassBorder, width: 0.5),
-                boxShadow: context.colors.shadow,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Flexible, so the bar fits the phone rather than the phone fitting the bar.
-                    // The tabs' natural width is padding + icon + the active label, which came to
-                    // two pixels more than a 5.9" screen has and drew the striped overflow bar
-                    // across the bottom of every screen. Turn the system font size up and it is
-                    // far more than two. Loose fit: a tab still takes only what it needs when
-                    // there is room.
-                    for (var i = 0; i < tabs.length; i++)
-                      Flexible(
-                        child: _NavTab(
-                          item: tabs[i],
-                          active: i == currentIndex,
-                          onTap: () => onTap(i),
-                        ),
-                      ),
-                  ],
+        // Shadow lives on this outer box, not the one BackdropFilter blurs — a BoxShadow paints
+        // outside its own bounds, and the ClipRRect around the blur would have silently clipped
+        // it away otherwise.
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: context.colors.shadow,
+          ),
+          // RepaintBoundary around the clip+blur, not just inside it: without its own compositing
+          // layer here, this bar's BackdropFilter painted a second, unclipped copy of the active
+          // tab's gradient pill into the system gesture-nav strip below it — a real leak this
+          // device reproduced every launch, not a one-off frame.
+          child: RepaintBoundary(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: AppVetroColors.blurSigma,
+                  sigmaY: AppVetroColors.blurSigma,
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: v.glassFill,
+                    border: Border.all(color: v.glassBorder, width: 0.5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Flexible, so the bar fits the phone rather than the phone fitting the
+                        // bar. The tabs' natural width is padding + icon + the active label,
+                        // which came to two pixels more than a 5.9" screen has and drew the
+                        // striped overflow bar across the bottom of every screen. Turn the
+                        // system font size up and it is far more than two. Loose fit: a tab
+                        // still takes only what it needs when there is room.
+                        for (var i = 0; i < tabs.length; i++)
+                          Flexible(
+                            child: _NavTab(
+                              item: tabs[i],
+                              active: i == currentIndex,
+                              onTap: () => onTap(i),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

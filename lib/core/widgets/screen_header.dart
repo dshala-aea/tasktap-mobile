@@ -225,18 +225,24 @@ class ScreenHeader extends StatelessWidget {
     // A real frosted bar, not a flat tint standing in for one — same reasoning as VetroGlass's
     // own doc comment. Border radius zero: this spans the full screen width, so the only edge
     // that reads is the bottom hairline the artifact's own `.tabbar`/status bar draws.
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: AppVetroColors.blurSigma,
-          sigmaY: AppVetroColors.blurSigma,
-        ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: v.glassFill,
-            border: Border(bottom: BorderSide(color: v.hairline)),
+    //
+    // RepaintBoundary around the clip+blur: without its own compositing layer, BackdropFilter
+    // here leaked an unclipped second copy of content past its ClipRect bounds on-device (the
+    // bottom nav's identical bar had the same leak — see AppBottomNav's own comment on this).
+    return RepaintBoundary(
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(
+            sigmaX: AppVetroColors.blurSigma,
+            sigmaY: AppVetroColors.blurSigma,
           ),
-          child: row,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: v.glassFill,
+              border: Border(bottom: BorderSide(color: v.hairline)),
+            ),
+            child: row,
+          ),
         ),
       ),
     );
