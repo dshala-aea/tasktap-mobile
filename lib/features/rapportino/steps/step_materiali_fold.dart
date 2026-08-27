@@ -14,14 +14,17 @@ import '../../../core/theme/app_vetro_palette.dart';
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
+import '../../../core/scanner/barcode_scan_sheet.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
+import '../../../data/materiali/materiale_barcode_lookup.dart';
 import '../../../data/reports/ticket_controls_cache_repository.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../magazzino/magazzino_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
+import '../../ticket/ticket_providers.dart' show ticketMaterialiProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -121,7 +124,8 @@ class StepMaterialiFold extends ConsumerWidget {
               ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () => _showAddMaterialeDialog(context, ref, furgoneAsync.valueOrNull),
+              onPressed: () =>
+                  _showAddMaterialeDialog(context, ref, furgoneAsync.valueOrNull, state.ticketId),
               icon: const Icon(LucideIcons.plusSquare),
               label: const Text('Aggiungi materiale'),
               style: OutlinedButton.styleFrom(
@@ -199,6 +203,7 @@ class StepMaterialiFold extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     MagazzinoDto? defaultMagazzino,
+    String? ticketId,
   ) {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final materialiAsync = ref.read(allMaterialiProvider);
@@ -209,6 +214,11 @@ class StepMaterialiFold extends ConsumerWidget {
     final uomCtrl = TextEditingController();
     String? selectedMaterialeId;
     String freeTextName = '';
+    // AppLookupField only reads selectedId/initialText once, in initState — it doesn't watch
+    // them for later external changes (see its own didUpdateWidget doc comment). A scan resolves
+    // outside the field's own onSelected/onFreeText callbacks, so this key is bumped on every scan
+    // result to force a fresh instance that picks the new value up.
+    var lookupFieldGeneration = 0;
     // Defaults to the technician's own furgone (zero extra taps for the common case — see Gap 1 in
     // the feature audit). "Cambia" below lets them source a line from a different warehouse, e.g.
     // stock picked up from a Sede for a job done off the van.
@@ -224,12 +234,30 @@ class StepMaterialiFold extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Fabbisogno was already fetched and shown read-only on the ticket's own Materiali
+                // tab, disconnected from the one screen a technician actually adds materiali from.
+                // Nothing to type here — tapping a suggestion is the whole interaction.
+                if (ticketId != null)
+                  _FabbisognoSuggestions(
+                    ticketId: ticketId,
+                    onPicked: (m) {
+                      selectedMaterialeId = m.materialeId;
+                      freeTextName = m.materialeId == null ? m.nome : '';
+                      qtyCtrl.text = m.quantita.toString();
+                      if (m.unitaMisura?.isNotEmpty ?? false) uomCtrl.text = m.unitaMisura!;
+                      lookupFieldGeneration++;
+                      setDialogState(() {});
+                    },
+                  ),
                 // Same single field as the rest of the wizard. This dialog is opened once per
                 // material — often a dozen times on one job — so the catalogo/testo-libero mode
                 // switch was being paid over and over on the same rapportino.
                 AppLookupField(
+                  key: ValueKey(lookupFieldGeneration),
                   label: 'Materiale',
                   hint: 'Cerca a catalogo o scrivi il nome',
+                  selectedId: selectedMaterialeId,
+                  initialText: freeTextName,
                   items: [
                     for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code),
                   ],
@@ -250,6 +278,32 @@ class StepMaterialiFold extends ConsumerWidget {
                     selectedMaterialeId = null;
                     freeTextName = v;
                   },
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    icon: const Icon(LucideIcons.scanLine, size: 16),
+                    label: const Text('Scansiona codice'),
+                    onPressed: () async {
+                      final code = await openBarcodeScanSheet(ctx, title: 'Scansiona materiale');
+                      if (code == null || !ctx.mounted) return;
+                      final match = await lookupMaterialeByBarcode(ref, code);
+                      if (match != null) {
+                        selectedMaterialeId = match.id;
+                        freeTextName = '';
+                        if (match.unitOfMeasure?.isNotEmpty ?? false) {
+                          uomCtrl.text = match.unitOfMeasure!;
+                        }
+                      } else {
+                        // Not in the catalog (or its barcode) — the scan wasn't wasted, the raw
+                        // code becomes the free-text name, same as if it had been typed.
+                        selectedMaterialeId = null;
+                        freeTextName = code;
+                      }
+                      lookupFieldGeneration++;
+                      setDialogState(() {});
+                    },
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -411,6 +465,52 @@ class StepMaterialiFold extends ConsumerWidget {
         );
       }
     }
+  }
+}
+
+// ── Fabbisogno suggestions ──────────────────────────────────────────────────
+//
+// One tap fills the picker with a planned line's name/quantity/unit — the technician still
+// reviews and hits "Aggiungi" like any other entry, they just never type what the office already
+// planned. Silent (no error state) when offline or when the ticket has nothing planned: it's a
+// convenience layered on the picker, not a thing the dialog depends on to function.
+class _FabbisognoSuggestions extends ConsumerWidget {
+  const _FabbisognoSuggestions({required this.ticketId, required this.onPicked});
+
+  final String ticketId;
+  final ValueChanged<TicketMaterialeDto> onPicked;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(ticketMaterialiProvider(ticketId));
+    final planned = async.valueOrNull ?? const <TicketMaterialeDto>[];
+    if (planned.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Dal fabbisogno del ticket',
+            style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final m in planned)
+                ActionChip(
+                  avatar: const Icon(LucideIcons.plusSquare, size: 14),
+                  label: Text(m.nome),
+                  onPressed: () => onPicked(m),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

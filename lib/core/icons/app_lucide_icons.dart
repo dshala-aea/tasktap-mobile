@@ -295,6 +295,13 @@ class LucideIcons {
     fontPackage: 'lucide_icons',
   );
 
+  /// Barcode/QR scan trigger, wherever the materiali catalog can be searched.
+  static const IconData scanLine = IconData(
+    0xf4a4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
   /// Stock in: a carico movement.
   static const IconData arrowDownToLine = IconData(
     0xf14b,

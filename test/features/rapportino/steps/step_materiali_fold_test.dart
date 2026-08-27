@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/widgets/app_text_field.dart';
 import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -409,6 +410,109 @@ void main() {
       expect(persisted, hasLength(1));
       expect(persisted.single.controlId, 'tc-1');
       expect(persisted.single.boolValue, isTrue);
+    });
+  });
+
+  group('Aggiungi materiale — Fabbisogno suggestions + scan entry point', () {
+    testWidgets('shows the scan button', (tester) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Scansiona codice'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no suggestions row when the rapportino has no linked ticket', (tester) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dal fabbisogno del ticket'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('planned materiali from the ticket render as tappable suggestions', (tester) async {
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/Tickets/$_ticketId/materiali')).thenAnswer(
+        (_) async => _okResponse([
+          {
+            'id': 'tm-1',
+            'materialeId': 'mat-1',
+            'codice': 'ART-001',
+            'nome': 'Guarnizione EPDM',
+            'quantita': 3,
+            'unitaMisura': 'pz',
+            'note': null,
+            'disponibile': true,
+          },
+        ], '/api/Tickets/$_ticketId/materiali'),
+      );
+
+      final container = _buildContainer(db: db, dio: dio);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dal fabbisogno del ticket'), findsOneWidget);
+      expect(find.text('Guarnizione EPDM'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping a suggestion fills quantity and unit from the planned line', (
+      tester,
+    ) async {
+      final dio = MockDio();
+      when(() => dio.get<List<dynamic>>('/api/Tickets/$_ticketId/materiali')).thenAnswer(
+        (_) async => _okResponse([
+          {
+            'id': 'tm-1',
+            'materialeId': null,
+            'codice': null,
+            'nome': 'Nastro isolante',
+            'quantita': 2,
+            'unitaMisura': 'rt',
+            'note': null,
+            'disponibile': true,
+          },
+        ], '/api/Tickets/$_ticketId/materiali'),
+      );
+
+      final container = _buildContainer(db: db, dio: dio);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Nastro isolante'));
+      await tester.pumpAndSettle();
+
+      final qtyField = tester.widget<TextField>(
+        find.descendant(of: find.byType(AppFieldShell).first, matching: find.byType(TextField)),
+      );
+      expect(qtyField.controller?.text, '2.0');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     });
   });
 }
