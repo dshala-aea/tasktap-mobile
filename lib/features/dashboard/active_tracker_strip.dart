@@ -140,7 +140,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.onDarkMuted,
@@ -149,7 +149,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
           Text(
             formatElapsed(t.elapsedAt(widget.now)),
             style: TextStyle(
-              fontFamily: 'Sora',
+              fontFamily: 'Inter',
               fontSize: 19,
               fontWeight: FontWeight.w700,
               color: onBreak ? AppColors.onDarkMuted : AppColors.onDark,
@@ -198,7 +198,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
                 child: Text(
                   'in pausa',
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: AppColors.onDarkMuted,

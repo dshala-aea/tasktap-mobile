@@ -152,7 +152,7 @@ class _FocusCard extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontFamily: 'Sora',
+                fontFamily: 'Inter',
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: c.ink,
@@ -165,7 +165,7 @@ class _FocusCard extends ConsumerWidget {
                 row.subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontFamily: 'Manrope', fontSize: 13, color: c.inkMuted),
+                style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: c.inkMuted),
               ),
             ],
             const SizedBox(height: 12),
@@ -176,7 +176,7 @@ class _FocusCard extends ConsumerWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -186,7 +186,7 @@ class _FocusCard extends ConsumerWidget {
                 Text(
                   '  ·  ${row.timeLabel}',
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Inter',
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: c.inkMuted,
@@ -231,7 +231,7 @@ class _CompactTier extends StatelessWidget {
             child: Text(
               '$title  ${schedules.length}',
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.2,
@@ -271,7 +271,7 @@ class _CompactRow extends ConsumerWidget {
         meta: Text(
           row.timeLabel,
           style: TextStyle(
-            fontFamily: 'Manrope',
+            fontFamily: 'Inter',
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: context.colors.inkMuted,

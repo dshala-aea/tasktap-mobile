@@ -61,7 +61,7 @@ class IdPlateHeroComp extends StatelessWidget {
                     child: Text(
                       userName.toUpperCase(),
                       style: const TextStyle(
-                        fontFamily: 'Sora',
+                        fontFamily: 'Inter',
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         color: AppColors.WHITE,
@@ -79,7 +79,7 @@ class IdPlateHeroComp extends StatelessWidget {
               Text(
                 dateLabel,
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.WHITE.withAlpha(150),
@@ -145,7 +145,7 @@ class _Readout extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontFamily: 'Sora',
+            fontFamily: 'Inter',
             fontSize: 32,
             fontWeight: FontWeight.w800,
             color: color,
@@ -156,7 +156,7 @@ class _Readout extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            fontFamily: 'Manrope',
+            fontFamily: 'Inter',
             fontSize: 10,
             fontWeight: FontWeight.w700,
             color: accent ? AppColors.WHITE : AppColors.WHITE.withAlpha(150),
