@@ -1,8 +1,8 @@
 // dart format width=100
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -516,6 +516,15 @@ class _SigDialogState extends State<_SigDialog> {
   @override
   void initState() {
     super.initState();
+    // A signature is the one input on this whole screen where the phone's short edge is a real
+    // constraint — landscape gives noticeably more width to write in. Nothing else in the app
+    // sets a preferred orientation (grep turns up nothing), so there's no existing lock to
+    // respect here; this dialog claims landscape for itself and hands orientation back to
+    // "whatever the OS wants" — not a portrait lock — the moment it closes, in dispose below.
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     // Fixed ink, not `context.colors.ink` — that used to throw: `Theme.of(context)` (what
     // `context.colors` resolves through) establishes an InheritedWidget dependency, and Flutter
     // asserts against doing that before initState() completes ("dependOnInheritedWidgetOfExact
@@ -536,6 +545,10 @@ class _SigDialogState extends State<_SigDialog> {
 
   @override
   void dispose() {
+    // Restores the app's actual default — every orientation, sensor-driven — not portrait. An
+    // empty list is Flutter's own idiom for "no preference, allow all"; a hardcoded portraitUp
+    // here would be a second, unrelated behavior change smuggled into a signature-capture fix.
+    SystemChrome.setPreferredOrientations([]);
     _ctrl.dispose();
     super.dispose();
   }

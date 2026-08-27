@@ -10,16 +10,17 @@
 // test coverage before this file.
 
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:signature/signature.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -184,6 +185,54 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Firma acquisita'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('signature dialog forces landscape open, releases it on close', (tester) async {
+    container = _buildContainer(db);
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // More writing surface is the whole point of this dialog forcing an orientation — captured
+    // here as the SystemChrome.setPreferredOrientations calls the platform channel actually
+    // receives, since there is no orientation to read back from the widget tree itself.
+    final orientationCalls = <List<Object?>>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (
+      call,
+    ) async {
+      if (call.method == 'SystemChrome.setPreferredOrientations') {
+        orientationCalls.add(call.arguments as List<Object?>);
+      }
+      return null;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(_buildStep(container));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Acquisisci firma cliente'));
+    await tester.pumpAndSettle();
+
+    expect(orientationCalls, hasLength(1));
+    expect(
+      orientationCalls.single.map((o) => o.toString()),
+      containsAll(['DeviceOrientation.landscapeLeft', 'DeviceOrientation.landscapeRight']),
+    );
+
+    await tester.tap(find.byIcon(LucideIcons.x));
+    await tester.pumpAndSettle();
+
+    expect(orientationCalls, hasLength(2));
+    expect(orientationCalls.last, isEmpty, reason: 'releases the lock — every orientation again');
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
