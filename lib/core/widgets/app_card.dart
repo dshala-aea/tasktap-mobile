@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import '../theme/app_vetro_palette.dart';
+import 'vetro_glass.dart';
 
-import 'rack.dart';
-
-/// The app's container, now a drawer front on the rail rather than a floating card.
+/// The app's general-purpose container — a Vetro glass panel.
 ///
 /// The public API is unchanged on purpose. Thirty-three call sites across thirteen screens say
-/// `AppCard(child: …)`, and every one of them means "a block of content at the page gutter" —
-/// which is exactly what a cell is. Rebuilding the primitive rather than the call sites is what
-/// let the world reach the whole app.
+/// `AppCard(child: …)`, and every one of them means "a block of content," which [VetroGlass]
+/// renders directly now rather than through `RackCell`'s drawer-front cell.
 ///
-/// What changed underneath:
-/// - Bone [AppPalette.labelCard] instead of the neutral `bg1`. This is the one warm surface in
-///   the app and it is what makes a screen recognisable with the content stripped out.
-/// - A graphite ledge down the leading edge instead of a drop shadow. A soft 10%-black shadow is
-///   invisible on a dark ground and washes out entirely in direct sun; a 6dp bar does not.
-/// - Square on the rail edge, machined 6dp on the other three. A card floats; a drawer is mounted.
+/// This is deliberately not routed through [VetroCard]: that widget's own doc comment explains
+/// why it stays minimal (no state-marking concept), and [strapped]/[borderColor] are real,
+/// currently-used capability — recoloring the glass border rather than a separate ledge bar,
+/// which is the same move `ListRow`'s state marking made (a property of the surface's own edge,
+/// not a second material glued onto it).
+///
+/// [flush] no longer does anything: it distinguished a cell butted against the rail from a free
+/// one, and Vetro has no rail for a card to be flush against. Kept on the constructor only so
+/// call sites need no change.
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -45,32 +46,41 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onTap;
 
-  /// Retained from the previous API. A card that overrode its border was marking a state; that
-  /// now reads better on the ledge, so this is routed there.
+  /// Overrides the glass border colour. [strapped] wins when both are set.
   final Color? borderColor;
 
   final Color? backgroundColor;
 
-  /// Selected, priority, or still-needs-finishing — turns the ledge the brand accent. Not for a
-  /// live/running state: that's [LiveDot], deliberately a different mark (see its doc comment).
+  /// Selected, priority, or still-needs-finishing — turns the glass border the Vetro tint. Not
+  /// for a live/running state: that's `LiveDot`, deliberately a different mark (see its doc
+  /// comment).
   final bool strapped;
 
-  /// False for a cell that is not on the rail: inside a sheet, a dialog, or a nested panel.
+  /// No longer consulted — see class doc. Kept so existing call sites need no change.
   final bool flush;
 
   static const EdgeInsets _defaultPadding = EdgeInsets.fromLTRB(14, 12, 14, 12);
+  static const _radius = BorderRadius.all(Radius.circular(20));
 
   @override
   Widget build(BuildContext context) {
-    return RackCell(
-      onTap: onTap,
-      strapped: strapped,
-      flush: flush,
-      background: backgroundColor ?? context.colors.labelCard,
-      ledgeColor: borderColor,
-      padding: padding ?? _defaultPadding,
-      minHeight: 0,
-      child: child,
+    final v = context.vetro;
+    final border = strapped ? v.tint : borderColor;
+    final content = Padding(padding: padding ?? _defaultPadding, child: child);
+
+    return VetroGlass(
+      borderRadius: _radius,
+      fill: backgroundColor,
+      border: border,
+      // VetroGlass would otherwise apply its own padding around `content`, double-padding it —
+      // padding is handled here instead so an `onTap` row's ink can reach the full glass bounds.
+      child: onTap == null
+          ? content
+          : Material(
+              color: Colors.transparent,
+              borderRadius: _radius,
+              child: InkWell(borderRadius: _radius, onTap: onTap, child: content),
+            ),
     );
   }
 }

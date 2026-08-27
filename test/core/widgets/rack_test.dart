@@ -1,126 +1,20 @@
+// dart format width=100
+// test/core/widgets/rack_test.dart
+//
+// RackCell — the drawer-front cell AppCard and the old CompartmentTile used to render through —
+// is gone: AppCard renders VetroGlass directly now, and CompartmentTile was deleted outright once
+// every screen turned out to already use VetroCompartmentTile. RackCell's own tests (border/
+// radius/dark-palette/tap-passthrough) went with it rather than being ported, since there is
+// nothing left in the app to regress. Rack — the retired rail's passthrough wrapper, kept only
+// for home_shell.dart's one call site — is what remains here.
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/core/theme/app_colors.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_rack.dart';
-import 'package:tasktap_mobile/core/theme/app_theme.dart';
 import 'package:tasktap_mobile/core/widgets/rack.dart';
 
-Widget _wrap(Widget child, {Brightness brightness = Brightness.light}) => MaterialApp(
-  theme: buildAppTheme(brightness: brightness),
-  home: Scaffold(body: child),
-);
-
-/// A cell inside a Column inside a scroll view — the shape almost every real call site has, and
-/// the one that used to throw. Kept as the default harness rather than a special case so a
-/// regression to `CrossAxisAlignment.stretch` fails these tests rather than the whole suite.
-Widget _inScrollableColumn(Widget child) => SingleChildScrollView(child: Column(children: [child]));
+Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
-  group('RackCell', () {
-    testWidgets('lays out under unbounded height', (tester) async {
-      await tester.pumpWidget(_wrap(_inScrollableColumn(const RackCell(child: Text('x')))));
-
-      expect(tester.takeException(), isNull);
-      expect(find.text('x'), findsOneWidget);
-    });
-
-    testWidgets('is bone, flush on the rail edge, machined on the other three', (tester) async {
-      await tester.pumpWidget(_wrap(const RackCell(child: Text('x'))));
-
-      final decoration =
-          tester
-                  .widget<DecoratedBox>(
-                    find
-                        .descendant(of: find.byType(RackCell), matching: find.byType(DecoratedBox))
-                        .first,
-                  )
-                  .decoration
-              as BoxDecoration;
-
-      expect(decoration.color, AppPalette.light.labelCard);
-      expect(decoration.borderRadius, AppRack.cellShape);
-      expect(
-        (decoration.borderRadius! as BorderRadius).topLeft,
-        Radius.zero,
-        reason: 'the leading edge is butted against the rail',
-      );
-    });
-
-    testWidgets('an unstrapped cell draws a plain hairline border', (tester) async {
-      await tester.pumpWidget(_wrap(const RackCell(child: Text('x'))));
-      final border = _cellBorder(tester);
-      expect(border.top.color, AppPalette.light.borderLight);
-      expect(border.top.width, 1);
-    });
-
-    testWidgets('a strapped cell turns its border the brand accent', (tester) async {
-      await tester.pumpWidget(_wrap(const RackCell(strapped: true, child: Text('x'))));
-      final border = _cellBorder(tester);
-      expect(border.top.color, AppColors.Y);
-      expect(border.top.width, greaterThan(1), reason: 'state also thickens the border');
-    });
-
-    testWidgets('strapped wins over an explicit ledge colour', (tester) async {
-      await tester.pumpWidget(
-        _wrap(const RackCell(strapped: true, ledgeColor: Color(0xFF00FF00), child: Text('x'))),
-      );
-      expect(
-        _cellBorder(tester).top.color,
-        AppColors.Y,
-        reason: 'live outranks every other state a ledge can carry',
-      );
-    });
-
-    testWidgets('a tappable cell does not swallow taps meant for its children', (tester) async {
-      var cellTaps = 0;
-      var childTaps = 0;
-
-      await tester.pumpWidget(
-        _wrap(
-          RackCell(
-            onTap: () => cellTaps++,
-            child: Row(
-              children: [
-                const Expanded(child: Text('body')),
-                TextButton(onPressed: () => childTaps++, child: const Text('azione')),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('azione'));
-      await tester.pumpAndSettle();
-
-      // The first arrangement of this widget layered an InkWell over the cell, which painted a
-      // correct splash and ate every tap meant for a control inside it.
-      expect(childTaps, 1);
-      expect(cellTaps, 0);
-
-      await tester.tap(find.text('body'));
-      await tester.pumpAndSettle();
-      expect(cellTaps, 1);
-    });
-
-    testWidgets('takes its materials from the dark palette under dark', (tester) async {
-      await tester.pumpWidget(_wrap(const RackCell(child: Text('x')), brightness: Brightness.dark));
-
-      final decoration =
-          tester
-                  .widget<DecoratedBox>(
-                    find
-                        .descendant(of: find.byType(RackCell), matching: find.byType(DecoratedBox))
-                        .first,
-                  )
-                  .decoration
-              as BoxDecoration;
-
-      expect(decoration.color, AppPalette.dark.labelCard);
-      expect(_cellBorder(tester).top.color, AppPalette.dark.borderLight);
-    });
-  });
-
   group('Rack', () {
     // Vetro has no rail-and-drawer shell to bolt content to — Rack is a passthrough now. Kept as
     // a class only because home_shell.dart's one call site wraps its content in it; these tests
@@ -142,20 +36,4 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
-
-  // ShadowBoard's tests moved to empty_state_test.dart as CompactEmptyState — see that widget's
-  // own doc comment for why it moved out of this file.
-}
-
-/// A cell's state now lives on its own border, not a separate ledge bar — see RackCell's class
-/// doc for why.
-Border _cellBorder(WidgetTester tester) {
-  final decoration =
-      tester
-              .widget<DecoratedBox>(
-                find.descendant(of: find.byType(RackCell), matching: find.byType(DecoratedBox)).first,
-              )
-              .decoration
-          as BoxDecoration;
-  return decoration.border! as Border;
 }

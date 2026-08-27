@@ -1,12 +1,13 @@
 import 'package:flutter/widgets.dart';
 
-/// Shape and motion tokens for [RackCell] — the one piece of the van-racking design language
-/// still in use, by `AppCard` and the pre-Vetro `CompartmentTile`. The rail, the cell-pitch
-/// spacing, and the shadow-board silhouette that used to live alongside these were retired with
-/// the rest of that metaphor (see `rack.dart`/`empty_state.dart`'s own doc comments); [ListRow],
-/// their highest-traffic consumer, no longer uses any of this file at all.
+/// Corner-radius tokens shared across the app, and the floating-nav clearance math.
 ///
-/// [AppPalette] owns what things are *made of*; this owns what shape they are and how they move.
+/// Was the van-racking design language's own geometry file — the rail, the cell-pitch spacing,
+/// the shadow-board silhouette, and `RackCell` (the drawer-front cell they were all sized for)
+/// were retired along with that metaphor (see `rack.dart`/`empty_state.dart`'s own doc comments).
+/// [cellRadius]/[insetRadius]/[freeShape]/[insetShape] outlived it: plain corner-radius values
+/// used throughout the app independent of any one component, not specific to a cell that no
+/// longer exists.
 ///
 /// ## Corner radius: settled at the validated number, not re-litigated per world
 ///
@@ -17,44 +18,23 @@ import 'package:flutter/widgets.dart';
 /// metaphor: it is not "the old Figma number" or "the Cassetta number," it is the number four
 /// separate references landed on for a card at this density. Stop moving it per redirection.
 abstract final class AppRack {
-  // ── Cells ─────────────────────────────────────────────────────────────────
+  // ── Corner radius ─────────────────────────────────────────────────────────
 
-  /// Minimum height of a cell.
-  ///
-  /// 64, above the 48dp Android floor rather than at it: the target here is a gloved thumb on a
-  /// phone braced against a van door, and the extra 16dp is the difference between a tap and a
-  /// second tap.
-  static const double cellMinHeight = 64;
-
-  /// Corner radius of a cell on its three free edges. See the class doc — this is the validated
-  /// number, not a per-world value.
+  /// The app's standard corner radius. See the class doc — this is the validated number, not a
+  /// per-world value.
   static const double cellRadius = 12;
 
-  /// Corner radius on the rail edge. Square — the cell is butted against the extrusion. Structural,
-  /// not a style knob: does not move when [cellRadius] does.
-  static const double cellRadiusFlush = 0;
-
-  /// Radius of a compartment *inside* a cell (a material line, an hour tile, a photo thumb — also
-  /// what `AppChip`'s filter pills use). Scales with [cellRadius]: half of it, so a compartment
-  /// always reads as nested inside its cell rather than competing with the cell's own corner.
+  /// Radius of a compartment *inside* a larger container (a material line, an hour tile, a photo
+  /// thumb — also what `AppChip`'s filter pills use). Scales with [cellRadius]: half of it, so a
+  /// compartment always reads as nested inside its container rather than competing with its
+  /// corner.
   static const double insetRadius = cellRadius / 1.5;
 
-  /// Standard shape for a cell attached to the rail.
-  static const BorderRadius cellShape = BorderRadius.only(
-    topLeft: Radius.circular(cellRadiusFlush),
-    bottomLeft: Radius.circular(cellRadiusFlush),
-    topRight: Radius.circular(cellRadius),
-    bottomRight: Radius.circular(cellRadius),
-  );
-
-  /// Shape for a cell that is *not* on a rail — a sheet, a dialog, a standalone panel.
+  /// [cellRadius] on all four corners — a sheet, a dialog, a standalone panel.
   static const BorderRadius freeShape = BorderRadius.all(Radius.circular(cellRadius));
 
-  /// Shape for a compartment inside a cell.
+  /// [insetRadius] on all four corners — a compartment nested inside a larger container.
   static const BorderRadius insetShape = BorderRadius.all(Radius.circular(insetRadius));
-
-  /// Inner padding of a cell.
-  static const EdgeInsets cellPadding = EdgeInsets.fromLTRB(12, 10, 12, 10);
 
   // ── The load strap: clearance for the floating nav ────────────────────────
 
@@ -77,7 +57,6 @@ abstract final class AppRack {
   // ── Motion ────────────────────────────────────────────────────────────────
 
   /// `AppBottomNav`'s active-tab transition — the last consumer of this file's motion tokens.
-  /// `RackCell` itself never animates.
   static const Duration drawerOut = Duration(milliseconds: 180);
 
   /// The curve for anything opening or arriving. Exponential ease-out, firm stop, no overshoot.

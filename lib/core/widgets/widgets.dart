@@ -11,7 +11,6 @@ export 'avatar.dart';
 export 'badge.dart';
 export 'bottom_nav.dart';
 export 'compartment_sheet.dart';
-export 'compartment_tile.dart';
 export 'empty_state.dart';
 export 'error_state.dart';
 export 'key_val.dart';
