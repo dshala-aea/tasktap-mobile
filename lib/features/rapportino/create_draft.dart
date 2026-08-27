@@ -59,7 +59,12 @@ Future<String?> createLocalDraft(
   final db = ref.read(appDatabaseProvider);
   final resolvedTenantId = tenantId ?? await resolveDeviceTenantId(db);
 
-  final id = 'draft-${DateTime.now().microsecondsSinceEpoch}';
+  // A real GUID, not a `draft-<timestamp>` string. The backend treats this as the client-supplied
+  // report id from the first attachment upload onward — `POST /api/reports/{id:guid}/attachments`
+  // route-constrains it, and `SubmitReportRequest.Id` is a `Guid` field. A timestamp-prefixed
+  // string never matched that route at all, so every attachment upload 404'd before the request
+  // reached any business logic — the report row not existing yet was never the problem.
+  final id = _uuid.v4();
   await ref
       .read(draftReportRepositoryProvider)
       .createDraft(
@@ -128,7 +133,7 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
   if (user == null) return null;
 
   final repo = ref.read(draftReportRepositoryProvider);
-  final id = 'draft-${DateTime.now().microsecondsSinceEpoch}';
+  final id = _uuid.v4();
   final now = DateTime.now().toUtc();
 
   await repo.createDraft(

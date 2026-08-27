@@ -63,6 +63,43 @@ Future<String?> _callCreateReworkDraft(
   return result;
 }
 
+/// A real GUID (v4), matching what `POST /api/reports/{id:guid}/attachments` and
+/// `SubmitReportRequest.Id` (a `Guid` field, backend-side) actually accept — the format bug this
+/// file guards against had every attachment upload 404 at the route level, since a
+/// `draft-<timestamp>` string never matches `{id:guid}`.
+final _guidPattern = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+  caseSensitive: false,
+);
+
+Future<String?> _callCreateLocalDraft(
+  WidgetTester tester,
+  ProviderContainer container, {
+  required String title,
+}) async {
+  String? result;
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Consumer(
+          builder: (context, ref, _) {
+            return ElevatedButton(
+              onPressed: () async {
+                result = await createLocalDraft(ref, title: title);
+              },
+              child: const Text('go'),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('go'));
+  await tester.pumpAndSettle();
+  return result;
+}
+
 DraftReportsCompanion _rejectedReportCompanion({String id = 'report-1'}) =>
     DraftReportsCompanion.insert(
       id: id,
@@ -103,7 +140,37 @@ void main() {
     ],
   );
 
+  group('createLocalDraft', () {
+    testWidgets('generates a real GUID id, not a draft-<timestamp> string', (tester) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
+
+      expect(id, isNotNull);
+      expect(
+        _guidPattern.hasMatch(id!),
+        isTrue,
+        reason: 'must satisfy POST /api/reports/{id:guid}/attachments — a draft-<timestamp> '
+            'string never matches that route',
+      );
+    });
+  });
+
   group('createReworkDraft', () {
+    testWidgets('generates a real GUID id, not a draft-<timestamp> string', (tester) async {
+      await repo.createDraft(_rejectedReportCompanion());
+      final source = (await repo.getDraft('report-1'))!;
+
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final newId = await _callCreateReworkDraft(tester, container, source);
+
+      expect(newId, isNotNull);
+      expect(_guidPattern.hasMatch(newId!), isTrue);
+    });
+
     testWidgets('clones header fields into a new draft id, starting fresh as Bozza', (
       tester,
     ) async {
