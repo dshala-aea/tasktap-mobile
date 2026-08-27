@@ -8678,6 +8678,70 @@
         }
       }
     },
+    "/api/report-templates/{key}/config": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The tenant\u0027s saved config for this template, or the template\u0027s own default when\n    the tenant never customized it.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Replaces the tenant\u0027s config for this template. An unrecognized enum value in the\n    body (a section, column, or logo position outside the closed option space) is rejected as\n    a 400 naming the value, never silently dropped or defaulted.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/role-permissions/catalogue": {
       "get": {
         "tags": [
@@ -9267,6 +9331,137 @@
           "Schedules"
         ],
         "summary": "Inizia la sessione di lavoro per uno Schedule: crea (o riprende) un\nrapportino in Bozza, semina materiali dal fabbisogno e staff dalla squadra.\nIdempotente: chiamate successive ritornano il rapportino esistente.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals": {
+      "get": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicePrincipalRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicePrincipalRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicePrincipalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals/{id}": {
+      "get": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals/{id}/grants": {
+      "put": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGrantsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGrantsRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals/{id}/revoke": {
+      "post": {
+        "tags": [
+          "ServicePrincipals"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -12882,7 +13077,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s).\nThe device shows this as a QR; the technician scans it with their phone.",
+        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s), bound to the\ncalling kiosk\u0027s own tenant. The device shows this as a QR; the technician scans it with\ntheir phone. See this section\u0027s header comment for the full fix.",
         "responses": {
           "200": {
             "description": "OK"
@@ -12895,7 +13090,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Processes a kiosk QR scan (technician scanned the device QR).\nValidates the HMAC token and clock-in / clock-out the user.",
+        "summary": "Processes a kiosk QR scan (technician scanned the device QR with their own phone, their\nown authenticated session). Validates the HMAC token against the caller\u0027s own tenant and\nclocks in/out the caller themselves \u2014 never a caller-supplied id. See this section\u0027s\nheader comment for the full fix.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13813,6 +14008,18 @@
           }
         }
       },
+      "BrandingOptionsDto": {
+        "required": [
+          "logoPosition"
+        ],
+        "type": "object",
+        "properties": {
+          "logoPosition": {
+            "type": "string"
+          }
+        },
+        "description": "Per-template branding overrides, as exposed over the wire."
+      },
       "Cantiere": {
         "type": "object",
         "properties": {
@@ -14234,6 +14441,37 @@
             "description": "Codice SDI (Italian e-invoicing recipient code), collected by the signup wizard.\n    Optional \u2014 passed through to the Stripe Checkout session metadata so the checkout.session.completed\n    webhook can persist it onto the tenant (for future B-12 ERP export)."
           }
         }
+      },
+      "ClassicReportConfigDto": {
+        "required": [
+          "branding",
+          "sections",
+          "materiali",
+          "signatures",
+          "footerText"
+        ],
+        "type": "object",
+        "properties": {
+          "branding": {
+            "$ref": "#/components/schemas/BrandingOptionsDto"
+          },
+          "sections": {
+            "$ref": "#/components/schemas/SectionOptionsDto"
+          },
+          "materiali": {
+            "$ref": "#/components/schemas/TableOptionsDto"
+          },
+          "signatures": {
+            "$ref": "#/components/schemas/SignatureOptionsDto"
+          },
+          "footerText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The Classic template\u0027s config, as exposed over the wire (GET response / PUT body)."
       },
       "ClienteOverviewDto": {
         "required": [
@@ -15841,6 +16079,17 @@
           }
         }
       },
+      "CreateServicePrincipalRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "CreateSquadraRequest": {
         "required": [
           "nome",
@@ -17113,7 +17362,6 @@
       "KioskScanRequest": {
         "required": [
           "token",
-          "userId",
           "locationId",
           "customerId"
         ],
@@ -17121,10 +17369,6 @@
         "properties": {
           "token": {
             "type": "string"
-          },
-          "userId": {
-            "type": "string",
-            "format": "uuid"
           },
           "locationId": {
             "type": "string",
@@ -17134,7 +17378,8 @@
             "type": "string",
             "format": "uuid"
           }
-        }
+        },
+        "description": "UserId was removed (security fix, see the \u0022Kiosk QR\u0022 section above) \u2014 the caller who\n    is being clocked in/out is always the authenticated technician making this request, never a\n    value the request body could claim to be."
       },
       "KpiDto": {
         "required": [
@@ -20659,6 +20904,21 @@
       "SeatTypeEnum": {
         "type": "integer"
       },
+      "SectionOptionsDto": {
+        "required": [
+          "order"
+        ],
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Which sections print, and in what order, as exposed over the wire."
+      },
       "SelfRegistrationRequest": {
         "required": [
           "email",
@@ -20762,6 +21022,20 @@
         },
         "description": "Request model for sending report email."
       },
+      "SetGrantsRequest": {
+        "required": [
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "SetMatrixRequest": {
         "required": [
           "entries"
@@ -20792,6 +21066,22 @@
             "format": "double"
           }
         }
+      },
+      "SignatureOptionsDto": {
+        "required": [
+          "showCustomerSignature",
+          "showTechnicianSignature"
+        ],
+        "type": "object",
+        "properties": {
+          "showCustomerSignature": {
+            "type": "boolean"
+          },
+          "showTechnicianSignature": {
+            "type": "boolean"
+          }
+        },
+        "description": "Whether each signature block prints, as exposed over the wire."
       },
       "Squadra": {
         "type": "object",
@@ -21896,6 +22186,21 @@
           }
         },
         "description": "A schedule as the device sees it.\n\nThe sync payload used to serialise Schedule entities directly, which is how an\ninternal schema change was able to break a client: dropping the assignment columns (ADR-0009)\nremoved \u0060userId\u0060 from the wire, and the Flutter client casts it non-nullably. An entity is\na storage shape and will keep changing; this DTO is the contract, and it changes only when the\ncontract is meant to.\n\nGuid SyncScheduleDto.UserId is preserved as the directly assigned technician \u2014 the same value the\ndropped column held \u2014 so the existing client keeps working unchanged.\nIReadOnlyList\u0026lt;SyncScheduleAssigneeDto\u0026gt; SyncScheduleDto.Assignees is what it should move to: it carries everyone on the schedule,\nincluding squadra-mediated members the old column could never express."
+      },
+      "TableOptionsDto": {
+        "required": [
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Which materiali columns print, and in what order, as exposed over the wire."
       },
       "TenantProvisionPayload": {
         "required": [
@@ -24998,6 +25303,9 @@
     },
     {
       "name": "Schedules"
+    },
+    {
+      "name": "ServicePrincipals"
     },
     {
       "name": "Signup"
