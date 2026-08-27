@@ -12628,7 +12628,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s).\nThe device shows this as a QR; the technician scans it with their phone.",
+        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s), bound to the\ncalling kiosk\u0027s own tenant. The device shows this as a QR; the technician scans it with\ntheir phone. See this section\u0027s header comment for the full fix.",
         "responses": {
           "200": {
             "description": "OK"
@@ -12641,7 +12641,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Processes a kiosk QR scan (technician scanned the device QR).\nValidates the HMAC token and clock-in / clock-out the user.",
+        "summary": "Processes a kiosk QR scan (technician scanned the device QR with their own phone, their\nown authenticated session). Validates the HMAC token against the caller\u0027s own tenant and\nclocks in/out the caller themselves \u2014 never a caller-supplied id. See this section\u0027s\nheader comment for the full fix.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -16701,7 +16701,6 @@
       "KioskScanRequest": {
         "required": [
           "token",
-          "userId",
           "locationId",
           "customerId"
         ],
@@ -16709,10 +16708,6 @@
         "properties": {
           "token": {
             "type": "string"
-          },
-          "userId": {
-            "type": "string",
-            "format": "uuid"
           },
           "locationId": {
             "type": "string",
@@ -16722,7 +16717,8 @@
             "type": "string",
             "format": "uuid"
           }
-        }
+        },
+        "description": "UserId was removed (security fix, see the \u0022Kiosk QR\u0022 section above) \u2014 the caller who\n    is being clocked in/out is always the authenticated technician making this request, never a\n    value the request body could claim to be."
       },
       "KpiDto": {
         "required": [
