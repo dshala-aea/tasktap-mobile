@@ -1718,6 +1718,7 @@
         "tags": [
           "Cantieri"
         ],
+        "summary": "Hard-deletes a cantiere. Every foreign key in this database is \u0060DeleteBehavior.Restrict\u0060\n(see \u0060ApplicationDbContext.OnModelCreating\u0060) \u2014 a cantiere with any linked ticket,\nreport, work log, contact or crew assignment cannot be deleted at all, by design, not by\nomission. Without the catch below that surfaces as a raw 500 from the unhandled\nDbUpdateException; this turns it into the actual answer.",
         "parameters": [
           {
             "name": "id",
@@ -2023,6 +2024,13 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "stato",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -2512,6 +2520,7 @@
         "tags": [
           "Contracts"
         ],
+        "summary": "Hard-deletes a contract. Every foreign key in this database is\n\u0060DeleteBehavior.Restrict\u0060 (see \u0060ApplicationDbContext.OnModelCreating\u0060) \u2014 a\ncontract referenced by a ProdottoAssistenza, a generated Schedule, or a Ticket cannot be\ndeleted at all, by design. Without the catch below that surfaces as a raw 500 from the\nunhandled DbUpdateException; this turns it into the actual answer (same\ntreatment as \u0060CantieriController.Delete\u0060).",
         "parameters": [
           {
             "name": "id",
@@ -2654,6 +2663,30 @@
         "tags": [
           "CustomerPortalAdmin"
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer-portal/admin/users/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "CustomerPortalAdmin"
+        ],
+        "summary": "Undoes Task\u0026lt;IActionResult\u0026gt; CustomerPortalAdminController.Deactivate(Guid id). Before this existed, a deactivated portal user could only\nbe recovered by deleting the row and re-inviting from scratch \u2014 the identity provider\naccount (string CustomerPortalUser.ExternalUserId) still exists the whole time, this\njust flips the local gate back open.",
         "parameters": [
           {
             "name": "id",
@@ -6572,6 +6605,13 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "categoria",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -6755,6 +6795,148 @@
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ProdottoAssistenza/{id}/matricole": {
+      "get": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Matricola"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Matricola"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Matricola"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMatricolaRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMatricolaRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMatricolaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ProdottoAssistenza/{id}/matricole/{matricolaId}": {
+      "delete": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "matricolaId",
             "in": "path",
             "required": true,
             "schema": {
@@ -7398,6 +7580,48 @@
         "responses": {
           "200": {
             "description": "Success message."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Deletes a draft report. Only Bozza reports can be deleted \u2014 the same gate every other\nmutating endpoint on this controller applies. Lets a technician (or office/admin) clean\nup a report started in error before it\u0027s ever submitted; a report that has already left\nBozza must go through Task\u0026lt;IActionResult\u0026gt; ReportsController.Annulla(Guid id) instead.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -8496,6 +8720,70 @@
         }
       }
     },
+    "/api/report-templates/{key}/config": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The tenant\u0027s saved config for this template, or the template\u0027s own default when\n    the tenant never customized it.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Replaces the tenant\u0027s config for this template. An unrecognized enum value in the\n    body (a section, column, or logo position outside the closed option space) is rejected as\n    a 400 naming the value, never silently dropped or defaulted.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/role-permissions/catalogue": {
       "get": {
         "tags": [
@@ -8827,6 +9115,22 @@
               ],
               "format": "int32"
             }
+          },
+          {
+            "name": "squadraId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "ticketId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -8912,6 +9216,22 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "squadraId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "ticketId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -9053,6 +9373,137 @@
           "Schedules"
         ],
         "summary": "Inizia la sessione di lavoro per uno Schedule: crea (o riprende) un\nrapportino in Bozza, semina materiali dal fabbisogno e staff dalla squadra.\nIdempotente: chiamate successive ritornano il rapportino esistente.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals": {
+      "get": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicePrincipalRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicePrincipalRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicePrincipalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals/{id}": {
+      "get": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals/{id}/grants": {
+      "put": {
+        "tags": [
+          "ServicePrincipals"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGrantsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGrantsRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGrantsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/service-principals/{id}/revoke": {
+      "post": {
+        "tags": [
+          "ServicePrincipals"
+        ],
         "parameters": [
           {
             "name": "id",
@@ -9697,7 +10148,7 @@
         "tags": [
           "Sync"
         ],
-        "summary": "Returns the authenticated technician\u0027s schedules for the next 7 days plus linked\nreference data (customers, locations, tickets) and their own draft reports.\nThis is the mobile-first endpoint \u2014 strictly user-scoped for offline use.\nSupports delta re-sync via the since parameter.",
+        "summary": "Returns the authenticated technician\u0027s schedules for the next 7 days plus linked\nreference data (customers, locations, tickets) and their own draft reports.\nThis is the mobile-first endpoint \u2014 strictly user-scoped for offline use, EXCEPT for\ncustomers/tickets/locations when the caller holds Office/Admin/SuperUser: those roles get\nthe full tenant book, matching what the same account sees on the web app. Mobile\u0027s admin\nscreens (Clienti, Ticket lists) read exclusively from the local cache this endpoint fills \u2014\nthere is no separate REST call for them \u2014 so an office/admin account with the technician-only\nscope silently saw a fraction of the tenant\u0027s data, with no error.\nSupports delta re-sync via the since parameter.",
         "parameters": [
           {
             "name": "since",
@@ -9711,7 +10162,7 @@
         ],
         "responses": {
           "200": {
-            "description": "User-scoped sync payload.",
+            "description": "User-scoped (or, for office/admin, tenant-scoped) sync payload.",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11653,7 +12104,7 @@
           "Users"
         ],
         "summary": "Returns the QR code token used for reverse-scan kiosk clock-in\n(string? User.QrCodeToken).",
-        "description": "This is a credential, not ordinary profile data \u2014 it is deliberately excluded from\nUser\u0027s normal JSON shape (\u0060[JsonIgnore]\u0060 on the entity property), so\nTask\u0026lt;IActionResult\u0026gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null)/Task\u0026lt;IActionResult\u0026gt; UsersController.GetById(Guid id)/Task\u0026lt;IActionResult\u0026gt; UsersController.GetCurrentUser() never carry it.\nThis is the ONLY endpoint that returns it, and only to the owning user or a tenant Admin \u2014\nanyone else gets ForbidResult (403). Existence of the target user is not\nhidden behind a 404 here (unlike the tenant-isolation FK guards elsewhere in this\ncodebase): the caller already reached this route with a real, in-tenant user id (e.g. from\na team member list they can already see), so this is an authorization decision, not a\ncross-tenant existence leak.",
+        "description": "This is a credential, not ordinary profile data \u2014 it is deliberately excluded from\nUser\u0027s normal JSON shape (\u0060[JsonIgnore]\u0060 on the entity property), so\nTask\u0026lt;IActionResult\u0026gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task\u0026lt;IActionResult\u0026gt; UsersController.GetById(Guid id, CancellationToken ct)/Task\u0026lt;IActionResult\u0026gt; UsersController.GetCurrentUser() never carry it.\nThis is the ONLY endpoint that returns it, and only to the owning user or a tenant Admin \u2014\nanyone else gets ForbidResult (403). Existence of the target user is not\nhidden behind a 404 here (unlike the tenant-isolation FK guards elsewhere in this\ncodebase): the caller already reached this route with a real, in-tenant user id (e.g. from\na team member list they can already see), so this is an authorization decision, not a\ncross-tenant existence leak.",
         "parameters": [
           {
             "name": "id",
@@ -11886,6 +12337,46 @@
         ],
         "summary": "The signed-in user\u0027s own day: status, running totals, and the actions available on it now,\neach with a reason when it is not (ADR-0013 \u00A7C.5).",
         "description": "Deliberately the caller\u0027s own day and not addressable by user id \u2014 a manager reading\nsomebody else\u0027s attendance is the Phase B queue, which has its own permission. The\nread permission is still required because this returns recorded hours.\n\nThe action list is what the client may offer. It is not a promise the command will\nsucceed: it can go stale between this call and the next write (another device, an\napproval, a payroll lock), which is why every command re-checks.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveTracker"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/WorkLog/active/team": {
+      "get": {
+        "tags": [
+          "WorkLog"
+        ],
+        "summary": "The office roster: everything currently tracking time across the whole tenant, tagged with\nwho it belongs to \u2014 the admin/office-facing \u0022who is clocked in right now\u0022 view Task\u0026lt;IActionResult\u0026gt; WorkLogController.Active(CancellationToken ct) deliberately does not answer, since that one is scoped to the caller\u0027s own\nday by design.",
+        "description": "Same \u0060configure\u0060 gate as approve/reject/the approval queue above: reading everyone\nelse\u0027s running trackers is the supervisory half of this module, not the employee\u0027s own-day\nread permission.",
         "responses": {
           "200": {
             "description": "OK",
@@ -12628,7 +13119,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s), bound to the\ncalling kiosk\u0027s own tenant. The device shows this as a QR; the technician scans it with\ntheir phone. See this section\u0027s header comment for the full fix.",
+        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s).\nThe device shows this as a QR; the technician scans it with their phone.",
         "responses": {
           "200": {
             "description": "OK"
@@ -12641,7 +13132,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Processes a kiosk QR scan (technician scanned the device QR with their own phone, their\nown authenticated session). Validates the HMAC token against the caller\u0027s own tenant and\nclocks in/out the caller themselves \u2014 never a caller-supplied id. See this section\u0027s\nheader comment for the full fix.",
+        "summary": "Processes a kiosk QR scan (technician scanned the device QR).\nValidates the HMAC token and clock-in / clock-out the user.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13102,6 +13593,22 @@
               "type": "string",
               "format": "date"
             }
+          },
+          {
+            "name": "squadraId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "ticketId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -13238,6 +13745,21 @@
             ],
             "description": "The cantiere or ticket, so a client can link to it. Null for attendance.",
             "format": "uuid"
+          },
+          "userId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Who this tracker belongs to. Null from Task\u0026lt;IReadOnlyList\u0026lt;ActiveTracker\u0026gt;\u0026gt; IActiveTrackerQuery.GetForUserAsync(Guid tenantId, Guid userId, CancellationToken ct = default(CancellationToken)) \u2014 the\ncaller already knows it\u0027s their own \u2014 and populated only by\nTask\u0026lt;IReadOnlyList\u0026lt;ActiveTracker\u0026gt;\u0026gt; IActiveTrackerQuery.GetForTenantAsync(Guid tenantId, CancellationToken ct = default(CancellationToken)), the office roster view.",
+            "format": "uuid"
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Display name to go with UserId. Same null-unless-tenant-scoped rule."
           }
         },
         "description": "One running tracker."
@@ -13265,6 +13787,24 @@
             ]
           },
           "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AddMatricolaRequest": {
+        "required": [
+          "numero",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "numero": {
+            "type": "string"
+          },
+          "note": {
             "type": [
               "null",
               "string"
@@ -13509,6 +14049,18 @@
             "type": "string"
           }
         }
+      },
+      "BrandingOptionsDto": {
+        "required": [
+          "logoPosition"
+        ],
+        "type": "object",
+        "properties": {
+          "logoPosition": {
+            "type": "string"
+          }
+        },
+        "description": "Per-template branding overrides, as exposed over the wire."
       },
       "Cantiere": {
         "type": "object",
@@ -13932,6 +14484,37 @@
           }
         }
       },
+      "ClassicReportConfigDto": {
+        "required": [
+          "branding",
+          "sections",
+          "materiali",
+          "signatures",
+          "footerText"
+        ],
+        "type": "object",
+        "properties": {
+          "branding": {
+            "$ref": "#/components/schemas/BrandingOptionsDto"
+          },
+          "sections": {
+            "$ref": "#/components/schemas/SectionOptionsDto"
+          },
+          "materiali": {
+            "$ref": "#/components/schemas/TableOptionsDto"
+          },
+          "signatures": {
+            "$ref": "#/components/schemas/SignatureOptionsDto"
+          },
+          "footerText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The Classic template\u0027s config, as exposed over the wire (GET response / PUT body)."
+      },
       "ClienteOverviewDto": {
         "required": [
           "id",
@@ -14121,6 +14704,39 @@
           },
           "isActive": {
             "type": "boolean"
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free-text lifecycle status (e.g. \u0022aperta\u0022, \u0022in corso\u0022, \u0022chiusa\u0022). No enum \u2014\n            matches the free-text convention already used for Materiale.Category/Tipo elsewhere."
+          },
+          "dataApertura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date the commessa was opened.",
+            "format": "date-time"
+          },
+          "dataChiusura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date the commessa was closed. Null while open.",
+            "format": "date-time"
+          },
+          "importo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Contract value in EUR.",
+            "format": "double"
           },
           "tenantId": {
             "type": "string",
@@ -14502,6 +15118,13 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "commessaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -14511,7 +15134,11 @@
           "descrizione",
           "externalId",
           "customerId",
-          "note"
+          "note",
+          "stato",
+          "dataApertura",
+          "dataChiusura",
+          "importo"
         ],
         "type": "object",
         "properties": {
@@ -14542,6 +15169,35 @@
               "null",
               "string"
             ]
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dataApertura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "dataChiusura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "importo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -15196,6 +15852,42 @@
               "string"
             ],
             "description": "Legacy gestionale id (W6b Task 8). Default camelCase (\u0022externalId\u0022) \u2014 no override needed."
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "um": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prezzoAcquisto": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "prezzoVendita": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -15426,6 +16118,17 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "CreateServicePrincipalRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -16701,6 +17404,7 @@
       "KioskScanRequest": {
         "required": [
           "token",
+          "userId",
           "locationId",
           "customerId"
         ],
@@ -16708,6 +17412,10 @@
         "properties": {
           "token": {
             "type": "string"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
           },
           "locationId": {
             "type": "string",
@@ -16717,8 +17425,7 @@
             "type": "string",
             "format": "uuid"
           }
-        },
-        "description": "UserId was removed (security fix, see the \u0022Kiosk QR\u0022 section above) \u2014 the caller who\n    is being clocked in/out is always the authenticated technician making this request, never a\n    value the request body could claim to be."
+        }
       },
       "KpiDto": {
         "required": [
@@ -17396,6 +18103,51 @@
           }
         }
       },
+      "Matricola": {
+        "type": "object",
+        "properties": {
+          "prodottoAssistenzaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "numero": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "One serial number belonging to a ProdottoAssistenza. Replaces the old\nscalar \u0060ProdottoAssistenza.SerialNumber\u0060 field with a real 1:N \u2014 an asset can carry\nmore than one serial (e.g. a compressor unit \u002B its control board), which the scalar\nfield could not represent. ClickUp: Matricole 1:N sub-resource."
+      },
       "MatrixEntry": {
         "required": [
           "role",
@@ -17543,13 +18295,6 @@
             },
             "description": "The tenant\u0027s active materials catalog, scoped to the authenticated technician\u0027s tenant.\nUsed by the mobile rapportino material picker for offline-first operation.\nDelta filter (\u0060UpdatedAt \u0026gt; since\u0060) is applied when DateTime? MobileUserSyncResult.Since is set."
           },
-          "materialiBarcodes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SyncMaterialeBarcodeDto"
-            },
-            "description": "Barcodes/QR codes for the same catalog entries as IReadOnlyList\u0026lt;Materiale\u0026gt; MobileUserSyncResult.Materiali, so a scan can\nresolve to a material offline. Delta filter matches IReadOnlyList\u0026lt;Materiale\u0026gt; MobileUserSyncResult.Materiali\u0027s own \u2014 a\nbarcode added or reassigned since DateTime? MobileUserSyncResult.Since is included even when the parent\nMateriale row itself did not change."
-          },
           "cantieri": {
             "type": "array",
             "items": {
@@ -17579,7 +18324,7 @@
             "description": "The tenant\u0027s ticket type lookup list (TipologiaIntervento).\nReturned in full on every sync (no UpdatedAt column \u2014 no delta filter).\nUsed by the mobile app to map a ticket\u0027s \u0060TypeId\u0060 int to a human name."
           }
         },
-        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
+        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
       "MonthlyGridCell": {
         "required": [
@@ -18881,6 +19626,47 @@
             ],
             "description": "Legacy gestionale id (legacy \u0060idGestionale\u0060), for cross-referencing assets imported\nfrom the legacy ERP. Nullable and deliberately NOT unique \u2014 the legacy system used\n\u00600\u0060 as a \u0022no link\u0022 sentinel, so many assets legitimately carry no external id.\nFollows string? Commessa.ExternalId exactly. Any import boundary must map a legacy\n\u00600\u0060/\u0060\u00220\u0022\u0060/\u0060\u0022\u0022\u0060 to \u0060null\u0060 via\nLegacyExternalIdMapper before assigning this\nproperty."
           },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Internal code / SKU for this asset. Wire name \u0022codice\u0022. Not unique \u2014 unlike\n            Materiale\u0027s Code, an asset code is informational, not a catalog key."
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Logical grouping / equipment family (free text). Wire name \u0022categoria\u0022."
+          },
+          "um": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Unit of measure (e.g. pz, kg, mt). Wire name \u0022um\u0022."
+          },
+          "prezzoAcquisto": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Purchase/cost price in EUR. Wire name \u0022prezzoAcquisto\u0022.",
+            "format": "double"
+          },
+          "prezzoVendita": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Customer-facing sale price in EUR. Wire name \u0022prezzoVendita\u0022.",
+            "format": "double"
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -19049,7 +19835,8 @@
           "allegati",
           "auditTrail",
           "materialiNonRichiesti",
-          "testoAccettazioneCliente"
+          "testoAccettazioneCliente",
+          "isAiAssisted"
         ],
         "type": "object",
         "properties": {
@@ -19194,6 +19981,10 @@
               "string"
             ],
             "description": "Customer acceptance text captured at signing time. See bool RapportinoDettaglioDto.MaterialiNonRichiesti\u0027s remarks."
+          },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Feature-parity audit item #1: \u0060Report.IsAiAssisted\u0060 is written on mobile submit and\nreturned once in the one-shot submit response, but no read endpoint returned it afterward \u2014\na re-fetch (this web review screen) could not tell whether a rapportino was AI-assisted."
           }
         },
         "description": "Ready-to-render payload for the Rapportino detail/review screen\n(\u0060GET /api/app/rapportini/{id}\u0060). Application-tier contract\n(\u0060docs/patterns/application-api.md\u0060): Italian property names, no \u0060[JsonPropertyName]\u0060,\nowned by the web app, no external compatibility promise. Replaces the previous mocked detail\nwith a composed read: report header \u002B staff \u002B materiali \u002B control values \u002B signature state.\nWrites stay on canonical \u0060/api/reports/*\u0060 \u2014 the app tier is read-only."
@@ -19506,6 +20297,10 @@
               "string"
             ],
             "description": "Structured cause/diagnosis of the intervention, alongside the existing free-text\nstring? Report.Details/string? Report.TechnicianNotes. Plain nullable string per the\nW6b plan (\u00A70) \u2014 a lookup table was considered and explicitly deferred."
+          },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Whether a model drafted any of the text the technician then adopted.\n\nInternal provenance, not a disclosure. The model suggests; the technician reviews, edits\nand signs; the rapportino is their statement and the PDF is a template render of it. So\nthis does not travel to the customer and the printed document carries no marker \u2014 there is\nno synthetic content being handed to a recipient, and labelling a signed human statement\nas machine-written would be the inaccurate claim.\n\nWhat it is for is answering, later and internally, how much of the field\u0027s written record\nstarted from a suggestion: whether the drafts are worth what they cost, whether reports\nthat began as drafts read differently under review, and which ones to sample. The AI call\nlog cannot answer that \u2014 it records calls, not which suggestions survived.\n\nSet when the technician keeps text that came from a draft. Generating a draft and\ndiscarding it is not AI assistance; only what reaches the record counts."
           },
           "soluzione": {
             "type": [
@@ -20155,6 +20950,21 @@
       "SeatTypeEnum": {
         "type": "integer"
       },
+      "SectionOptionsDto": {
+        "required": [
+          "order"
+        ],
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Which sections print, and in what order, as exposed over the wire."
+      },
       "SelfRegistrationRequest": {
         "required": [
           "email",
@@ -20258,6 +21068,20 @@
         },
         "description": "Request model for sending report email."
       },
+      "SetGrantsRequest": {
+        "required": [
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "SetMatrixRequest": {
         "required": [
           "entries"
@@ -20288,6 +21112,22 @@
             "format": "double"
           }
         }
+      },
+      "SignatureOptionsDto": {
+        "required": [
+          "showCustomerSignature",
+          "showTechnicianSignature"
+        ],
+        "type": "object",
+        "properties": {
+          "showCustomerSignature": {
+            "type": "boolean"
+          },
+          "showTechnicianSignature": {
+            "type": "boolean"
+          }
+        },
+        "description": "Whether each signature block prints, as exposed over the wire."
       },
       "Squadra": {
         "type": "object",
@@ -20788,6 +21628,10 @@
             ],
             "description": "Structured cause/diagnosis, alongside the free-text string? SubmitReportRequest.Details. Carried on\nthe mobile submit path (W6b Task 5) \u2014 a technician filling in the diagnosis while\nstill on-site is the obvious use case."
           },
+          "aiAssisted": {
+            "type": "boolean",
+            "description": "Whether text from an AI draft survived into this rapportino.\n\nSelf-reported by the device, and unverifiable server-side: AI calls are published to the\noutbox rather than stored, so there is no table to check the claim against \u2014 which is also\nwhy \u0060AiCallAuditEvent.Accepted\u0060 exists and is never written. The client is the only\ncomponent that knows whether a suggestion was kept or discarded, so it is the right source.\n\nGood enough for what this field is: internal provenance for judging the drafts, not a\ndisclosure anyone relies on. A modified client could misreport it and nothing downstream\nwould be misled about who authored the rapportino \u2014 the signature answers that."
+          },
           "soluzione": {
             "type": [
               "null",
@@ -20973,6 +21817,10 @@
               "string"
             ],
             "description": "Structured cause/diagnosis (W6b Task 5)."
+          },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Whether a model produced any of this rapportino\u0027s text."
           },
           "soluzione": {
             "type": [
@@ -21240,65 +22088,6 @@
         },
         "description": "A colleague the technician can name on a rapportino \u2014 just enough to pick them from a list\nand send back the right id."
       },
-      "SyncMaterialeBarcodeDto": {
-        "required": [
-          "id",
-          "tenantId",
-          "createdAt",
-          "updatedAt",
-          "materialeId",
-          "barcode",
-          "barcodeType",
-          "isPrimary"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "The barcode row\u0027s own id.",
-            "format": "uuid"
-          },
-          "tenantId": {
-            "type": "string",
-            "description": "Carried the same way Materiale\u0027s own sync DTO carries it \u2014\n            the local Drift mirror stores it on every row, not just the ones nested under a tenant-scoped\n            parent object.",
-            "format": "uuid"
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "Matches the local table\u0027s own non-nullable column.",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Null until first edited, same as every other synced entity here.",
-            "format": "date-time"
-          },
-          "materialeId": {
-            "type": "string",
-            "description": "The catalog entry this barcode resolves to.",
-            "format": "uuid"
-          },
-          "barcode": {
-            "type": "string",
-            "description": "Raw scanned value (EAN-13, QR payload, Code128, etc.)."
-          },
-          "barcodeType": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Symbology, informational only \u2014 not used for matching."
-          },
-          "isPrimary": {
-            "type": "boolean",
-            "description": "Whether this is the canonical barcode for the material."
-          }
-        },
-        "description": "One barcode/QR code tied to a catalog Materiale, for offline-first scan-to-lookup\non the device."
-      },
       "SyncScheduleAssigneeDto": {
         "required": [
           "userId",
@@ -21443,6 +22232,21 @@
           }
         },
         "description": "A schedule as the device sees it.\n\nThe sync payload used to serialise Schedule entities directly, which is how an\ninternal schema change was able to break a client: dropping the assignment columns (ADR-0009)\nremoved \u0060userId\u0060 from the wire, and the Flutter client casts it non-nullably. An entity is\na storage shape and will keep changing; this DTO is the contract, and it changes only when the\ncontract is meant to.\n\nGuid SyncScheduleDto.UserId is preserved as the directly assigned technician \u2014 the same value the\ndropped column held \u2014 so the existing client keeps working unchanged.\nIReadOnlyList\u0026lt;SyncScheduleAssigneeDto\u0026gt; SyncScheduleDto.Assignees is what it should move to: it carries everyone on the schedule,\nincluding squadra-mediated members the old column could never express."
+      },
+      "TableOptionsDto": {
+        "required": [
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Which materiali columns print, and in what order, as exposed over the wire."
       },
       "TenantProvisionPayload": {
         "required": [
@@ -22096,6 +22900,13 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "commessaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -22106,7 +22917,11 @@
           "externalId",
           "customerId",
           "note",
-          "isActive"
+          "isActive",
+          "stato",
+          "dataApertura",
+          "dataChiusura",
+          "importo"
         ],
         "type": "object",
         "properties": {
@@ -22146,6 +22961,35 @@
               "null",
               "boolean"
             ]
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dataApertura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "dataChiusura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "importo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -22841,6 +23685,42 @@
               "string"
             ],
             "description": "Legacy gestionale id (W6b Task 8). Null = not provided, leaves the existing value untouched."
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "um": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prezzoAcquisto": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "prezzoVendita": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         }
       },
@@ -23964,6 +24844,29 @@
             "type": "boolean",
             "description": "Indicates whether the user is active."
           },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "            Squadra (team) id this user currently belongs to \u2014 W7 gap closure, same treatment as\n            Guid? Squadra.CapSquadraId: NOT a persisted column (EF-\u0060Ignore()\u0060d in\n            \u0060ApplicationDbContext\u0060). The data lives on SquadraMembro;\n            \u0060UsersController\u0060 populates this from a single batched query over\n            \u0060SquadraMembers\u0060 when listing/reading users, avoiding N\u002B1. A user with no active\n            squadra membership, or belonging to more than one, is left null here \u2014 team assignment\n            in this codebase is modelled as at-most-one-active-membership by convention, but\n            SquadraMembro itself does not enforce that, so ambiguous cases surface as\n            \u0022no team shown\u0022 rather than guessing.\n            \u26A0 Being EF-Ignore()d, this is not queryable \u2014 it cannot appear in a\nWHERE or ORDER BY. Same limitation as Guid? Squadra.CapSquadraId.",
+            "format": "uuid"
+          },
+          "squadraNome": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Squadra display name, populated alongside Guid? User.SquadraId."
+          },
+          "lastAccessAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "UTC timestamp of this user\u0027s most recent authenticated request \u2014 a persisted column,\nunlike Guid? User.SquadraId. Written best-effort (fire-and-forget, logged not thrown)\nby \u0060DatabaseClaimsTransformation.LoadAsync\u0060 on identity-cache miss, i.e. at most once\nper \u003Csee cref=\u0022!:TaskTapAPI.Api.Authorization.DatabaseClaimsTransformation.CacheTtl\u0022 /\u003E\n(60s) per user \u2014 same best-effort-update pattern as\nDateTime? CustomerPortalUser.LastLoginAt in \u0060CustomerPortalController\u0060. Null\nmeans the user has never made an authenticated request since this column was added.",
+            "format": "date-time"
+          },
           "roles": {
             "type": "array",
             "items": {
@@ -24446,6 +25349,9 @@
     },
     {
       "name": "Schedules"
+    },
+    {
+      "name": "ServicePrincipals"
     },
     {
       "name": "Signup"

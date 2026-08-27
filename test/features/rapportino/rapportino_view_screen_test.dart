@@ -187,7 +187,7 @@ void main() {
     });
   });
 
-  group('RapportinoViewScreen — download stub', () {
+  group('RapportinoViewScreen — download', () {
     testWidgets('Scarica PDF button is present', (tester) async {
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
@@ -195,6 +195,73 @@ void main() {
 
       final pdfBtn = find.text('Scarica PDF');
       expect(pdfBtn, findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — customer/location names, not raw ids (regression)', () {
+    testWidgets('Sede and Cliente resolve to names when the ids are in the local mirror', (
+      tester,
+    ) async {
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'customer-real-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              companyName: 'Rossi Impianti Srl',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'location-real-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              customerId: 'customer-real-1',
+              name: 'Sede Via Roma 12',
+            ),
+          );
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'report-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Manutenzione con id reali',
+              insertedUserId: 'tecnico-1',
+              locationId: 'location-real-1',
+              customerId: const Value('customer-real-1'),
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+              submissionState: const Value('submitted'),
+            ),
+          );
+
+      await tester.pumpWidget(_buildView(db: db, reportId: 'report-2'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rossi Impianti Srl'), findsOneWidget);
+      expect(find.text('Sede Via Roma 12'), findsOneWidget);
+      expect(find.text('customer-real-1'), findsNothing);
+      expect(find.text('location-real-1'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('falls back to the raw id when the mirror does not know it', (tester) async {
+      await _seedSubmittedDraft(db); // customerId 'Cliente Srl', locationId 'sede-abc' — no rows
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cliente Srl'), findsOneWidget);
+      expect(find.text('sede-abc'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

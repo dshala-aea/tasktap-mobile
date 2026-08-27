@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +12,9 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
+import '../../presentation/providers/report_editor_providers.dart';
 import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -269,7 +273,7 @@ class _RapportinoRow extends ConsumerWidget {
     ];
     final subtitle = subParts.join(' · ');
 
-    return InkWell(
+    final row = InkWell(
       onTap: () {
         if (isSubmitted) {
           context.push(AppRoutes.rapportiniView(draft.id));
@@ -363,5 +367,58 @@ class _RapportinoRow extends ConsumerWidget {
         ),
       ),
     );
+
+    // Only a still-editable draft can be deleted — a submitted report goes through the office
+    // Annulla workflow instead (ReportsController.Delete rejects anything past Bozza too).
+    if (statusLabel != 'Bozza') return row;
+
+    return Dismissible(
+      key: ValueKey('rapportino-${draft.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: Icon(LucideIcons.trash2, color: context.colors.red),
+      ),
+      confirmDismiss: (_) => _confirmDeleteDraft(context, ref, draft),
+      child: row,
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Delete (Bozza only)
+// ══════════════════════════════════════════════════════════════════════════════
+
+Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftReport draft) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Eliminare il rapportino?'),
+      content: Text('"${draft.title}" verrà eliminato definitivamente.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
+      ],
+    ),
+  );
+  if (confirmed != true) return false;
+
+  await ref.read(draftReportRepositoryProvider).deleteDraft(draft.id);
+
+  // Best-effort, not awaited by the dismiss animation: the draft may or may not exist
+  // server-side yet (an attachment upload can create the row before Invia does) — either way
+  // local state is authoritative for a Bozza the technician is still working on, so a failure
+  // here (offline, already gone, 404) is not worth surfacing.
+  unawaited(_bestEffortServerDelete(ref, draft.id));
+
+  return true;
+}
+
+Future<void> _bestEffortServerDelete(WidgetRef ref, String reportId) async {
+  try {
+    await ref.read(dioProvider).delete<void>('/api/reports/$reportId');
+  } catch (_) {
+    // See _confirmDeleteDraft's doc comment.
   }
 }

@@ -1,15 +1,24 @@
 // dart format width=100
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/vetro_button.dart';
 import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
 import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
@@ -146,12 +155,9 @@ class _RapportinoViewBody extends ConsumerWidget {
                             ),
                           ),
                           Divider(height: 1, thickness: 1, color: context.colors.borderLight),
-                          KeyVal(
-                            label: 'Sede',
-                            value: draft.locationId.isEmpty ? '—' : draft.locationId,
-                          ),
+                          KeyVal(label: 'Sede', value: _locationLabel(context, ref, draft)),
                           KeyVal(label: 'Tecnico', value: tecnicoLabel),
-                          KeyVal(label: 'Cliente', value: draft.customerId ?? '—'),
+                          KeyVal(label: 'Cliente', value: _customerLabel(context, ref, draft)),
                           KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
                         ],
                       ),
@@ -235,7 +241,12 @@ class _RapportinoViewBody extends ConsumerWidget {
                               child: SectionTitle(title: 'Materiali'),
                             ),
                             ...materiali.map((m) {
-                              final name = m.freeTextName ?? m.materialeId ?? '—';
+                              final name =
+                                  m.freeTextName ??
+                                  (m.materialeId != null
+                                      ? (ref.watch(materialeNameProvider(m.materialeId!)).valueOrNull ??
+                                            m.materialeId!)
+                                      : '—');
                               final qty = m.quantity.toStringAsFixed(
                                 m.quantity.truncateToDouble() == m.quantity ? 0 : 2,
                               );
@@ -295,11 +306,6 @@ class _RapportinoViewBody extends ConsumerWidget {
                   ),
 
                 // ── Download PDF ──────────────────────────────────────────────
-                // GET /api/Reports/{id}/pdf exists and generates the PDF
-                // server-side, but no client code path in lib/ calls it yet
-                // (verified by grep — no Dio request to any /pdf route).
-                // This button names that gap instead of promising a date
-                // nobody has set.
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(
@@ -308,20 +314,18 @@ class _RapportinoViewBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.xl,
                     ),
-                    child: VetroButton(
-                      label: 'Scarica PDF',
-                      icon: const Icon(LucideIcons.download, size: 16),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Il PDF viene generato dal server ma il '
-                              "download non è ancora collegato nell'app.",
-                            ),
-                            duration: Duration(seconds: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: VetroButton(
+                            label: 'Scarica PDF',
+                            icon: const Icon(LucideIcons.download, size: 16),
+                            onPressed: () => _openReportPdf(context, ref, draft.id),
                           ),
-                        );
-                      },
+                        ),
+                        const SizedBox(width: 8),
+                        _SharePdfButton(reportId: draft.id),
+                      ],
                     ),
                   ),
                 ),
@@ -333,6 +337,151 @@ class _RapportinoViewBody extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Downloads the report's PDF (`GET /api/Reports/{id}/pdf`, already generated server-side —
+/// this was the missing half, no client code path called it) to a temp file and opens it in
+/// the device's default PDF viewer. Temp, not the app-documents directory `step_riepilogo.dart`
+/// uses for a signature: a downloaded PDF is disposable cache content the OS can reclaim, not
+/// something this app owns going forward.
+Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final file = await _fetchPdfToTempFile(ref, reportId, messenger);
+  if (file == null) return;
+
+  final result = await OpenFilex.open(file.path);
+  if (result.type != ResultType.done) {
+    messenger.showSnackBar(SnackBar(content: Text('Impossibile aprire il PDF: ${result.message}')));
+  }
+}
+
+/// Shared fetch-and-save step behind [_openReportPdf] and [_SharePdfButton] — downloads once,
+/// each caller decides what to do with the file. Returns null (and has already shown the
+/// error) on failure, so callers can just check for null rather than duplicating error UI.
+Future<File?> _fetchPdfToTempFile(
+  WidgetRef ref,
+  String reportId,
+  ScaffoldMessengerState messenger,
+) async {
+  try {
+    final dio = ref.read(dioProvider);
+    final response = await dio.get<List<int>>(
+      '/api/Reports/$reportId/pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = response.data;
+    if (bytes == null) throw StateError('empty PDF response');
+
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/report-$reportId.pdf');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  } on DioException catch (e) {
+    final offline =
+        e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          offline
+              ? 'Nessuna connessione — riprova quando sei online.'
+              : 'Impossibile scaricare il PDF. Riprova più tardi.',
+        ),
+      ),
+    );
+    return null;
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('Impossibile scaricare il PDF.')));
+    return null;
+  }
+}
+
+/// Square icon-only twin to the "Scarica PDF" [VetroButton] — sends the same downloaded file
+/// through the OS share sheet instead of opening it, so a technician can hand the report to the
+/// office/customer over email/WhatsApp without leaving the app. Not [VetroButton] itself: that
+/// widget always pairs an icon with a label, and a share affordance next to a full-width primary
+/// button reads better as an icon-only square than a second full-width row.
+class _SharePdfButton extends ConsumerStatefulWidget {
+  const _SharePdfButton({required this.reportId});
+
+  final String reportId;
+
+  @override
+  ConsumerState<_SharePdfButton> createState() => _SharePdfButtonState();
+}
+
+class _SharePdfButtonState extends ConsumerState<_SharePdfButton> {
+  bool _busy = false;
+
+  Future<void> _share() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    final file = await _fetchPdfToTempFile(ref, widget.reportId, messenger);
+    if (mounted) setState(() => _busy = false);
+    if (file == null) return;
+
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+      child: AppTappable(
+        onTap: _busy ? null : _share,
+        color: v.tint.withAlpha(31),
+        borderRadius: BorderRadius.circular(16),
+        semanticLabel: 'Condividi PDF',
+        child: Center(
+          child: _busy
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
+                )
+              : Icon(LucideIcons.share2, size: 18, color: v.tint),
+        ),
+      ),
+    );
+  }
+}
+
+/// Resolves [draft]'s location for display: the local mirror's name, falling back to the
+/// free-text the operator typed when the site wasn't in the catalog (packed into
+/// `metadataJson` — see `report_editor_providers.dart`'s `_buildMetadataJson`), falling back
+/// to the raw id rather than showing nothing.
+String _locationLabel(BuildContext context, WidgetRef ref, DraftReport draft) {
+  if (draft.locationId.isEmpty) {
+    return _metadataField(draft.metadataJson, 'locationFreeText') ?? '—';
+  }
+  return ref.watch(locationNameProvider(draft.locationId)).valueOrNull ??
+      _metadataField(draft.metadataJson, 'locationFreeText') ??
+      draft.locationId;
+}
+
+/// Resolves [draft]'s customer for display — same fallback chain as [_locationLabel].
+String _customerLabel(BuildContext context, WidgetRef ref, DraftReport draft) {
+  final customerId = draft.customerId;
+  if (customerId == null || customerId.isEmpty) {
+    return _metadataField(draft.metadataJson, 'customerFreeText') ?? '—';
+  }
+  return ref.watch(customerNameProvider(customerId)).valueOrNull ??
+      _metadataField(draft.metadataJson, 'customerFreeText') ??
+      customerId;
+}
+
+/// Reads one string field out of the draft's packed `metadataJson` blob. Malformed/absent
+/// metadata is not worth losing the rest of the display over — returns null rather than
+/// throwing, same tolerance `report_editor_providers.dart`'s own parser applies.
+String? _metadataField(String? json, String key) {
+  if (json == null || json.isEmpty) return null;
+  try {
+    final decoded = jsonDecode(json) as Map<String, dynamic>;
+    final value = decoded[key];
+    return value is String && value.isNotEmpty ? value : null;
+  } catch (_) {
+    return null;
   }
 }
 

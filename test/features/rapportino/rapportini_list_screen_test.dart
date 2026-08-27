@@ -10,17 +10,22 @@
 //   4. AppFab is present.
 //   5. Submitted draft tap navigates to view route (not editor).
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
+
+class MockDio extends Mock implements Dio {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -199,6 +204,75 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AppFab), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportiniListScreen — delete a draft (swipe, Bozza only)', () {
+    late MockDio mockDio;
+
+    setUp(() {
+      mockDio = MockDio();
+      when(() => mockDio.delete<void>(any())).thenAnswer(
+        (_) async => Response<void>(requestOptions: RequestOptions(path: ''), statusCode: 204),
+      );
+    });
+
+    Widget buildWithDio({required AppDatabase db}) => ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        dioProvider.overrideWithValue(mockDio),
+      ],
+      child: const MaterialApp(home: RapportiniListScreen()),
+    );
+
+    testWidgets('swiping a Bozza row and confirming removes it locally', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Da eliminare', submissionState: 'draft');
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da eliminare'), findsOneWidget);
+
+      await tester.drag(find.text('Da eliminare'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Eliminare il rapportino?'), findsOneWidget);
+      await tester.tap(find.text('Elimina'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da eliminare'), findsNothing);
+      expect(await db.select(db.draftReports).get(), isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('cancelling the confirmation keeps the row', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Non eliminare', submissionState: 'draft');
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.text('Non eliminare'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Annulla'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Non eliminare'), findsOneWidget);
+      expect(await db.select(db.draftReports).get(), hasLength(1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a submitted report has no swipe-to-delete affordance', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Già inviato', submissionState: 'submitted');
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dismissible), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

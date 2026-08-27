@@ -302,6 +302,14 @@ class LucideIcons {
     fontPackage: 'lucide_icons',
   );
 
+  /// Send a downloaded file through the OS share sheet — the two-arrow variant (share2), not the
+  /// three-dot android glyph (share).
+  static const IconData share2 = IconData(
+    0xf4bd,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
   /// Stock in: a carico movement.
   static const IconData arrowDownToLine = IconData(
     0xf14b,

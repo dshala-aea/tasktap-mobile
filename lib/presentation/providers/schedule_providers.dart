@@ -133,6 +133,34 @@ final colleagueNameProvider = StreamProvider.autoDispose.family<String?, String>
   )..where((c) => c.id.equals(userId))).watchSingleOrNull().map((c) => c?.displayName);
 });
 
+/// Resolves a location id to its name from the local mirror — same fallback contract as
+/// [colleagueNameProvider]: null when the mirror doesn't (yet) know the id, so a caller can fall
+/// back to the raw id rather than show nothing.
+final locationNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, locationId) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(
+    db.locations,
+  )..where((l) => l.id.equals(locationId))).watchSingleOrNull().map((l) => l?.name);
+});
+
+/// Resolves a customer id to its company name from the local mirror. Same fallback contract as
+/// [colleagueNameProvider].
+final customerNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, customerId) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(
+    db.customers,
+  )..where((c) => c.id.equals(customerId))).watchSingleOrNull().map((c) => c?.companyName);
+});
+
+/// Resolves a materiale id (a catalog pick, not a free-text line) to its name from the local
+/// mirror. Same fallback contract as [colleagueNameProvider].
+final materialeNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, materialeId) {
+  final db = ref.watch(appDatabaseProvider);
+  return (db.select(
+    db.materiali,
+  )..where((m) => m.id.equals(materialeId))).watchSingleOrNull().map((m) => m?.name);
+});
+
 final allLocationsProvider = StreamProvider.autoDispose<List<Location>>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.locations)
