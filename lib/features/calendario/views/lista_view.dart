@@ -80,7 +80,7 @@ class _DateHeader extends StatelessWidget {
       child: Text(
         _capitalize(label),
         style: TextStyle(
-          fontFamily: 'Sora',
+          fontFamily: 'Inter',
           fontSize: 13,
           fontWeight: FontWeight.w700,
           color: context.colors.ink,

@@ -72,7 +72,7 @@ class GiornoView extends ConsumerWidget {
                           child: Text(
                             '${h.toString().padLeft(2, '0')}:00',
                             style: TextStyle(
-                              fontFamily: 'Manrope',
+                              fontFamily: 'Inter',
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
                               color: context.colors.inkMuted,
@@ -210,7 +210,7 @@ class _EventBlock extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: pair.foreground,
@@ -228,7 +228,7 @@ class _EventBlock extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
                 color: pair.foreground.withAlpha(179),

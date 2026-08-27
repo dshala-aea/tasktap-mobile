@@ -85,7 +85,7 @@ class MeseView extends ConsumerWidget {
                       child: Text(
                         dayNameFmt.format(d).toUpperCase(),
                         style: TextStyle(
-                          fontFamily: 'Manrope',
+                          fontFamily: 'Inter',
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: context.colors.inkMuted,
@@ -126,8 +126,15 @@ class MeseView extends ConsumerWidget {
                           padding: const EdgeInsets.all(2),
                           child: AppTappable(
                             onTap: () => onDayTap?.call(day),
+                            gradient: isSelected
+                                ? LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [context.vetro.tint, context.vetro.tintStrong],
+                                  )
+                                : null,
                             color: isSelected
-                                ? context.colors.surfaceInverse
+                                ? null
                                 : isToday
                                 ? context.vetro.tint.withAlpha(31)
                                 : Colors.transparent,
@@ -141,11 +148,11 @@ class MeseView extends ConsumerWidget {
                                 Text(
                                   '${day.day}',
                                   style: TextStyle(
-                                    fontFamily: 'Manrope',
+                                    fontFamily: 'Inter',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: isSelected
-                                        ? context.colors.inkInverse
+                                        ? Colors.white
                                         : inMonth
                                         ? context.colors.ink
                                         : context.colors.inkDisabled,

@@ -74,9 +74,14 @@ class SettimanaView extends ConsumerWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
-                    color: isToday
-                        ? context.colors.surfaceInverse
-                        : Colors.transparent,
+                    gradient: isToday
+                        ? LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [context.vetro.tint, context.vetro.tintStrong],
+                          )
+                        : null,
+                    color: Colors.transparent,
                     borderRadius: AppRack.insetShape,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -84,12 +89,10 @@ class SettimanaView extends ConsumerWidget {
                         Text(
                           dayAbbr.format(day).toUpperCase(),
                           style: TextStyle(
-                            fontFamily: 'Manrope',
+                            fontFamily: 'Inter',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isToday
-                                ? context.vetro.tint
-                                : context.colors.inkMuted,
+                            color: isToday ? Colors.white : context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -97,12 +100,10 @@ class SettimanaView extends ConsumerWidget {
                         Text(
                           '${day.day}',
                           style: TextStyle(
-                            fontFamily: 'Sora',
+                            fontFamily: 'Inter',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: isToday
-                                ? context.colors.inkInverse
-                                : context.colors.ink,
+                            color: isToday ? Colors.white : context.colors.ink,
                           ),
                         ),
                       ],
@@ -184,7 +185,7 @@ class _WeekEventChip extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   color: pair.foreground,

@@ -195,7 +195,10 @@ class _PeriodBar extends StatelessWidget {
     final navigable = view.isNavigable;
 
     return Container(
-      color: context.colors.surface,
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(bottom: BorderSide(color: context.vetro.hairline)),
+      ),
       padding: const EdgeInsets.fromLTRB(AppSpacing.xs, 6, AppSpacing.sm, 6),
       child: Row(
         children: [
@@ -214,7 +217,7 @@ class _PeriodBar extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontFamily: 'Sora',
+                fontFamily: 'Inter',
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: context.colors.ink,
@@ -307,7 +310,10 @@ class _WeekDayScroller extends ConsumerWidget {
 
     return Container(
       height: 74,
-      color: context.colors.surface,
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(bottom: BorderSide(color: context.vetro.hairline)),
+      ),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
         vertical: AppSpacing.sm,
@@ -333,7 +339,7 @@ class _WeekDayScroller extends ConsumerWidget {
                   Text(
                     dayAbbr.format(day).toUpperCase(),
                     style: TextStyle(
-                      fontFamily: 'Manrope',
+                      fontFamily: 'Inter',
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
                       color: isSelected ? context.vetro.tint : context.colors.inkMuted,
@@ -346,8 +352,15 @@ class _WeekDayScroller extends ConsumerWidget {
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [context.vetro.tint, context.vetro.tintStrong],
+                            )
+                          : null,
                       color: isSelected
-                          ? context.colors.surfaceInverse
+                          ? null
                           : isToday
                           ? context.vetro.tint.withAlpha(31)
                           : Colors.transparent,
@@ -357,14 +370,10 @@ class _WeekDayScroller extends ConsumerWidget {
                       child: Text(
                         '${day.day}',
                         style: TextStyle(
-                          fontFamily: 'Sora',
+                          fontFamily: 'Inter',
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: isSelected
-                              ? context.colors.inkInverse
-                              : isToday
-                              ? context.colors.ink
-                              : context.colors.ink,
+                          color: isSelected ? Colors.white : context.colors.ink,
                         ),
                       ),
                     ),
@@ -623,7 +632,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
           Text(
             schedule.title,
             style: TextStyle(
-              fontFamily: 'Sora',
+              fontFamily: 'Inter',
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -639,7 +648,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
               Text(
                 timeRange,
                 style: TextStyle(
-                  fontFamily: 'Manrope',
+                  fontFamily: 'Inter',
                   fontSize: 13,
                   color: context.colors.inkMuted,
                 ),
@@ -651,7 +660,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
             Text(
               schedule.description,
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Inter',
                 fontSize: 13,
                 color: context.colors.inkFaint,
                 height: 1.5,

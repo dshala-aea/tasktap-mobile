@@ -23,6 +23,7 @@ class AppTappable extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.color,
+    this.gradient,
     this.borderRadius,
     this.border,
     this.padding,
@@ -35,6 +36,11 @@ class AppTappable extends StatelessWidget {
 
   /// The surface colour this used to paint through a `Container`'s decoration.
   final Color? color;
+
+  /// A gradient fill instead of a flat [color] — the Vetro tint→tintStrong "selected" state (see
+  /// `AppBottomNav`'s active tab, calendario's selected-day disc/cell). Takes precedence over
+  /// [color] when both are set, same as [BoxDecoration] itself.
+  final Gradient? gradient;
 
   final BorderRadius? borderRadius;
   final BoxBorder? border;
@@ -49,7 +55,8 @@ class AppTappable extends StatelessWidget {
 
     Widget surface = Ink(
       decoration: BoxDecoration(
-        color: color ?? Colors.transparent,
+        color: gradient == null ? (color ?? Colors.transparent) : null,
+        gradient: gradient,
         borderRadius: radius,
         border: border,
       ),
