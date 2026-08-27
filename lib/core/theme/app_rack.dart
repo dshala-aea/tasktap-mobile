@@ -1,20 +1,12 @@
 import 'package:flutter/widgets.dart';
 
-/// The rack: the geometry and motion of the van-racking world.
+/// Shape and motion tokens for [RackCell] — the one piece of the van-racking design language
+/// still in use, by `AppCard` and the pre-Vetro `CompartmentTile`. The rail, the cell-pitch
+/// spacing, and the shadow-board silhouette that used to live alongside these were retired with
+/// the rest of that metaphor (see `rack.dart`/`empty_state.dart`'s own doc comments); [ListRow],
+/// their highest-traffic consumer, no longer uses any of this file at all.
 ///
 /// [AppPalette] owns what things are *made of*; this owns what shape they are and how they move.
-/// The two are split because material flips with the theme and geometry never does — a drawer is
-/// the same drawer with the van doors shut.
-///
-/// ## The grammar, in three rules
-///
-/// 1. **Everything hangs off one rail.** A vertical alu extrusion runs down the leading edge of a
-///    scrollable surface. Cells attach to it; nothing floats free of it. The rail is what makes a
-///    list of six rows read as one rack rather than six cards.
-/// 2. **Cells sit on a constant pitch.** [cellGap] never varies inside one rack, whatever a cell
-///    contains. Density comes from what is *in* a cell, never from crowding the cells together.
-/// 3. **Absence is drawn.** An empty slot is a cut silhouette ([silhouetteDash]), not whitespace.
-///    A technician reading their own rack sees the missing tool; so does this app.
 ///
 /// ## Corner radius: settled at the validated number, not re-litigated per world
 ///
@@ -25,38 +17,7 @@ import 'package:flutter/widgets.dart';
 /// metaphor: it is not "the old Figma number" or "the Cassetta number," it is the number four
 /// separate references landed on for a card at this density. Stop moving it per redirection.
 abstract final class AppRack {
-  // ── The rail ──────────────────────────────────────────────────────────────
-
-  /// Width of the alu extrusion running down the leading edge.
-  ///
-  /// 4, not a hairline. At 1–2dp it reads as a stray divider in direct sun; at 4 it reads as
-  /// structure. It is the single most load-bearing mark in the world and the one a low-quality
-  /// screenshot loses first.
-  static const double railWidth = 4;
-
-  /// The machined highlight down the rail's outer edge. One device pixel at most densities.
-  static const double railHighlight = 1;
-
-  /// Gap from the screen's leading edge to the rail.
-  ///
-  /// Deliberately smaller than the page gutter: the rail is chrome bolted to the side of the load
-  /// bay, not content, so it sits outside the reading column.
-  static const double railInset = 8;
-
-  /// Gap from the rail to the leading edge of a cell.
-  static const double railToCell = 7;
-
-  /// Total leading offset a cell's content sits at: [railInset] + [railWidth] + [railToCell] = 19,
-  /// which lands exactly on `AppSpacing.pagePadding`.
-  ///
-  /// This is the reason the rail costs nothing: it is drawn inside the gutter ninety screens
-  /// already use, so adopting it moves no content sideways.
-  static const double railColumn = railInset + railWidth + railToCell;
-
   // ── Cells ─────────────────────────────────────────────────────────────────
-
-  /// Vertical gap between two cells on the rail. Never varies within one rack.
-  static const double cellGap = 8;
 
   /// Minimum height of a cell.
   ///
@@ -92,26 +53,8 @@ abstract final class AppRack {
   /// Shape for a compartment inside a cell.
   static const BorderRadius insetShape = BorderRadius.all(Radius.circular(insetRadius));
 
-  /// Height of the label strip at the top of a cell — the printed card in its window.
-  static const double labelStripHeight = 20;
-
   /// Inner padding of a cell.
   static const EdgeInsets cellPadding = EdgeInsets.fromLTRB(12, 10, 12, 10);
-
-  /// Inner padding of a cell that carries a label strip (the strip supplies its own top space).
-  static const EdgeInsets cellPaddingLabelled = EdgeInsets.fromLTRB(12, 6, 12, 10);
-
-  // ── Shadow board ──────────────────────────────────────────────────────────
-
-  /// Stroke weight of a cut silhouette.
-  static const double silhouetteStroke = 1.5;
-
-  /// Dash pattern of a cut silhouette: [dash, gap].
-  ///
-  /// A long dash and a short gap. A fine dotted line disappears at arm's length outdoors, which
-  /// would turn "the thing that belongs here is missing" into "nothing is here" — the one
-  /// distinction this app exists to preserve.
-  static const List<double> silhouetteDash = [6, 4];
 
   // ── The load strap: clearance for the floating nav ────────────────────────
 
@@ -132,25 +75,13 @@ abstract final class AppRack {
   static const double navGap = 12;
 
   // ── Motion ────────────────────────────────────────────────────────────────
-  //
-  // A drawer runs out on its slides and stops against a detent. It does not bounce, and it does
-  // not drift to a halt. Every transition in the app is that one movement at a different length.
 
-  /// A cell opening — expanding in place, a sheet rising, a step advancing.
+  /// `AppBottomNav`'s active-tab transition — the last consumer of this file's motion tokens.
+  /// `RackCell` itself never animates.
   static const Duration drawerOut = Duration(milliseconds: 180);
-
-  /// A cell closing. Shorter than opening: reversing a movement you initiated should not make you
-  /// wait for it.
-  static const Duration drawerIn = Duration(milliseconds: 140);
-
-  /// A state change inside a cell — the strap landing, a status flipping, a value updating.
-  static const Duration detent = Duration(milliseconds: 120);
 
   /// The curve for anything opening or arriving. Exponential ease-out, firm stop, no overshoot.
   static const Curve slideOut = Curves.easeOutCubic;
-
-  /// The curve for anything closing or leaving.
-  static const Curve slideIn = Curves.easeInCubic;
 }
 
 /// Room to leave at the bottom of a screen that sits under the floating nav.

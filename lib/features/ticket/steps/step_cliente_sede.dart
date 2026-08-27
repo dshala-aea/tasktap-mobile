@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/rack.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/vetro_card.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
@@ -79,13 +80,13 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         ),
 
         const SizedBox(height: 12),
-        // Rule 3 of the rack grammar: an empty slot is drawn, not left blank. Before a customer
-        // is picked this is what the step has to say — the field above is the only content, and
-        // the gap down to "Avanti" used to read as unfinished rather than "not filled in yet".
+        // An empty slot is drawn, not left blank. Before a customer is picked this is what the
+        // step has to say — the field above is the only content, and the gap down to "Avanti"
+        // used to read as unfinished rather than "not filled in yet".
         if (selectedCustomer != null)
           _CustomerSummary(customer: selectedCustomer)
         else
-          const ShadowBoard(
+          const CompactEmptyState(
             label: 'Cliente non ancora selezionato',
             icon: LucideIcons.briefcase,
             height: 72,
@@ -118,7 +119,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         if (selectedLocation != null)
           _LocationSummary(location: selectedLocation)
         else if (widget.state.customerId != null)
-          const ShadowBoard(
+          const CompactEmptyState(
             label: 'Sede non ancora selezionata',
             icon: LucideIcons.mapPin,
             height: 72,
@@ -138,9 +139,8 @@ class _CustomerSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return VetroCard(
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -167,9 +167,8 @@ class _LocationSummary extends StatelessWidget {
       if (location.city != null && location.city!.isNotEmpty) location.city!,
     ];
 
-    return Container(
+    return VetroCard(
       padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(color: context.colors.bg3, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -195,7 +194,7 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontFamily: 'Sora',
+        fontFamily: 'Inter',
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.colors.ink,

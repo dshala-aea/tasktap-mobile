@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_rack.dart';
-
+import '../theme/app_palette.dart';
 import 'empty_state.dart';
 
 /// Shown where a screen needs backend data that no client code path fetches (or writes to the
@@ -13,14 +11,15 @@ import 'empty_state.dart';
 /// behind a promise nobody scheduled — every call site names the specific capability that is
 /// missing, traceable to `docs/api-gap-list.md`.
 ///
-/// ## Why this is a shadow board and not an error
+/// ## Why this shares EmptyState's shell, muted rather than red
 ///
-/// It shares [EmptyState]'s cut outline, because both are the same claim — *something belongs
-/// here and is not here* — and a technician should not have to learn two visual languages for
-/// one idea. What separates them is the ledge: this one draws a graphite stub across the top of
-/// the board, the mark the rack uses for a slot that is fitted but not stocked. It is never red.
-/// An unreachable capability is not the technician's error and must not be dressed as one; the
-/// red channel in this app is reserved for things they can actually act on.
+/// Both are the same claim — *something belongs here and is not here* — and a technician should
+/// not have to learn two visual languages for one idea. What separates them is the icon badge's
+/// tint: neutral ink-muted rather than [ErrorState]'s red. An unreachable capability is not the
+/// technician's error and must not be dressed as one; the red channel in this app is reserved for
+/// things they can actually act on. (The old design marked this distinction with a graphite ledge
+/// stub — a mark specific to the rack metaphor Vetro replaced; the muted badge carries the same
+/// meaning without borrowing vocabulary from a design language this one isn't part of.)
 ///
 /// ```dart
 /// UnavailableState(
@@ -55,53 +54,35 @@ class UnavailableState extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 40),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
-          child: CustomPaintShadowBoard(
+          child: VetroStateCard(
+            iconBadge: VetroStateIconBadge(
+              icon: icon,
+              tint: c.inkMuted,
+              tintBg: c.inkMuted.withAlpha(31),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // The fitted-but-not-stocked mark: a graphite stub where a ledge would be if this
-                // slot held anything. Deliberately not the full-height ledge of a live cell.
-                Padding(
-                  padding: const EdgeInsets.only(top: 14),
-                  child: Container(
-                    width: 44,
-                    height: AppRack.silhouetteStroke * 2,
-                    decoration: BoxDecoration(
-                      color: c.ledge,
-                      borderRadius: BorderRadius.circular(AppRack.silhouetteStroke),
-                    ),
+                Text(
+                  titolo,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: c.ink,
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 26, color: c.silhouette),
-                      const SizedBox(height: 14),
-                      Text(
-                        titolo,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: 'Sora',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: c.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        motivo,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontFamily: 'Manrope',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: c.inkMuted,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 6),
+                Text(
+                  motivo,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: c.inkMuted,
+                    height: 1.4,
                   ),
                 ),
               ],

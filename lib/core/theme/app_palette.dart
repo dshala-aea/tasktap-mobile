@@ -44,11 +44,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.red,
     required this.redSoft,
     required this.brandOn,
-    required this.railSurface,
-    required this.railHighlight,
     required this.ledge,
     required this.labelCard,
-    required this.silhouette,
   });
 
   // ── Ink: what text and icons are written in ───────────────────────────────
@@ -116,15 +113,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
   // ── Rack materials ────────────────────────────────────────────────────────
   //
   // The van. These are the only warm colours in the palette, and that is the point: every
-  // neutral above is a true grey, so the alu and the label card read as *material* against the
-  // app's chrome rather than as another step on the background ramp. Strip the content out of a
-  // screen and these four are what make it recognisable.
-
-  /// The anodized aluminium extrusion the cells hang off.
-  final Color railSurface;
-
-  /// The machined highlight down the rail's outer edge.
-  final Color railHighlight;
+  // neutral above is a true grey, so the label card reads as *material* against the app's chrome
+  // rather than as another step on the background ramp. railSurface/railHighlight (the anodized
+  // rail extrusion) and silhouette (a shadow board's cut line) were this group's other two
+  // members — both retired with the van-racking metaphor they belonged to; see rack.dart and
+  // empty_state.dart's own doc comments.
 
   /// The graphite pull bar on a cell's leading edge. Goes brand yellow when the cell is strapped —
   /// running, selected, live — which is the app's single most important state change.
@@ -136,12 +129,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// dark mode it is a warm near-black at 12.9:1. It is not interchangeable with [surface] —
   /// [surface] is a sheet or an input, this is a cell.
   final Color labelCard;
-
-  /// The cut line of a shadow board: what is drawn where something belongs and is absent.
-  ///
-  /// Held above 3:1 against [labelCard] in both themes. It is a graphical object carrying meaning,
-  /// not decoration, so it takes the non-text contrast floor rather than being allowed to fade.
-  final Color silhouette;
 
   // ── Instances ─────────────────────────────────────────────────────────────
 
@@ -173,11 +160,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     red: Color(0xFFD32F2F),
     redSoft: Color(0xFFFFD1D1),
     brandOn: Color(0xFF363636),
-    railSurface: Color(0xFFC9CAC4),
-    railHighlight: Color(0xFFE8E9E4),
     ledge: Color(0xFF3A3C39),
     labelCard: Color(0xFFF4F2EA),
-    silhouette: Color(0xFF8E8C80),
   );
 
   /// The dark palette.
@@ -224,14 +208,10 @@ class AppPalette extends ThemeExtension<AppPalette> {
     // A tint of the dark red rather than the light theme's pastel, which would glare here.
     redSoft: Color(0xFF4A2320),
     brandOn: Color(0xFF363636),
-    // The van with the doors shut and the work light on. The alu darkens but keeps its warmth;
-    // the ledge goes blacker than any background step so it still reads as hardware against a
+    // The ledge goes blacker than any background step so it still reads as hardware against a
     // dark cell, which a mid-grey would not.
-    railSurface: Color(0xFF4A4C46),
-    railHighlight: Color(0xFF5E605A),
     ledge: Color(0xFF0E0F0D),
     labelCard: Color(0xFF262720),
-    silhouette: Color(0xFF66645A),
   );
 
   @override
@@ -260,11 +240,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? red,
     Color? redSoft,
     Color? brandOn,
-    Color? railSurface,
-    Color? railHighlight,
     Color? ledge,
     Color? labelCard,
-    Color? silhouette,
   }) {
     return AppPalette(
       ink: ink ?? this.ink,
@@ -291,11 +268,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
       red: red ?? this.red,
       redSoft: redSoft ?? this.redSoft,
       brandOn: brandOn ?? this.brandOn,
-      railSurface: railSurface ?? this.railSurface,
-      railHighlight: railHighlight ?? this.railHighlight,
       ledge: ledge ?? this.ledge,
       labelCard: labelCard ?? this.labelCard,
-      silhouette: silhouette ?? this.silhouette,
     );
   }
 
@@ -331,11 +305,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
       red: c(red, other.red),
       redSoft: c(redSoft, other.redSoft),
       brandOn: c(brandOn, other.brandOn),
-      railSurface: c(railSurface, other.railSurface),
-      railHighlight: c(railHighlight, other.railHighlight),
       ledge: c(ledge, other.ledge),
       labelCard: c(labelCard, other.labelCard),
-      silhouette: c(silhouette, other.silhouette),
     );
   }
 }

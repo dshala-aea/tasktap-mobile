@@ -145,10 +145,8 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // The rail is drawn once here rather than per screen. It was reaching only four of the
-      // forty-two screens, so the world read as "ledged cards" everywhere else — and the rail is
-      // the mark that makes a column of cells a rack. It costs no layout: it paints inside the
-      // 19dp gutter every screen already indents by (see AppRack.railColumn).
+      // Rack is a passthrough now (see its own doc comment) — kept only so this one call site
+      // needs no change from when it painted the van-racking rail behind every tab.
       //
       // SuspendedBanner used to live here; it now lives in MaterialApp's `builder` (main.dart) so
       // it covers pushed routes too, not just the 5 tab branches.

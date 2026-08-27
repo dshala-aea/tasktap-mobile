@@ -143,38 +143,8 @@ void main() {
     });
   });
 
-  group('ShadowBoard', () {
-    testWidgets('names what is missing, and reads it out as one phrase', (tester) async {
-      final handle = tester.ensureSemantics();
-
-      await tester.pumpWidget(
-        _wrap(
-          const ShadowBoard(
-            label: 'Nessun rapportino in coda',
-            reason: 'La sincronizzazione non è ancora riuscita.',
-          ),
-        ),
-      );
-
-      expect(find.text('Nessun rapportino in coda'), findsOneWidget);
-      expect(find.text('La sincronizzazione non è ancora riuscita.'), findsOneWidget);
-      expect(
-        tester.getSemantics(find.byType(ShadowBoard)),
-        matchesSemantics(
-          label: 'Nessun rapportino in coda. La sincronizzazione non è ancora riuscita.',
-        ),
-      );
-
-      handle.dispose();
-    });
-
-    testWidgets('an ordinary empty slot states no reason', (tester) async {
-      await tester.pumpWidget(_wrap(const ShadowBoard(label: 'Nessun materiale')));
-
-      expect(find.text('Nessun materiale'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  });
+  // ShadowBoard's tests moved to empty_state_test.dart as CompactEmptyState — see that widget's
+  // own doc comment for why it moved out of this file.
 }
 
 /// A cell's state now lives on its own border, not a separate ledge bar — see RackCell's class
