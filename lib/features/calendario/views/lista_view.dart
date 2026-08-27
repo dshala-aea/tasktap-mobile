@@ -55,7 +55,7 @@ class ListaView extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      padding: EdgeInsets.only(bottom: context.navClearance),
       children: children,
     );
   }
@@ -110,7 +110,7 @@ class _ScheduleListRow extends StatelessWidget {
     final timeRange =
         '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
     final statusName = scheduleStatusName(schedule.statusId);
-    final statusPair = statusColor(statusName);
+    final statusPair = statusColor(context, statusName);
 
     return ListRow(
       leading: Container(

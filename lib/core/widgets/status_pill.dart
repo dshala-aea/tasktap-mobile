@@ -25,7 +25,7 @@ class StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pair = statusColor(stato);
+    final pair = statusColor(context, stato);
 
     return AppBadge(
       label: stato,

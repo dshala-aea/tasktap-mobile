@@ -44,7 +44,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.red,
     required this.redSoft,
     required this.brandOn,
-    required this.ledge,
     required this.labelCard,
   });
 
@@ -112,16 +111,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
 
   // ── Rack materials ────────────────────────────────────────────────────────
   //
-  // The van. These are the only warm colours in the palette, and that is the point: every
-  // neutral above is a true grey, so the label card reads as *material* against the app's chrome
-  // rather than as another step on the background ramp. railSurface/railHighlight (the anodized
-  // rail extrusion) and silhouette (a shadow board's cut line) were this group's other two
-  // members — both retired with the van-racking metaphor they belonged to; see rack.dart and
-  // empty_state.dart's own doc comments.
-
-  /// The graphite pull bar on a cell's leading edge. Goes brand yellow when the cell is strapped —
-  /// running, selected, live — which is the app's single most important state change.
-  final Color ledge;
+  // The van. This is the only warm colour in the palette, and that is the point: every neutral
+  // above is a true grey, so the label card reads as *material* against the app's chrome rather
+  // than as another step on the background ramp. railSurface/railHighlight (the anodized rail
+  // extrusion), silhouette (a shadow board's cut line), and ledge (a cell's graphite pull bar)
+  // were this group's other members — all retired with the van-racking metaphor they belonged to;
+  // see rack.dart, empty_state.dart, and app_fab.dart's own doc comments.
 
   /// The printed card in the label window: the surface a cell's content is actually read off.
   ///
@@ -160,7 +155,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
     red: Color(0xFFD32F2F),
     redSoft: Color(0xFFFFD1D1),
     brandOn: Color(0xFF363636),
-    ledge: Color(0xFF3A3C39),
     labelCard: Color(0xFFF4F2EA),
   );
 
@@ -208,9 +202,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
     // A tint of the dark red rather than the light theme's pastel, which would glare here.
     redSoft: Color(0xFF4A2320),
     brandOn: Color(0xFF363636),
-    // The ledge goes blacker than any background step so it still reads as hardware against a
-    // dark cell, which a mid-grey would not.
-    ledge: Color(0xFF0E0F0D),
     labelCard: Color(0xFF262720),
   );
 
@@ -240,7 +231,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? red,
     Color? redSoft,
     Color? brandOn,
-    Color? ledge,
     Color? labelCard,
   }) {
     return AppPalette(
@@ -268,7 +258,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
       red: red ?? this.red,
       redSoft: redSoft ?? this.redSoft,
       brandOn: brandOn ?? this.brandOn,
-      ledge: ledge ?? this.ledge,
       labelCard: labelCard ?? this.labelCard,
     );
   }
@@ -305,7 +294,6 @@ class AppPalette extends ThemeExtension<AppPalette> {
       red: c(red, other.red),
       redSoft: c(redSoft, other.redSoft),
       brandOn: c(brandOn, other.brandOn),
-      ledge: c(ledge, other.ledge),
       labelCard: c(labelCard, other.labelCard),
     );
   }

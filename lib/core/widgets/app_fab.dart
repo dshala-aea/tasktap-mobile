@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import '../theme/app_vetro_palette.dart';
 
-/// Floating action button — 56 px circle, Y bg, large shadow
-/// (0 8px 20px rgba(0,0,0,0.18)), plus icon (24, DARK).
+/// Floating action button — 56 px circle, Vetro tint→tintStrong gradient, white icon.
+///
+/// Same gradient `AppButton.primary`/`AppBottomNav`'s active tab use — the one accent in the app
+/// means the same thing everywhere. Retired: the flat orange fill, the "ledge" bottom-edge border
+/// (a van-racking cue — the FAB is no longer part of that metaphor), and the heavy drop shadow
+/// (a soft shadow is invisible outdoors in direct sun, same reasoning as `AppButton`'s primary).
 ///
 /// ```dart
 /// AppFab(onPressed: () {});
@@ -34,23 +37,21 @@ class AppFab extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppColors.Y,
-              // Machined, not moulded — and closer to Material 3's own squircle FAB than the
-              // circle this drew before. It reads as the accent lever on the load rail, which is
-              // the one place in a van that colour means "pull this".
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [context.vetro.tint, context.vetro.tintStrong],
+              ),
               borderRadius: AppRack.freeShape,
-              // A graphite bottom edge gives it the ledge every other object in the rack has, so
-              // the primary action is made of the same material as everything it sits above.
-              border: Border(bottom: BorderSide(color: context.colors.ledge, width: 3)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(56),
-                  offset: const Offset(0, 6),
-                  blurRadius: 14,
+                  color: context.vetro.tint.withAlpha(90),
+                  offset: const Offset(0, 4),
+                  blurRadius: 16,
                 ),
               ],
             ),
-            child: Icon(icon, size: 24, color: context.colors.brandOn),
+            child: Icon(icon, size: 24, color: Colors.white),
           ),
         ),
       ),

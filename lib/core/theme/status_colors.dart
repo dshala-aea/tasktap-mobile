@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'app_colors.dart';
+import 'app_palette.dart';
+import 'app_vetro_palette.dart';
 
 /// Legacy rapportino workflow states — kept for backward compat with StatusBadge.
 enum ReportStato { bozza, inviato, controllato, fatturato, annullato }
@@ -18,40 +19,34 @@ class StatusColorPair {
 /// Covers: Aperto, In corso, In pausa, In attesa, Completato, Chiuso,
 /// Annullato, Bozza, Inviata, Pagata, Scaduta, Sospeso, Attivo.
 ///
-/// Unknown strings fall back to [ReportStato.bozza] styling.
-StatusColorPair statusColor(String stato) {
+/// Every pair now comes from [context]'s theme — [AppVetroPalette]'s tint (an "in flight, needs
+/// eyes" state — Aperto/In attesa/Inviata), statusGood (Completato/Pagata/Attivo), statusWarn
+/// (In corso/Controllato — actively being worked), statusBad (Annullato/Scaduta/Sospeso/Respinta),
+/// or [AppPalette]'s neutrals (In pausa/Chiuso/Bozza — no state that needs colour). Previously a
+/// flat table of ~13 hardcoded hex pairs that could not flip with the app's theme at all — this
+/// file didn't even take a [BuildContext]. Unknown strings fall back to the neutral pairing.
+StatusColorPair statusColor(BuildContext context, String stato) {
+  final v = context.vetro;
+  final neutral = StatusColorPair(background: context.colors.bg3, foreground: context.colors.inkMuted);
+  final info = StatusColorPair(background: v.tint.withAlpha(31), foreground: v.tint);
+  final good = StatusColorPair(background: v.statusGoodBg, foreground: v.statusGood);
+  final warn = StatusColorPair(background: v.statusWarnBg, foreground: v.statusWarn);
+  final bad = StatusColorPair(background: v.statusBadBg, foreground: v.statusBad);
+
   return switch (stato.trim().toLowerCase()) {
-    'aperto' => const StatusColorPair(background: Color(0xFFDCE8FF), foreground: Color(0xFF1D4ED8)),
-    'in corso' => const StatusColorPair(background: AppColors.AMBER, foreground: Color(0xFF000000)),
-    'in pausa' => const StatusColorPair(
-      background: Color(0xFFE8E8E8),
-      foreground: Color(0xFF555555),
-    ),
-    'in attesa' => const StatusColorPair(background: Color(0xFFDCF0FF), foreground: AppColors.CYAN),
-    'completato' => const StatusColorPair(
-      background: Color(0xFFDAF2E0),
-      foreground: Color(0xFF1E7A3A),
-    ),
-    'chiuso' => const StatusColorPair(background: Color(0xFFE8E8E8), foreground: AppColors.DARK),
-    'annullato' => const StatusColorPair(
-      background: Color(0xFFFFDCDC),
-      foreground: Color(0xFFAA0000),
-    ),
-    'bozza' => const StatusColorPair(background: Color(0xFFF5F5F5), foreground: Color(0xFF666666)),
-    'inviata' => const StatusColorPair(
-      background: Color(0xFFDCE8FF),
-      foreground: Color(0xFF1D4ED8),
-    ),
-    'pagata' => const StatusColorPair(background: Color(0xFFDAF2E0), foreground: Color(0xFF1E7A3A)),
-    'scaduta' => const StatusColorPair(
-      background: Color(0xFFFFDCDC),
-      foreground: Color(0xFFAA0000),
-    ),
-    'sospeso' => const StatusColorPair(
-      background: Color(0xFFFFDCDC),
-      foreground: Color(0xFFAA0000),
-    ),
-    'attivo' => const StatusColorPair(background: Color(0xFFDAF2E0), foreground: Color(0xFF1E7A3A)),
+    'aperto' => info,
+    'in corso' => warn,
+    'in pausa' => neutral,
+    'in attesa' => info,
+    'completato' => good,
+    'chiuso' => neutral,
+    'annullato' => bad,
+    'bozza' => neutral,
+    'inviata' => info,
+    'pagata' => good,
+    'scaduta' => bad,
+    'sospeso' => bad,
+    'attivo' => good,
     // ── Report lifecycle, masculine ─────────────────────────────────────────
     //
     // A rapportino is masculine, so the backend sends 'Inviato' / 'Fatturato' where the invoice
@@ -60,31 +55,29 @@ StatusColorPair statusColor(String stato) {
     // colour table with a third set of blues and greens that matched neither this file nor the
     // StatusPill beside it. Aliases, not new colours: each returns the pair its feminine or enum
     // counterpart already uses.
-    'inviato' => statusColor('Inviata'),
-    'fatturato' => statusColor('Pagata'),
-    // Rejected rapportino (Inviato → Respinto, office sends it back for rework). Same red as
+    'inviato' => info,
+    'fatturato' => good,
+    // Rejected rapportino (Inviato → Respinto, office sends it back for rework). Same treatment as
     // Annullato/Scaduta — both read as "this needs attention", which a rejection does too.
-    'respinta' => const StatusColorPair(background: Color(0xFFFFDCDC), foreground: Color(0xFFAA0000)),
-    'respinto' => statusColor('Respinta'),
-    'controllato' => const StatusColorPair(
-      background: AppColors.statusControllato,
-      foreground: AppColors.onStatusControllato,
-    ),
-
-    _ => const StatusColorPair(background: Color(0xFFF5F5F5), foreground: Color(0xFF666666)),
+    'respinta' => bad,
+    'respinto' => bad,
+    // Same family as In corso — both are "actively being worked", just at a different lifecycle
+    // stage.
+    'controllato' => warn,
+    _ => neutral,
   };
 }
 
 /// Returns [StatusColorPair] for a legacy [ReportStato] enum value.
 ///
 /// Delegates to the string-based [statusColor] for a single source of truth.
-StatusColorPair statusColorFromStato(ReportStato stato) {
+StatusColorPair statusColorFromStato(BuildContext context, ReportStato stato) {
   return switch (stato) {
-    ReportStato.bozza => statusColor('Bozza'),
-    ReportStato.inviato => statusColor('Inviata'),
-    ReportStato.controllato => statusColor('Controllato'),
-    ReportStato.fatturato => statusColor('Pagata'),
-    ReportStato.annullato => statusColor('Annullato'),
+    ReportStato.bozza => statusColor(context, 'Bozza'),
+    ReportStato.inviato => statusColor(context, 'Inviata'),
+    ReportStato.controllato => statusColor(context, 'Controllato'),
+    ReportStato.fatturato => statusColor(context, 'Pagata'),
+    ReportStato.annullato => statusColor(context, 'Annullato'),
   };
 }
 

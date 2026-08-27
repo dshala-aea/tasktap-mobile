@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import '../theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Button variant.
 ///
-/// - [primary]   — Y bg / DARK fg / SH shadow  (default)
+/// - [primary]   — Vetro tint→tintStrong gradient / white fg
 /// - [secondary] — BG3 bg / MUTED fg
-/// - [dark]      — DARK bg / INV fg / SH shadow
+/// - [dark]      — DARK bg / INV fg
 /// - [ghost]     — transparent bg / DARK fg
 /// - [danger]    — REDSOFT bg / #c00 fg
 enum AppButtonVariant { primary, secondary, dark, ghost, danger }
@@ -17,11 +17,6 @@ enum AppButtonVariant { primary, secondary, dark, ghost, danger }
 /// - [lg] — vPad 14, hPad 24, fontSize 16, radius 10, iconSize 18
 /// - [md] — vPad 11, hPad 20, fontSize 14, radius 8, iconSize 16  (default)
 /// - [sm] — vPad 6,  hPad 14, fontSize 10, radius 6, iconSize 12
-///
-/// Radii tightened 2026-08-24: these were near-pill (20/18/10), deliberately matched to the
-/// floating pill nav as a pinned brand commitment. That pin retired with the nav itself (see
-/// `AppBottomNav`, now a case latch row) — a button machined at 10/8/6 now reads as one more
-/// compartment on the same case, not the odd soft shape left over from a world that moved on.
 enum AppButtonSize { lg, md, sm }
 
 /// TaskTap brand button — 5 variants × 3 sizes.
@@ -149,16 +144,29 @@ class AppButton extends StatelessWidget {
 
   // ── Colour tokens ────────────────────────────────────────────────────────
 
+  /// Solid fallback for [variant]s that don't paint the Vetro gradient (disabled state,
+  /// splash/highlight colour math) — [primary]'s real fill is [_gradient].
   Color _bg(BuildContext context) => switch (variant) {
-    AppButtonVariant.primary => AppColors.Y,
+    AppButtonVariant.primary => context.vetro.tint,
     AppButtonVariant.secondary => context.colors.bg3,
     AppButtonVariant.dark => context.colors.surfaceInverse,
     AppButtonVariant.ghost => Colors.transparent,
     AppButtonVariant.danger => context.colors.redSoft,
   };
 
+  /// The primary variant's real fill — the same tint→tintStrong gradient as `AppBottomNav`'s
+  /// active tab and the rapportino completion card, so the one accent colour in the app means
+  /// the same thing everywhere it appears.
+  Gradient? _gradient(BuildContext context) => variant == AppButtonVariant.primary
+      ? LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [context.vetro.tint, context.vetro.tintStrong],
+        )
+      : null;
+
   Color _fg(BuildContext context) => switch (variant) {
-    AppButtonVariant.primary => context.colors.brandOn,
+    AppButtonVariant.primary => Colors.white,
     AppButtonVariant.secondary => context.colors.inkMuted,
     AppButtonVariant.dark => context.colors.inkInverse,
     AppButtonVariant.ghost => context.colors.ink,
@@ -177,7 +185,7 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textStyle = TextStyle(
-      fontFamily: 'Manrope',
+      fontFamily: 'Inter',
       fontSize: _fontSize,
       fontWeight: FontWeight.w700,
       color: onPressed == null && !isLoading ? _fg(context).withAlpha(100) : _fg(context),
@@ -236,9 +244,11 @@ class AppButton extends StatelessWidget {
         : _bg(context).withAlpha(120);
     final fgDisabled = _fg(context).withAlpha(100);
 
+    final enabled = onPressed != null || isLoading;
     Widget button = DecoratedBox(
       decoration: BoxDecoration(
-        color: onPressed != null || isLoading ? _bg(context) : bgDisabled,
+        gradient: enabled ? _gradient(context) : null,
+        color: enabled ? (_gradient(context) == null ? _bg(context) : null) : bgDisabled,
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: onPressed != null ? _shadows(context) : const [],
       ),

@@ -169,7 +169,7 @@ class _EventBlock extends StatelessWidget {
     );
 
     final statusName = scheduleStatusName(schedule.statusId);
-    final pair = statusColor(statusName);
+    final pair = statusColor(context, statusName);
 
     return Positioned(
       top: top,

@@ -235,7 +235,7 @@ class _StatoIcon extends StatelessWidget {
       'Fatturato' => LucideIcons.receipt,
       _ => LucideIcons.fileText,
     };
-    final color = statusColor(stato).foreground;
+    final color = statusColor(context, stato).foreground;
 
     return Container(
       width: 40,

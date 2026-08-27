@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -15,13 +16,14 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('primary has brand-yellow background decoration', (tester) async {
+    testWidgets('primary has the Vetro tint gradient background', (tester) async {
       await tester.pumpWidget(_wrap(AppButton(label: 'Test', onPressed: () {})));
       final container = tester.widget<DecoratedBox>(
         find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
       );
       final box = container.decoration as BoxDecoration;
-      expect(box.color, equals(AppColors.Y));
+      final gradient = box.gradient as LinearGradient;
+      expect(gradient.colors, [AppVetroPalette.light.tint, AppVetroPalette.light.tintStrong]);
     });
 
     testWidgets('secondary variant renders', (tester) async {

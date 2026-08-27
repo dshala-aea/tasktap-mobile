@@ -3,15 +3,16 @@ import 'package:flutter/material.dart';
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// Compact rounded badge pill.
 ///
-/// Spec: rounded 9 px radius, Manrope 500/10 (sm: 9), pad 3/9 (sm: 2/7).
+/// Spec: rounded 9 px radius, Inter 500/10 (sm: 9), pad 3/9 (sm: 2/7).
 ///
 /// ```dart
 /// AppBadge(label: '3');
 /// AppBadge(label: 'Nuovo', small: true);
-/// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: context.colors.ink);
+/// AppBadge(label: 'Tag', bgColor: context.vetro.tint.withAlpha(31), fgColor: context.vetro.tint);
 /// ```
 class AppBadge extends StatelessWidget {
   const AppBadge({
@@ -45,17 +46,14 @@ class AppBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: outlined ? Colors.transparent : bg,
         border: outlined ? Border.all(color: fg, width: 1.5) : null,
-        // 3, not 9. A badge is ink printed on the label card, and printed marks on a machined
-        // label are not lozenges. At this size the difference is small and it is the difference
-        // between the app looking drawn and looking specified.
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: AppRack.insetShape,
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         child: Text(
           label,
           style: TextStyle(
-            fontFamily: 'Manrope',
+            fontFamily: 'Inter',
             fontSize: fontSize,
             fontWeight: outlined ? FontWeight.w700 : FontWeight.w500,
             color: fg,
@@ -67,9 +65,9 @@ class AppBadge extends StatelessWidget {
   }
 }
 
-/// Selection chip — white/DARK (inactive) or DARK/white (active).
+/// Selection chip — neutral (inactive) or Vetro tint fill / white (active).
 ///
-/// Spec: 1 px border, 5 px radius, Manrope 500/11, pad 5/10.
+/// Spec: 1 px border, 8 px radius, Inter 500/11, pad 5/10.
 ///
 /// ```dart
 /// AppChip(label: 'Oggi', active: true, onTap: () {});
@@ -84,9 +82,9 @@ class AppChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = active ? context.colors.surfaceInverse : context.colors.surface;
-    final fg = active ? context.colors.inkInverse : context.colors.ink;
-    final borderColor = active ? context.colors.surfaceInverse : context.colors.borderMedium;
+    final bg = active ? context.vetro.tint : context.colors.surface;
+    final fg = active ? Colors.white : context.colors.ink;
+    final borderColor = active ? context.vetro.tint : context.colors.borderMedium;
 
     const radius = AppRack.insetRadius;
 
@@ -102,7 +100,7 @@ class AppChip extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontFamily: 'Manrope',
+              fontFamily: 'Inter',
               fontSize: 11,
               fontWeight: FontWeight.w500,
               color: fg,

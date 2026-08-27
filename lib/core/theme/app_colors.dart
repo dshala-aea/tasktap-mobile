@@ -207,38 +207,6 @@ abstract final class AppColors {
   /// Disabled text — alias for [DIS].
   static const Color textDisabled = DIS;
 
-  // ── Legacy status colors (kept for StatusBadge / ReportStato enum) ────────
-
-  /// Bozza bg rgb(245,245,245).
-  static const Color statusBozza = Color(0xFFF5F5F5);
-
-  /// Bozza fg #666.
-  static const Color onStatusBozza = Color(0xFF666666);
-
-  /// Inviata bg rgb(220,232,255).
-  static const Color statusInviato = Color(0xFFDCE8FF);
-
-  /// Inviata fg #1d4ed8.
-  static const Color onStatusInviato = Color(0xFF1D4ED8);
-
-  /// Controllato bg AMBER (kept for backward compat).
-  static const Color statusControllato = AMBER;
-
-  /// Controllato fg black.
-  static const Color onStatusControllato = Color(0xFF000000);
-
-  /// Fatturato / Pagata bg rgb(218,242,224).
-  static const Color statusFatturato = Color(0xFFDAF2E0);
-
-  /// Fatturato / Pagata fg #1e7a3a.
-  static const Color onStatusFatturato = Color(0xFF1E7A3A);
-
-  /// Annullato bg rgb(255,220,220).
-  static const Color statusAnnullato = Color(0xFFFFDCDC);
-
-  /// Annullato fg #a00.
-  static const Color onStatusAnnullato = Color(0xFFAA0000);
-
   // ── Semantic (kept for theme / screens) ───────────────────────────────────
 
   /// Error — alias for [RED], and now actually one.

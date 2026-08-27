@@ -1,10 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/theme/status_colors.dart';
 
+/// [statusColor]/[statusColorFromStato] now read the Vetro theme extension via [BuildContext], so
+/// exercising them needs a pumped widget tree. A bare `MaterialApp` registers no
+/// [AppVetroPalette] extension — `context.vetro` falls back to [AppVetroPalette.light] (see its
+/// own doc comment), which is what these assertions check against.
+Future<StatusColorPair> _pairFor(WidgetTester tester, String stato) async {
+  late StatusColorPair pair;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) {
+          pair = statusColor(context, stato);
+          return const SizedBox();
+        },
+      ),
+    ),
+  );
+  return pair;
+}
+
+Future<StatusColorPair> _pairForStato(WidgetTester tester, ReportStato stato) async {
+  late StatusColorPair pair;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) {
+          pair = statusColorFromStato(context, stato);
+          return const SizedBox();
+        },
+      ),
+    ),
+  );
+  return pair;
+}
+
 void main() {
+  const v = AppVetroPalette.light;
+  const p = AppPalette.light;
+  final infoBg = v.tint.withAlpha(31);
   // google_fonts loads fonts asynchronously; using testWidgets gives us a
   // binding + fake-async environment so font-load callbacks don't escape.
   group('buildAppTheme', () {
@@ -39,60 +78,65 @@ void main() {
     });
   });
 
-  // Pure Dart tests — no Flutter binding needed, no google_fonts calls.
-  group('statusColor (string API)', () {
-    test('Bozza maps to light-grey background', () {
-      final pair = statusColor('Bozza');
-      expect(pair.background, equals(const Color(0xFFF5F5F5)));
-      expect(pair.foreground, equals(const Color(0xFF666666)));
+  group('statusColor (Vetro tokens, context-aware)', () {
+    testWidgets('Bozza maps to the neutral pair', (tester) async {
+      final pair = await _pairFor(tester, 'Bozza');
+      expect(pair.background, equals(p.bg3));
+      expect(pair.foreground, equals(p.inkMuted));
     });
 
-    test('Inviata maps to blue background', () {
-      final pair = statusColor('Inviata');
-      expect(pair.background, equals(const Color(0xFFDCE8FF)));
-      expect(pair.foreground, equals(const Color(0xFF1D4ED8)));
+    testWidgets('Inviata maps to the tint "in flight" pair', (tester) async {
+      final pair = await _pairFor(tester, 'Inviata');
+      expect(pair.background, equals(infoBg));
+      expect(pair.foreground, equals(v.tint));
     });
 
-    test('In corso maps to AMBER background', () {
-      final pair = statusColor('In corso');
-      expect(pair.background, equals(AppColors.AMBER));
-      expect(pair.foreground, equals(const Color(0xFF000000)));
+    testWidgets('In corso maps to statusWarn', (tester) async {
+      final pair = await _pairFor(tester, 'In corso');
+      expect(pair.background, equals(v.statusWarnBg));
+      expect(pair.foreground, equals(v.statusWarn));
     });
 
-    test('Completato maps to green background', () {
-      final pair = statusColor('Completato');
-      expect(pair.background, equals(const Color(0xFFDAF2E0)));
-      expect(pair.foreground, equals(const Color(0xFF1E7A3A)));
+    testWidgets('Completato maps to statusGood', (tester) async {
+      final pair = await _pairFor(tester, 'Completato');
+      expect(pair.background, equals(v.statusGoodBg));
+      expect(pair.foreground, equals(v.statusGood));
     });
 
-    test('Annullato maps to red-soft background', () {
-      final pair = statusColor('Annullato');
-      expect(pair.background, equals(const Color(0xFFFFDCDC)));
-      expect(pair.foreground, equals(const Color(0xFFAA0000)));
+    testWidgets('Annullato maps to statusBad', (tester) async {
+      final pair = await _pairFor(tester, 'Annullato');
+      expect(pair.background, equals(v.statusBadBg));
+      expect(pair.foreground, equals(v.statusBad));
     });
 
-    test('Pagata maps to green background', () {
-      final pair = statusColor('Pagata');
-      expect(pair.background, equals(const Color(0xFFDAF2E0)));
-      expect(pair.foreground, equals(const Color(0xFF1E7A3A)));
+    testWidgets('Pagata maps to statusGood', (tester) async {
+      final pair = await _pairFor(tester, 'Pagata');
+      expect(pair.background, equals(v.statusGoodBg));
+      expect(pair.foreground, equals(v.statusGood));
     });
 
-    test('Scaduta maps to red-soft background', () {
-      final pair = statusColor('Scaduta');
-      expect(pair.background, equals(const Color(0xFFFFDCDC)));
+    testWidgets('Scaduta maps to statusBad', (tester) async {
+      final pair = await _pairFor(tester, 'Scaduta');
+      expect(pair.background, equals(v.statusBadBg));
     });
 
-    test('Sospeso maps to red-soft background', () {
-      final pair = statusColor('Sospeso');
-      expect(pair.background, equals(const Color(0xFFFFDCDC)));
+    testWidgets('Sospeso maps to statusBad', (tester) async {
+      final pair = await _pairFor(tester, 'Sospeso');
+      expect(pair.background, equals(v.statusBadBg));
     });
 
-    test('Attivo maps to green background', () {
-      final pair = statusColor('Attivo');
-      expect(pair.background, equals(const Color(0xFFDAF2E0)));
+    testWidgets('Attivo maps to statusGood', (tester) async {
+      final pair = await _pairFor(tester, 'Attivo');
+      expect(pair.background, equals(v.statusGoodBg));
     });
 
-    test('all 13 statuses return non-transparent colors', () {
+    testWidgets('an unknown status falls back to the neutral pair', (tester) async {
+      final pair = await _pairFor(tester, 'Not A Real Status');
+      expect(pair.background, equals(p.bg3));
+      expect(pair.foreground, equals(p.inkMuted));
+    });
+
+    testWidgets('all 13 statuses return non-transparent colors', (tester) async {
       final statuses = [
         'Aperto',
         'In corso',
@@ -109,7 +153,7 @@ void main() {
         'Attivo',
       ];
       for (final s in statuses) {
-        final pair = statusColor(s);
+        final pair = await _pairFor(tester, s);
         expect(
           (pair.background.a * 255.0).round(),
           greaterThan(0),
@@ -125,39 +169,39 @@ void main() {
   });
 
   group('statusColorFromStato (legacy enum API)', () {
-    test('bozza maps to grey background', () {
-      final pair = statusColorFromStato(ReportStato.bozza);
-      expect(pair.background, equals(AppColors.statusBozza));
-      expect(pair.foreground, equals(AppColors.onStatusBozza));
+    testWidgets('bozza maps to the neutral pair', (tester) async {
+      final pair = await _pairForStato(tester, ReportStato.bozza);
+      expect(pair.background, equals(p.bg3));
+      expect(pair.foreground, equals(p.inkMuted));
     });
 
-    test('inviato maps to blue background', () {
-      final pair = statusColorFromStato(ReportStato.inviato);
-      expect(pair.background, equals(AppColors.statusInviato));
-      expect(pair.foreground, equals(AppColors.onStatusInviato));
+    testWidgets('inviato maps to the tint "in flight" pair', (tester) async {
+      final pair = await _pairForStato(tester, ReportStato.inviato);
+      expect(pair.background, equals(infoBg));
+      expect(pair.foreground, equals(v.tint));
     });
 
-    test('controllato maps to amber background', () {
-      final pair = statusColorFromStato(ReportStato.controllato);
-      expect(pair.background, equals(AppColors.statusControllato));
-      expect(pair.foreground, equals(AppColors.onStatusControllato));
+    testWidgets('controllato maps to statusWarn', (tester) async {
+      final pair = await _pairForStato(tester, ReportStato.controllato);
+      expect(pair.background, equals(v.statusWarnBg));
+      expect(pair.foreground, equals(v.statusWarn));
     });
 
-    test('fatturato maps to green background', () {
-      final pair = statusColorFromStato(ReportStato.fatturato);
-      expect(pair.background, equals(AppColors.statusFatturato));
-      expect(pair.foreground, equals(AppColors.onStatusFatturato));
+    testWidgets('fatturato maps to statusGood', (tester) async {
+      final pair = await _pairForStato(tester, ReportStato.fatturato);
+      expect(pair.background, equals(v.statusGoodBg));
+      expect(pair.foreground, equals(v.statusGood));
     });
 
-    test('annullato maps to red background', () {
-      final pair = statusColorFromStato(ReportStato.annullato);
-      expect(pair.background, equals(AppColors.statusAnnullato));
-      expect(pair.foreground, equals(AppColors.onStatusAnnullato));
+    testWidgets('annullato maps to statusBad', (tester) async {
+      final pair = await _pairForStato(tester, ReportStato.annullato);
+      expect(pair.background, equals(v.statusBadBg));
+      expect(pair.foreground, equals(v.statusBad));
     });
 
-    test('all statuses return non-transparent colors', () {
+    testWidgets('all statuses return non-transparent colors', (tester) async {
       for (final stato in ReportStato.values) {
-        final pair = statusColorFromStato(stato);
+        final pair = await _pairForStato(tester, stato);
         expect(
           (pair.background.a * 255.0).round(),
           greaterThan(0),

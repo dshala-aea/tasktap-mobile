@@ -154,7 +154,7 @@ class _WeekEventChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusName = scheduleStatusName(schedule.statusId);
-    final pair = statusColor(statusName);
+    final pair = statusColor(context, statusName);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
