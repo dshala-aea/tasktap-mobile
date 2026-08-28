@@ -114,7 +114,12 @@ class ZitadelAuthRepository implements IAuthRepository {
         data: {'authRequestId': authRequestId, 'loginName': loginName, 'password': password},
         options: Options(contentType: Headers.jsonContentType),
       );
-      code = response.data['code'] as String;
+      final data = response.data;
+      final rawCode = data is Map ? data['code'] : null;
+      if (rawCode is! String || rawCode.isEmpty) {
+        return (user: null, failure: const UnknownAuthError('Malformed login response'));
+      }
+      code = rawCode;
     } on DioException catch (e) {
       final backendCode = e.response?.data is Map ? e.response?.data['code'] as String? : null;
       return (user: null, failure: switch (backendCode) {

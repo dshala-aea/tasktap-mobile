@@ -502,5 +502,62 @@ void main() {
       expect(result.user, isNull);
       expect(result.failure, isA<NetworkError>());
     });
+
+    // Regression: a 200 OK with a malformed body (missing `code`, or `code` of the wrong type)
+    // must never let a raw cast/TypeError exception escape signInWithPassword — every other
+    // failure path in this class converts to a typed AuthFailure, and this one must too.
+    test('malformed 200 response (missing code): returns UnknownAuthError, does not throw', () async {
+      stubAuthorizeRedirect('authreq-1');
+      when(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<dynamic>(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+          statusCode: 200,
+          data: <String, dynamic>{},
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<UnknownAuthError>());
+      verifyNever(() => appAuth.token(any()));
+    });
+
+    test('malformed 200 response (code not a String): returns UnknownAuthError, does not throw', () async {
+      stubAuthorizeRedirect('authreq-1');
+      when(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<dynamic>(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+          statusCode: 200,
+          data: {'code': 123},
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<UnknownAuthError>());
+      verifyNever(() => appAuth.token(any()));
+    });
   });
 }
