@@ -217,6 +217,50 @@ void main() {
         verify(() => repo.signOut()).called(1);
       },
     );
+
+    test('signInWithPassword success clears loading and failure state', () async {
+      final user = _fakeUser();
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
+          .thenAnswer((_) async => (user: user, failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
+
+      final state = container.read(loginProvider);
+      expect(state.isLoading, isFalse);
+      expect(state.failure, isNull);
+    });
+
+    test('signInWithPassword wrong credentials surfaces InvalidCredentials, does not call signIn', () async {
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'wrong')).thenAnswer(
+        (_) async => (user: null, failure: const InvalidCredentials()),
+      );
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'wrong');
+
+      final state = container.read(loginProvider);
+      expect(state.failure, isA<InvalidCredentials>());
+      verifyNever(() => repo.signIn());
+    });
+
+    test('signInWithPassword AdditionalFactorRequired falls back to signIn() automatically', () async {
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct')).thenAnswer(
+        (_) async => (user: null, failure: const AdditionalFactorRequired()),
+      );
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
+
+      verify(() => repo.signIn()).called(1);
+    });
   });
 
   // ── Router redirect logic ──────────────────────────────────────────────

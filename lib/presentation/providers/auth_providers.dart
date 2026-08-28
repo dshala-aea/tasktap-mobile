@@ -78,6 +78,25 @@ class LoginNotifier extends StateNotifier<LoginState> {
     }
   }
 
+  Future<void> signInWithPassword(String loginName, String password) async {
+    state = const LoginState(isLoading: true);
+    final result = await _repo.signInWithPassword(loginName, password);
+
+    if (result.failure is AdditionalFactorRequired) {
+      // The account needs more than a password — fall back to the browser flow, which can
+      // satisfy MFA/passkey/whatever Zitadel's hosted UI supports. No error shown; this is a
+      // transition, not a failure the technician needs to see or act on.
+      await signIn();
+      return;
+    }
+
+    if (result.failure != null) {
+      state = LoginState(failure: result.failure);
+    } else {
+      state = const LoginState();
+    }
+  }
+
   Future<void> signOut() async {
     // Unregister this device's FCM token BEFORE signing out — the access token this call needs
     // is gone the moment signOut() completes, and a device that stays registered keeps receiving
