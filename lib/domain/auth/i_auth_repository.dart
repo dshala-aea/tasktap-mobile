@@ -30,6 +30,16 @@ abstract interface class IAuthRepository {
   /// error (network, cancelled, …).
   Future<({AuthUser? user, AuthFailure? failure})> signIn();
 
+  /// Native in-app password sign-in — submits credentials directly instead of opening the
+  /// system browser. See `ZitadelAuthRepository.signInWithPassword`'s own doc comment for the
+  /// full flow and its fallback triggers.
+  ///
+  /// Returns the signed-in [AuthUser] on success. On failure, [AuthFailure] is
+  /// [AdditionalFactorRequired] when the caller should fall back to [signIn] (the account needs
+  /// more than a password), or any other [AuthFailure] when it should not (wrong credentials,
+  /// network error, unexpected upstream error).
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPassword(String loginName, String password);
+
   /// Silently refresh the session using the stored refresh token.
   ///
   /// Returns the refreshed [AuthUser] or an [AuthFailure].
