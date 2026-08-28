@@ -5,17 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/app_vetro_palette.dart';
+import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/vetro_button.dart';
 import '../../providers/auth_providers.dart';
 import '../../../domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// Login screen — Zitadel OIDC sign-in.
+/// Login screen — native username/password sign-in.
 ///
-/// Credentials are entered in the system browser (Authorization Code + PKCE),
-/// so this screen is just branding + a single "Accedi" button that launches the
-/// flow. On success [authStateProvider] emits a non-null user and go_router's
-/// refresh redirect sends the user into the app.
+/// Credentials are entered in-app and submitted directly via
+/// [LoginNotifier.signInWithPassword]. If the account needs more than a
+/// password (MFA, passkey, …), the notifier automatically falls back to the
+/// system-browser OIDC flow ([LoginNotifier.signIn]) — the same flow used by
+/// the "Password dimenticata?" link. On success [authStateProvider] emits a
+/// non-null user and go_router's refresh redirect sends the user into the app.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -24,10 +27,29 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _usernameCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _usernameCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _onLogin() async {
     ref.read(loginProvider.notifier).clearError();
-    await ref.read(loginProvider.notifier).signIn();
+    await ref.read(loginProvider.notifier).signInWithPassword(
+      _usernameCtrl.text.trim(),
+      _passwordCtrl.text,
+    );
     // Router redirect handles navigation on success.
+  }
+
+  Future<void> _onForgotPassword() async {
+    ref.read(loginProvider.notifier).clearError();
+    // Zitadel's own hosted page has its own password-reset link — no need to build one here.
+    await ref.read(loginProvider.notifier).signIn();
   }
 
   @override
@@ -61,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text('Accedi', style: AppTextStyles.headlineLarge),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Verrai reindirizzato all\'accesso sicuro TaskTap.',
+                'Inserisci le tue credenziali TaskTap.',
                 style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
               ),
 
@@ -72,6 +94,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 _ErrorBanner(message: authFailureMessage(failure)),
                 const SizedBox(height: AppSpacing.base),
               ],
+
+              // ── Form fields ──────────────────────────────────────────────
+              AppTextField(
+                key: const ValueKey('login-username'),
+                controller: _usernameCtrl,
+                label: 'Email o nome utente',
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: AppSpacing.base),
+              AppTextField(
+                key: const ValueKey('login-password'),
+                controller: _passwordCtrl,
+                label: 'Password',
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onEditingComplete: isLoading ? null : _onLogin,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: isLoading ? null : _onForgotPassword,
+                  child: const Text('Password dimenticata?'),
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.base),
 
               // ── CTA ──────────────────────────────────────────────────────
               VetroButton(

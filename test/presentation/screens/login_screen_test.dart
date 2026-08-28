@@ -29,6 +29,14 @@ Widget _buildLoginScreen(IAuthRepository repo) {
 Finder get _loginCta =>
     find.descendant(of: find.byType(VetroButton), matching: find.text('Accedi'));
 
+Finder get _usernameField => find.byKey(const ValueKey('login-username'));
+Finder get _passwordField => find.byKey(const ValueKey('login-password'));
+
+Future<void> _enterCredentials(WidgetTester tester, {String username = 'tech@tasktap.io', String password = 'correct-password'}) async {
+  await tester.enterText(_usernameField, username);
+  await tester.enterText(_passwordField, password);
+}
+
 void main() {
   late MockAuthRepository repo;
   late StreamController<AuthUser?> authStream;
@@ -62,45 +70,89 @@ void main() {
       expect(_loginCta, findsOneWidget);
     });
 
-    testWidgets('does not render email/password fields (OIDC redirect)', (tester) async {
+    testWidgets('renders username and password fields (native login)', (tester) async {
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextFormField), findsNothing);
+      expect(_usernameField, findsOneWidget);
+      expect(_passwordField, findsOneWidget);
+    });
+
+    testWidgets('renders the Password dimenticata? link', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Password dimenticata?'), findsOneWidget);
     });
   });
 
   // ── Sign-in ──────────────────────────────────────────────────────────────
 
   group('LoginScreen sign-in', () {
-    testWidgets('tapping Accedi starts the interactive sign-in', (tester) async {
-      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+    testWidgets('submitting valid credentials calls signInWithPassword', (tester) async {
+      when(() => repo.signInWithPassword(any(), any()))
+          .thenAnswer((_) async => (user: null, failure: null));
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
+      await _enterCredentials(tester);
       await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
-      verify(() => repo.signIn()).called(1);
+      verify(() => repo.signInWithPassword('tech@tasktap.io', 'correct-password')).called(1);
+      verifyNever(() => repo.signIn());
     });
   });
 
   // ── Error display ──────────────────────────────────────────────────────
 
   group('LoginScreen error display', () {
-    testWidgets('shows the network error banner on NetworkError', (tester) async {
-      when(
-        () => repo.signIn(),
-      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
+    testWidgets('wrong credentials shows the error banner', (tester) async {
+      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
+        (_) async => (user: null, failure: const InvalidCredentials()),
+      );
 
       await tester.pumpWidget(_buildLoginScreen(repo));
       await tester.pumpAndSettle();
 
+      await _enterCredentials(tester, password: 'wrong');
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Email o password errati. Controlla le credenziali e riprova.'), findsOneWidget);
+    });
+
+    testWidgets('shows the network error banner on NetworkError', (tester) async {
+      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
+        (_) async => (user: null, failure: const NetworkError()),
+      );
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await _enterCredentials(tester);
       await tester.tap(_loginCta);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('connessione'), findsOneWidget);
+    });
+  });
+
+  // ── Forgot password ──────────────────────────────────────────────────────
+
+  group('LoginScreen forgot password', () {
+    testWidgets('"Password dimenticata?" calls signIn (browser flow), not signInWithPassword', (tester) async {
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Password dimenticata?'));
+      await tester.pumpAndSettle();
+
+      verify(() => repo.signIn()).called(1);
+      verifyNever(() => repo.signInWithPassword(any(), any()));
     });
   });
 }

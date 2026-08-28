@@ -87,6 +87,12 @@ class _FakeAuth implements IAuthRepository {
   Future<({AuthFailure? failure, AuthUser? user})> signIn() async => (user: null, failure: null);
 
   @override
+  Future<({AuthFailure? failure, AuthUser? user})> signInWithPassword(
+    String loginName,
+    String password,
+  ) async => (user: null, failure: null);
+
+  @override
   Future<void> signOut() async {}
 }
 
