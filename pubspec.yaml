@@ -76,6 +76,7 @@ dependencies:
   # is NOT initialised and the app still works normally.
   sentry_flutter: ^9.27.0
   speech_to_text: ^7.4.0
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
