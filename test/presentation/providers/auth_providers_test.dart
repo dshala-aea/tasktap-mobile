@@ -260,6 +260,9 @@ void main() {
       await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
 
       verify(() => repo.signIn()).called(1);
+      // Verify that the fallback successfully clears the failure state,
+      // not leaving the stale AdditionalFactorRequired behind.
+      expect(container.read(loginProvider).failure, isNull);
     });
   });
 
