@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show AutofillHints, TextInput;
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -44,6 +45,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _passwordCtrl.text,
     );
     // Router redirect handles navigation on success.
+    if (ref.read(loginProvider).failure == null) {
+      // Tells the platform autofill service (password manager) the credentials just used were
+      // valid, so it can offer to save them — must only fire on success, never on a failed
+      // attempt.
+      TextInput.finishAutofillContext();
+    }
   }
 
   Future<void> _onForgotPassword() async {
@@ -96,21 +103,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ],
 
               // ── Form fields ──────────────────────────────────────────────
-              AppTextField(
-                key: const ValueKey('login-username'),
-                controller: _usernameCtrl,
-                label: 'Email o nome utente',
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: AppSpacing.base),
-              AppTextField(
-                key: const ValueKey('login-password'),
-                controller: _passwordCtrl,
-                label: 'Password',
-                obscureText: true,
-                textInputAction: TextInputAction.done,
-                onEditingComplete: isLoading ? null : _onLogin,
+              // AutofillGroup ties the two fields together so the platform password manager
+              // treats them as one credential pair (username + password), matching the fill/save
+              // behavior the old browser-based OIDC flow got for free.
+              AutofillGroup(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AppTextField(
+                      key: const ValueKey('login-username'),
+                      controller: _usernameCtrl,
+                      label: 'Email o nome utente',
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.username],
+                    ),
+                    const SizedBox(height: AppSpacing.base),
+                    AppTextField(
+                      key: const ValueKey('login-password'),
+                      controller: _passwordCtrl,
+                      label: 'Password',
+                      obscureText: true,
+                      textInputAction: TextInputAction.done,
+                      onEditingComplete: isLoading ? null : _onLogin,
+                      autofillHints: const [AutofillHints.password],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: AppSpacing.sm),
               Align(
@@ -120,6 +139,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: const Text('Password dimenticata?'),
                 ),
               ),
+
+              // ── Browser fallback (unexpected errors only) ───────────────
+              // A wrong-password error just lets the technician retry the same form — no browser
+              // detour needed. Anything else unexpected (network hiccup, backend error, …) gets a
+              // manual way out via the same browser-based flow "Password dimenticata?" uses.
+              if (failure != null && failure is! InvalidCredentials) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: isLoading ? null : _onForgotPassword,
+                    child: const Text('Accedi con il browser'),
+                  ),
+                ),
+              ],
 
               const SizedBox(height: AppSpacing.base),
 

@@ -104,6 +104,11 @@ class ZitadelAuthRepository implements IAuthRepository {
     try {
       authRequestId = await _captureAuthRequestId(pkce.challenge);
     } catch (e) {
+      // _captureAuthRequestId throws typed AuthFailure values (e.g. UnknownAuthError), not Dart
+      // Exceptions — pass those straight through instead of re-mapping via _mapError, which does
+      // `e.toString().toLowerCase()` and would turn a typed failure into a useless
+      // "Instance of 'UnknownAuthError'" message (AuthFailure has no custom toString()).
+      if (e is AuthFailure) return (user: null, failure: e);
       return (user: null, failure: _mapError(e));
     }
 
@@ -121,7 +126,10 @@ class ZitadelAuthRepository implements IAuthRepository {
       }
       code = rawCode;
     } on DioException catch (e) {
-      final backendCode = e.response?.data is Map ? e.response?.data['code'] as String? : null;
+      final rawResponseData = e.response?.data;
+      final backendCode = rawResponseData is Map && rawResponseData['code'] is String
+          ? rawResponseData['code'] as String
+          : null;
       return (user: null, failure: switch (backendCode) {
         'additional_factor_required' => const AdditionalFactorRequired(),
         'invalid_credentials' => const InvalidCredentials(),
@@ -209,9 +217,11 @@ class ZitadelAuthRepository implements IAuthRepository {
 
   // ── internals ──────────────────────────────────────────────────────────
 
-  /// GETs the OAuth authorize endpoint with redirects disabled and reads `authRequestId` off the
-  /// resulting 302's Location header — the same redirect [_appAuth]'s own `authorize()` would
-  /// otherwise open a full browser to render. Never rendered here; only the header is read.
+  /// GETs the OAuth authorize endpoint with redirects disabled and reads the auth request id off
+  /// the resulting 302's Location header — the same redirect [_appAuth]'s own `authorize()` would
+  /// otherwise open a full browser to render. Never rendered here; only the header is read. The
+  /// query parameter is named `authRequest` on this deployment's Zitadel Login V2 configuration,
+  /// with `authRequestId` accepted as a fallback name — see the comment at the read site below.
   Future<String> _captureAuthRequestId(String codeChallenge) async {
     final uri = Uri.parse('${Env.oidcIssuer}/oauth/v2/authorize').replace(
       queryParameters: {
@@ -236,7 +246,13 @@ class ZitadelAuthRepository implements IAuthRepository {
     if (location == null) {
       throw const UnknownAuthError('No redirect from authorize endpoint');
     }
-    final authRequestId = Uri.parse(location).queryParameters['authRequestId'];
+    // The deployed Zitadel instance's Login V2 configuration
+    // (ZITADEL_OIDC_DEFAULTLOGINURLV2 in the backend's docker-compose.coolify.yml) names this
+    // query parameter `authRequest`, not the `authRequestId` its docs/older versions use — read
+    // that name first, falling back to `authRequestId` in case a differently configured
+    // environment (or a future Zitadel version) reverts to it.
+    final redirectParams = Uri.parse(location).queryParameters;
+    final authRequestId = redirectParams['authRequest'] ?? redirectParams['authRequestId'];
     if (authRequestId == null || authRequestId.isEmpty) {
       throw const UnknownAuthError('No authRequestId in authorize redirect');
     }

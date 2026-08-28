@@ -365,7 +365,31 @@ void main() {
 
     /// Stubs the GET /oauth/v2/authorize redirect-capture call to return a 302 with the given
     /// authRequestId in its Location header — the shape every case in this group starts from.
+    ///
+    /// Uses `authRequest` as the query parameter name, matching the deployed Zitadel instance's
+    /// actual Login V2 configuration (ZITADEL_OIDC_DEFAULTLOGINURLV2 in the backend repo's
+    /// docker-compose.coolify.yml) — NOT `authRequestId`, which some Zitadel docs/versions use
+    /// but which this deployment does not send.
     void stubAuthorizeRedirect(String authRequestId) {
+      when(
+        () => httpClient.get<void>(
+          any(that: contains('/oauth/v2/authorize')),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<void>(
+          requestOptions: RequestOptions(path: '/oauth/v2/authorize'),
+          statusCode: 302,
+          headers: Headers.fromMap({
+            'location': ['https://issuer.test/ui/v1/login?authRequest=$authRequestId'],
+          }),
+        ),
+      );
+    }
+
+    /// Stubs the same redirect but with the fallback `authRequestId` query parameter name, for
+    /// the test confirming that name is still accepted.
+    void stubAuthorizeRedirectWithFallbackParamName(String authRequestId) {
       when(
         () => httpClient.get<void>(
           any(that: contains('/oauth/v2/authorize')),
@@ -419,6 +443,50 @@ void main() {
       final tokenCall = verify(() => appAuth.token(captureAny())).captured.single as TokenRequest;
       expect(tokenCall.authorizationCode, 'abc123');
       expect(tokenCall.codeVerifier, isNotEmpty);
+    });
+
+    // Regression: some Zitadel configurations/versions send `authRequestId` instead of the
+    // `authRequest` name this deployment actually uses (see stubAuthorizeRedirect's doc comment)
+    // — the fallback name must still work.
+    test('happy path via the authRequestId fallback query parameter name', () async {
+      stubAuthorizeRedirectWithFallbackParamName('authreq-fallback');
+      when(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<dynamic>(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+          statusCode: 200,
+          data: {'code': 'abc123'},
+        ),
+      );
+      when(() => appAuth.token(any())).thenAnswer(
+        (_) async => TokenResponse(
+          'access-1', 'refresh-1', DateTime.now().add(const Duration(hours: 1)),
+          _fakeIdToken(), null, null, null,
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+      expect(result.failure, isNull);
+      expect(result.user?.accessToken, 'access-1');
+
+      final loginPostCall = verify(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: captureAny(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).captured.single as Map<String, dynamic>;
+      expect(loginPostCall['authRequestId'], 'authreq-fallback');
     });
 
     test('wrong credentials: backend returns invalid_credentials, no fallback', () async {
@@ -479,6 +547,45 @@ void main() {
       expect(result.user, isNull);
       expect(result.failure, isA<AdditionalFactorRequired>());
     });
+
+    // Regression: _captureAuthRequestId throws typed AuthFailure values (e.g. UnknownAuthError),
+    // not Dart Exceptions. The catch block around its call site used to funnel everything through
+    // _mapError(e), which does `e.toString().toLowerCase()` — since UnknownAuthError has no
+    // custom toString(), that produced a useless "Instance of 'UnknownAuthError'" message instead
+    // of the actual, specific failure. It must be passed through untouched instead.
+    test(
+      'when the authorize redirect has no Location header, the typed failure survives intact '
+      '(not "Instance of ...")',
+      () async {
+        when(
+          () => httpClient.get<void>(
+            any(that: contains('/oauth/v2/authorize')),
+            options: any(named: 'options'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<void>(
+            requestOptions: RequestOptions(path: '/oauth/v2/authorize'),
+            statusCode: 302,
+            // No 'location' header at all — simulates a redirect response Dio accepted but that
+            // carries nothing to capture (e.g. a timed-out/misconfigured authorize endpoint).
+            headers: Headers(),
+          ),
+        );
+
+        final repo = ZitadelAuthRepository(
+          appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+        );
+
+        final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+        expect(result.user, isNull);
+        expect(result.failure, isA<UnknownAuthError>());
+        final failure = result.failure as UnknownAuthError;
+        expect(failure.message, isNot(contains('Instance of')));
+        expect(failure.message, 'No redirect from authorize endpoint');
+        verifyNever(() => httpClient.post<dynamic>(any(), data: any(named: 'data'), options: any(named: 'options')));
+      },
+    );
 
     test('network error surfaces as NetworkError', () async {
       when(
@@ -559,5 +666,49 @@ void main() {
       expect(result.failure, isA<UnknownAuthError>());
       verifyNever(() => appAuth.token(any()));
     });
+
+    // Regression: the backend login POST can fail with a response body that IS a Map but whose
+    // `code` field is not a String (e.g. a proxy/gateway error page shaped differently, here a
+    // numeric HTTP status echoed back as `code`). The old `e.response?.data['code'] as String?`
+    // cast threw a TypeError from inside the catch block itself, escaping the whole method
+    // uncaught and leaving the UI stuck spinning forever. It must fall through to a generic
+    // mapped failure instead.
+    test(
+      'DioException with a non-String `code` field in the response body does not throw '
+      '— falls through to a generic failure',
+      () async {
+        stubAuthorizeRedirect('authreq-1');
+        when(
+          () => httpClient.post<dynamic>(
+            any(that: contains('/api/MobileAuth/login')),
+            data: any(named: 'data'),
+            options: any(named: 'options'),
+          ),
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+              statusCode: 502,
+              data: {'code': 502},
+            ),
+          ),
+        );
+
+        final repo = ZitadelAuthRepository(
+          appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+        );
+
+        // Must complete without throwing.
+        final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+        expect(result.user, isNull);
+        // Not InvalidCredentials/AdditionalFactorRequired — those require a String match on
+        // `code`, which this response doesn't have — so it falls through to _mapError's generic
+        // mapping.
+        expect(result.failure, isA<UnknownAuthError>());
+        verifyNever(() => appAuth.token(any()));
+      },
+    );
   });
 }

@@ -31,6 +31,7 @@ Finder get _loginCta =>
 
 Finder get _usernameField => find.byKey(const ValueKey('login-username'));
 Finder get _passwordField => find.byKey(const ValueKey('login-password'));
+Finder get _browserFallbackButton => find.text('Accedi con il browser');
 
 Future<void> _enterCredentials(WidgetTester tester, {String username = 'tech@tasktap.io', String password = 'correct-password'}) async {
   await tester.enterText(_usernameField, username);
@@ -84,6 +85,45 @@ void main() {
 
       expect(find.text('Password dimenticata?'), findsOneWidget);
     });
+
+    // Regression: a real functional regression vs. the old browser-based flow, which got native
+    // password-manager fill/save for free. The two fields must be wrapped in an AutofillGroup and
+    // carry the right autofillHints for the platform password manager to recognize them.
+    testWidgets('wraps the credential fields in an AutofillGroup', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.ancestor(of: _usernameField, matching: find.byType(AutofillGroup)),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(of: _passwordField, matching: find.byType(AutofillGroup)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('username field carries AutofillHints.username', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      // TextFormField itself doesn't expose the properties it was constructed with as public
+      // getters — it forwards them into the TextField it builds internally, so assert on that.
+      final field = tester.widget<TextField>(
+        find.descendant(of: _usernameField, matching: find.byType(TextField)),
+      );
+      expect(field.autofillHints, contains(AutofillHints.username));
+    });
+
+    testWidgets('password field carries AutofillHints.password', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(
+        find.descendant(of: _passwordField, matching: find.byType(TextField)),
+      );
+      expect(field.autofillHints, contains(AutofillHints.password));
+    });
   });
 
   // ── Sign-in ──────────────────────────────────────────────────────────────
@@ -136,6 +176,67 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('connessione'), findsOneWidget);
+    });
+  });
+
+  // ── Browser fallback on unexpected errors ────────────────────────────────
+
+  group('LoginScreen browser fallback', () {
+    testWidgets('is not shown before any login attempt', (tester) async {
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      expect(_browserFallbackButton, findsNothing);
+    });
+
+    testWidgets('is NOT shown on InvalidCredentials — retry the same form instead', (tester) async {
+      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
+        (_) async => (user: null, failure: const InvalidCredentials()),
+      );
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await _enterCredentials(tester, password: 'wrong');
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      expect(_browserFallbackButton, findsNothing);
+    });
+
+    testWidgets('is shown on an unexpected/generic failure (e.g. NetworkError)', (tester) async {
+      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
+        (_) async => (user: null, failure: const NetworkError()),
+      );
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await _enterCredentials(tester);
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      expect(_browserFallbackButton, findsOneWidget);
+    });
+
+    testWidgets('tapping it calls signIn (browser flow), not signInWithPassword again', (tester) async {
+      when(() => repo.signInWithPassword(any(), any())).thenAnswer(
+        (_) async => (user: null, failure: const NetworkError()),
+      );
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      await tester.pumpWidget(_buildLoginScreen(repo));
+      await tester.pumpAndSettle();
+
+      await _enterCredentials(tester);
+      await tester.tap(_loginCta);
+      await tester.pumpAndSettle();
+
+      await tester.tap(_browserFallbackButton);
+      await tester.pumpAndSettle();
+
+      verify(() => repo.signIn()).called(1);
+      verify(() => repo.signInWithPassword(any(), any())).called(1);
     });
   });
 
