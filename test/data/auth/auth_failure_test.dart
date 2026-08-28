@@ -45,6 +45,13 @@ void main() {
       expect(msg, contains('boom'));
     });
 
+    test('AdditionalFactorRequired returns a verification-needed message', () {
+      expect(
+        authFailureMessage(const AdditionalFactorRequired()),
+        'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
+      );
+    });
+
     test('all failure types return non-empty Italian strings', () {
       final failures = <AuthFailure>[
         const InvalidCredentials(),

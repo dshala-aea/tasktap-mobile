@@ -11,6 +11,14 @@ class InvalidCredentials extends AuthFailure {
   const InvalidCredentials();
 }
 
+/// The account needs a verification factor beyond password (MFA, passkey) that the native
+/// login form doesn't support yet — see `ZitadelAuthRepository.signInWithPassword`'s own doc
+/// comment. Callers fall back to the browser flow automatically; this type exists mainly so the
+/// fallback has something typed to switch on, not because it's normally shown as an error.
+class AdditionalFactorRequired extends AuthFailure {
+  const AdditionalFactorRequired();
+}
+
 /// The account has been disabled by an admin.
 class AccountDisabled extends AuthFailure {
   const AccountDisabled();
@@ -45,6 +53,7 @@ class UnknownAuthError extends AuthFailure {
 /// Maps an [AuthFailure] to a user-facing Italian string.
 String authFailureMessage(AuthFailure failure) => switch (failure) {
   InvalidCredentials() => 'Email o password errati. Controlla le credenziali e riprova.',
+  AdditionalFactorRequired() => 'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
   AccountDisabled() => 'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
   EmailNotFound() => 'Nessun account trovato con questa email.',
   TooManyRequests() => 'Troppi tentativi. Attendi qualche minuto prima di riprovare.',
