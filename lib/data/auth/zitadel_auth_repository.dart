@@ -10,6 +10,7 @@ import '../../core/config/env.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
+import 'pkce.dart';
 
 /// Zitadel OIDC implementation of [IAuthRepository].
 ///
@@ -18,6 +19,11 @@ import '../../domain/auth/i_auth_repository.dart';
 /// and a small cached-identity snapshot (id/email/displayName — no tokens) are
 /// the only things persisted (flutter_secure_storage); access/id tokens live
 /// in memory and are re-minted from the refresh token on restart.
+///
+/// [signInWithPassword] additionally drives a native in-app password flow: it captures an
+/// `authRequestId` from Zitadel's authorize redirect, submits credentials to the TaskTap backend's
+/// BFF endpoint, and exchanges the resulting authorization code for tokens via AppAuth — all
+/// without ever opening the system browser.
 ///
 /// Cold start is offline-tolerant by design: see [_restore].
 class ZitadelAuthRepository implements IAuthRepository {
@@ -39,11 +45,11 @@ class ZitadelAuthRepository implements IAuthRepository {
   final FlutterAppAuth _appAuth;
   final FlutterSecureStorage _storage;
 
-  /// Plain HTTP client for the one non-AppAuth call this repository makes: revoking the refresh
-  /// token at sign-out (see [_revokeRefreshToken]). Deliberately not `dioProvider`'s configured
-  /// instance — that one carries `AuthInterceptor`, which exists to *attach* a bearer token and
-  /// silently refresh on 401; revocation needs neither and firing it through that interceptor
-  /// would be the wrong tool wired to the wrong call.
+  /// Plain HTTP client for calls that must not go through `dioProvider`'s `AuthInterceptor` —
+  /// revoking the refresh token at sign-out (see [_revokeRefreshToken]), and the native-login
+  /// BFF calls below ([signInWithPassword]). Revocation needs no bearer token; a login attempt
+  /// has none yet to attach — either way, `AuthInterceptor`'s 401-retry-then-forced-signout logic
+  /// is the wrong behavior for both, since neither is an authenticated-session request.
   final Dio _revocationHttpClient;
 
   final StreamController<AuthUser?> _controller = StreamController<AuthUser?>.broadcast();
@@ -67,6 +73,65 @@ class ZitadelAuthRepository implements IAuthRepository {
           Env.oidcRedirectUri,
           issuer: Env.oidcIssuer,
           scopes: _scopes,
+        ),
+      );
+      final user = _fromTokens(
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        idToken: result.idToken,
+        expiry: result.accessTokenExpirationDateTime,
+      );
+      if (user == null) {
+        return (user: null, failure: const UnknownAuthError('No tokens returned'));
+      }
+      await _persistRefreshToken(result.refreshToken);
+      await _persistCachedIdentity(user);
+      _emit(user);
+      return (user: user, failure: null);
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+  }
+
+  @override
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPassword(
+    String loginName,
+    String password,
+  ) async {
+    final pkce = Pkce.generate();
+
+    final String authRequestId;
+    try {
+      authRequestId = await _captureAuthRequestId(pkce.challenge);
+    } catch (e) {
+      return (user: null, failure: _mapError(e));
+    }
+
+    final String code;
+    try {
+      final response = await _revocationHttpClient.post<dynamic>(
+        '${Env.apiBaseUrl}/api/MobileAuth/login',
+        data: {'authRequestId': authRequestId, 'loginName': loginName, 'password': password},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+      code = response.data['code'] as String;
+    } on DioException catch (e) {
+      final backendCode = e.response?.data is Map ? e.response?.data['code'] as String? : null;
+      return (user: null, failure: switch (backendCode) {
+        'additional_factor_required' => const AdditionalFactorRequired(),
+        'invalid_credentials' => const InvalidCredentials(),
+        _ => _mapError(e),
+      });
+    }
+
+    try {
+      final result = await _appAuth.token(
+        TokenRequest(
+          Env.oidcClientId,
+          Env.oidcRedirectUri,
+          issuer: Env.oidcIssuer,
+          authorizationCode: code,
+          codeVerifier: pkce.verifier,
         ),
       );
       final user = _fromTokens(
@@ -138,6 +203,40 @@ class ZitadelAuthRepository implements IAuthRepository {
   }
 
   // ── internals ──────────────────────────────────────────────────────────
+
+  /// GETs the OAuth authorize endpoint with redirects disabled and reads `authRequestId` off the
+  /// resulting 302's Location header — the same redirect [_appAuth]'s own `authorize()` would
+  /// otherwise open a full browser to render. Never rendered here; only the header is read.
+  Future<String> _captureAuthRequestId(String codeChallenge) async {
+    final uri = Uri.parse('${Env.oidcIssuer}/oauth/v2/authorize').replace(
+      queryParameters: {
+        'response_type': 'code',
+        'client_id': Env.oidcClientId,
+        'redirect_uri': Env.oidcRedirectUri,
+        'scope': _scopes.join(' '),
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
+      },
+    );
+
+    final response = await _revocationHttpClient.get<void>(
+      uri.toString(),
+      options: Options(
+        followRedirects: false,
+        validateStatus: (status) => status != null && status < 400,
+      ),
+    );
+
+    final location = response.headers.value('location');
+    if (location == null) {
+      throw const UnknownAuthError('No redirect from authorize endpoint');
+    }
+    final authRequestId = Uri.parse(location).queryParameters['authRequestId'];
+    if (authRequestId == null || authRequestId.isEmpty) {
+      throw const UnknownAuthError('No authRequestId in authorize redirect');
+    }
+    return authRequestId;
+  }
 
   /// Revoke the current refresh token at Zitadel's OAuth revocation endpoint.
   ///

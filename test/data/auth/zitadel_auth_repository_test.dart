@@ -19,6 +19,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/auth/zitadel_auth_repository.dart';
+import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -351,6 +352,155 @@ void main() {
           ),
         );
       });
+    });
+  });
+
+  group('signInWithPassword', () {
+    late MockDio httpClient;
+
+    setUp(() {
+      httpClient = MockDio();
+      registerFallbackValue(Options());
+    });
+
+    /// Stubs the GET /oauth/v2/authorize redirect-capture call to return a 302 with the given
+    /// authRequestId in its Location header — the shape every case in this group starts from.
+    void stubAuthorizeRedirect(String authRequestId) {
+      when(
+        () => httpClient.get<void>(
+          any(that: contains('/oauth/v2/authorize')),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<void>(
+          requestOptions: RequestOptions(path: '/oauth/v2/authorize'),
+          statusCode: 302,
+          headers: Headers.fromMap({
+            'location': ['https://issuer.test/ui/v1/login?authRequestId=$authRequestId'],
+          }),
+        ),
+      );
+    }
+
+    test('happy path: authorize redirect + backend login + token exchange', () async {
+      stubAuthorizeRedirect('authreq-1');
+      when(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<dynamic>(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+          statusCode: 200,
+          data: {'code': 'abc123'},
+        ),
+      );
+      when(() => appAuth.token(any())).thenAnswer(
+        // Positional order per flutter_appauth_platform_interface's TokenResponse: accessToken,
+        // refreshToken, accessTokenExpirationDateTime, idToken, tokenType, scopes,
+        // tokenAdditionalParameters — 7 params, all but the first four left null here.
+        (_) async => TokenResponse(
+          'access-1', 'refresh-1', DateTime.now().add(const Duration(hours: 1)),
+          _fakeIdToken(), null, null, null,
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+      expect(result.failure, isNull);
+      expect(result.user?.accessToken, 'access-1');
+
+      final tokenCall = verify(() => appAuth.token(captureAny())).captured.single as TokenRequest;
+      expect(tokenCall.authorizationCode, 'abc123');
+      expect(tokenCall.codeVerifier, isNotEmpty);
+    });
+
+    test('wrong credentials: backend returns invalid_credentials, no fallback', () async {
+      stubAuthorizeRedirect('authreq-1');
+      when(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+          response: Response<dynamic>(
+            requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+            statusCode: 400,
+            data: {'code': 'invalid_credentials'},
+          ),
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'wrong-password');
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<InvalidCredentials>());
+      verifyNever(() => appAuth.token(any()));
+    });
+
+    test('additional factor required: typed as AdditionalFactorRequired', () async {
+      stubAuthorizeRedirect('authreq-1');
+      when(
+        () => httpClient.post<dynamic>(
+          any(that: contains('/api/MobileAuth/login')),
+          data: any(named: 'data'),
+          options: any(named: 'options'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+          response: Response<dynamic>(
+            requestOptions: RequestOptions(path: '/api/MobileAuth/login'),
+            statusCode: 400,
+            data: {'code': 'additional_factor_required'},
+          ),
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<AdditionalFactorRequired>());
+    });
+
+    test('network error surfaces as NetworkError', () async {
+      when(
+        () => httpClient.get<void>(
+          any(that: contains('/oauth/v2/authorize')),
+          options: any(named: 'options'),
+        ),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/oauth/v2/authorize'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
+
+      final repo = ZitadelAuthRepository(
+        appAuth: appAuth, storage: storage, revocationHttpClient: httpClient, restore: false,
+      );
+
+      final result = await repo.signInWithPassword('tech@tasktap.io', 'correct-password');
+
+      expect(result.user, isNull);
+      expect(result.failure, isA<NetworkError>());
     });
   });
 }
