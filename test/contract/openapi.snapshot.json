@@ -22,6 +22,240 @@
         }
       }
     },
+    "/api/absence-requests": {
+      "post": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAbsenceRequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAbsenceRequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAbsenceRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AbsenceRequestStatusEnum"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/absence-requests/{id}": {
+      "get": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/absence-requests/{id}/approve": {
+      "post": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideAbsenceRequestBody"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideAbsenceRequestBody"
+                  }
+                ]
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DecideAbsenceRequestBody"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/absence-requests/{id}/reject": {
+      "post": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideAbsenceRequestBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideAbsenceRequestBody"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideAbsenceRequestBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/absence-requests/{id}/cancel": {
+      "post": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/absence-requests/{id}/reassignment-candidates": {
+      "get": {
+        "tags": [
+          "AbsenceRequests"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/migrations/migrate": {
       "post": {
         "tags": [
@@ -6050,6 +6284,26 @@
         "tags": [
           "MobileAuth"
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeLoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeLoginRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/NativeLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -7580,48 +7834,6 @@
         "responses": {
           "200": {
             "description": "Success message."
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Reports"
-        ],
-        "summary": "Deletes a draft report. Only Bozza reports can be deleted \u2014 the same gate every other\nmutating endpoint on this controller applies. Lets a technician (or office/admin) clean\nup a report started in error before it\u0027s ever submitted; a report that has already left\nBozza must go through Task\u0026lt;IActionResult\u0026gt; ReportsController.Annulla(Guid id) instead.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
           }
         }
       }
@@ -13709,6 +13921,13 @@
   },
   "components": {
     "schemas": {
+      "AbsenceRequestStatusEnum": {
+        "type": "integer"
+      },
+      "AbsenceTypeEnum": {
+        "type": "integer",
+        "description": "The category of an AbsenceRequest."
+      },
       "ActiveTracker": {
         "required": [
           "kind",
@@ -15000,6 +15219,50 @@
       "ControlTypeEnum": {
         "type": "integer",
         "description": "Defines how a Control renders its input and stores its value in a ReportControlValue."
+      },
+      "CreateAbsenceRequestBody": {
+        "type": "object",
+        "properties": {
+          "requestedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Null means \u0022myself\u0022 \u2014 resolved server-side, never trust a client-supplied self-id.",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AbsenceTypeEnum"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "time"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       },
       "CreateAgentRequest": {
         "type": "object",
@@ -16626,6 +16889,17 @@
           }
         },
         "description": "Represents a customer/client (Cliente) in the system."
+      },
+      "DecideAbsenceRequestBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       },
       "DeleteAccountRequest": {
         "type": "object",
@@ -18664,6 +18938,21 @@
       },
       "MovimentoTipoEnum": {
         "type": "integer"
+      },
+      "NativeLoginRequest": {
+        "type": "object",
+        "properties": {
+          "authRequestId": {
+            "type": "string"
+          },
+          "loginName": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "description": "Request body for the native-password login flow (see IZitadelSessionService)."
       },
       "Notification": {
         "type": "object",
@@ -25232,6 +25521,9 @@
   "tags": [
     {
       "name": "TaskTapAPI.Api"
+    },
+    {
+      "name": "AbsenceRequests"
     },
     {
       "name": "AdminMigrations"
