@@ -56,6 +56,8 @@ import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
 import '../../features/timbra/cantiere_timbra_screen.dart';
+import '../../features/cantiere/cantieri_list_screen.dart';
+import '../../features/cantiere/cantiere_detail_screen.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Route path constants.
@@ -185,11 +187,20 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) {
           final ticketId = state.uri.queryParameters['ticketId'];
           final customerId = state.uri.queryParameters['customerId'];
+          final cantiereId = state.uri.queryParameters['cantiereId'];
           return CantiereTimbraScreen(
             ticketId: ticketId,
             customerId: customerId,
+            cantiereId: cantiereId,
           );
         },
+      ),
+
+      // ── Personal Timbra (pushed from a Dashboard quick action) ──────────────
+      GoRoute(
+        path: AppRoutes.timbra,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const TimbraScreen(),
       ),
 
       // ── New ticket form (pushed from ticket list FAB) ─────────────────────
@@ -236,13 +247,24 @@ GoRouter buildRouter(WidgetRef ref) {
               ),
             ],
           ),
-          // 2 — Timbra
+          // 2 — Cantieri
           StatefulShellBranch(
-            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'timbra'),
+            navigatorKey: GlobalKey<NavigatorState>(debugLabel: 'cantieri'),
             routes: [
               GoRoute(
-                path: AppRoutes.timbra,
-                builder: (context, state) => const TimbraScreen(),
+                path: AppRoutes.cantieri,
+                builder: (context, state) => const CantieriListScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    // Full-screen, no persistent bottom nav — same reasoning as ticket detail's
+                    // own `parentNavigatorKey` (see that route's comment above).
+                    parentNavigatorKey: rootNavigatorKey,
+                    builder: (context, state) => CantiereDetailScreen(
+                      cantiereId: state.pathParameters['id']!,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
