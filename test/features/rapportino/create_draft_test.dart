@@ -215,6 +215,22 @@ void main() {
       final draft = await repo.getDraft(id!);
       expect(draft!.metadataJson, isNull);
     });
+
+    testWidgets('seeds the creating technician as the first staff row', (tester) async {
+      final container = buildContainer(user: _testUser);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
+
+      final staff = await repo.getStaff(id!);
+      expect(staff, hasLength(1));
+      expect(staff.single.userId, _testUser.id);
+      expect(
+        staff.single.hoursWorked,
+        isNull,
+        reason: 'names who is on the job, but does not guess their hours',
+      );
+    });
   });
 
   group('createReworkDraft', () {

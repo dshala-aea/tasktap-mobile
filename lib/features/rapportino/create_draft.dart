@@ -69,29 +69,42 @@ Future<String?> createLocalDraft(
   // string never matched that route at all, so every attachment upload 404'd before the request
   // reached any business logic — the report row not existing yet was never the problem.
   final id = _uuid.v4();
-  await ref
-      .read(draftReportRepositoryProvider)
-      .createDraft(
-        DraftReportsCompanion.insert(
-          id: id,
-          tenantId: resolvedTenantId,
-          createdAt: DateTime.now().toUtc(),
-          title: title,
-          insertedUserId: user.id,
-          locationId: locationId,
-          ticketId: Value(ticketId),
-          cantiereId: Value(cantiereId),
-          customerId: Value(customerId),
-          scheduleId: Value(scheduleId),
-          // Same shape ReportEditorNotifier._buildMetadataJson/._parseMetadataJson round-trip —
-          // workAddress has no column of its own (see DraftReports.metadataJson's doc comment).
-          metadataJson: Value(
-            (workAddress?.isNotEmpty ?? false) ? jsonEncode({'workAddress': workAddress}) : null,
-          ),
-          isLocalOnly: const Value(true),
-          stato: const Value('Bozza'),
-        ),
-      );
+  final repo = ref.read(draftReportRepositoryProvider);
+  await repo.createDraft(
+    DraftReportsCompanion.insert(
+      id: id,
+      tenantId: resolvedTenantId,
+      createdAt: DateTime.now().toUtc(),
+      title: title,
+      insertedUserId: user.id,
+      locationId: locationId,
+      ticketId: Value(ticketId),
+      cantiereId: Value(cantiereId),
+      customerId: Value(customerId),
+      scheduleId: Value(scheduleId),
+      // Same shape ReportEditorNotifier._buildMetadataJson/._parseMetadataJson round-trip —
+      // workAddress has no column of its own (see DraftReports.metadataJson's doc comment).
+      metadataJson: Value(
+        (workAddress?.isNotEmpty ?? false) ? jsonEncode({'workAddress': workAddress}) : null,
+      ),
+      isLocalOnly: const Value(true),
+      stato: const Value('Bozza'),
+    ),
+  );
+
+  // Seed the creating technician as the first staff row. Almost every rapportino is worked and
+  // filed by the same person — without this, every single draft made the operator manually add
+  // themselves to the staff list before they could enter their own hours. The row is otherwise
+  // empty (no hours yet); it only names who's on the job.
+  await repo.upsertStaff(
+    ReportStaffTableCompanion.insert(
+      id: _uuid.v4(),
+      tenantId: resolvedTenantId,
+      createdAt: DateTime.now().toUtc(),
+      reportId: id,
+      userId: user.id,
+    ),
+  );
 
   return id;
 }
