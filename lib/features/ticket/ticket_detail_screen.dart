@@ -301,12 +301,18 @@ class _TicketDetailBody extends ConsumerWidget {
                   final cantiereAsync = ref.watch(
                     cantiereByIdProvider(ticket.cantiereId!),
                   );
+                  // Neutral fallback, not the raw GUID — this isn't just a brief loading-state
+                  // placeholder, it's the permanent label whenever the linked cantiere falls
+                  // outside this technician's synced scope (a normal, expected case).
                   final label =
-                      cantiereAsync.valueOrNull?.name ?? ticket.cantiereId!;
+                      cantiereAsync.valueOrNull?.name ?? 'Cantiere collegato';
                   return AppChip(
                     label: 'Cantiere: $label',
                     onTap: () => context.push(
-                      AppRoutes.cantieriDetailPath(ticket.cantiereId!),
+                      AppRoutes.cantieriDetailPath(
+                        ticket.cantiereId!,
+                        ticketId: ticket.id,
+                      ),
                     ),
                   );
                 },

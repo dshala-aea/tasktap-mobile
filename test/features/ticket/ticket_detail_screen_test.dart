@@ -8,9 +8,11 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -71,6 +73,49 @@ Widget _buildDetail({
       isOnlineProvider.overrideWithValue(isOnline),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
+  );
+}
+
+/// Builds this screen's `/ticket/:id` route behind a real [GoRouter], with a marker screen at
+/// the cantiere-detail route that echoes back its `ticketId` query param — so a test can assert
+/// the cantiere chip's push actually carries `ticket.id` through, not just that it navigates
+/// somewhere. Mirrors dashboard_screen_test.dart's `_makeQuickActionRouter` pattern: this file's
+/// other tests have no GoRouter ancestor at all, so this is a router-backed variant of just this
+/// one test rather than adding a GoRouter to every test in the file.
+GoRouter _makeChipRouter({required String ticketId}) => GoRouter(
+  initialLocation: '/ticket/$ticketId',
+  routes: [
+    GoRoute(
+      path: AppRoutes.ticketDetail,
+      builder: (_, state) => TicketDetailScreen(ticketId: state.pathParameters['id']!),
+    ),
+    GoRoute(
+      path: AppRoutes.cantieriDetail,
+      builder: (_, state) => Scaffold(
+        body: Center(
+          child: Text(
+            'CANTIERE-DETAIL-MARKER:ticketId=${state.uri.queryParameters['ticketId']}',
+          ),
+        ),
+      ),
+    ),
+  ],
+);
+
+Widget _buildDetailWithRouter({
+  required AppDatabase db,
+  required MockAuthRepository repo,
+  required GoRouter router,
+  bool isOnline = false,
+}) {
+  return ProviderScope(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo),
+      appDatabaseProvider.overrideWithValue(db),
+      dioProvider.overrideWithValue(MockDio()),
+      isOnlineProvider.overrideWithValue(isOnline),
+    ],
+    child: MaterialApp.router(routerConfig: router),
   );
 }
 
@@ -447,6 +492,48 @@ void main() {
       await pump(tester);
 
       expect(find.textContaining('Cantiere:'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'falls back to a neutral label, never the raw GUID, when the linked cantiere is not synced '
+      'locally',
+      (tester) async {
+        // ticket.cantiereId points at a cantiere id that was never synced to this device — a
+        // real, ordinary case per this app's sync-scoping rules, not a hypothetical. The chip's
+        // label must never fall back to the raw id.
+        await seedBase(db);
+        await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+          const TicketsCompanion(cantiereId: Value('cant-unsynced')),
+        );
+        await pump(tester);
+
+        expect(find.text('Cantiere: Cantiere collegato'), findsOneWidget);
+        expect(find.textContaining('cant-unsynced'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('tapping the chip pushes CantiereDetailScreen with ticket.id as ticketId', (
+      tester,
+    ) async {
+      await seedWithCantiere(db);
+      final router = _makeChipRouter(ticketId: 'ticket-1');
+      await tester.pumpWidget(_buildDetailWithRouter(db: db, repo: repo, router: router));
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final chip = find.text('Cantiere: Cantiere Nord');
+      expect(chip, findsOneWidget);
+
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+
+      expect(find.text('CANTIERE-DETAIL-MARKER:ticketId=ticket-1'), findsOneWidget);
+
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

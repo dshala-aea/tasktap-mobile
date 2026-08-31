@@ -76,8 +76,11 @@ abstract final class AppRoutes {
   static const String cantieri = '/cantieri';
   static const String cantieriDetail = '/cantieri/:id';
 
-  /// Build the detail path for a given cantiere id.
-  static String cantieriDetailPath(String id) => '/cantieri/$id';
+  /// Build the detail path for a given cantiere id, optionally carrying the ticket that launched
+  /// it (see the cantiere chip in `ticket_detail_screen.dart`) so the eventual Timbra session
+  /// downstream stays tagged with that ticket.
+  static String cantieriDetailPath(String id, {String? ticketId}) =>
+      ticketId == null ? '/cantieri/$id' : '/cantieri/$id?ticketId=$ticketId';
 
   static const String calendario = '/calendario';
   static const String altro = '/altro';
@@ -262,6 +265,7 @@ GoRouter buildRouter(WidgetRef ref) {
                     parentNavigatorKey: rootNavigatorKey,
                     builder: (context, state) => CantiereDetailScreen(
                       cantiereId: state.pathParameters['id']!,
+                      ticketId: state.uri.queryParameters['ticketId'],
                     ),
                   ),
                 ],
