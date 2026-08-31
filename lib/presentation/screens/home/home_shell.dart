@@ -15,6 +15,7 @@ import '../../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../../data/timbratura/cantiere_timbra_sync_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconciler.dart';
+import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 import '../../../data/timbratura/work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/work_log_reconciler.dart';
@@ -80,6 +81,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // Same push-on-reconnect treatment for a photo/file picked from ticket detail's Allegati
       // tab while offline (features/ticket/ticket_detail_screen.dart).
       _reconnectUnsubs.add(initTicketAttachmentUploadQueueWatcher(ref));
+      // A rapportino submitted with no signal is queued (SubmissionQueue) and correctly kept as
+      // retryable rather than lost — but nothing ever retried it automatically until this watcher
+      // was wired up. Every other offline-write queue in this app (tickets, attachments, timbra,
+      // cantiere timbra) gets this same reconnect-triggered flush; this was the one missing.
+      _reconnectUnsubs.add(initSubmissionQueueWatcher(ref));
       // Retries the OIDC token refresh as soon as connectivity returns —
       // matters most right after a cold start on no signal, where auth
       // falls back to a cached, signed-in-but-offline identity (see

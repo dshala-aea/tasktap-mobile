@@ -25,11 +25,15 @@ final realSubmissionQueueProvider = Provider<SubmissionQueue>((ref) {
   return SubmissionQueue(repo: repo, apiClient: apiClient);
 });
 
-/// Call once on app start (e.g. in main or the root widget).
-/// Registers the reconnect → processAll hook.
-void initSubmissionQueueWatcher(WidgetRef ref) {
+/// Call once on app start (e.g. in HomeShell.initState via addPostFrameCallback).
+///
+/// Returns the cancel function `onReconnect` hands back — the caller (HomeShell) must invoke it
+/// from `dispose()`, matching every sibling watcher (see e.g. `initTimbraSyncWatcher`'s own doc
+/// comment for why: without it, a widget remount leaves the old closure's `ref` in the listener
+/// list forever).
+VoidCallback initSubmissionQueueWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() {
+  final cancel = connectivity.onReconnect(() {
     final queue = ref.read(realSubmissionQueueProvider);
     queue.processAll();
   });
@@ -42,4 +46,6 @@ void initSubmissionQueueWatcher(WidgetRef ref) {
 
   // Flush once after the first frame.
   Future.microtask(flush);
+
+  return cancel;
 }
