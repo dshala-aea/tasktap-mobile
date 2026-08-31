@@ -113,8 +113,8 @@ class NotificationDto {
       userId: json['userId'] as String,
       title: json['title'] as String,
       message: json['message'] as String,
-      type: json['type'] as String,
-      deliveryType: json['deliveryType'] as String,
+      type: _notificationTypeFromWire(json['type']),
+      deliveryType: _deliveryTypeFromWire(json['deliveryType']),
       isRead: json['isRead'] as bool,
       readAt: json['readAt'] as String?,
       relatedEntityId: json['relatedEntityId'] as String?,
@@ -140,4 +140,51 @@ class NotificationDto {
   final String? sentAt;
   final bool isDelivered;
   final String createdAt;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Wire-format enum decoding
+//
+// `NotificationTypeEnum`/`NotificationDeliveryTypeEnum` carry no `[JsonConverter(
+// JsonStringEnumConverter)]` server-side (unlike e.g. TicketPriorityEnum) — this codebase applies
+// that converter per-enum, not globally, and neither of these two got it. The wire value is the
+// raw ordinal int, not a name string. `type`/`deliveryType` used to be cast `as String` here,
+// which threw "type 'int' is not a subtype of type 'String'" on every single notification —
+// exactly the same bug the web client already hit and fixed for the same field (see
+// `frontend/src/lib/api/enums.ts`'s `notificationTypeFromWire`, whose own comment describes a
+// notification centre that "showed a count on the bell and then failed to open"). These two
+// helpers mirror that fix: tolerate either an int ordinal or a name string, and fall back to a
+// neutral label for anything unrecognised rather than crashing — nothing in the mobile UI
+// branches on the specific value today, so a safe label is enough.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _kNotificationTypeNames = [
+  'TicketAssigned', // 0
+  'TicketStatusChanged', // 1
+  'TicketCreated', // 2
+  'TicketCompleted', // 3
+  'TicketOverdue', // 4
+  'ScheduleReminder', // 5
+  'ScheduleStarting', // 6
+  'LicenseExpiring', // 7
+  'LicenseExpired', // 8
+  'WorkLogSubmitted', // 9
+  'DocumentUploaded', // 10
+  'SystemAnnouncement', // 11
+  'UserMention', // 12
+  'LowStock', // 13
+];
+
+const _kDeliveryTypeNames = ['InApp', 'Push', 'Email', 'SMS'];
+
+String _notificationTypeFromWire(dynamic value) =>
+    _enumNameFromWire(value, _kNotificationTypeNames) ?? 'Unknown';
+
+String _deliveryTypeFromWire(dynamic value) =>
+    _enumNameFromWire(value, _kDeliveryTypeNames) ?? 'InApp';
+
+String? _enumNameFromWire(dynamic value, List<String> names) {
+  if (value is String) return value;
+  if (value is int && value >= 0 && value < names.length) return names[value];
+  return null;
 }
