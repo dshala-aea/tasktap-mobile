@@ -496,6 +496,23 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       draft.customerSignatureAllegatoId,
       draft.technicianSignatureAllegatoId,
     }.whereType<String>().toSet();
+    // The signature blob itself lives on disk, not in the draft row — only its allegatoId is
+    // persisted there. Without re-deriving the local path from the matching allegato here, every
+    // (re)open of this editor restores allegatoId but leaves localPath null, and
+    // _SignatureBlock's `captured` check (localPath != null && allegatoId != null) reverts to
+    // "not captured" even though the file and DB row both still exist.
+    final customerSignatureRows = allegati
+        .where((a) => a.id == draft.customerSignatureAllegatoId)
+        .toList();
+    final technicianSignatureRows = allegati
+        .where((a) => a.id == draft.technicianSignatureAllegatoId)
+        .toList();
+    final customerSignatureLocalPath = customerSignatureRows.isNotEmpty
+        ? customerSignatureRows.first.storagePath
+        : null;
+    final technicianSignatureLocalPath = technicianSignatureRows.isNotEmpty
+        ? technicianSignatureRows.first.storagePath
+        : null;
     final metadata = _parseMetadataJson(draft.metadataJson);
     if (!mounted) return;
 
@@ -567,7 +584,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       materialiNotRequired: draft.materialiNotRequired,
       isAiAssisted: draft.isAiAssisted,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
+      customerSignatureLocalPath: customerSignatureLocalPath,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
+      technicianSignatureLocalPath: technicianSignatureLocalPath,
       tenantId: draft.tenantId,
       insertedUserId: draft.insertedUserId,
       isLoading: false,

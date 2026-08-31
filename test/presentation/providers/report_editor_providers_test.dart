@@ -465,6 +465,35 @@ void main() {
 
       expect(notifier.state.customerSignatureAllegatoId, isNull);
     });
+
+    test(
+      'reopening the editor (a fresh notifier against the same draft) restores both '
+      'signature local paths, not just their allegatoIds',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (firstNotifier, _) = await _makeEditor(db);
+
+        await firstNotifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-1',
+          bytes: Uint8List.fromList([0, 1, 2]),
+          localPath: '/tmp/sig-cust-1.png',
+        );
+        await firstNotifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: Uint8List.fromList([3, 4, 5]),
+          localPath: '/tmp/sig-tech-1.png',
+        );
+
+        // Simulates app restart / navigating away and back: a brand-new notifier instance
+        // hydrating from the same persisted draft, not the same in-memory state.
+        final (reopenedNotifier, _) = await _makeEditor(db);
+
+        expect(reopenedNotifier.state.customerSignatureAllegatoId, 'sig-cust-1');
+        expect(reopenedNotifier.state.customerSignatureLocalPath, '/tmp/sig-cust-1.png');
+        expect(reopenedNotifier.state.technicianSignatureAllegatoId, 'sig-tech-1');
+        expect(reopenedNotifier.state.technicianSignatureLocalPath, '/tmp/sig-tech-1.png');
+      },
+    );
   });
 
   // ── Photo allegati ────────────────────────────────────────────────────────
