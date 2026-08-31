@@ -23,9 +23,10 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// The technician's day, in the order they need it.
 ///
-/// Running clocks, then the work queue (five named tiers, see WorkQueueSection), then the two
-/// things worth starting from here. The stat grid that used to sit above all of it is gone — see
-/// the Oggi section.
+/// Running clocks, then the work queue (five named tiers, see WorkQueueSection), then the
+/// quick-action row: two things worth starting from here, plus "Le mie timbrature" — a view, not
+/// a start action, grouped in anyway as the personal-Timbra home now that its bottom-nav tab is
+/// gone. The stat grid that used to sit above all of it is gone — see the Oggi section.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
@@ -128,9 +129,15 @@ class DashboardScreen extends ConsumerWidget {
 
             // ── Start something ───────────────────────────────────────────────
             //
-            // Below the work, not above it. These are the two things a technician *starts* from
-            // here; "Rapportini" and "Magazzino" were also here and are places to *go*, which the
-            // Altro tab already is. A shortcut to a screen one tap away is not a shortcut.
+            // Below the work, not above it. "Nuovo ticket" and "Timbra cantiere" are the two
+            // things a technician *starts* from here; "Rapportini" and "Magazzino" were also here
+            // and are places to *go*, which the Altro tab already is. A shortcut to a screen one
+            // tap away is not a shortcut.
+            //
+            // "Le mie timbrature" is a third tile alongside them, but it's a *view*, not a start
+            // action — it's grouped here because it's the personal-Timbra home now that the
+            // Timbra bottom-nav tab is gone (AppRoutes.timbra is a standalone pushed route), not
+            // because it fits this section's "starts from here" framing exactly.
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -153,6 +160,13 @@ class DashboardScreen extends ConsumerWidget {
                         icon: LucideIcons.clock,
                         label: 'Timbra\ncantiere',
                         onTap: () => context.push(AppRoutes.cantiereTimbra),
+                      ),
+                    ),
+                    Expanded(
+                      child: QuickAction(
+                        icon: LucideIcons.timer,
+                        label: 'Le mie\ntimbrature',
+                        onTap: () => context.push(AppRoutes.timbra),
                       ),
                     ),
                   ],

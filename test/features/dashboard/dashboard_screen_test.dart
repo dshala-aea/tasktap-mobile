@@ -6,9 +6,11 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -35,6 +37,41 @@ Widget _buildDashboard({required AppDatabase db, required MockAuthRepository rep
       locationServiceProvider.overrideWithValue(const DisabledLocationService()),
     ],
     child: const MaterialApp(home: DashboardScreen()),
+  );
+}
+
+/// Builds the Dashboard behind a real [GoRouter] with marker screens at the standalone Timbra
+/// route and the (distinct) cantiere-timbra route, so a test can assert *which* route a tile
+/// actually pushes rather than only checking that some text containing "Timbra" is on screen.
+GoRouter _makeQuickActionRouter() => GoRouter(
+  initialLocation: '/dashboard',
+  routes: [
+    GoRoute(path: '/dashboard', builder: (_, _) => const DashboardScreen()),
+    GoRoute(
+      path: AppRoutes.timbra,
+      builder: (_, _) => const Scaffold(body: Center(child: Text('TIMBRA-SCREEN-MARKER'))),
+    ),
+    GoRoute(
+      path: AppRoutes.cantiereTimbra,
+      builder: (_, _) =>
+          const Scaffold(body: Center(child: Text('CANTIERE-TIMBRA-SCREEN-MARKER'))),
+    ),
+  ],
+);
+
+Widget _buildDashboardWithRouter({
+  required AppDatabase db,
+  required MockAuthRepository repo,
+  required GoRouter router,
+}) {
+  return ProviderScope(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo),
+      appDatabaseProvider.overrideWithValue(db),
+      dioProvider.overrideWithValue(MockDio()),
+      locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+    ],
+    child: MaterialApp.router(routerConfig: router),
   );
 }
 
@@ -121,16 +158,64 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('offers only the two things a technician starts from here', (tester) async {
+    testWidgets('offers the two things a technician starts from here, plus Le mie timbrature', (
+      tester,
+    ) async {
       // Was four. "Rapportini" and "Magazzino" are destinations the Altro tab already reaches;
-      // a shortcut to a screen one tap away is not a shortcut, it is a second door.
+      // a shortcut to a screen one tap away is not a shortcut, it is a second door. "Le mie
+      // timbrature" was added back as a third tile — a view, not a start action — because it's
+      // the personal-Timbra home now that the Timbra bottom-nav tab is gone.
       await pumpDashboard(tester);
 
-      expect(find.byType(QuickAction, skipOffstage: false), findsNWidgets(2));
+      expect(find.byType(QuickAction, skipOffstage: false), findsNWidgets(3));
       expect(find.text('Magazzino', skipOffstage: false), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    // ── Le mie timbrature (Task 11: personal-Timbra entry point) ────────────
+    //
+    // AppRoutes.timbra became a standalone pushed route once the Timbra bottom-nav tab was
+    // replaced by Cantieri; this tile is the new entry point for a technician's own clock in/out.
+
+    testWidgets('shows a Timbra quick action that pushes the standalone Timbra route', (
+      tester,
+    ) async {
+      await pumpDashboard(tester);
+
+      // Same skipOffstage: false convention as the QuickAction count test above — this tile
+      // sits below the fold in the CustomScrollView at the test viewport's default size.
+      expect(find.textContaining('mie\ntimbrature', skipOffstage: false), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'tapping Le mie timbrature pushes AppRoutes.timbra specifically, not cantiere timbra',
+      (tester) async {
+        final router = _makeQuickActionRouter();
+        await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        final tile = find.text('Le mie\ntimbrature', skipOffstage: false);
+        expect(tile, findsOneWidget);
+
+        // Scroll it into the viewport before tapping — it sits below the fold by default.
+        await tester.ensureVisible(tile);
+        await tester.pumpAndSettle();
+
+        await tester.tap(tile);
+        await tester.pumpAndSettle();
+
+        expect(find.text('TIMBRA-SCREEN-MARKER'), findsOneWidget);
+        expect(find.text('CANTIERE-TIMBRA-SCREEN-MARKER'), findsNothing);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
 
     testWidgets('shows the clock-in prompt, not a placeholder, when no clock is running', (
       tester,
