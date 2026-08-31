@@ -16,6 +16,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/sync/sync_service.dart';
 import '../timbra/cantiere_timbra_screen.dart' show cantieriProvider;
 
 class CantieriListScreen extends ConsumerWidget {
@@ -42,39 +43,42 @@ class CantieriListScreen extends ConsumerWidget {
               child: ScreenHeader(title: 'Cantieri'),
             ),
             Expanded(
-              child: cantieriAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => const UnavailableState(
-                  icon: LucideIcons.hardHat,
-                  titolo: 'Impossibile caricare i cantieri',
-                  motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
-                ),
-                data: (cantieri) {
-                  if (cantieri.isEmpty) {
-                    return const UnavailableState(
-                      icon: LucideIcons.hardHat,
-                      titolo: 'Nessun cantiere disponibile',
-                      motivo:
-                          'Non risultano cantieri sincronizzati su questo dispositivo. Trascina '
-                          'in basso per aggiornare, oppure riprova tra poco.',
-                    );
-                  }
-
-                  return ListView.builder(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-                    itemCount: cantieri.length,
-                    itemBuilder: (context, i) {
-                      final c = cantieri[i];
-                      return ListRow(
-                        leading: Icon(LucideIcons.hardHat, color: context.colors.inkMuted),
-                        title: c.name,
-                        subtitle: c.address,
-                        showDivider: i != cantieri.length - 1,
-                        onTap: () => context.push(AppRoutes.cantieriDetailPath(c.id)),
+              child: RefreshIndicator(
+                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                child: cantieriAsync.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => const UnavailableState(
+                    icon: LucideIcons.hardHat,
+                    titolo: 'Impossibile caricare i cantieri',
+                    motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                  ),
+                  data: (cantieri) {
+                    if (cantieri.isEmpty) {
+                      return const UnavailableState(
+                        icon: LucideIcons.hardHat,
+                        titolo: 'Nessun cantiere disponibile',
+                        motivo:
+                            'Non risultano cantieri sincronizzati su questo dispositivo. Trascina '
+                            'in basso per aggiornare, oppure riprova tra poco.',
                       );
-                    },
-                  );
-                },
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+                      itemCount: cantieri.length,
+                      itemBuilder: (context, i) {
+                        final c = cantieri[i];
+                        return ListRow(
+                          leading: Icon(LucideIcons.hardHat, color: context.colors.inkMuted),
+                          title: c.name,
+                          subtitle: c.address,
+                          showDivider: i != cantieri.length - 1,
+                          onTap: () => context.push(AppRoutes.cantieriDetailPath(c.id)),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
             ),
           ],
