@@ -111,13 +111,46 @@ final ticketControlsProvider = FutureProvider.autoDispose
     });
 
 /// Materials planned for a ticket — fabbisogno (Fabbisogno tab).
-final ticketMaterialiProvider = FutureProvider.autoDispose
-    .family<List<TicketMaterialeDto>, String>((ref, ticketId) async {
-      if (!ref.watch(isOnlineProvider)) {
-        throw const TicketDetailOfflineException();
-      }
-      final api = ref.watch(ticketDetailApiClientProvider);
-      return api.fetchMateriali(ticketId);
+///
+/// Local-Drift-backed, unlike the five sibling ticket-detail providers below (Rapportini,
+/// Controls, Attachments, Worklogs, History) — TicketMateriali syncs to the device
+/// (MobileUserSyncResult.TicketMateriali, office-set/low-volatility like the materiali catalog
+/// itself), so this works offline. Returns the same [TicketMaterialeDto] shape the online
+/// fetch used to, so both existing consumers (ticket_detail_screen.dart,
+/// step_materiali_fold.dart) needed no changes — just resolved from the local mirror + local
+/// materiali catalog instead of parsed from a network response.
+final ticketMaterialiProvider = StreamProvider.autoDispose
+    .family<List<TicketMaterialeDto>, String>((ref, ticketId) {
+      final db = ref.watch(appDatabaseProvider);
+      final query = db.select(db.ticketMateriali)..where((m) => m.ticketId.equals(ticketId));
+      return query.watch().asyncMap((rows) async {
+        final materialeIds = rows
+            .where((r) => r.materialeId != null)
+            .map((r) => r.materialeId!)
+            .toSet();
+        final catalog = materialeIds.isEmpty
+            ? const <MaterialiData>[]
+            : await (db.select(db.materiali)..where((m) => m.id.isIn(materialeIds))).get();
+        final catalogById = {for (final c in catalog) c.id: c};
+
+        return [
+          for (final r in rows)
+            TicketMaterialeDto(
+              id: r.id,
+              materialeId: r.materialeId,
+              codice: r.materialeId != null ? catalogById[r.materialeId]?.code : null,
+              // Free-text items name themselves; a catalog reference resolves through the
+              // synced catalog — same precedence the online endpoint's own resolution used.
+              nome: r.materialeId != null
+                  ? (catalogById[r.materialeId]?.name ?? r.freeTextName ?? '')
+                  : (r.freeTextName ?? ''),
+              quantita: r.quantity,
+              unitaMisura: r.unitOfMeasure ?? catalogById[r.materialeId]?.unitOfMeasure,
+              note: r.notes,
+              disponibile: r.isAvailable,
+            ),
+        ];
+      });
     });
 
 /// Time booked against a ticket, newest first — and the one entry still running, if any.

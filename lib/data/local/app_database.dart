@@ -280,6 +280,30 @@ class Materiali extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ticket_materiali ─────────────────────────────────────────────────────────
+// Fabbisogno: a ticket's planned/required materials. Mirrors the backend `TicketMateriale`
+// entity 1:1 (raw field names, not the Italian-translated shape the per-ticket detail REST
+// endpoint's own response DTO uses — that endpoint stays as the online source of truth; this
+// table is the offline mirror synced via MobileUserSyncResult.TicketMateriali). Read-only on the
+// device: mobile only ever reads fabbisogno, never writes to it.
+class TicketMateriali extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get ticketId => text()();
+  TextColumn get materialeId => text().nullable()();
+  TextColumn get freeTextName => text().nullable()();
+  RealColumn get quantity => real()();
+  TextColumn get unitOfMeasure => text().nullable()();
+  TextColumn get notes => text().nullable()();
+  BoolColumn get isAvailable => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── materiale_barcodes ──────────────────────────────────────────────────────
 //
 // Local mirror of MaterialeBarcode (backend), synced alongside its parent Materiali row so a
@@ -712,6 +736,7 @@ class PendingTicketAttachments extends Table {
     TicketStatuses,
     TicketTypes,
     Materiali,
+    TicketMateriali,
     MaterialeBarcodes,
     DraftReports,
     ReportStaffTable,
@@ -732,7 +757,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration {
@@ -882,6 +907,13 @@ class AppDatabase extends _$AppDatabase {
           // bumped below or an already-synced device never backfills it.
           await m.addColumn(tickets, tickets.cantiereId);
         }
+        if (from < 24) {
+          // Fabbisogno offline mirror — see TicketMateriali's own doc comment. New table, not a
+          // column, but the same delta blind spot as materiale_barcodes (schema 22): existing
+          // TicketMateriale rows on the backend would never backfill for a device whose cursor is
+          // already past the owning ticket's last change — syncCursorGeneration bumped below.
+          await m.createTable(ticketMateriali);
+        }
       },
     );
   }
@@ -912,7 +944,9 @@ class AppDatabase extends _$AppDatabase {
   /// v6 — 2026-08-31, schema 23 added `tickets.cantiereId`. Same reasoning as v4
   ///      (tickets.priority/dueDate): already on the wire, a delta sync would never refill it for
   ///      tickets that haven't otherwise changed.
-  static const String syncCursorGeneration = 'v6';
+  /// v7 — 2026-08-31, schema 24 added `ticket_materiali` (new table, same delta blind spot as v5's
+  ///      `materiale_barcodes`).
+  static const String syncCursorGeneration = 'v7';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

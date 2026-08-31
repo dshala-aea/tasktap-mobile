@@ -16,6 +16,7 @@ class SyncResultDto {
   final List<CustomerDto> customers;
   final List<LocationDto> locations;
   final List<TicketDto> tickets;
+  final List<SyncTicketMaterialeDto> ticketMateriali;
   final List<MaterialeDto> materiali;
   final List<MaterialeBarcodeDto> materialiBarcodes;
   final List<CantiereDto> cantieri;
@@ -32,6 +33,7 @@ class SyncResultDto {
     required this.customers,
     required this.locations,
     required this.tickets,
+    this.ticketMateriali = const [],
     required this.materiali,
     this.materialiBarcodes = const [],
     required this.cantieri,
@@ -50,6 +52,7 @@ class SyncResultDto {
       customers: _list(j['customers'], CustomerDto.fromJson),
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),
+      ticketMateriali: _list(j['ticketMateriali'], SyncTicketMaterialeDto.fromJson),
       materiali: _list(j['materiali'], MaterialeDto.fromJson),
       materialiBarcodes: _list(j['materialiBarcodes'], MaterialeBarcodeDto.fromJson),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
@@ -329,6 +332,54 @@ class MaterialeDto {
     purchasePrice: _dbl(j['purchasePrice']),
     salePrice: _dbl(j['salePrice']),
     isActive: j['isActive'] as bool? ?? true,
+  );
+}
+
+// ── TicketMateriale (fabbisogno) ─────────────────────────────────────────────
+//
+// Mirrors the backend's raw TicketMateriale entity field-for-field — not the Italian-translated
+// shape the per-ticket detail REST endpoint's own response DTO uses (see TicketMaterialeDto in
+// ticket_detail_api_client.dart, which stays the online source of truth for that screen). This
+// one is only ever read into the local Drift mirror.
+class SyncTicketMaterialeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String ticketId;
+  final String? materialeId;
+  final String? freeTextName;
+  final double quantity;
+  final String? unitOfMeasure;
+  final String? notes;
+  final bool isAvailable;
+
+  const SyncTicketMaterialeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.ticketId,
+    this.materialeId,
+    this.freeTextName,
+    required this.quantity,
+    this.unitOfMeasure,
+    this.notes,
+    this.isAvailable = false,
+  });
+
+  factory SyncTicketMaterialeDto.fromJson(Map<String, dynamic> j) => SyncTicketMaterialeDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    ticketId: j['ticketId'] as String,
+    materialeId: j['materialeId'] as String?,
+    freeTextName: j['freeTextName'] as String?,
+    quantity: _dbl(j['quantity']) ?? 0,
+    unitOfMeasure: j['unitOfMeasure'] as String?,
+    notes: j['notes'] as String?,
+    isAvailable: j['isAvailable'] as bool? ?? false,
   );
 }
 

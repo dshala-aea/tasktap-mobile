@@ -18562,6 +18562,13 @@
             },
             "description": "Tickets referenced by the schedules."
           },
+          "ticketMateriali": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketMateriale"
+            },
+            "description": "Fabbisogno (planned materials) for the tickets in IReadOnlyList\u0026lt;Ticket\u0026gt; MobileUserSyncResult.Tickets \u2014 read-only on the\ndevice, office-set and low-volatility like IReadOnlyList\u0026lt;Materiale\u0026gt; MobileUserSyncResult.Materiali itself. Distinct from a\nsubmitted report\u0027s own materials (actual consumption vs. what was planned)."
+          },
           "materiali": {
             "type": "array",
             "items": {
@@ -22801,6 +22808,82 @@
           }
         },
         "description": "Represents a work ticket/intervention (Intervento)."
+      },
+      "TicketMateriale": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "description": "Owning ticket.",
+            "format": "uuid"
+          },
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Reference to the catalog entry. Null when the item is a free-text one-off.\nConstraint: MaterialeId IS NOT NULL OR FreeTextName IS NOT NULL.",
+            "format": "uuid"
+          },
+          "freeTextName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free-text material name used when MaterialeId is null.\nRequired when MaterialeId is null."
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Required quantity.",
+            "format": "double"
+          },
+          "unitOfMeasure": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Unit of measure override (e.g. pz, kg). Falls back to catalog value when null."
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional technician or office notes about this requirement."
+          },
+          "isAvailable": {
+            "type": "boolean",
+            "description": "Warehouse has confirmed the material is available for this ticket."
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "Fabbisogno materiale: a line item representing a material planned/required for a ticket.\nEither references the tenant\u0027s Materiale catalog (MaterialeId set) or is a one-off\nfree-text entry (MaterialeId null, FreeTextName required).\nThe diff between TicketMateriali and a report\u0027s ReportMateriali shows variance\nbetween planned and actual consumption."
       },
       "TicketMaterialeDto": {
         "required": [

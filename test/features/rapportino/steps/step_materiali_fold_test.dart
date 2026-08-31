@@ -11,7 +11,7 @@
 // rendered inputs actually write back to the editor state.
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -445,23 +445,35 @@ void main() {
     });
 
     testWidgets('planned materiali from the ticket render as tappable suggestions', (tester) async {
-      final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/$_ticketId/materiali')).thenAnswer(
-        (_) async => _okResponse([
-          {
-            'id': 'tm-1',
-            'materialeId': 'mat-1',
-            'codice': 'ART-001',
-            'nome': 'Guarnizione EPDM',
-            'quantita': 3,
-            'unitaMisura': 'pz',
-            'note': null,
-            'disponibile': true,
-          },
-        ], '/api/Tickets/$_ticketId/materiali'),
-      );
+      // Local-Drift-backed now (see ticketMaterialiProvider's own doc comment) — seeded directly,
+      // not stubbed on MockDio.
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART-001',
+              name: 'Guarnizione EPDM',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              ticketId: _ticketId,
+              materialeId: const Value('mat-1'),
+              quantity: 3,
+              isAvailable: const Value(true),
+            ),
+          );
 
-      final container = _buildContainer(db: db, dio: dio);
+      final container = _buildContainer(db: db);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
@@ -479,23 +491,23 @@ void main() {
     testWidgets('tapping a suggestion fills quantity and unit from the planned line', (
       tester,
     ) async {
-      final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/Tickets/$_ticketId/materiali')).thenAnswer(
-        (_) async => _okResponse([
-          {
-            'id': 'tm-1',
-            'materialeId': null,
-            'codice': null,
-            'nome': 'Nastro isolante',
-            'quantita': 2,
-            'unitaMisura': 'rt',
-            'note': null,
-            'disponibile': true,
-          },
-        ], '/api/Tickets/$_ticketId/materiali'),
-      );
+      // Local-Drift-backed now — seeded directly, not stubbed on MockDio.
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              ticketId: _ticketId,
+              freeTextName: const Value('Nastro isolante'),
+              quantity: 2,
+              unitOfMeasure: const Value('rt'),
+              isAvailable: const Value(true),
+            ),
+          );
 
-      final container = _buildContainer(db: db, dio: dio);
+      final container = _buildContainer(db: db);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();

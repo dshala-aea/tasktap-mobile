@@ -1188,27 +1188,42 @@ void main() {
   });
 
   group('TicketDetailScreen — Fabbisogno tab (index 4)', () {
-    final materialiJson = [
-      {
-        'id': 'm-1',
-        'materialeId': 'mat-1',
-        'codice': 'ART001',
-        'nome': 'Valvola idraulica',
-        'quantita': 2,
-        'unitaMisura': 'pz',
-        'note': null,
-        'disponibile': true,
-      },
-    ];
+    // Local-Drift-backed now (see ticketMaterialiProvider's own doc comment) — seeded directly
+    // into the db, like every other Drift-mirrored tab in this file, not stubbed on MockDio. This
+    // tab genuinely works offline now, which is the point of the change.
+    Future<void> seedFabbisogno(AppDatabase db) async {
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART001',
+              name: 'Valvola idraulica',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'm-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              ticketId: 'ticket-1',
+              materialeId: const Value('mat-1'),
+              quantity: 2,
+              isAvailable: const Value(true),
+            ),
+          );
+    }
 
     testWidgets('shows materials planned for the ticket', (tester) async {
       await seedBase(db);
-      final dio = MockDio();
-      when(
-        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/materiali'),
-      ).thenAnswer((_) async => _okResponse(materialiJson, '/api/Tickets/ticket-1/materiali'));
+      await seedFabbisogno(db);
 
-      await pump(tester, dio: dio, isOnline: true);
+      await pump(tester, isOnline: true);
       await tapTab(tester, 'Fabbisogno');
 
       expect(find.text('Valvola idraulica'), findsOneWidget);
@@ -1217,26 +1232,25 @@ void main() {
 
     testWidgets('shows an honest empty state when nothing is planned', (tester) async {
       await seedBase(db);
-      final dio = MockDio();
-      when(
-        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/materiali'),
-      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/Tickets/ticket-1/materiali'));
 
-      await pump(tester, dio: dio, isOnline: true);
+      await pump(tester, isOnline: true);
       await tapTab(tester, 'Fabbisogno');
 
       expect(find.text('Nessun fabbisogno'), findsOneWidget);
       await resetAndDispose(tester);
     });
 
-    testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
+    testWidgets('still shows planned materials offline — the whole point of the local mirror', (
+      tester,
+    ) async {
       await seedBase(db);
+      await seedFabbisogno(db);
 
       await pump(tester, isOnline: false);
       await tapTab(tester, 'Fabbisogno');
 
-      expect(find.text('Fabbisogno non disponibile offline'), findsOneWidget);
-      expect(find.text('Nessun fabbisogno'), findsNothing);
+      expect(find.text('Valvola idraulica'), findsOneWidget);
+      expect(find.text('Fabbisogno non disponibile offline'), findsNothing);
       await resetAndDispose(tester);
     });
   });

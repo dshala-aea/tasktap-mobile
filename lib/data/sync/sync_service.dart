@@ -51,6 +51,7 @@ class SyncService {
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
+      await _upsertTicketMateriali(payload.ticketMateriali);
       await _upsertMaterialeBarcodes(payload.materialiBarcodes);
       await _upsertCantieri(payload.cantieri);
       await _replaceColleagues(payload.colleagues);
@@ -110,6 +111,28 @@ class SyncService {
               purchasePrice: Value(m.purchasePrice),
               salePrice: Value(m.salePrice),
               isActive: Value(m.isActive),
+            ),
+          );
+    }
+  }
+
+  Future<void> _upsertTicketMateriali(List<SyncTicketMaterialeDto> list) async {
+    for (final m in list) {
+      await db
+          .into(db.ticketMateriali)
+          .insertOnConflictUpdate(
+            TicketMaterialiCompanion.insert(
+              id: m.id,
+              tenantId: m.tenantId,
+              createdAt: m.createdAt,
+              updatedAt: Value(m.updatedAt),
+              ticketId: m.ticketId,
+              materialeId: Value(m.materialeId),
+              freeTextName: Value(m.freeTextName),
+              quantity: m.quantity,
+              unitOfMeasure: Value(m.unitOfMeasure),
+              notes: Value(m.notes),
+              isAvailable: Value(m.isAvailable),
             ),
           );
     }

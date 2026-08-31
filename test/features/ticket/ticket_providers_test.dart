@@ -123,4 +123,86 @@ void main() {
     expect(result.length, 1);
     expect(result.first.id, 'sched-1');
   });
+
+  group('ticketMaterialiProvider — offline fabbisogno mirror', () {
+    test('resolves a catalog-referenced item\'s name/code/unit from the synced Materiale', () async {
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              code: 'VLV-034',
+              name: 'Valvola 3/4"',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: 'ticket-1',
+              materialeId: const Value('mat-1'),
+              quantity: 2,
+              isAvailable: const Value(true),
+            ),
+          );
+
+      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+
+      expect(result, hasLength(1));
+      expect(result.single.nome, 'Valvola 3/4"');
+      expect(result.single.codice, 'VLV-034');
+      expect(result.single.unitaMisura, 'pz');
+      expect(result.single.quantita, 2);
+      expect(result.single.disponibile, isTrue);
+    });
+
+    test('a free-text item (no materialeId) uses its own name, no catalog lookup', () async {
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: 'ticket-1',
+              freeTextName: const Value('Guarnizione generica'),
+              quantity: 1,
+            ),
+          );
+
+      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+
+      expect(result, hasLength(1));
+      expect(result.single.nome, 'Guarnizione generica');
+      // Bare `isNull` is ambiguous in this file (drift.dart's own query-builder symbol vs.
+      // matcher's) — plain `null` reads identically for an equality check.
+      expect(result.single.materialeId, null);
+      expect(result.single.codice, null);
+    });
+
+    test('only returns fabbisogno for the requested ticket', () async {
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-3',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              ticketId: 'ticket-2',
+              freeTextName: const Value('Not this ticket'),
+              quantity: 1,
+            ),
+          );
+
+      final result = await container.read(ticketMaterialiProvider('ticket-1').future);
+
+      expect(result, isEmpty);
+    });
+  });
 }
