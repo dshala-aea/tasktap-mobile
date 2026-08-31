@@ -69,6 +69,14 @@ abstract final class AppRoutes {
   static String ticketDetailPath(String id) => '/ticket/$id';
 
   static const String timbra = '/timbra';
+
+  /// Technician-facing cantieri (worksites) list — the Cantieri tab.
+  static const String cantieri = '/cantieri';
+  static const String cantieriDetail = '/cantieri/:id';
+
+  /// Build the detail path for a given cantiere id.
+  static String cantieriDetailPath(String id) => '/cantieri/$id';
+
   static const String calendario = '/calendario';
   static const String altro = '/altro';
   static const String altroProfilo = '/altro/profilo';
@@ -88,10 +96,15 @@ abstract final class AppRoutes {
   static const String cantiereTimbra = '/cantiere-timbra';
 
   /// Build the cantiere timbra path with optional query params.
-  static String cantiereTimbraPath({String? ticketId, String? customerId}) {
+  static String cantiereTimbraPath({
+    String? ticketId,
+    String? customerId,
+    String? cantiereId,
+  }) {
     final params = <String>[];
     if (ticketId != null) params.add('ticketId=$ticketId');
     if (customerId != null) params.add('customerId=$customerId');
+    if (cantiereId != null) params.add('cantiereId=$cantiereId');
     return params.isEmpty
         ? cantiereTimbra
         : '$cantiereTimbra?${params.join('&')}';
