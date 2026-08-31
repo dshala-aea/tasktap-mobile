@@ -345,8 +345,7 @@ void main() {
       await pump(tester);
 
       // Tap "Pianificazioni" tab (index 2).
-      // Use a taller surface so the tab bar is not obscured by the bottom
-      // actions bar (now a two-row Column after the Timbra cantiere button).
+      // Use a taller surface so the tab bar is not obscured by the bottom actions bar.
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pump();
       await tester.ensureVisible(find.text('Pianificazioni'));
@@ -359,15 +358,17 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('the bottom bar holds the two doing-actions, one leading', (tester) async {
+    testWidgets('the bottom bar holds a single leading doing-action', (tester) async {
       // Was four equal buttons in two rows: Assegna / Cliente / Crea rapportino / Timbra cantiere,
       // about 130dp of permanent chrome with no rank between them. What a technician does on a
-      // ticket is start the work and write it up.
+      // ticket is start the work and write it up — "Timbra cantiere" moved to CantiereDetailScreen
+      // (reached from this ticket's own cantiere chip; see the chip tests below), so it no longer
+      // shares the bottom bar with "Crea rapportino" at all.
       await seedBase(db);
       await pump(tester);
 
       expect(find.text('Crea rapportino'), findsOneWidget);
-      expect(find.text('Timbra cantiere'), findsOneWidget);
+      expect(find.text('Timbra cantiere'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -405,6 +406,47 @@ void main() {
 
       expect(find.text('Acqua che perde dal tubo.'), findsOneWidget);
       await tester.binding.setSurfaceSize(null);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  // "Timbra cantiere" moved off this screen into CantiereDetailScreen (reached via
+  // AppRoutes.cantieriDetailPath); this chip is this ticket's only remaining trace of a cantiere
+  // link, and its only job is "does this ticket have one, and if so what's it called".
+  group('TicketDetailScreen — cantiere chip', () {
+    Future<void> seedWithCantiere(AppDatabase db) async {
+      await seedBase(db);
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Nord',
+            ),
+          );
+      await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
+        const TicketsCompanion(cantiereId: Value('cant-1')),
+      );
+    }
+
+    testWidgets('shows a cantiere chip when the ticket has one linked', (tester) async {
+      await seedWithCantiere(db);
+      await pump(tester);
+
+      expect(find.textContaining('Cantiere:'), findsOneWidget);
+      expect(find.text('Cantiere: Cantiere Nord'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows no cantiere chip when the ticket has none linked', (tester) async {
+      await seedBase(db);
+      await pump(tester);
+
+      expect(find.textContaining('Cantiere:'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

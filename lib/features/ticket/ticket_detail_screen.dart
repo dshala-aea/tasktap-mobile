@@ -24,6 +24,7 @@ import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
+import '../cantiere/cantiere_providers.dart';
 import '../rapportino/create_draft.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
@@ -283,6 +284,35 @@ class _TicketDetailBody extends ConsumerWidget {
             ),
           ),
 
+          // Cantiere chip — a one-line contextual fact, matching the KeyVal/status-row rhythm
+          // above it. Only shown when this ticket is actually linked to a cantiere; tapping it
+          // opens CantiereDetailScreen, which now owns "Timbra cantiere" (see the bottom-actions
+          // comment below for why that control no longer lives on this screen).
+          if (ticket.cantiereId != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+              ),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final cantiereAsync = ref.watch(
+                    cantiereByIdProvider(ticket.cantiereId!),
+                  );
+                  final label =
+                      cantiereAsync.valueOrNull?.name ?? ticket.cantiereId!;
+                  return AppChip(
+                    label: 'Cantiere: $label',
+                    onTap: () => context.push(
+                      AppRoutes.cantieriDetailPath(ticket.cantiereId!),
+                    ),
+                  );
+                },
+              ),
+            ),
+
           Expanded(
             child: CustomScrollView(
               controller: scrollController,
@@ -434,8 +464,8 @@ class _TicketDetailBody extends ConsumerWidget {
           // unassigned ticket isn't yours to start work on yet — "Prendi in carico" already leads
           // the status row above, so the bar stays empty rather than repeating that control in a
           // second place. Once assigned, "Crea rapportino" is what a technician does on a ticket
-          // (see the status-row comment); "Timbra cantiere" is real and still one tap away, but
-          // demoted to a smaller secondary control underneath rather than sharing equal billing.
+          // (see the status-row comment). "Timbra cantiere" no longer lives here at all — it
+          // moved to CantiereDetailScreen, reached from this ticket's own cantiere chip above.
           if (ticket.assignedUserId != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -444,33 +474,9 @@ class _TicketDetailBody extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 AppSpacing.base,
               ),
-              child: Column(
-                children: [
-                  VetroButton(
-                    label: 'Crea rapportino',
-                    onPressed: () =>
-                        _createRapportino(context, ref, ticket, locationAddress),
-                  ),
-                  const SizedBox(height: 8),
-                  // compact for the smaller type/padding "demoted" look the comment above calls
-                  // for, wrapped to force full width — VetroButton's compact flag is otherwise
-                  // never full-width (it's tuned for inline controls like a timer bar's buttons).
-                  SizedBox(
-                    width: double.infinity,
-                    child: VetroButton(
-                      label: 'Timbra cantiere',
-                      icon: const Icon(LucideIcons.mapPin),
-                      compact: true,
-                      secondary: true,
-                      onPressed: () => context.push(
-                        AppRoutes.cantiereTimbraPath(
-                          ticketId: ticket.id,
-                          customerId: ticket.customerId,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              child: VetroButton(
+                label: 'Crea rapportino',
+                onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
               ),
             )
           else
