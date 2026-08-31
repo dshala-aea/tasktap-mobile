@@ -54,6 +54,7 @@ import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import '../cantiere/cantiere_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -199,13 +200,19 @@ DateTime _combineWorkDateAndStartTime(DateTime workDate, String startTime) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 class CantiereTimbraScreen extends ConsumerStatefulWidget {
-  const CantiereTimbraScreen({super.key, this.ticketId, this.customerId});
+  const CantiereTimbraScreen({super.key, this.ticketId, this.customerId, this.cantiereId});
 
   /// The ticket that launched this screen (optional context link).
   final String? ticketId;
 
   /// The customerId from the ticket (used to pre-filter the cantiere list).
   final String? customerId;
+
+  /// When set, this screen skips its cantiere picker entirely and acts on this cantiere directly
+  /// — the entry point from CantiereDetailScreen (and, transitively, the Cantieri tab). `ticketId`
+  /// stays honored alongside it when both are present (arrived via the ticket-detail chip), so the
+  /// resulting session is still tagged with that ticket.
+  final String? cantiereId;
 
   @override
   ConsumerState<CantiereTimbraScreen> createState() => _CantiereTimbraScreenState();
@@ -248,6 +255,13 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
     final hasPendingSync = ref.watch(cantiereHasPendingSyncProvider);
 
+    final fixedCantiereAsync = widget.cantiereId != null
+        ? ref.watch(cantiereByIdProvider(widget.cantiereId!))
+        : null;
+    final effectiveSelected = widget.cantiereId != null
+        ? fixedCantiereAsync?.valueOrNull
+        : _selectedCantiere;
+
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
@@ -278,7 +292,8 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                       customerId: widget.customerId,
                       ticketId: widget.ticketId,
                       cantieriAsync: cantieriAsync,
-                      selectedCantiere: _selectedCantiere,
+                      selectedCantiere: effectiveSelected,
+                      showPicker: widget.cantiereId == null,
                       isLoading: _isLoading,
                       errorMessage: _errorMessage,
                       hasDetails: _hasCheckInDetails,
@@ -536,6 +551,7 @@ class _CheckInBody extends StatelessWidget {
     required this.ticketId,
     required this.cantieriAsync,
     required this.selectedCantiere,
+    required this.showPicker,
     required this.isLoading,
     required this.errorMessage,
     required this.hasDetails,
@@ -548,6 +564,10 @@ class _CheckInBody extends StatelessWidget {
   final String? ticketId;
   final AsyncValue<List<CantieriData>> cantieriAsync;
   final CantieriData? selectedCantiere;
+
+  /// When false, the cantiere picker (section header + selectable list) is skipped in favour of a
+  /// compact fixed-cantiere card — the direct-entry path (`CantiereTimbraScreen.cantiereId` set).
+  final bool showPicker;
   final bool isLoading;
   final String? errorMessage;
   final bool hasDetails;
@@ -601,121 +621,150 @@ class _CheckInBody extends StatelessWidget {
             const SizedBox(height: 16),
           ],
 
-          // Section header
-          Text(
-            'Seleziona cantiere',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
-              color: context.colors.inkMuted,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          cantieriAsync.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(AppSpacing.xl),
-                child: CircularProgressIndicator(),
+          if (showPicker) ...[
+            // Section header
+            Text(
+              'Seleziona cantiere',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: context.colors.inkMuted,
               ),
             ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
-              child: Text(
-                'Impossibile caricare i cantieri.',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.red),
+            const SizedBox(height: 8),
+
+            cantieriAsync.when(
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.xl),
+                  child: CircularProgressIndicator(),
+                ),
               ),
-            ),
-            data: (cantieri) {
-              // Prefer cantieri matching the ticket's customerId.
-              final preferred = customerId != null
-                  ? cantieri.where((c) => c.customerId == customerId).toList()
-                  : <CantieriData>[];
-              final others = cantieri.where((c) => !preferred.contains(c)).toList();
-              final ordered = [...preferred, ...others];
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+                child: Text(
+                  'Impossibile caricare i cantieri.',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.red),
+                ),
+              ),
+              data: (cantieri) {
+                // Prefer cantieri matching the ticket's customerId.
+                final preferred = customerId != null
+                    ? cantieri.where((c) => c.customerId == customerId).toList()
+                    : <CantieriData>[];
+                final others = cantieri.where((c) => !preferred.contains(c)).toList();
+                final ordered = [...preferred, ...others];
 
-              if (ordered.isEmpty) {
-                return const UnavailableState(
-                  icon: LucideIcons.hardHat,
-                  titolo: 'Nessun cantiere disponibile',
-                  motivo:
-                      'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
-                      'è stato creato uno di recente, apri una qualsiasi scheda e trascina in '
-                      'basso per aggiornare, oppure riprova tra poco.',
-                );
-              }
+                if (ordered.isEmpty) {
+                  return const UnavailableState(
+                    icon: LucideIcons.hardHat,
+                    titolo: 'Nessun cantiere disponibile',
+                    motivo:
+                        'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
+                        'è stato creato uno di recente, apri una qualsiasi scheda e trascina in '
+                        'basso per aggiornare, oppure riprova tra poco.',
+                  );
+                }
 
-              final v = context.vetro;
-              return VetroCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: ordered.asMap().entries.map((entry) {
-                    final i = entry.key;
-                    final c = entry.value;
-                    final isSelected = selectedCantiere?.id == c.id;
-                    final isLast = i == ordered.length - 1;
+                final v = context.vetro;
+                return VetroCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: ordered.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final c = entry.value;
+                      final isSelected = selectedCantiere?.id == c.id;
+                      final isLast = i == ordered.length - 1;
 
-                    return InkWell(
-                      onTap: () => onCantiereSelected(c),
-                      borderRadius: i == 0
-                          ? const BorderRadius.vertical(top: Radius.circular(20))
-                          : (isLast
-                                ? const BorderRadius.vertical(bottom: Radius.circular(20))
-                                : BorderRadius.zero),
-                      child: Container(
-                        constraints: const BoxConstraints(minHeight: 56),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.base,
-                          vertical: AppSpacing.md,
-                        ),
-                        decoration: BoxDecoration(
-                          // Vetro's one accent for "selected", not AppColors.YSoft — the tint at
-                          // low alpha reads as the same "strapped/active" idea Cassetta's YSoft
-                          // signalled, in the new system's own colour.
-                          color: isSelected ? v.tint.withAlpha(31) : Colors.transparent,
-                          border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
-                        ),
-                        child: Row(
-                          children: [
-                            const RowIconTile(icon: LucideIcons.hardHat),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    c.name,
-                                    style: TextStyle(
-                                      fontFamily: 'Inter',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.colors.ink,
-                                    ),
-                                  ),
-                                  if (c.city != null && c.city!.isNotEmpty)
+                      return InkWell(
+                        onTap: () => onCantiereSelected(c),
+                        borderRadius: i == 0
+                            ? const BorderRadius.vertical(top: Radius.circular(20))
+                            : (isLast
+                                  ? const BorderRadius.vertical(bottom: Radius.circular(20))
+                                  : BorderRadius.zero),
+                        child: Container(
+                          constraints: const BoxConstraints(minHeight: 56),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.base,
+                            vertical: AppSpacing.md,
+                          ),
+                          decoration: BoxDecoration(
+                            // Vetro's one accent for "selected", not AppColors.YSoft — the tint at
+                            // low alpha reads as the same "strapped/active" idea Cassetta's YSoft
+                            // signalled, in the new system's own colour.
+                            color: isSelected ? v.tint.withAlpha(31) : Colors.transparent,
+                            border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
+                          ),
+                          child: Row(
+                            children: [
+                              const RowIconTile(icon: LucideIcons.hardHat),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
                                     Text(
-                                      c.city!,
+                                      c.name,
                                       style: TextStyle(
                                         fontFamily: 'Inter',
-                                        fontSize: 12,
-                                        color: context.colors.inkMuted,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: context.colors.ink,
                                       ),
                                     ),
-                                ],
+                                    if (c.city != null && c.city!.isNotEmpty)
+                                      Text(
+                                        c.city!,
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 12,
+                                          color: context.colors.inkMuted,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            if (isSelected) Icon(LucideIcons.checkCircle2, size: 18, color: v.tint),
-                          ],
+                              if (isSelected)
+                                Icon(LucideIcons.checkCircle2, size: 18, color: v.tint),
+                            ],
+                          ),
                         ),
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
+            ),
+          ] else
+            VetroCard(
+              child: selectedCantiere == null
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.base),
+                        child: CircularProgressIndicator(),
                       ),
-                    );
-                  }).toList(),
-                ),
-              );
-            },
-          ),
+                    )
+                  : Row(
+                      children: [
+                        Icon(LucideIcons.hardHat, size: 18, color: context.colors.ink),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            selectedCantiere!.name,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
 
           const SizedBox(height: 16),
 

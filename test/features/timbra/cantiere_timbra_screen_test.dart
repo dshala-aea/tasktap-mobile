@@ -122,6 +122,7 @@ Widget _buildScreen({
   ILocationService? locationService,
   String? ticketId,
   String? customerId,
+  String? cantiereId,
 }) {
   return ProviderScope(
     overrides: [
@@ -131,7 +132,11 @@ Widget _buildScreen({
       activeCantiereLogProvider.overrideWith(() => _FakeActiveNotifier(apiClient.activeLog)),
     ],
     child: MaterialApp(
-      home: CantiereTimbraScreen(ticketId: ticketId, customerId: customerId),
+      home: CantiereTimbraScreen(
+        ticketId: ticketId,
+        customerId: customerId,
+        cantiereId: cantiereId,
+      ),
     ),
   );
 }
@@ -427,6 +432,33 @@ void main() {
         await _teardown(tester);
       },
     );
+  });
+
+  // ── Direct-entry mode (cantiereId provided — skips the picker) ─────────────
+
+  group('direct-entry mode (cantiereId provided)', () {
+    testWidgets('given a cantiereId, the picker is not shown', (tester) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Diretto',
+            ),
+          );
+
+      final api = _FakeApiClient();
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api, cantiereId: 'c1'));
+      await tester.pumpAndSettle();
+
+      // The full picker section header only renders in picker mode.
+      expect(find.text('Seleziona cantiere'), findsNothing);
+      expect(find.text('Cantiere Diretto'), findsOneWidget);
+
+      await _teardown(tester);
+    });
   });
 
   // ── Offline check-in (item B2) ────────────────────────────────────────────
