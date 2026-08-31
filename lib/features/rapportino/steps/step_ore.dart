@@ -11,6 +11,8 @@ import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../ticket/ticket_providers.dart' show ticketWorklogsProvider;
+import '../../ticket/ticket_workflow_api_client.dart' show TicketWorkLogDto;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -33,6 +35,14 @@ class StepOre extends ConsumerWidget {
     final state = ref.watch(reportEditorProvider(reportId));
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final totalOre = state.staffRows.fold<double>(0, (sum, r) => sum + r.effectiveHours);
+
+    // The ticket's own server-tracked labour sessions, when this report is for a ticket and the
+    // fetch succeeds — offline or no ticketId both just mean no suggestions, not an error state
+    // (ticketWorklogsProvider is online-only by design, see its own doc comment).
+    final ticketId = state.ticketId;
+    final worklogEntries = ticketId != null
+        ? ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull
+        : null;
 
     // A Column, not a ListView: this sits inside the compartment sheet's own ambient
     // SingleChildScrollView now, not a screen-height-bounded Expanded body — an inner scrollable
@@ -66,6 +76,9 @@ class StepOre extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: _StaffTile(
                   row: row,
+                  worklogSuggestion: worklogEntries == null
+                      ? null
+                      : _worklogSuggestionFor(worklogEntries, row),
                   onUpdate: (updated) => notifier.updateStaff(updated),
                   onRemove: () => notifier.removeStaff(row.id),
                   onStartTimer: () => notifier.startTimer(row.id),
@@ -233,9 +246,61 @@ class _StaffPickerMessage extends StatelessWidget {
 
 // ── Staff tile ─────────────────────────────────────────────────────────────────
 
+// ── Worklog → hours suggestion ────────────────────────────────────────────────
+//
+// A ticket's own labour sessions (TicketWorkLogDto, server-tracked, independent of this report's
+// own manual start/stop timer above) are keyed by userId, so a suggestion only ever applies to
+// the specific staff row whose userId matches — never a blind average across everyone on the job.
+// Explicit-apply only (a tappable chip, not a silent overwrite): the technician's own typed time
+// is never touched without them choosing to replace it.
+
+/// [startTime]/[endTime] are non-null only when exactly one completed session matched — combining
+/// several unrelated sessions into one fabricated time range would be dishonest, so multi-session
+/// matches surface a summed [hours] total with no synthesized range.
+class WorklogHoursSuggestion {
+  const WorklogHoursSuggestion({required this.hours, this.startTime, this.endTime});
+
+  final double hours;
+  final DateTime? startTime;
+  final DateTime? endTime;
+}
+
+/// The suggestion for [row], or null when there's nothing to suggest.
+///
+/// Only completed sessions count (a still-running entry has no endTime — see
+/// TicketWorkLogDto.isRunning — and suggesting hours from a clock that hasn't stopped yet would
+/// be actively wrong). A multi-session sum is suppressed when the row already has its own
+/// start/end range (from this report's own timer): StaffRow.copyWith has no way to clear
+/// startTime/endTime, and effectiveHours prefers that range over hoursWorked whenever both are
+/// set — so setting hoursWorked alongside an existing range would silently do nothing visible,
+/// which is worse than not offering the suggestion at all.
+WorklogHoursSuggestion? _worklogSuggestionFor(List<TicketWorkLogDto> entries, StaffRow row) {
+  final completed = entries.where((e) => e.userId == row.userId && !e.isRunning).toList();
+  if (completed.isEmpty) return null;
+
+  if (completed.length == 1) {
+    final e = completed.single;
+    final start = e.workDate.add(e.startTime);
+    final end = e.workDate.add(e.endTime!);
+    return WorklogHoursSuggestion(
+      hours: end.difference(start).inMinutes / 60.0,
+      startTime: start,
+      endTime: end,
+    );
+  }
+
+  if (row.startTime != null || row.endTime != null) return null;
+  final totalMinutes = completed.fold<int>(
+    0,
+    (sum, e) => sum + (e.endTime! - e.startTime).inMinutes,
+  );
+  return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
+}
+
 class _StaffTile extends StatefulWidget {
   const _StaffTile({
     required this.row,
+    this.worklogSuggestion,
     required this.onUpdate,
     required this.onRemove,
     required this.onStartTimer,
@@ -243,6 +308,7 @@ class _StaffTile extends StatefulWidget {
   });
 
   final StaffRow row;
+  final WorklogHoursSuggestion? worklogSuggestion;
   final ValueChanged<StaffRow> onUpdate;
   final VoidCallback onRemove;
   final VoidCallback onStartTimer;
@@ -263,6 +329,19 @@ class _StaffTileState extends State<_StaffTile> {
     _kmCtrl = TextEditingController(
       text: widget.row.kmTraveled > 0 ? widget.row.kmTraveled.toStringAsFixed(1) : '',
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant _StaffTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // hoursWorked changing from outside this field's own onChanged — applying a multi-session
+    // worklog suggestion (no time range, so the "Ore effettive" readout below never renders to
+    // show it) is the only path that does this today. Without resyncing here, tapping the
+    // suggestion chip would persist the value but show no visible change at all.
+    if (widget.row.hoursWorked != oldWidget.row.hoursWorked) {
+      final text = widget.row.hoursWorked?.toStringAsFixed(1) ?? '';
+      if (_hoursCtrl.text != text) _hoursCtrl.text = text;
+    }
   }
 
   @override
@@ -351,6 +430,23 @@ class _StaffTileState extends State<_StaffTile> {
             ],
           ),
 
+          if (widget.worklogSuggestion != null) ...[
+            const SizedBox(height: 8),
+            _WorklogSuggestionChip(
+              suggestion: widget.worklogSuggestion!,
+              onApply: () {
+                final s = widget.worklogSuggestion!;
+                widget.onUpdate(
+                  row.copyWith(
+                    hoursWorked: s.hours,
+                    startTime: s.startTime,
+                    endTime: s.endTime,
+                  ),
+                );
+              },
+            ),
+          ],
+
           // Timer time range display
           if (row.startTime != null) ...[
             const SizedBox(height: 8),
@@ -375,6 +471,49 @@ class _StaffTileState extends State<_StaffTile> {
 
   String _fmtTime(DateTime dt) =>
       '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+}
+
+// ── Worklog suggestion chip ─────────────────────────────────────────────────────
+
+class _WorklogSuggestionChip extends StatelessWidget {
+  const _WorklogSuggestionChip({required this.suggestion, required this.onApply});
+
+  final WorklogHoursSuggestion suggestion;
+  final VoidCallback onApply;
+
+  static String _fmtTime(DateTime dt) =>
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    final hoursLabel = suggestion.hours.toStringAsFixed(1).replaceAll('.', ',');
+    final label = suggestion.startTime != null
+        ? 'Da worklog: ${hoursLabel}h (${_fmtTime(suggestion.startTime!)}–'
+              '${_fmtTime(suggestion.endTime!)})'
+        : 'Da worklog: ${hoursLabel}h';
+
+    return AppTappable(
+      onTap: onApply,
+      color: v.tint.withAlpha(31),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: v.tint),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.clock, size: 14, color: v.tint),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: context.colors.ink),
+          ),
+          const SizedBox(width: 6),
+          Text('· Usa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: v.tint)),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Running timer badge ────────────────────────────────────────────────────────
