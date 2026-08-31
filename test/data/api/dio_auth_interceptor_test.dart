@@ -190,6 +190,53 @@ void main() {
     });
   });
 
+  // ── onError: 401 + refresh unreachable (NetworkError) → session preserved ──
+  //
+  // Regression for a real cold-start bug: HomeShell's first sync fires before the radio has
+  // finished registering, the 401 lands on the not-yet-re-minted access token, and the refresh
+  // attempt races the same signal gap. Treating that NetworkError like a real auth failure was
+  // forcing a fresh interactive login — needing network — on every such cold start. Only a
+  // genuine failure (SessionExpired etc., covered above) should sign the user out.
+
+  group('onError — 401 + refresh unreachable', () {
+    setUp(() {
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
+      when(() => repo.signOut()).thenAnswer((_) async {});
+    });
+
+    test('does NOT call signOut', () async {
+      final options = RequestOptions(path: '/api/data');
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      verifyNever(() => repo.signOut());
+    });
+
+    test('does NOT invoke onForcedSignOut', () async {
+      var called = false;
+      interceptor.onForcedSignOut = () => called = true;
+
+      final options = RequestOptions(path: '/api/data');
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      expect(called, isFalse);
+    });
+
+    test('still passes the original error through (the request fails for now)', () async {
+      final options = RequestOptions(path: '/api/data');
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      verify(() => handler.next(any())).called(1);
+    });
+  });
+
   // ── onError: already-retried request skips refresh ────────────────────
 
   group('onError — retry guard', () {

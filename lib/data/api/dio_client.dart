@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
+import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/i_auth_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 
@@ -11,7 +12,8 @@ import '../../presentation/providers/auth_providers.dart';
 /// Provides a configured [Dio] instance with:
 /// - Base URL from [Env.apiBaseUrl]
 /// - Authorization: Bearer {access_token} on every request
-/// - 401 → silent token refresh → retry once → /login on second 401
+/// - 401 → silent token refresh → retry once → /login only if the refresh itself was refused
+///   (not merely unreachable — see [AuthInterceptor.onError])
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
@@ -68,8 +70,15 @@ final dioProvider = Provider<Dio>((ref) {
 /// Dio interceptor that:
 /// 1. Attaches the current JWT as `Authorization: Bearer <token>`.
 /// 2. On 401: silently refreshes the token once, retries the request.
-/// 3. On second 401 (refresh failed): calls [AuthInterceptor.onForcedSignOut]
-///    so the app can route to /login.
+/// 3. If that refresh fails because Zitadel is merely unreachable (a [NetworkError] — a cold
+///    start racing the radio still registering, a tunnel, airplane mode): leaves the session
+///    alone and lets this one request fail. Says nothing about whether the refresh token itself
+///    is still good — the same distinction [IAuthRepository]'s own offline-restore path already
+///    makes on cold start; forcing sign-out here would silently undo it one layer up, requiring
+///    a fresh interactive login (which itself needs network) every time a request happened to
+///    race a signal gap.
+/// 4. If that refresh fails for a real reason (expired/revoked/invalid_grant): calls
+///    [AuthInterceptor.onForcedSignOut] so the app can route to /login.
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({required this.dio, required this.authRepo});
 
@@ -109,8 +118,21 @@ class AuthInterceptor extends Interceptor {
         } on DioException catch (retryErr) {
           return handler.next(retryErr);
         }
+      } else if (refreshResult.failure is NetworkError) {
+        // Refresh itself couldn't reach Zitadel — says nothing about whether the refresh token
+        // is still good (see ZitadelAuthRepository._restore's own identical reasoning). This is
+        // the common case on a cold start: HomeShell fires its first sync before the radio has
+        // finished registering with the carrier, this 401 fires on the stale/empty in-memory
+        // access token, and the refresh attempt lands in that same dead window. Treating a
+        // network hiccup as "sign out" was forcing a fresh interactive login (which itself needs
+        // network) on every such cold start — exactly the offline lockout _restore() was written
+        // to prevent, just reintroduced one layer up. Leave the session alone; this request fails
+        // for now, and the next request (or AuthReconnectWatcher, once connectivity actually
+        // returns) gets a real chance to refresh.
+        return handler.next(err);
       } else {
-        // Refresh failed — force sign-out and navigate to login.
+        // A genuine auth failure (SessionExpired, revoked, invalid_grant) — the refresh token
+        // itself is no longer good, not just unreachable. Force sign-out and navigate to login.
         await authRepo.signOut();
         onForcedSignOut?.call();
         return handler.next(err);

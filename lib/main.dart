@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'core/location/location_service.dart';
 import 'core/security/biometric_lock.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -98,6 +99,13 @@ Future<void> runTaskTapApp() async {
   // the session is restored from the stored refresh token by the repository.
   // FCM device-token registration is driven off the Riverpod auth state inside
   // TaskTapApp (a listener needs the ProviderScope, created below).
+
+  // Portrait only — every screen is designed and tested for it; a rotated layout is unsupported,
+  // not merely untested, and would break the bottom-nav pill / stepper layouts.
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   runApp(
     ProviderScope(

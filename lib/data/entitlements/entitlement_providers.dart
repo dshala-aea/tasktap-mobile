@@ -46,7 +46,11 @@ final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
 /// reconnects, so it never fetched, so the cache stayed null and every screen reading it fell back
 /// to the field-seat baseline forever. An office user on good wifi would have been the *worst*
 /// served by a watcher that only listens for the network coming back.
-void initEntitlementRefreshWatcher(WidgetRef ref) {
+///
+/// Returns the cancel function to invoke from the caller's `dispose()` — without it, a widget
+/// remount (e.g. forced sign-out → re-login) leaves the old closure's `ref` in the listener list
+/// forever, and the next reconnect throws on that stale entry.
+VoidCallback initEntitlementRefreshWatcher(WidgetRef ref) {
   Future<void> refresh() async {
     final updated = await ref.read(entitlementServiceProvider).refresh();
     // Only invalidate on a real change — a failed refresh must not churn the UI into
@@ -58,5 +62,5 @@ void initEntitlementRefreshWatcher(WidgetRef ref) {
   }
 
   refresh();
-  ref.read(connectivityProvider.notifier).onReconnect(refresh);
+  return ref.read(connectivityProvider.notifier).onReconnect(refresh);
 }
