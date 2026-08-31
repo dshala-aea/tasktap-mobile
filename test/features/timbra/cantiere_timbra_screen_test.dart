@@ -459,6 +459,61 @@ void main() {
 
       await _teardown(tester);
     });
+
+    testWidgets('check-in succeeds against the fixed cantiere, without ever touching the picker', (
+      tester,
+    ) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'c1',
+              tenantId: 'tenant1',
+              createdAt: DateTime.utc(2026, 8, 31),
+              name: 'Cantiere Diretto',
+              customerId: const drift.Value('cust-1'),
+            ),
+          );
+
+      final api = _FakeApiClient();
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'c1', ticketId: 'tick-1'),
+      );
+      await tester.pumpAndSettle();
+
+      // Direct-entry mode: no picker row to tap — the button must work off the resolved fixed
+      // cantiere alone (see _effectiveCantiere in cantiere_timbra_screen.dart; this used to fall
+      // through to the "Seleziona un cantiere" validation error because _handleStartCantiere read
+      // the picker-only _selectedCantiere field instead).
+      await tester.ensureVisible(find.text('Timbra ingresso cantiere'));
+      await tester.tap(find.text('Timbra ingresso cantiere'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Seleziona un cantiere prima di timbrare.'), findsNothing);
+      expect(api.startedRequests, hasLength(1));
+      expect(api.startedRequests.first.cantiereId, 'c1');
+      expect(api.startedRequests.first.customerId, 'cust-1');
+      expect(api.startedRequests.first.ticketId, 'tick-1');
+
+      await _teardown(tester);
+    });
+
+    testWidgets('shows an honest not-found message when the fixed cantiere is not synced locally', (
+      tester,
+    ) async {
+      // Nothing seeded for 'missing-id' — the fixed-cantiere card must distinguish this from
+      // "still loading" rather than spinning forever (see fixedCantiereAsync.when in
+      // cantiere_timbra_screen.dart).
+      final api = _FakeApiClient();
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api, cantiereId: 'missing-id'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cantiere non trovato su questo dispositivo.'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      await _teardown(tester);
+    });
   });
 
   // ── Offline check-in (item B2) ────────────────────────────────────────────

@@ -247,6 +247,22 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   bool get _hasClosingDetails =>
       [_closingDescription, _safetyNotes].any((v) => v != null && v.isNotEmpty);
 
+  /// The cantiere this screen currently intends to act on — the fixed cantiere when in
+  /// direct-entry mode (`widget.cantiereId` set), else whatever the picker has selected.
+  ///
+  /// Read by both `build()` (for display) and `_handleStartCantiere` (for the actual clock-in)
+  /// so the two can never disagree. Originally `build()` alone computed an `effectiveSelected`
+  /// local while `_handleStartCantiere` still read the picker-only `_selectedCantiere` field
+  /// directly — so a direct-entry clock-in tap always fell through to "Seleziona un cantiere
+  /// prima di timbrare.", even though the fixed-cantiere card was correctly showing the resolved
+  /// cantiere. `ref.read`, not `ref.watch`: `build()` already watches `cantiereByIdProvider` for
+  /// itself below, and this getter only needs the cached value, not a subscription of its own —
+  /// including when called imperatively from `_handleStartCantiere`, which must not create a new
+  /// watch mid-callback.
+  CantieriData? get _effectiveCantiere => widget.cantiereId != null
+      ? ref.read(cantiereByIdProvider(widget.cantiereId!)).valueOrNull
+      : _selectedCantiere;
+
   @override
   Widget build(BuildContext context) {
     final cantieriAsync = ref.watch(cantieriProvider);
@@ -255,12 +271,12 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
     final hasPendingSync = ref.watch(cantiereHasPendingSyncProvider);
 
+    // Watched here (not just read via `_effectiveCantiere`) so the screen rebuilds once this
+    // resolves — the fixed-cantiere card below also needs its loading/error/not-found states,
+    // which the plain `CantieriData?` value alone can't distinguish.
     final fixedCantiereAsync = widget.cantiereId != null
         ? ref.watch(cantiereByIdProvider(widget.cantiereId!))
         : null;
-    final effectiveSelected = widget.cantiereId != null
-        ? fixedCantiereAsync?.valueOrNull
-        : _selectedCantiere;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -292,8 +308,9 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                       customerId: widget.customerId,
                       ticketId: widget.ticketId,
                       cantieriAsync: cantieriAsync,
-                      selectedCantiere: effectiveSelected,
+                      selectedCantiere: _effectiveCantiere,
                       showPicker: widget.cantiereId == null,
+                      fixedCantiereAsync: fixedCantiereAsync,
                       isLoading: _isLoading,
                       errorMessage: _errorMessage,
                       hasDetails: _hasCheckInDetails,
@@ -345,7 +362,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   Future<void> _handleStartCantiere() async {
-    final cantiere = _selectedCantiere;
+    final cantiere = _effectiveCantiere;
     if (cantiere == null) {
       setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
@@ -552,6 +569,7 @@ class _CheckInBody extends StatelessWidget {
     required this.cantieriAsync,
     required this.selectedCantiere,
     required this.showPicker,
+    this.fixedCantiereAsync,
     required this.isLoading,
     required this.errorMessage,
     required this.hasDetails,
@@ -568,6 +586,12 @@ class _CheckInBody extends StatelessWidget {
   /// When false, the cantiere picker (section header + selectable list) is skipped in favour of a
   /// compact fixed-cantiere card — the direct-entry path (`CantiereTimbraScreen.cantiereId` set).
   final bool showPicker;
+
+  /// The fixed cantiere's own load state (direct-entry mode only — null when `showPicker` is
+  /// true). Carried separately from `selectedCantiere` because a plain `CantieriData?` can't tell
+  /// "still loading" apart from "resolved to nothing found" — the fixed-cantiere card below needs
+  /// that distinction so a not-found cantiere doesn't read as a permanent spinner.
+  final AsyncValue<CantieriData?>? fixedCantiereAsync;
   final bool isLoading;
   final String? errorMessage;
   final bool hasDetails;
@@ -580,8 +604,13 @@ class _CheckInBody extends StatelessWidget {
     // The picker reads the local Drift mirror `SyncService` keeps warm (see cantieriProvider's own
     // doc comment) — once the stream has emitted at least once, an empty list means this tenant has
     // no active cantieri synced to this device yet, not that the feature is unimplemented.
+    //
+    // Only gates the button in picker mode: `cantieriAsync` is the Active-only cantieri list, but
+    // a direct-entry cantiere reached via a ticket link may be Completed/Cancelled (so absent from
+    // that list) or the tenant may simply have zero other Active cantieri right now — neither
+    // should disable a button that's about to act on an already-resolved fixed cantiere.
     final cantieriValue = cantieriAsync.valueOrNull;
-    final noCantieriAvailable = cantieriValue != null && cantieriValue.isEmpty;
+    final noCantieriAvailable = showPicker && cantieriValue != null && cantieriValue.isEmpty;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -740,30 +769,64 @@ class _CheckInBody extends StatelessWidget {
             ),
           ] else
             VetroCard(
-              child: selectedCantiere == null
-                  ? const Center(
+              child:
+                  fixedCantiereAsync?.when(
+                    loading: () => const Center(
                       child: Padding(
                         padding: EdgeInsets.all(AppSpacing.base),
                         child: CircularProgressIndicator(),
                       ),
-                    )
-                  : Row(
-                      children: [
-                        Icon(LucideIcons.hardHat, size: 18, color: context.colors.ink),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            selectedCantiere!.name,
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.ink,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
+                    error: (e, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+                      child: Text(
+                        'Impossibile caricare il cantiere.',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                          color: context.colors.red,
+                        ),
+                      ),
+                    ),
+                    data: (c) => c == null
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+                            child: Text(
+                              'Cantiere non trovato su questo dispositivo.',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 13,
+                                color: context.colors.red,
+                              ),
+                            ),
+                          )
+                        : Row(
+                            children: [
+                              Icon(LucideIcons.hardHat, size: 18, color: context.colors.ink),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  c.name,
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.ink,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ) ??
+                  // Unreachable in practice — showPicker == false implies the caller set
+                  // cantiereId, which implies fixedCantiereAsync was watched — but a defensive
+                  // fallback beats a null-check crash if that invariant is ever violated.
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(AppSpacing.base),
+                      child: CircularProgressIndicator(),
+                    ),
+                  ),
             ),
 
           const SizedBox(height: 16),
