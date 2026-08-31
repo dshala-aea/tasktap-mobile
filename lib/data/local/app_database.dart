@@ -99,6 +99,13 @@ class Tickets extends Table {
   TextColumn get prodottoAssistenzaId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
+  /// The cantiere (worksite) this ticket is linked to, when it has one — a ticket may or may not
+  /// be linked to a cantiere. Already on the wire the whole time (mobile sync returns the full
+  /// `Ticket` entity, which has carried `CantiereId` since it was added server-side), just never
+  /// parsed or stored — same situation as `numero` (schema 12) and `priority`/`dueDate`
+  /// (schema 20). See `syncCursorGeneration`'s own doc comment for why this needs a bump too.
+  TextColumn get cantiereId => text().nullable()();
+
   /// Wire form is the enum name ("Bassa"/"Media"/"Alta"/"Urgente" — backend `TicketPriorityEnum`
   /// carries `[JsonConverter(typeof(JsonStringEnumConverter))]`), not an int. Stored as the same
   /// string rather than parsed to an enum locally, matching how `statusId`/`typeId` are looked up
@@ -725,7 +732,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration {
@@ -869,6 +876,12 @@ class AppDatabase extends _$AppDatabase {
           // (schema 12) / tickets.priority (schema 20): syncCursorGeneration bumped to v5 below.
           await m.createTable(materialeBarcodes);
         }
+        if (from < 23) {
+          // Ticket<->Cantiere link — see Tickets.cantiereId's own doc comment. Same reasoning as
+          // schema 20 (tickets.priority/dueDate): already on the wire, needs syncCursorGeneration
+          // bumped below or an already-synced device never backfills it.
+          await m.addColumn(tickets, tickets.cantiereId);
+        }
       },
     );
   }
@@ -896,7 +909,10 @@ class AppDatabase extends _$AppDatabase {
   /// v5 — 2026-08-27, schema 22 added `materiale_barcodes` (new table, not a column, but the
   ///      same delta blind spot: existing MaterialeBarcode rows on the backend would never
   ///      backfill for a device whose cursor is already past their (unrelated) last change).
-  static const String syncCursorGeneration = 'v5';
+  /// v6 — 2026-08-31, schema 23 added `tickets.cantiereId`. Same reasoning as v4
+  ///      (tickets.priority/dueDate): already on the wire, a delta sync would never refill it for
+  ///      tickets that haven't otherwise changed.
+  static const String syncCursorGeneration = 'v6';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 
