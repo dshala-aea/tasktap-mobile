@@ -219,6 +219,11 @@ class TicketDto {
   final String? prodottoAssistenzaId;
   final String? commessaId;
 
+  /// The cantiere this ticket is linked to, when it has one. See `Tickets.cantiereId`'s own doc
+  /// comment in app_database.dart for why this needed a schema+cursor bump to actually reach the
+  /// device rather than just being added to this DTO.
+  final String? cantiereId;
+
   /// Wire form is the enum name — see `Tickets.priority`'s own doc comment in `app_database.dart`.
   final String? priority;
   final DateTime? dueDate;
@@ -243,6 +248,7 @@ class TicketDto {
     this.contractId,
     this.prodottoAssistenzaId,
     this.commessaId,
+    this.cantiereId,
     this.priority,
     this.dueDate,
   });
@@ -267,6 +273,7 @@ class TicketDto {
     contractId: j['contractId'] as String?,
     prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
     commessaId: j['commessaId'] as String?,
+    cantiereId: j['cantiereId'] as String?,
     priority: j['priority'] as String?,
     dueDate: _dt(j['dueDate']),
   );

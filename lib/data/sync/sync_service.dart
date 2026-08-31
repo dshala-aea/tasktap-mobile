@@ -237,6 +237,7 @@ class SyncService {
               contractId: Value(t.contractId),
               prodottoAssistenzaId: Value(t.prodottoAssistenzaId),
               commessaId: Value(t.commessaId),
+              cantiereId: Value(t.cantiereId),
               priority: Value(t.priority),
               dueDate: Value(t.dueDate),
             ),
