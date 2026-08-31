@@ -8,6 +8,8 @@
 //   await tester.pumpAndSettle();
 // to avoid "A Timer is still pending" hangs from Drift's StreamQueryStore.
 
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/drift.dart' as drift show Value;
@@ -18,9 +20,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/widgets/vetro_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
+import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
 import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
@@ -511,6 +515,60 @@ void main() {
 
       expect(find.text('Cantiere non trovato su questo dispositivo.'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      await _teardown(tester);
+    });
+
+    testWidgets(
+      'the start button stays disabled, not just the card message, when the fixed cantiere is '
+      'not found',
+      (tester) async {
+        // Regression for the button previously staying enabled through both the loading and
+        // not-found direct-entry states, falling through to the self-contradictory "Seleziona un
+        // cantiere prima di timbrare." on a screen with no picker at all.
+        final api = _FakeApiClient();
+        await tester.pumpWidget(_buildScreen(db: db, apiClient: api, cantiereId: 'missing-id'));
+        await tester.pumpAndSettle();
+
+        final button = tester.widget<VetroButton>(
+          find.widgetWithText(VetroButton, 'Timbra ingresso cantiere'),
+        );
+        expect(button.onPressed, isNull);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets('the start button stays disabled while the fixed cantiere is still loading', (
+      tester,
+    ) async {
+      // A real Drift StreamProvider backed by an in-memory NativeDatabase resolves its first
+      // watchSingleOrNull value within a single pump, so there's no reliable window to observe
+      // "still loading" through the real provider. Overriding cantiereByIdProvider with a stream
+      // that never emits pins the screen in AsyncLoading deterministically instead.
+      final neverEmits = StreamController<CantieriData?>();
+      addTearDown(neverEmits.close);
+
+      final api = _FakeApiClient();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            cantiereWorklogApiClientProvider.overrideWithValue(api),
+            locationServiceProvider.overrideWithValue(_FakeLocationService()),
+            activeCantiereLogProvider.overrideWith(() => _FakeActiveNotifier(api.activeLog)),
+            cantiereByIdProvider.overrideWith((ref, id) => neverEmits.stream),
+          ],
+          child: const MaterialApp(home: CantiereTimbraScreen(cantiereId: 'c1')),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+      final button = tester.widget<VetroButton>(
+        find.widgetWithText(VetroButton, 'Timbra ingresso cantiere'),
+      );
+      expect(button.onPressed, isNull);
 
       await _teardown(tester);
     });

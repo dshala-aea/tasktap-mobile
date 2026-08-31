@@ -612,6 +612,14 @@ class _CheckInBody extends StatelessWidget {
     final cantieriValue = cantieriAsync.valueOrNull;
     final noCantieriAvailable = showPicker && cantieriValue != null && cantieriValue.isEmpty;
 
+    // Direct-entry mode's own gate: the fixed-cantiere card above already shows a distinct
+    // message for "still loading" vs. "not synced locally" (see fixedCantiereAsync.when above),
+    // but until now the start button stayed enabled through both, and tapping it fell through to
+    // the generic "Seleziona un cantiere prima di timbrare." — self-contradictory on a screen with
+    // no picker to select from. `selectedCantiere` is `_effectiveCantiere` in direct-entry mode,
+    // so it's null in exactly those two states and non-null once resolved.
+    final noFixedCantiere = !showPicker && selectedCantiere == null;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
@@ -881,7 +889,7 @@ class _CheckInBody extends StatelessWidget {
             label: 'Timbra ingresso cantiere',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
-            onPressed: (isLoading || noCantieriAvailable) ? null : onStart,
+            onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
           ),
         ],
       ),
