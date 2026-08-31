@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/features/dashboard/id_plate_hero_comp.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -29,6 +30,9 @@ Widget _buildDashboard({required AppDatabase db, required MockAuthRepository rep
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
+      // PunchNotifier calls this (best-effort, silent GPS capture) on every punch — same reasoning
+      // as timbra_screen_test.dart's own override.
+      locationServiceProvider.overrideWithValue(const DisabledLocationService()),
     ],
     child: const MaterialApp(home: DashboardScreen()),
   );
@@ -216,6 +220,39 @@ void main() {
       expect(bell.showDot, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
+    });
+
+    // ── Clock-in from Home (2026-08-30 polish pass) ─────────────────────────
+    //
+    // A punch fired from the idle hero used to hand back control with nothing but the hero
+    // swapping shape — no confirmation at all that "Turno iniziato" the way there is for a failed
+    // punch (TimbraScreen's own inline error text).
+
+    testWidgets('tapping Timbra ingresso shows a confirmation and swaps to the active tracker', (
+      tester,
+    ) async {
+      await pumpDashboard(tester);
+      expect(find.text('Timbra ingresso'), findsOneWidget);
+
+      await tester.tap(find.text('Timbra ingresso'));
+      // Bounded pumps, not pumpAndSettle: ActiveTrackerStrip watches nowProvider, the same
+      // per-second live clock TimbraScreen's own tests avoid settling against (see
+      // timbra_screen_test.dart's _teardownTimer comment) — pumpAndSettle would never return once
+      // it mounts.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 350)); // punch write + crossfade
+      await tester.pump(); // let the SnackBar's entrance animation start
+
+      expect(find.text('Turno iniziato'), findsOneWidget);
+      expect(find.byType(ActiveTrackerStrip), findsOneWidget);
+      expect(find.text('Timbra ingresso'), findsNothing);
+
+      // Disposes by unmounting, same as timbra_screen_test.dart's _teardownTimer — cancels
+      // nowProvider's Timer.periodic instead of leaving it pending past the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(Duration.zero);
+      }
     });
   });
 }

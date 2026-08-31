@@ -79,9 +79,32 @@ class DashboardScreen extends ConsumerWidget {
                 // possible — leaving that as a second tap into the Timbra tab, on the one screen
                 // that already knows nothing is running, was the actual gap (the Vetro mockup's
                 // own "Home — idle" screen calls this out directly).
-                child: trackers.isEmpty
-                    ? const _ClockInPrompt()
-                    : ActiveTrackerStrip(trackers: trackers),
+                //
+                // The idle → active swap used to be a raw ternary: two different widget types in
+                // the same slot, so Flutter unmounts one and mounts the other on the very next
+                // frame — the one moment on this screen where a technician's own tap visibly
+                // changes the world (they just started their day) read as a silent pop instead of
+                // a transition. A crossfade gives that moment the beat it earns without touching
+                // layout height mid-scroll (no SizeTransition — this sits inside a CustomScrollView
+                // and a collapsing/growing sliver is its own jank, not a fix for one). A
+                // MediaQuery.disableAnimations check collapses it to an instant cut, matching
+                // TimbraScreen's own reduced-motion handling for its pulse.
+                child: AnimatedSwitcher(
+                  duration: MediaQuery.of(context).disableAnimations
+                      ? Duration.zero
+                      : const Duration(milliseconds: 280),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.topCenter,
+                    children: [...previousChildren, ?currentChild],
+                  ),
+                  child: trackers.isEmpty
+                      ? const _ClockInPrompt(key: ValueKey('idle'))
+                      : ActiveTrackerStrip(key: const ValueKey('active'), trackers: trackers),
+                ),
               ),
             ),
 
@@ -153,12 +176,23 @@ class DashboardScreen extends ConsumerWidget {
 /// navigation just to reach the same "ingresso" event this button can fire directly would be a
 /// tap this screen exists to save.
 class _ClockInPrompt extends ConsumerWidget {
-  const _ClockInPrompt();
+  const _ClockInPrompt({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final punchState = ref.watch(punchNotifierProvider);
     final busy = punchState.isLoading;
+
+    // A punch fired from here used to hand back control with nothing but the hero swapping
+    // shape — the one confirmation TimbraScreen's own inline error text gives a failed punch, a
+    // successful one from Home gave none at all. Same success-toast convention
+    // new_ticket_form_screen.dart already uses (context.colors.green), so this reads as the same
+    // "it worked" language the rest of the app already speaks, not a new one invented here.
+    ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
+      if (previous is AsyncLoading && next is AsyncData && !next.hasError) {
+        showAppToast(context, message: 'Turno iniziato', tone: ToastTone.success);
+      }
+    });
 
     return VetroGlass(
       fill: AppVetroColors.glassFillOnDark,

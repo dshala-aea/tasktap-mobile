@@ -54,6 +54,14 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   Timer? _reconcilePoll;
 
+  // Cancel functions for every connectivityProvider.onReconnect() registration made below. A
+  // forced sign-out (AuthInterceptor → authRepo.signOut()) sends the router to /login and back,
+  // disposing and recreating this whole widget — connectivityProvider itself is never disposed
+  // across that cycle. Without unregistering here, each remount left the previous mount's
+  // closures (closing over an already-disposed `ref`) in the listener list forever, and the next
+  // reconnect threw "Cannot use ref after the widget was disposed" on those stale entries.
+  final List<VoidCallback> _reconnectUnsubs = [];
+
   @override
   void initState() {
     super.initState();
@@ -61,33 +69,33 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     // Trigger initial sync post-login.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncProvider.notifier).performSync();
-      initTimbraSyncWatcher(ref);
+      _reconnectUnsubs.add(initTimbraSyncWatcher(ref));
       // Offline-first cantiere (worksite) timbratura — same push-on-reconnect pattern as
       // personal attendance. See cantiere_timbra_sync_service.dart.
-      initCantiereTimbraSyncWatcher(ref);
+      _reconnectUnsubs.add(initCantiereTimbraSyncWatcher(ref));
       // Offline-created tickets are queued locally (see
       // features/ticket/new_ticket_form_screen.dart); this flushes the
       // ones that are safe to auto-retry as soon as connectivity returns.
-      initTicketCreationQueueWatcher(ref);
+      _reconnectUnsubs.add(initTicketCreationQueueWatcher(ref));
       // Same push-on-reconnect treatment for a photo/file picked from ticket detail's Allegati
       // tab while offline (features/ticket/ticket_detail_screen.dart).
-      initTicketAttachmentUploadQueueWatcher(ref);
+      _reconnectUnsubs.add(initTicketAttachmentUploadQueueWatcher(ref));
       // Retries the OIDC token refresh as soon as connectivity returns —
       // matters most right after a cold start on no signal, where auth
       // falls back to a cached, signed-in-but-offline identity (see
       // ZitadelAuthRepository._restore).
-      initAuthReconnectWatcher(ref);
+      _reconnectUnsubs.add(initAuthReconnectWatcher(ref));
       // Which modules this tenant actually bought. The whole entitlement layer — repository,
       // service, Drift table, tests — existed and was never started from anywhere, so the cache was
       // permanently empty and the Altro hub offered every office module to every technician
       // regardless. The server refused them on arrival, which is the wrong place to find out.
-      initEntitlementRefreshWatcher(ref);
+      _reconnectUnsubs.add(initEntitlementRefreshWatcher(ref));
       // Corrects local "on shift" state when the same account clocked out elsewhere (web).
       // See work_log_reconciler.dart.
-      initWorkLogReconcileWatcher(ref);
+      _reconnectUnsubs.add(initWorkLogReconcileWatcher(ref));
       // Same correction, for the cantiere (worksite) session. See
       // cantiere_work_log_reconciler.dart.
-      initCantiereWorkLogReconcileWatcher(ref);
+      _reconnectUnsubs.add(initCantiereWorkLogReconcileWatcher(ref));
       // General sync already carries a submitted rapportino's server-side lifecycle back to the
       // device (SyncService's `submittedReports` upsert) — including an office rejection — but
       // until now it only ever ran on first mount and app-foreground resume (below). A
@@ -95,15 +103,20 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
       // without backgrounding the app, would not see a rejection until they happened to resume
       // it. Reconnect + the same 60s foreground poll the two worklog reconcilers already use
       // close that gap, matching their cadence exactly rather than inventing a third pattern.
-      ref.read(connectivityProvider.notifier).onReconnect(() {
-        ref.read(syncProvider.notifier).performSync();
-      });
+      _reconnectUnsubs.add(
+        ref.read(connectivityProvider.notifier).onReconnect(() {
+          ref.read(syncProvider.notifier).performSync();
+        }),
+      );
       _startReconcilePoll();
     });
   }
 
   @override
   void dispose() {
+    for (final unsub in _reconnectUnsubs) {
+      unsub();
+    }
     _reconcilePoll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

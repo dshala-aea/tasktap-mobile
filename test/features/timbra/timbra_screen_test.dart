@@ -11,12 +11,14 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
+import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show giornataProvider;
 import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
 // ── No-op stubs (prevent Dio from being constructed by providers) ─────────────
@@ -70,7 +72,11 @@ AppDatabase _makeDb() {
   return AppDatabase(NativeDatabase.memory());
 }
 
-Widget _buildApp(AppDatabase db, {ILocationService? locationService}) {
+Widget _buildApp(
+  AppDatabase db, {
+  ILocationService? locationService,
+  List<Override> extraOverrides = const [],
+}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
@@ -81,6 +87,7 @@ Widget _buildApp(AppDatabase db, {ILocationService? locationService}) {
       // same "no position, never prompts" behavior the app itself falls back to whenever the
       // technician has GPS turned off, so this is a realistic default, not just a test workaround.
       locationServiceProvider.overrideWithValue(locationService ?? const DisabledLocationService()),
+      ...extraOverrides,
     ],
     child: const MaterialApp(home: TimbraScreen()),
   );
@@ -293,5 +300,113 @@ void main() {
     });
   });
 
+  // ── Status-First Hero (2026-08-30) ────────────────────────────────────────
+  //
+  // The state badge (IN TURNO / IN PAUSA / FUORI TURNO) and the promoted guard banner replacing
+  // the old under-button reason text.
 
+  group('hero status', () {
+    testWidgets('shows FUORI TURNO before any shift starts', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('FUORI TURNO'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows IN TURNO once a shift starts', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      // The status pill crossfades on change (AnimatedSwitcher, 220ms) — let it finish so the
+      // outgoing label is actually gone, not mid-fade.
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('IN TURNO'), findsOneWidget);
+      expect(find.text('FUORI TURNO'), findsNothing);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows IN PAUSA while on break', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      await tester.tap(find.text('PAUSA'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('IN PAUSA'), findsOneWidget);
+      expect(find.text('IN TURNO'), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
+
+  group('guard banner', () {
+    GiornataDto giornataWith(GiornataActionDto action) => GiornataDto(
+      status: 'Working',
+      workedMinutes: 0,
+      breakMinutes: 0,
+      isPayrollLocked: action.reasonCode == 'payroll_locked',
+      actions: [action],
+    );
+
+    testWidgets('renders the server reason above the punch button when ClockIn is refused', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [
+            giornataProvider.overrideWith(
+              (ref) async => giornataWith(
+                const GiornataActionDto(
+                  action: 'ClockIn',
+                  enabled: false,
+                  reasonCode: 'payroll_locked',
+                  reason: "Il periodo è chiuso per le buste paga: chiedi all'amministrazione.",
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      // Let giornataProvider's future resolve before asserting on its dependents.
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // findsOneWidget also proves it is not duplicated under the dimmed button anymore —
+      // _PunchButton no longer renders its own copy of the reason (see its doc comment).
+      expect(find.textContaining('chiuso per le buste paga'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('does not render when ClockIn is allowed', (tester) async {
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [
+            giornataProvider.overrideWith(
+              (ref) async => giornataWith(
+                const GiornataActionDto(action: 'ClockIn', enabled: true),
+              ),
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byIcon(LucideIcons.alertTriangle), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
 }

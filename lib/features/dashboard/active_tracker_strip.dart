@@ -6,9 +6,8 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/widgets/live_dot.dart';
+import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
@@ -84,11 +83,10 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
       ref.invalidate(activeTrackersProvider);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e is TicketWorkflowFailure ? e.message : 'Operazione non riuscita.'),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: e is TicketWorkflowFailure ? e.message : 'Operazione non riuscita.',
+        tone: ToastTone.error,
       );
     } finally {
       if (mounted) setState(() => _busy = false);

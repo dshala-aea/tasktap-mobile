@@ -21,9 +21,12 @@ import 'work_log_reconciler.dart';
 
 /// Call once on app start (e.g. in HomeShell.initState via addPostFrameCallback).
 /// Registers the offline→online reconnect hook for worklog reconciliation.
-void initWorkLogReconcileWatcher(WidgetRef ref) {
+///
+/// Returns the cancel function to invoke from the caller's `dispose()` — see
+/// timbra_sync_watcher.dart's doc comment for why this matters.
+VoidCallback initWorkLogReconcileWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() {
+  final cancel = connectivity.onReconnect(() {
     ref.read(workLogReconcilerProvider).reconcile();
   });
 
@@ -32,4 +35,6 @@ void initWorkLogReconcileWatcher(WidgetRef ref) {
   Future.microtask(() {
     ref.read(workLogReconcilerProvider).reconcile();
   });
+
+  return cancel;
 }

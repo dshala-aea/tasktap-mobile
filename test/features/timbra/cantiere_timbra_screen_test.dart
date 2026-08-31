@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -311,12 +312,12 @@ void main() {
   // ── Active session (clock-out) UI ─────────────────────────────────────────
 
   group('active session', () {
-    testWidgets('shows Sessione cantiere attiva indicator', (tester) async {
+    testWidgets('shows IN CANTIERE indicator', (tester) async {
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      expect(find.text('Sessione cantiere attiva'), findsOneWidget);
+      expect(find.text('IN CANTIERE'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -334,8 +335,14 @@ void main() {
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      // startTime '08:00:00' → displayed as '08:00'
-      expect(find.text('08:00'), findsOneWidget);
+      // workDate 2026-06-23 UTC + startTime '08:00:00' (also UTC, per backend convention) →
+      // the actual clock-in instant is 2026-06-23T08:00:00Z, displayed in the device's local
+      // zone. Computed rather than hardcoded so the expectation holds on any CI machine's TZ,
+      // not just UTC+0.
+      final expectedLabel = DateFormat(
+        'HH:mm',
+      ).format(DateTime.utc(2026, 6, 23, 8).toLocal());
+      expect(find.text(expectedLabel), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -458,7 +465,7 @@ void main() {
         // No online request ever landed, and the screen did not show a blocking error — it
         // switched straight to "on site" from the local queue.
         expect(api.startedRequests, isEmpty);
-        expect(find.text('Sessione cantiere attiva'), findsOneWidget);
+        expect(find.text('IN CANTIERE'), findsOneWidget);
 
         final events = await (db.select(db.cantierePunches)).get();
         expect(events, hasLength(1));

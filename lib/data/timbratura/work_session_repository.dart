@@ -7,11 +7,13 @@ import '../local/app_database.dart';
 // Reconciliation marker
 //
 // Written into WorkSession.notes (an existing, previously-unused column — no schema
-// migration needed) by WorkLogReconciler when it discovers a local opener event
+// migration needed) by WorkLogReconciler in two cases: (1) a local opener event
 // (ingresso/ripresa) whose interval the server has already closed elsewhere (e.g. the same
-// account clocking out on the web). TimbraSyncService excludes marked openers from what it
-// resends, so a stale local "still active" push can never re-open or extend a worklog the
-// server already closed. See work_log_reconciler.dart and timbra_sync_service.dart.
+// account clocking out on the web), and (2) a local 'ingresso' the reconciler itself backfilled
+// because the server reported an active shift this device had no record of at all. Either way
+// the marked event already exists server-side (or is already known closed there) and must never
+// be treated as a fresh local-origin punch. TimbraSyncService excludes marked events from what it
+// resends. See work_log_reconciler.dart and timbra_sync_service.dart.
 // ══════════════════════════════════════════════════════════════════════════════
 
 const String reconciledOrphanMarker = 'reconciled_orphan';

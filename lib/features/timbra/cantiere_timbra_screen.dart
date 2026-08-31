@@ -175,9 +175,26 @@ final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession
     cantiereId: serverLog.cantiereId,
     customerId: serverLog.customerId,
     ticketId: serverLog.ticketId,
-    startTime: serverLog.workDate,
+    startTime: _combineWorkDateAndStartTime(serverLog.workDate, serverLog.startTime),
   );
 });
+
+/// Combines a server work log's date-only `workDate` with its `startTime` ("HH:mm:ss") into the
+/// actual clock-in instant.
+///
+/// The fallback used to hand `workDate` itself (midnight) straight to [CantiereActiveSession] as
+/// `startTime`, silently dropping the actual time-of-day the backend sent — every displayed
+/// ingresso time for a server-only session (no local Drift row) was midnight shifted by the
+/// device's UTC offset, not the real check-in time. `.utc(...)`, not the plain constructor: the
+/// backend stores/transmits these as UTC, so building a local-naive `DateTime` here would double
+/// the offset once the caller's own `.toLocal()` runs.
+DateTime _combineWorkDateAndStartTime(DateTime workDate, String startTime) {
+  final parts = startTime.split(':');
+  final h = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 0;
+  final m = int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0;
+  final s = int.tryParse(parts.elementAtOrNull(2) ?? '') ?? 0;
+  return DateTime.utc(workDate.year, workDate.month, workDate.day, h, m, s);
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -447,15 +464,12 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       _closingDescription = null;
       _safetyNotes = null;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          offline
-              ? 'Uscita registrata offline: verrà inviata al ritorno della connessione.'
-              : 'Uscita cantiere registrata con successo.',
-        ),
-        backgroundColor: offline ? context.colors.amber : context.colors.green,
-      ),
+    showAppToast(
+      context,
+      message: offline
+          ? 'Uscita registrata offline: verrà inviata al ritorno della connessione.'
+          : 'Uscita cantiere registrata con successo.',
+      tone: offline ? ToastTone.warning : ToastTone.success,
     );
   }
 
@@ -954,12 +968,22 @@ class _ActiveSessionBody extends ConsumerWidget {
   final VoidCallback onEnd;
   final VoidCallback onOpenClosingDetails;
 
+  /// "Xh Ym" — no seconds, matching personal Timbra's own [_HeroStatus] elapsed reading. Not
+  /// live-ticking: recomputed on rebuild only, same non-ticking choice as personal Timbra's
+  /// (a number that changes a few times an hour does not need to visibly age in real time).
+  static String _formatElapsed(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    return '${h}h ${m}m';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dateLabel = DateFormat('dd/MM/yyyy', 'it').format(local.startTime.toLocal());
-    final startLabel = serverLog != null && serverLog!.startTime.length >= 5
-        ? serverLog!.startTime.substring(0, 5)
-        : DateFormat('HH:mm').format(local.startTime.toLocal());
+    // Not serverLog.startTime.substring(0, 5) — that's a raw "HH:mm:ss" backend string with no
+    // timezone conversion possible on a String, and the backend stores/transmits it as UTC. local
+    // carries the same instant as a proper DateTime, so .toLocal() applies correctly.
+    final startLabel = DateFormat('HH:mm').format(local.startTime.toLocal());
 
     // The session carries a ticket id and nothing else, so the row used to read `#3f2a1c8e`.
     // Resolved against the local mirror to the job's own name — which is what the technician is
@@ -981,6 +1005,14 @@ class _ActiveSessionBody extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Active session card
+          //
+          // Status-first hero (2026-08-30, matches personal Timbra's own hero restructuring):
+          // the elapsed-since-check-in reading is now the largest thing on the card — what a
+          // technician glances at this screen to answer is "how long have I been on site," the
+          // same question the personal screen's own hero answers. Uses the flipping
+          // `context.vetro` status tokens (not the fixed AppVetroColors pair personal Timbra
+          // uses) because this card, unlike personal Timbra's permanently-dark ground, is on
+          // this screen's own light/dark-flipping surface — see this file's own doc comment.
           VetroCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -988,22 +1020,23 @@ class _ActiveSessionBody extends ConsumerWidget {
                 Row(
                   children: [
                     Container(
-                      width: 10,
-                      height: 10,
+                      width: 8,
+                      height: 8,
                       decoration: BoxDecoration(
-                        color: context.colors.green,
+                        color: context.vetro.statusGood,
                         shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Sessione cantiere attiva',
+                        'IN CANTIERE',
                         style: TextStyle(
                           fontFamily: 'Inter',
-                          fontSize: 13,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: context.colors.green,
+                          letterSpacing: 0.6,
+                          color: context.vetro.statusGood,
                         ),
                       ),
                     ),
@@ -1020,6 +1053,18 @@ class _ActiveSessionBody extends ConsumerWidget {
                         ),
                       ),
                   ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _formatElapsed(DateTime.now().difference(local.startTime.toLocal())),
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.8,
+                    color: context.vetro.tint,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
                 const SizedBox(height: 12),
                 KeyVal(label: 'Data', value: dateLabel),

@@ -10,13 +10,22 @@
 // so `timbraStateProvider` converges — and marks the stale opener so `TimbraSyncService` never
 // resends it (see timbra_sync_service_test.dart for the resurrection-guard side of this).
 //
+// A second, symmetric bug: a technician clocks in via another surface (web) or reinstalls the
+// app. Mobile's local table has NO record of the shift at all, so `timbraStateProvider` shows
+// "off shift" / stale data even though the server has an active worklog.
+//
 // Verifies:
 // - reconcileWith: local open + server closed → local corrected (fine appended, opener marked)
 // - reconcileWith: local open + server still open → no-op (don't invent a close)
 // - reconcileWith: local closed + server closed → no-op (already agrees)
-// - Idempotency: reconcileWith called N times converges, does not duplicate/toggle
+// - reconcileWith: local unaware + server open with a start time → local corrected (ingresso
+//   backfilled at the server's start time, marked orphaned so it's never resent)
+// - reconcileWith: local unaware + server open with NO start time → no-op (never guess a time)
+// - Idempotency: reconcileWith called N times converges, does not duplicate/toggle, in either
+//   direction
 // - reconcile(): network variant swallows errors (offline is not a crash)
-// - reconcile(): network variant applies the same correction as reconcileWith on success
+// - reconcile(): network variant applies the same correction as reconcileWith on success, in
+//   either direction
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,12 +92,22 @@ class _FakeApiClient extends WorklogApiClient {
   GiornataDto? giornataToReturn;
   Object? errorToThrow;
   int getGiornataCalls = 0;
+  List<TodayWorkLogDto> todayToReturn = const [];
+  Object? todayErrorToThrow;
+  int getTodayCalls = 0;
 
   @override
   Future<GiornataDto> getGiornata() async {
     getGiornataCalls++;
     if (errorToThrow != null) throw errorToThrow!;
     return giornataToReturn!;
+  }
+
+  @override
+  Future<List<TodayWorkLogDto>> getToday() async {
+    getTodayCalls++;
+    if (todayErrorToThrow != null) throw todayErrorToThrow!;
+    return todayToReturn;
   }
 }
 
@@ -103,6 +122,13 @@ GiornataDto _giornata(String status) => GiornataDto(
   breakMinutes: 0,
   isPayrollLocked: false,
   actions: const [],
+);
+
+TodayWorkLogDto _activeWorkLog(DateTime startTime) => TodayWorkLogDto(
+  id: 'wl-1',
+  clientId: 'wl-1',
+  startTime: startTime,
+  isActive: true,
 );
 
 void main() {
@@ -175,6 +201,58 @@ void main() {
       expect(await repo.getTodaySessions(), isEmpty);
     });
 
+    test(
+      'local never punched in + server on shift with a start time → backfills ingresso, marked orphaned',
+      () async {
+        final serverStart = DateTime.utc(2026, 8, 31, 7, 45);
+        final repo = _FakeRepo([]);
+        final reconciler = WorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+
+        await reconciler.reconcileWith(
+          ServerWorkLogSnapshot(isOnShift: true, isOnPause: false, activeStartTime: serverStart),
+        );
+
+        final sessions = await repo.getTodaySessions();
+        expect(sessions.length, 1);
+        expect(sessions.single.eventType, 'ingresso');
+        expect(sessions.single.eventTime, serverStart);
+        expect(deriveShiftState(sessions).isOnShift, isTrue);
+        expect(repo.orphanedIds, [sessions.single.id]);
+      },
+    );
+
+    test('local never punched in + server on shift but NO start time available → no-op', () async {
+      final repo = _FakeRepo([]);
+      final reconciler = WorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+
+      await reconciler.reconcileWith(const ServerWorkLogSnapshot(isOnShift: true, isOnPause: false));
+
+      expect(await repo.getTodaySessions(), isEmpty);
+      expect(repo.orphanedIds, isEmpty);
+    });
+
+    test(
+      'idempotent: backfill correction run 3 times converges, no duplicate ingresso rows',
+      () async {
+        final serverStart = DateTime.utc(2026, 8, 31, 7, 45);
+        final repo = _FakeRepo([]);
+        final reconciler = WorkLogReconciler(repo: repo, apiClient: _FakeApiClient());
+        final snapshot = ServerWorkLogSnapshot(
+          isOnShift: true,
+          isOnPause: false,
+          activeStartTime: serverStart,
+        );
+
+        await reconciler.reconcileWith(snapshot);
+        await reconciler.reconcileWith(snapshot);
+        await reconciler.reconcileWith(snapshot);
+
+        final sessions = await repo.getTodaySessions();
+        expect(sessions.length, 1);
+        expect(repo.orphanedIds.length, 1);
+      },
+    );
+
     test('idempotent: running the same correction 3 times converges, no duplicate rows', () async {
       final t1 = DateTime.utc(2026, 8, 24, 8);
       final repo = _FakeRepo([_ws('open-1', 'ingresso', t1)]);
@@ -207,6 +285,51 @@ void main() {
       expect(deriveShiftState(sessions).isOnShift, isFalse);
       expect(repo.orphanedIds, ['open-1']);
     });
+
+    test(
+      'applies a backfill correction when server reports an active shift with a start time',
+      () async {
+        final serverStart = DateTime.utc(2026, 8, 31, 7, 45);
+        final repo = _FakeRepo([]);
+        final api = _FakeApiClient()
+          ..giornataToReturn = _giornata('Working')
+          ..todayToReturn = [_activeWorkLog(serverStart)];
+        final reconciler = WorkLogReconciler(repo: repo, apiClient: api);
+
+        await reconciler.reconcile();
+
+        final sessions = await repo.getTodaySessions();
+        expect(deriveShiftState(sessions).isOnShift, isTrue);
+        expect(sessions.single.eventTime, serverStart);
+        expect(repo.orphanedIds, [sessions.single.id]);
+        expect(api.getTodayCalls, 1);
+      },
+    );
+
+    test('skips the getToday() fetch entirely when the server reports no active shift', () async {
+      final repo = _FakeRepo([_ws('open-1', 'ingresso', DateTime.utc(2026, 8, 24, 8))]);
+      final api = _FakeApiClient()..giornataToReturn = _giornata('ClockedOut');
+      final reconciler = WorkLogReconciler(repo: repo, apiClient: api);
+
+      await reconciler.reconcile();
+
+      expect(api.getTodayCalls, 0);
+    });
+
+    test(
+      'a failed getToday() fetch still lets the reconciler run — just no backfill possible',
+      () async {
+        final repo = _FakeRepo([]);
+        final api = _FakeApiClient()
+          ..giornataToReturn = _giornata('Working')
+          ..todayErrorToThrow = DioException(requestOptions: RequestOptions());
+        final reconciler = WorkLogReconciler(repo: repo, apiClient: api);
+
+        await expectLater(reconciler.reconcile(), completes);
+
+        expect(await repo.getTodaySessions(), isEmpty);
+      },
+    );
 
     test('network error is swallowed — offline is normal, not a crash', () async {
       final t1 = DateTime.utc(2026, 8, 24, 8);

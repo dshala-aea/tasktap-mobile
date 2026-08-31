@@ -20,16 +20,22 @@
 // visibleTrackersProvider, which reads timbraStateProvider as its own root) read the corrected
 // state. No provider needs to know reconciliation happened; it just sees consistent data.
 //
-// Idempotent by construction: reconcileWith only acts when local disagrees with the server in
-// the one direction this bug produces (local thinks it's on shift, server says it isn't).
+// Idempotent by construction: reconcileWith only acts when local disagrees with the server.
 // Once local agrees, every subsequent call is a no-op — see work_log_reconciler_test.dart.
 //
-// Resurrection guard: correcting local state means appending a 'fine' event, which is exactly
-// the kind of event TimbraSyncService would otherwise resend. To stop that from re-opening or
-// extending a worklog the server already closed, the *opener* this correction is closing is
-// marked with `reconciledOrphanMarker` (an existing, previously-unused `notes` column — no
-// schema migration needed) and TimbraSyncService excludes marked openers from its push. See
-// timbra_sync_service.dart.
+// Two directions, both guarded the same way:
+// - Local thinks it's on shift, server says it isn't (clocked out elsewhere) → append a local
+//   'fine' event.
+// - Local has no record of a shift at all, server says one is active (started elsewhere, or a
+//   fresh install) → backfill a local 'ingresso', anchored on the server's own interval start
+//   time, never `DateTime.now()`.
+//
+// Resurrection guard: either correction writes a local event that TimbraSyncService would
+// otherwise resend as if it were a fresh local-origin punch — re-opening/extending a worklog the
+// server already closed (direction 1), or re-creating as "new" an interval the server already
+// has (direction 2). Both corrections mark the event with `reconciledOrphanMarker` (an existing,
+// previously-unused `notes` column — no schema migration needed); TimbraSyncService excludes
+// marked events from its push. See timbra_sync_service.dart.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,17 +57,27 @@ const _uuid = Uuid();
 /// open, not workedMinutes or payroll-lock reasons (those stay [GiornataDto]'s job, consumed
 /// separately by `giornataProvider`/`resolveGuard`).
 class ServerWorkLogSnapshot {
-  const ServerWorkLogSnapshot({required this.isOnShift, required this.isOnPause});
+  const ServerWorkLogSnapshot({required this.isOnShift, required this.isOnPause, this.activeStartTime});
 
   final bool isOnShift;
   final bool isOnPause;
 
+  /// The active worklog's real start time, from `GET /api/worklog/mobile/today`. Null whenever
+  /// [isOnShift] is false, or when the server is on-shift but that richer per-worklog fetch
+  /// failed/raced/returned nothing — reconciliation only backfills a missing local shift when
+  /// this is present (see `_backfillMissingShift`), never guesses a start time.
+  final DateTime? activeStartTime;
+
   /// `Working` and `OnBreak` both mean a shift is open; `OnBreak` additionally means the break
   /// inside it is open. `ClockedOut` (or anything unrecognised) means neither is.
-  factory ServerWorkLogSnapshot.fromGiornata(GiornataDto giornata) {
+  factory ServerWorkLogSnapshot.fromGiornata(GiornataDto giornata, {DateTime? activeStartTime}) {
     final isOnPause = giornata.status == 'OnBreak';
     final isOnShift = isOnPause || giornata.status == 'Working';
-    return ServerWorkLogSnapshot(isOnShift: isOnShift, isOnPause: isOnPause);
+    return ServerWorkLogSnapshot(
+      isOnShift: isOnShift,
+      isOnPause: isOnPause,
+      activeStartTime: isOnShift ? activeStartTime : null,
+    );
   }
 }
 
@@ -90,11 +106,29 @@ class WorkLogReconciler {
     _running = true;
     try {
       final giornata = await _apiClient.getGiornata();
-      await _reconcileWith(ServerWorkLogSnapshot.fromGiornata(giornata));
+      await _reconcileWith(await _buildSnapshot(giornata));
     } catch (_) {
       // Swallow — see doc comment above.
     } finally {
       _running = false;
+    }
+  }
+
+  /// Enriches the status summary with the active worklog's real start time when one is open —
+  /// needed only for a possible backfill (direction 2 above), so the extra fetch is skipped
+  /// entirely when the server says no shift is open. A failure here still yields a usable
+  /// snapshot (just without a start time, so backfill will no-op) rather than aborting the whole
+  /// reconciliation — the close-direction correction doesn't need this fetch to succeed.
+  Future<ServerWorkLogSnapshot> _buildSnapshot(GiornataDto giornata) async {
+    final base = ServerWorkLogSnapshot.fromGiornata(giornata);
+    if (!base.isOnShift) return base;
+    try {
+      final today = await _apiClient.getToday();
+      final active = today.where((w) => w.isActive);
+      if (active.isEmpty) return base;
+      return ServerWorkLogSnapshot.fromGiornata(giornata, activeStartTime: active.first.startTime);
+    } catch (_) {
+      return base;
     }
   }
 
@@ -109,11 +143,13 @@ class WorkLogReconciler {
     final sessions = await _repo.getTodaySessions();
     final local = deriveShiftState(sessions);
 
-    // The only direction this bug produces: local still thinks a shift is open that the server
-    // has already closed (clocked out from another surface, same account). The reverse — server
-    // says open but local doesn't know about it — is intentionally left alone: manufacturing a
-    // local 'ingresso' the device never recorded risks inventing a second, overlapping shift,
-    // which is a worse failure mode than a dashboard that is briefly behind.
+    if (!local.isOnShift && server.isOnShift) {
+      await _backfillMissingShift(server);
+      return;
+    }
+
+    // Local still thinks a shift is open that the server has already closed (clocked out from
+    // another surface, same account).
     if (!local.isOnShift || server.isOnShift) return;
 
     final opener = _findOpenOpener(sessions);
@@ -122,6 +158,23 @@ class WorkLogReconciler {
     }
 
     await _repo.addEvent(id: _uuid.v4(), eventTime: DateTime.now().toUtc(), eventType: 'fine');
+  }
+
+  /// Server has an active shift this device has no local record of at all (started elsewhere, or
+  /// a fresh install/reinstall). Backfills a local 'ingresso' anchored on the server's own
+  /// interval start time — never `DateTime.now()`, which would understate worked time — and
+  /// immediately marks it with [reconciledOrphanMarker] so TimbraSyncService (which resends every
+  /// unmarked opener idempotently) never re-uploads it as a "new" local-origin interval. This is
+  /// what makes the backfill safe: it only ever changes what this device *displays*, never what
+  /// it sends. No-ops when the server didn't supply a start time — fabricating one is worse than
+  /// staying briefly stale.
+  Future<void> _backfillMissingShift(ServerWorkLogSnapshot server) async {
+    final startTime = server.activeStartTime;
+    if (startTime == null) return;
+
+    final id = _uuid.v4();
+    await _repo.addEvent(id: id, eventTime: startTime, eventType: 'ingresso');
+    await _repo.markReconciledOrphan(id);
   }
 
   /// The most recent ingresso/ripresa that has no closing fine/pausa after it — i.e. the opener
