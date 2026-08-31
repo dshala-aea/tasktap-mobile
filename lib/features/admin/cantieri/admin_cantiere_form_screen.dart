@@ -163,22 +163,16 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Cantiere aggiornato' : 'Cantiere creato'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Cantiere aggiornato' : 'Cantiere creato',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

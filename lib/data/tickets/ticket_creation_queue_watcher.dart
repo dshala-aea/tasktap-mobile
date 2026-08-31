@@ -42,9 +42,12 @@ final ticketCreationQueueProvider = Provider<TicketCreationQueue>((ref) {
 /// whose create request was therefore never sent and is safe to resend
 /// automatically. `failed` tickets (sent, outcome unknown) are deliberately
 /// excluded — see [TicketCreationQueue] doc comment.
-void initTicketCreationQueueWatcher(WidgetRef ref) {
+///
+/// Returns the cancel function to invoke from the caller's `dispose()` — see
+/// timbra_sync_watcher.dart's doc comment for why this matters.
+VoidCallback initTicketCreationQueueWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() {
+  final cancel = connectivity.onReconnect(() {
     ref.read(ticketCreationQueueProvider).processAll();
   });
 
@@ -53,4 +56,6 @@ void initTicketCreationQueueWatcher(WidgetRef ref) {
   Future.microtask(() {
     ref.read(ticketCreationQueueProvider).processAll();
   });
+
+  return cancel;
 }

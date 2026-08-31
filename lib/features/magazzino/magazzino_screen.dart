@@ -662,27 +662,21 @@ class _GiacenzaRow extends ConsumerWidget {
                                     if (ctx.mounted) Navigator.pop(ctx);
                                     _refresh(ref);
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            isCarico
-                                                ? 'Carico registrato'
-                                                : 'Scarico registrato',
-                                          ),
-                                          backgroundColor: context.colors.green,
-                                        ),
+                                      showAppToast(
+                                        context,
+                                        message: isCarico
+                                            ? 'Carico registrato'
+                                            : 'Scarico registrato',
+                                        tone: ToastTone.success,
                                       );
                                     }
                                   } catch (e) {
                                     setDialogState(() => isSaving = false);
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            _movimentoErrorMessage(e, isCarico: isCarico),
-                                          ),
-                                          backgroundColor: context.colors.red,
-                                        ),
+                                      showAppToast(
+                                        context,
+                                        message: _movimentoErrorMessage(e, isCarico: isCarico),
+                                        tone: ToastTone.error,
                                       );
                                     }
                                   }
@@ -855,23 +849,19 @@ class _GiacenzaRow extends ConsumerWidget {
                                     if (ctx.mounted) Navigator.pop(ctx);
                                     _refresh(ref);
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: const Text('Trasferimento registrato'),
-                                          backgroundColor: context.colors.green,
-                                        ),
+                                      showAppToast(
+                                        context,
+                                        message: 'Trasferimento registrato',
+                                        tone: ToastTone.success,
                                       );
                                     }
                                   } catch (e) {
                                     setDialogState(() => isSaving = false);
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            _movimentoErrorMessage(e, isCarico: false),
-                                          ),
-                                          backgroundColor: context.colors.red,
-                                        ),
+                                      showAppToast(
+                                        context,
+                                        message: _movimentoErrorMessage(e, isCarico: false),
+                                        tone: ToastTone.error,
                                       );
                                     }
                                   }
@@ -950,25 +940,21 @@ class _GiacenzaRow extends ConsumerWidget {
                               .setStockMinimo(stockId: giacenza.id, stockMinimo: value);
                           _refresh(ref);
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Soglia minima aggiornata'),
-                                backgroundColor: context.colors.green,
-                              ),
+                            showAppToast(
+                              context,
+                              message: 'Soglia minima aggiornata',
+                              tone: ToastTone.success,
                             );
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  humanErrorMessage(
-                                    e,
-                                    azione: 'salvare la soglia minima',
-                                  ),
-                                ),
-                                backgroundColor: context.colors.red,
+                            showAppToast(
+                              context,
+                              message: humanErrorMessage(
+                                e,
+                                azione: 'salvare la soglia minima',
                               ),
+                              tone: ToastTone.error,
                             );
                           }
                         }
@@ -994,22 +980,18 @@ class _GiacenzaRow extends ConsumerWidget {
           .clearStockMinimo(stockId: giacenza.id);
       _refresh(ref);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Soglia minima rimossa'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: 'Soglia minima rimossa',
+          tone: ToastTone.success,
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              humanErrorMessage(e, azione: 'rimuovere la soglia minima'),
-            ),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: humanErrorMessage(e, azione: 'rimuovere la soglia minima'),
+          tone: ToastTone.error,
         );
       }
     }

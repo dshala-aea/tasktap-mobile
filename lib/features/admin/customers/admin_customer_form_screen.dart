@@ -140,22 +140,16 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.isEditMode ? 'Cliente aggiornato' : 'Cliente creato con successo'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: widget.isEditMode ? 'Cliente aggiornato' : 'Cliente creato con successo',
+          tone: ToastTone.success,
         );
         Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

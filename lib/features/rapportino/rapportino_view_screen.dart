@@ -91,6 +91,10 @@ class _RapportinoViewBody extends ConsumerWidget {
     final staffAsync = ref.watch(rapportinoStaffProvider(draft.id));
     final materialiAsync = ref.watch(rapportinoMaterialiProvider(draft.id));
     final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
+    final allegatiAsync = ref.watch(rapportinoAllegatiProvider(draft.id));
+    // For openAttachment below (photo grid + signature) — see its own doc comment for why an
+    // authenticated client is the right one, not a bare Dio.
+    final dio = ref.watch(dioProvider);
 
     final statusLabel = rapportinoStatusLabel(draft);
     final dateLabel = DateFormat(
@@ -100,6 +104,19 @@ class _RapportinoViewBody extends ConsumerWidget {
 
     final staff = staffAsync.valueOrNull ?? [];
     final materiali = materialiAsync.valueOrNull ?? [];
+
+    // rapportinoAllegatiProvider mixes photo and signature rows (both are just "allegati" for
+    // the report) — split them here so the photo grid never shows a signature as if it were a
+    // job photo, and _SignatureBlock gets the real row instead of resolving it itself.
+    final allegati = allegatiAsync.valueOrNull ?? [];
+    final signatureIds = {
+      draft.customerSignatureAllegatoId,
+      draft.technicianSignatureAllegatoId,
+    }..removeWhere((id) => id == null);
+    final photoAllegati = allegati.where((a) => !signatureIds.contains(a.id)).toList();
+    final customerSignatureAllegato = draft.customerSignatureAllegatoId == null
+        ? null
+        : allegati.where((a) => a.id == draft.customerSignatureAllegatoId).firstOrNull;
 
     // Names, not user ids. This joined raw GUIDs — on the read-only view of the document that
     // becomes an invoice, where "who did the work" is the line a customer actually reads back.
@@ -275,6 +292,29 @@ class _RapportinoViewBody extends ConsumerWidget {
                     ),
                   ),
 
+                // ── Foto ──────────────────────────────────────────────────────
+                if (photoAllegati.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: VetroCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionTitle(title: 'Foto (${photoAllegati.length})'),
+                            const SizedBox(height: 8),
+                            _AllegatiPhotoGrid(dio: dio, allegati: photoAllegati),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // ── Firma cliente ─────────────────────────────────────────────
                 if (draft.customerSignatureAllegatoId != null)
                   SliverToBoxAdapter(
@@ -292,7 +332,8 @@ class _RapportinoViewBody extends ConsumerWidget {
                             SectionTitle(title: 'Firma cliente'),
                             const SizedBox(height: 8),
                             _SignatureBlock(
-                              allegatoId: draft.customerSignatureAllegatoId,
+                              dio: dio,
+                              allegato: customerSignatureAllegato,
                               signedAt:
                                   draft.customerSignoffAt ??
                                   draft.inviatoAt ??
@@ -346,13 +387,17 @@ class _RapportinoViewBody extends ConsumerWidget {
 /// uses for a signature: a downloaded PDF is disposable cache content the OS can reclaim, not
 /// something this app owns going forward.
 Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final file = await _fetchPdfToTempFile(ref, reportId, messenger);
+  final file = await _fetchPdfToTempFile(ref, reportId, context);
   if (file == null) return;
 
   final result = await OpenFilex.open(file.path);
   if (result.type != ResultType.done) {
-    messenger.showSnackBar(SnackBar(content: Text('Impossibile aprire il PDF: ${result.message}')));
+    if (!context.mounted) return;
+    showAppToast(
+      context,
+      message: 'Impossibile aprire il PDF: ${result.message}',
+      tone: ToastTone.error,
+    );
   }
 }
 
@@ -362,7 +407,7 @@ Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId
 Future<File?> _fetchPdfToTempFile(
   WidgetRef ref,
   String reportId,
-  ScaffoldMessengerState messenger,
+  BuildContext context,
 ) async {
   try {
     final dio = ref.read(dioProvider);
@@ -380,18 +425,18 @@ Future<File?> _fetchPdfToTempFile(
   } on DioException catch (e) {
     final offline =
         e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          offline
-              ? 'Nessuna connessione — riprova quando sei online.'
-              : 'Impossibile scaricare il PDF. Riprova più tardi.',
-        ),
-      ),
+    if (!context.mounted) return null;
+    showAppToast(
+      context,
+      message: offline
+          ? 'Nessuna connessione — riprova quando sei online.'
+          : 'Impossibile scaricare il PDF. Riprova più tardi.',
+      tone: offline ? ToastTone.warning : ToastTone.error,
     );
     return null;
   } catch (_) {
-    messenger.showSnackBar(const SnackBar(content: Text('Impossibile scaricare il PDF.')));
+    if (!context.mounted) return null;
+    showAppToast(context, message: 'Impossibile scaricare il PDF.', tone: ToastTone.error);
     return null;
   }
 }
@@ -414,9 +459,8 @@ class _SharePdfButtonState extends ConsumerState<_SharePdfButton> {
   bool _busy = false;
 
   Future<void> _share() async {
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy = true);
-    final file = await _fetchPdfToTempFile(ref, widget.reportId, messenger);
+    final file = await _fetchPdfToTempFile(ref, widget.reportId, context);
     if (mounted) setState(() => _busy = false);
     if (file == null) return;
 
@@ -508,9 +552,11 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
       final newId = await createReworkDraft(ref, widget.draft);
       if (!mounted) return;
       if (newId == null) {
-        ScaffoldMessenger.of(
+        showAppToast(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Accedi per rilavorare il rapportino.')));
+          message: 'Accedi per rilavorare il rapportino.',
+          tone: ToastTone.warning,
+        );
         return;
       }
       context.push(AppRoutes.rapportiniEditor(newId));
@@ -570,43 +616,179 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
 // Signature block
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _SignatureBlock extends ConsumerWidget {
-  const _SignatureBlock({required this.allegatoId, required this.signedAt});
+class _SignatureBlock extends StatelessWidget {
+  const _SignatureBlock({required this.dio, required this.allegato, required this.signedAt});
 
-  /// The allegato id for the customer signature (not null at call site).
-  final String? allegatoId;
+  final Dio dio;
+
+  /// Resolved by the caller against [rapportinoAllegatiProvider] — null while that stream is
+  /// still loading, or if the id it points to was never found (deleted/never synced).
+  final ReportAllegatiData? allegato;
   final DateTime signedAt;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final signedLabel = DateFormat('dd/MM/yyyy HH:mm', 'it').format(signedAt.toLocal());
 
-    // We can't easily resolve a local path from allegatoId here without
-    // querying the allegati table — show a placeholder icon + date stamp.
-    // When the allegati watcher is added to view, this can show the image.
-    return Container(
-      width: double.infinity,
-      constraints: const BoxConstraints(minHeight: 90),
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: context.colors.borderStrong,
-          width: 1.5,
-          style: BorderStyle.solid,
-        ),
-        borderRadius: BorderRadius.circular(10),
-        color: context.colors.bg1,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(LucideIcons.penTool, size: 28, color: context.colors.inkMuted),
-          const SizedBox(height: 6),
-          Text(
-            'Firmato il $signedLabel',
-            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+    // The placeholder this used to always show, still shown when the allegato hasn't resolved —
+    // "we can't easily resolve a local path from allegatoId" no longer applies now that
+    // rapportinoAllegatiProvider does exactly that, but a signature genuinely absent from the
+    // local mirror (synced down without its allegati, or deleted) still needs an honest fallback
+    // rather than a broken image icon.
+    if (allegato == null) {
+      return Container(
+        width: double.infinity,
+        constraints: const BoxConstraints(minHeight: 90),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: context.colors.borderStrong,
+            width: 1.5,
+            style: BorderStyle.solid,
           ),
-        ],
+          borderRadius: BorderRadius.circular(10),
+          color: context.colors.bg1,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.penTool, size: 28, color: context.colors.inkMuted),
+            const SizedBox(height: 6),
+            Text(
+              'Firmato il $signedLabel',
+              style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final a = allegato!;
+    final hasLocal = a.storagePath.isNotEmpty && File(a.storagePath).existsSync();
+
+    return AppTappable(
+      onTap: () => openAttachment(
+        context,
+        dio: dio,
+        fileName: a.fileName,
+        contentType: a.contentType,
+        url: a.url,
+        localPath: hasLocal ? a.storagePath : null,
       ),
+      borderRadius: BorderRadius.circular(10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 90),
+          decoration: BoxDecoration(
+            border: Border.all(color: context.colors.borderStrong, width: 1.5),
+            borderRadius: BorderRadius.circular(10),
+            color: Colors.white, // a signature is drawn in ink on white — never the theme's bg
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              hasLocal
+                  ? Image.file(File(a.storagePath), errorBuilder: (_, _, _) => const _SignatureFallbackIcon())
+                  : a.url.isNotEmpty
+                  ? Image.network(a.url, errorBuilder: (_, _, _) => const _SignatureFallbackIcon())
+                  : const _SignatureFallbackIcon(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  'Firmato il $signedLabel',
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SignatureFallbackIcon extends StatelessWidget {
+  const _SignatureFallbackIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Icon(LucideIcons.penTool, size: 28, color: context.colors.inkMuted),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Photo grid (Step 6 "Allegati")
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Thumbnails for whatever Step 6 attached, local-first (same as the editor's own
+/// StepMaterialiFold grid) so an offline-captured, not-yet-uploaded photo still shows.
+/// cacheWidth/cacheHeight for the same reason StepMaterialiFold's own tile has them: a camera
+/// photo decodes at full sensor resolution, and this is a small square tile.
+class _AllegatiPhotoGrid extends StatelessWidget {
+  const _AllegatiPhotoGrid({required this.dio, required this.allegati});
+
+  final Dio dio;
+  final List<ReportAllegatiData> allegati;
+
+  @override
+  Widget build(BuildContext context) {
+    final tileSize =
+        (MediaQuery.sizeOf(context).width - AppSpacing.pagePadding * 2 - AppSpacing.base * 2 - 8 * 2) /
+        3;
+    final cachePx = (tileSize * MediaQuery.devicePixelRatioOf(context)).round();
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: allegati.map((a) {
+        final hasLocal = a.storagePath.isNotEmpty && File(a.storagePath).existsSync();
+        return AppTappable(
+          onTap: () => openAttachment(
+            context,
+            dio: dio,
+            fileName: a.fileName,
+            contentType: a.contentType,
+            url: a.url,
+            localPath: hasLocal ? a.storagePath : null,
+          ),
+          borderRadius: BorderRadius.circular(8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              width: tileSize,
+              height: tileSize,
+              child: hasLocal
+                  ? Image.file(
+                      File(a.storagePath),
+                      fit: BoxFit.cover,
+                      cacheWidth: cachePx,
+                      cacheHeight: cachePx,
+                      errorBuilder: (ctx, e, _) => _photoErrorTile(context),
+                    )
+                  : a.url.isNotEmpty
+                  ? Image.network(
+                      a.url,
+                      fit: BoxFit.cover,
+                      cacheWidth: cachePx,
+                      cacheHeight: cachePx,
+                      errorBuilder: (ctx, e, _) => _photoErrorTile(context),
+                    )
+                  : _photoErrorTile(context),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _photoErrorTile(BuildContext context) {
+    return Container(
+      color: context.colors.bg3,
+      child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),
     );
   }
 }

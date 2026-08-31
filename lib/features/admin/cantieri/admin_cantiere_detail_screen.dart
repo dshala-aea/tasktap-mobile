@@ -100,9 +100,7 @@ Future<void> _deleteCantiere(BuildContext context, WidgetRef ref, String cantier
     await ref.read(adminApiClientProvider).deleteCantiere(cantiereId);
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cantiere eliminato')));
+      showAppToast(context, message: 'Cantiere eliminato', tone: ToastTone.success);
       context.pop(true);
     }
   } catch (e) {
@@ -111,11 +109,10 @@ Future<void> _deleteCantiere(BuildContext context, WidgetRef ref, String cantier
       // contact/assignment 409s with a specific message (CantieriController.Delete's own doc
       // comment: "not by omission"). humanErrorMessage surfaces that server sentence directly
       // instead of a generic one, since it names exactly why the delete was refused.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(humanErrorMessage(e, azione: 'eliminare il cantiere')),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'eliminare il cantiere'),
+        tone: ToastTone.error,
       );
     }
   }
@@ -274,9 +271,7 @@ class _CantiereDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Accedi per creare un rapportino.')));
+      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
@@ -425,18 +420,11 @@ class _ContactsSection extends ConsumerWidget {
       await ref.read(adminApiClientProvider).deleteCantiereContact(cantiereId, contactId);
       ref.invalidate(adminCantiereRemoteDetailProvider(cantiereId));
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Contatto eliminato')));
+        showAppToast(context, message: 'Contatto eliminato', tone: ToastTone.success);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile eliminare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile eliminare. Riprova.', tone: ToastTone.error);
       }
     }
   }
@@ -531,19 +519,16 @@ class _ContactFormSheetState extends State<_ContactFormSheet> {
       }
       widget.onSaved();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_isEditing ? 'Contatto aggiornato' : 'Contatto aggiunto')),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Contatto aggiornato' : 'Contatto aggiunto',
+          tone: ToastTone.success,
         );
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -697,18 +682,11 @@ class _CrewSection extends ConsumerWidget {
       await ref.read(adminApiClientProvider).removeCantiereAssignment(cantiereId, assignmentId);
       ref.invalidate(adminCantiereRemoteDetailProvider(cantiereId));
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Persona rimossa dal cantiere')));
+        showAppToast(context, message: 'Persona rimossa dal cantiere', tone: ToastTone.success);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     }
   }
@@ -787,19 +765,12 @@ class _AddAssignmentSheetState extends State<_AddAssignmentSheet> {
       );
       widget.onSaved();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Persona assegnata al cantiere')));
+        showAppToast(context, message: 'Persona assegnata al cantiere', tone: ToastTone.success);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

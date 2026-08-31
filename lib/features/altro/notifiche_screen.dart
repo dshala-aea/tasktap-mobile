@@ -74,6 +74,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
   @override
   Widget build(BuildContext context) {
     final all = ref.watch(notificheProvider);
+    final hasError = ref.watch(notificheHasErrorProvider);
     final unread = all.where((n) => !n.letta).length;
 
     final filtered = switch (_filter) {
@@ -154,7 +155,25 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
             ),
 
             // ── List or Empty ──────────────────────────────────────────────
-            if (filtered.isEmpty)
+            // hasError only overrides the empty state — a failed refresh keeps whatever the
+            // Drift cache already had, so a non-empty `all` here means the cache is still good
+            // even if the latest refresh() didn't reach the server.
+            if (filtered.isEmpty && hasError)
+              SliverToBoxAdapter(
+                child: EmptyState(
+                  icon: LucideIcons.wifiOff,
+                  title: 'Impossibile caricare le notifiche',
+                  body: 'Controlla la connessione e riprova.',
+                  action: AppButton(
+                    label: 'Riprova',
+                    size: AppButtonSize.sm,
+                    fullWidth: false,
+                    onPressed: () =>
+                        ref.read(notificheProvider.notifier).refresh(),
+                  ),
+                ),
+              )
+            else if (filtered.isEmpty)
               const SliverToBoxAdapter(
                 child: EmptyState(
                   icon: LucideIcons.bellOff,

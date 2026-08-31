@@ -108,22 +108,16 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Squadra aggiornata' : 'Squadra creata'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Squadra aggiornata' : 'Squadra creata',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

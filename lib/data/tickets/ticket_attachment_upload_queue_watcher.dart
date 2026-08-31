@@ -43,9 +43,12 @@ final ticketAttachmentUploadQueueProvider = Provider<TicketAttachmentUploadQueue
 /// `pendingSync` attachments — the ones picked while genuinely offline, whose upload request was
 /// therefore never sent and is safe to resend automatically. `failed` attachments (sent, outcome
 /// unknown) are deliberately excluded — see [TicketAttachmentUploadQueue] doc comment.
-void initTicketAttachmentUploadQueueWatcher(WidgetRef ref) {
+///
+/// Returns the cancel function to invoke from the caller's `dispose()` — see
+/// timbra_sync_watcher.dart's doc comment for why this matters.
+VoidCallback initTicketAttachmentUploadQueueWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() {
+  final cancel = connectivity.onReconnect(() {
     ref.read(ticketAttachmentUploadQueueProvider).processAll();
   });
 
@@ -54,4 +57,6 @@ void initTicketAttachmentUploadQueueWatcher(WidgetRef ref) {
   Future.microtask(() {
     ref.read(ticketAttachmentUploadQueueProvider).processAll();
   });
+
+  return cancel;
 }

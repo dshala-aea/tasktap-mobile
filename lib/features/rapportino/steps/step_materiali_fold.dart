@@ -455,13 +455,10 @@ class StepMaterialiFold extends ConsumerWidget {
       // one honest sentence covers every way it fails. It used to print the exception, which on a
       // full phone read as the app crashing rather than the storage being full.
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
-            ),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
+          tone: ToastTone.error,
         );
       }
     }

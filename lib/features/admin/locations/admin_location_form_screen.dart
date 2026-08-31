@@ -84,9 +84,7 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCustomerId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Seleziona un cliente')));
+      showAppToast(context, message: 'Seleziona un cliente', tone: ToastTone.warning);
       return;
     }
     if (!ensureOnlineOrWarn(context, ref)) return;
@@ -127,22 +125,16 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Sede aggiornata' : 'Sede creata'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Sede aggiornata' : 'Sede creata',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

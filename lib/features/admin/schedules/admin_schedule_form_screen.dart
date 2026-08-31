@@ -215,15 +215,11 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_assignmentIsValid) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_assignmentErrorMessage)));
+      showAppToast(context, message: _assignmentErrorMessage, tone: ToastTone.warning);
       return;
     }
     if (_selectedLocationId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Seleziona una sede')));
+      showAppToast(context, message: 'Seleziona una sede', tone: ToastTone.warning);
       return;
     }
     if (!ensureOnlineOrWarn(context, ref)) return;
@@ -259,11 +255,10 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
@@ -284,11 +279,10 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
               await _submit(api: api, force: true);
               unawaited(ref.read(syncProvider.notifier).performSync());
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(_isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata'),
-                    backgroundColor: context.colors.green,
-                  ),
+                showAppToast(
+                  context,
+                  message: _isEditing ? 'Pianificazione aggiornata' : 'Pianificazione creata',
+                  tone: ToastTone.success,
                 );
                 context.pop(true);
               }
@@ -310,12 +304,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
 
   void _showSaveError() {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Impossibile salvare. Riprova.'),
-        backgroundColor: context.colors.red,
-      ),
-    );
+    showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
   }
 
   Future<void> _submit({required AdminApiClient api, required bool force}) async {

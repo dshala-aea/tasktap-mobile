@@ -120,22 +120,16 @@ class _AgendaFormScreenState extends ConsumerState<AgendaFormScreen> {
       ref.invalidate(agendaListProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Task aggiornato' : 'Task creato'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Task aggiornato' : 'Task creato',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

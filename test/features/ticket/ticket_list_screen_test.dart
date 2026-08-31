@@ -221,5 +221,65 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    // ── Pending tickets (2026-08-30 polish pass) ────────────────────────────
+    //
+    // A queued-offline ticket that fails on retry used to flip its row's background and icon
+    // instantly. AnimatedContainer/AnimatedSwitcher animate that now (see _PendingTicketRow) —
+    // the assertions below cover the end state pumpAndSettle lands on, not the animation itself,
+    // which is exactly what a widget test can verify without a golden/frame-by-frame capture.
+
+    testWidgets('a failed pending ticket shows the retry button and failure styling', (
+      tester,
+    ) async {
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket in sospeso',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('failed'),
+            ),
+          );
+
+      await pump(tester);
+
+      expect(find.text('In sospeso (1)'), findsOneWidget);
+      expect(find.text('Ticket in sospeso'), findsOneWidget);
+      expect(find.textContaining('Invio non riuscito'), findsOneWidget);
+      expect(find.text('Riprova'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a queued-offline pending ticket has no retry button', (tester) async {
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-2',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket in coda',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('pendingSync'),
+            ),
+          );
+
+      await pump(tester);
+
+      expect(find.text('Ticket in coda'), findsOneWidget);
+      expect(find.textContaining('attesa di connessione'), findsOneWidget);
+      expect(find.text('Riprova'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 }

@@ -48,19 +48,30 @@ class RapportinoFormScreen extends ConsumerWidget {
         title: 'Rapportino',
         subtitle: subtitle,
         actions: [
-          // Autosave indicator
+          // Autosave indicator — spinner ↔ cloud used to hard-cut, on the single most-repeated
+          // state change in this screen: it flips on every field edit while filling in a report.
+          // AnimatedSwitcher, matching the idiom this pass already established on Dashboard and
+          // the ticket list.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Semantics(
               label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapportino salvato',
               liveRegion: true,
-              child: editorState.isSaving
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
-                    )
-                  : Icon(LucideIcons.cloud, size: 20, color: v.tint),
+              child: AnimatedSwitcher(
+                duration: MediaQuery.of(context).disableAnimations
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: editorState.isSaving
+                    ? SizedBox(
+                        key: const ValueKey('saving'),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
+                      )
+                    : Icon(LucideIcons.cloud, key: const ValueKey('saved'), size: 20, color: v.tint),
+              ),
             ),
           ),
         ],
@@ -169,6 +180,7 @@ class _CompletionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = context.vetro;
     final ready = completed == _total;
+    final reducedMotion = MediaQuery.of(context).disableAnimations;
     return Material(
       color: Colors.transparent,
       borderRadius: AppRack.freeShape,
@@ -203,13 +215,24 @@ class _CompletionCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '$completed di $_total',
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
+                  // The one number on this whole screen that actually answers "am I done" — used
+                  // to jump straight from one digit to the next with no transition, on the card
+                  // that is the sole way into Riepilogo. A fade-through (out then in, not a
+                  // crossfade) reads as the count ticking over rather than two different cards
+                  // being swapped.
+                  AnimatedSwitcher(
+                    duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: Text(
+                      '$completed di $_total',
+                      key: ValueKey(completed),
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ],
@@ -218,24 +241,31 @@ class _CompletionCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
-                        size: 18,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        ready ? 'Pronto per l\'invio' : 'Da completare',
-                        style: const TextStyle(
-                          fontFamily: 'Inter',
+                  AnimatedSwitcher(
+                    duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: Row(
+                      key: ValueKey(ready),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
+                          size: 18,
                           color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Text(
+                          ready ? 'Pronto per l\'invio' : 'Da completare',
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -294,10 +324,24 @@ class _StepTile extends StatelessWidget {
         Positioned(
           top: 10,
           right: 10,
-          child: Icon(
-            done ? LucideIcons.checkCircle2 : LucideIcons.circle,
-            size: 16,
-            color: done ? context.colors.green : context.colors.borderMedium,
+          // The one confirmation that a compartment's work actually registered — returning from
+          // Ore or Materiali having just filled something in, this badge used to just flip with
+          // no transition at all. A scale+fade reads as the tile "catching" the checkmark rather
+          // than silently being a different icon on the next frame.
+          child: AnimatedSwitcher(
+            duration: MediaQuery.of(context).disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            transitionBuilder: (child, animation) => ScaleTransition(
+              scale: animation,
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: Icon(
+              done ? LucideIcons.checkCircle2 : LucideIcons.circle,
+              key: ValueKey(done),
+              size: 16,
+              color: done ? context.colors.green : context.colors.borderMedium,
+            ),
           ),
         ),
       ],

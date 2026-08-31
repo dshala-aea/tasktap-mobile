@@ -300,12 +300,10 @@ class ImpostazioniScreen extends ConsumerWidget {
     if (!NotificationService.isAvailable) {
       // Firebase never initialised — an explicitly supported degraded path. Say so instead of
       // flipping a switch that cannot deliver anything.
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Le notifiche non sono disponibili su questo dispositivo.',
-          ),
-        ),
+      showAppToast(
+        context,
+        message: 'Le notifiche non sono disponibili su questo dispositivo.',
+        tone: ToastTone.warning,
       );
       return;
     }
@@ -331,13 +329,12 @@ class ImpostazioniScreen extends ConsumerWidget {
 
       if (!await service.ensurePermission()) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
+        showAppToast(
+          context,
+          message:
               'Le notifiche restano bloccate dal sistema. Puoi consentirle dalle impostazioni '
               'del telefono.',
-            ),
-          ),
+          tone: ToastTone.warning,
         );
         return;
       }
@@ -360,7 +357,6 @@ Future<void> _toggleBiometrics(
   ImpostazioniState settings,
 ) async {
   final notifier = ref.read(impostazioniProvider.notifier);
-  final messenger = ScaffoldMessenger.of(context);
 
   // Turning it off needs no ceremony: the user is already past the lock.
   if (settings.autenticazioneBiometrica) {
@@ -371,13 +367,13 @@ Future<void> _toggleBiometrics(
   final service = ref.read(biometricServiceProvider);
 
   if (!await service.isAvailable()) {
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text(
+    if (!context.mounted) return;
+    showAppToast(
+      context,
+      message:
           'Nessuna impronta o Face ID configurati su questo dispositivo. '
           'Aggiungili nelle impostazioni del telefono, poi riprova.',
-        ),
-      ),
+      tone: ToastTone.warning,
     );
     return;
   }
@@ -388,10 +384,11 @@ Future<void> _toggleBiometrics(
   );
 
   if (!ok) {
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('Verifica non riuscita. Blocco biometrico non attivato.'),
-      ),
+    if (!context.mounted) return;
+    showAppToast(
+      context,
+      message: 'Verifica non riuscita. Blocco biometrico non attivato.',
+      tone: ToastTone.error,
     );
     return;
   }

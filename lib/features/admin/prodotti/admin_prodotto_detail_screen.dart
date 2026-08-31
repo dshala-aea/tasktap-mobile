@@ -234,18 +234,15 @@ Future<void> _deleteProdotto(BuildContext context, WidgetRef ref, String prodott
     await ref.read(adminApiClientProvider).deleteProdottoAssistenza(prodottoId);
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Prodotto eliminato')));
+      showAppToast(context, message: 'Prodotto eliminato', tone: ToastTone.success);
       context.pop(true);
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(humanErrorMessage(e, azione: 'eliminare il prodotto')),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'eliminare il prodotto'),
+        tone: ToastTone.error,
       );
     }
   }
@@ -372,18 +369,11 @@ class _MatricoleSection extends ConsumerWidget {
       await ref.read(adminApiClientProvider).deleteMatricola(prodottoId, matricolaId);
       ref.invalidate(adminProdottoMatricoleProvider(prodottoId));
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Matricola rimossa')));
+        showAppToast(context, message: 'Matricola rimossa', tone: ToastTone.success);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile eliminare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile eliminare. Riprova.', tone: ToastTone.error);
       }
     }
   }
@@ -441,19 +431,12 @@ class _AddMatricolaSheetState extends State<_AddMatricolaSheet> {
       );
       widget.onSaved();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Matricola aggiunta')));
+        showAppToast(context, message: 'Matricola aggiunta', tone: ToastTone.success);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_palette.dart';
+import '../widgets/widgets.dart';
 import 'dictation_capability.dart';
 import 'dictation_service.dart';
 
@@ -80,7 +81,7 @@ class _DictateButtonState extends ConsumerState<DictateButton> {
   void _explain(DictationCapability capability) {
     final message = capability.unavailableMessage;
     if (message == null) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    showAppToast(context, message: message, tone: ToastTone.info);
   }
 
   @override

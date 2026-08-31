@@ -784,6 +784,82 @@ void main() {
       await resetAndDispose(tester);
     });
 
+    // ── Tap to view (2026-08-30 attachment viewer) ────────────────────────
+
+    testWidgets('tapping an image attachment pushes the fullscreen viewer', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+      ).thenAnswer((_) async => _okResponse(attachmentsJson, '/api/Tickets/ticket-1/attachments'));
+      // The image viewer fetches bytes through the same authenticated dio — contentUrl is a
+      // path on our own API, not an external storage URL (see openAttachment's own doc comment).
+      when(
+        () => dio.get<List<int>>(
+          '/api/tickets/ticket-1/attachments/att-1/content',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse<List<int>>(
+          [1, 2, 3],
+          '/api/tickets/ticket-1/attachments/att-1/content',
+        ),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapTab(tester, 'Allegati');
+      await tester.tap(find.text('foto1.jpg'));
+      await tester.pumpAndSettle();
+
+      // The pushed screen's AppBar repeats the filename as its title. Its own copy is the only
+      // one still onstage — the Allegati tab's ListRow is now offstage under the pushed route
+      // (still in the tree, per Navigator semantics, just not what find.text sees by default).
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.text('foto1.jpg'), findsOneWidget);
+      expect(find.text('foto1.jpg', skipOffstage: false), findsNWidgets(2));
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('tapping a non-image attachment attempts a download, not the image viewer', (
+      tester,
+    ) async {
+      final pdfAttachment = [
+        {
+          'id': 'att-2',
+          'fileName': 'certificato.pdf',
+          'contentType': 'application/pdf',
+          'sizeBytes': 51200,
+          'contentUrl': '/api/tickets/ticket-1/attachments/att-2/content',
+          'uploadedByUserId': 'u1',
+          'createdAt': '2026-07-01T09:00:00Z',
+        },
+      ];
+      await seedBase(db);
+      final dio = MockDio();
+      when(
+        () => dio.get<List<dynamic>>('/api/Tickets/ticket-1/attachments'),
+      ).thenAnswer((_) async => _okResponse(pdfAttachment, '/api/Tickets/ticket-1/attachments'));
+      // No stub for the content GET — a MockDio throws MissingStubError on an unstubbed call,
+      // which openAttachment's catch-all turns into the download-failure SnackBar. That's still
+      // the right assertion: it proves the non-image branch tried to fetch rather than opening
+      // the image viewer, without needing a real OpenFilex/platform-channel round trip.
+      when(
+        () => dio.get<List<int>>(
+          '/api/tickets/ticket-1/attachments/att-2/content',
+          options: any(named: 'options'),
+        ),
+      ).thenThrow(Exception('boom'));
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapTab(tester, 'Allegati');
+      await tester.tap(find.text('certificato.pdf'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsNothing);
+      expect(find.text('Impossibile scaricare il file.'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
     testWidgets('shows an honest empty state when there are no attachments', (tester) async {
       await seedBase(db);
       final dio = MockDio();

@@ -172,22 +172,16 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_isEditing ? 'Materiale aggiornato' : 'Materiale creato'),
-            backgroundColor: context.colors.green,
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Materiale aggiornato' : 'Materiale creato',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -266,11 +260,10 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       await _loadDetail();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile aggiornare i barcode. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Impossibile aggiornare i barcode. Riprova.',
+          tone: ToastTone.error,
         );
       }
     }
@@ -299,12 +292,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       await _loadDetail();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Immagine non caricata. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Immagine non caricata. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isUploadingImage = false);
@@ -320,11 +308,10 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
       await _loadDetail();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile rimuovere l\'immagine. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Impossibile rimuovere l\'immagine. Riprova.',
+          tone: ToastTone.error,
         );
       }
     } finally {

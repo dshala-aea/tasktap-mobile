@@ -103,9 +103,11 @@ class _NewRapportinoFab extends ConsumerWidget {
     if (!context.mounted) return;
     if (id == null) {
       // Refused rather than authored by a placeholder. See createLocalDraft.
-      ScaffoldMessenger.of(
+      showAppToast(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Accedi per creare un rapportino.')));
+        message: 'Accedi per creare un rapportino.',
+        tone: ToastTone.warning,
+      );
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));

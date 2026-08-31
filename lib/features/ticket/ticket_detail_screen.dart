@@ -16,6 +16,7 @@ import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/vetro_compartment_tile.dart';
 import '../../core/widgets/vetro_map_card.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -500,8 +501,10 @@ class _TicketDetailBody extends ConsumerWidget {
     );
     if (!context.mounted) return;
     if (id == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Accedi per creare un rapportino.')),
+      showAppToast(
+        context,
+        message: 'Accedi per creare un rapportino.',
+        tone: ToastTone.warning,
       );
       return;
     }
@@ -996,6 +999,10 @@ class _AllegatiTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final attachmentsAsync = ref.watch(ticketAttachmentsProvider(ticketId));
     final pending = ref.watch(pendingTicketAttachmentsProvider(ticketId)).valueOrNull ?? const [];
+    // For openAttachment below — contentUrl is a path on the TaskTap API itself, not an external
+    // storage URL, so it needs this same authenticated client (see openAttachment's own doc
+    // comment).
+    final dio = ref.watch(dioProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1087,6 +1094,16 @@ class _AllegatiTab extends ConsumerWidget {
                     title: a.fileName,
                     subtitle: '${_formatBytes(a.sizeBytes)} · $dateLabel',
                     showDivider: a != attachments.last,
+                    // Was inert — a row could only ever be read, never opened. contentType and
+                    // contentUrl already came back from the server on every row; nothing tapped
+                    // them.
+                    onTap: () => openAttachment(
+                      context,
+                      dio: dio,
+                      fileName: a.fileName,
+                      contentType: a.contentType,
+                      url: a.contentUrl,
+                    ),
                   );
                 }).toList(),
               ),
@@ -1132,13 +1149,11 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       // in the offline outbox for a while would read as a delayed, unexplained failure.
       if (bytes.length > kMaxTicketAttachmentBytes) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
+        showAppToast(
+          context,
+          message:
               'File troppo grande: il limite per gli allegati è 10 MB. Scegline uno più piccolo.',
-            ),
-            backgroundColor: context.colors.red,
-          ),
+          tone: ToastTone.error,
         );
         return;
       }
@@ -1157,38 +1172,30 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
 
       if (!mounted) return;
       if (outcome.isQueuedOffline) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
+        showAppToast(
+          context,
+          message:
               'Sei offline: la foto è stata salvata e verrà caricata automaticamente alla '
               'riconnessione.',
-            ),
-            backgroundColor: context.colors.amber,
-          ),
+          tone: ToastTone.warning,
         );
       } else if (outcome.isSubmitted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Allegato caricato')),
-        );
+        showAppToast(context, message: 'Allegato caricato', tone: ToastTone.success);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(outcome.error ?? 'Caricamento non riuscito.'),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: outcome.error ?? 'Caricamento non riuscito.',
+          tone: ToastTone.error,
         );
       }
     } catch (e) {
       // Local capture and file read — never a server call, so there is no status to interpret.
       // Mirrors StepMaterialiFold's own _pickImage catch for exactly this reason.
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
-            ),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
+          tone: ToastTone.error,
         );
       }
     } finally {
@@ -1492,18 +1499,15 @@ class _AssignSheetState extends State<_AssignSheet> {
     try {
       await widget.api.assignTicket(widget.ticket.id, _selectedUserId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Assegnazione aggiornata')),
-        );
+        showAppToast(context, message: 'Assegnazione aggiornata', tone: ToastTone.success);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Impossibile salvare. Riprova.',
+          tone: ToastTone.error,
         );
       }
     } finally {
@@ -1604,9 +1608,7 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
       await ref.read(ticketWorklogsProvider(widget.ticketId).future);
     } on TicketWorkflowFailure catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: context.colors.red),
-      );
+      showAppToast(context, message: e.message, tone: ToastTone.error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1734,11 +1736,10 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
 
   void _report(String message, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: ok ? context.colors.green : context.colors.red,
-      ),
+    showAppToast(
+      context,
+      message: message,
+      tone: ok ? ToastTone.success : ToastTone.error,
     );
   }
 

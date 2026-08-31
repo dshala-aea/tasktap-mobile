@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/env.dart';
@@ -82,12 +83,13 @@ class AppNotifica {
 /// On construction, loads from Drift cache (instant offline display).
 /// On refresh, fetches from backend and upserts into Drift.
 class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
-  NotificheNotifier(this._db, this._dio) : super(const []) {
+  NotificheNotifier(this._db, this._dio, this._ref) : super(const []) {
     _loadFromCache();
   }
 
   final AppDatabase _db;
   final Dio _dio;
+  final Ref _ref;
 
   /// Load notifications from Drift cache (fast, offline-first).
   Future<void> _loadFromCache() async {
@@ -142,8 +144,14 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
 
       // Reload from cache.
       await _loadFromCache();
+      _ref.read(notificheHasErrorProvider.notifier).state = false;
     } catch (e) {
-      // Offline: cache is already loaded, just keep it.
+      // The cache (already loaded) is kept either way — this isn't only "offline", it also
+      // catches a 401/403 from a stale token or a revoked permission, which used to look
+      // identical to "no notifications" with nothing to tell the two apart. The flag lets the
+      // screen show a distinct error state instead of a silently-empty inbox.
+      debugPrint('NotificheNotifier.refresh failed: $e');
+      _ref.read(notificheHasErrorProvider.notifier).state = true;
     }
   }
 
@@ -167,7 +175,9 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
     try {
       final client = NotificationApiClient(_dio);
       await client.markAllAsRead();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('NotificheNotifier.segnaLette sync failed: $e');
+    }
   }
 
   /// Mark a single notification as read (local + backend).
@@ -190,7 +200,9 @@ class NotificheNotifier extends StateNotifier<List<AppNotifica>> {
     try {
       final client = NotificationApiClient(_dio);
       await client.markAsRead(id);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('NotificheNotifier.segnaLetta sync failed: $e');
+    }
   }
 }
 
@@ -199,13 +211,18 @@ final notificheProvider =
     StateNotifierProvider<NotificheNotifier, List<AppNotifica>>((ref) {
       final db = ref.watch(appDatabaseProvider);
       final dio = ref.watch(dioProvider);
-      return NotificheNotifier(db, dio);
+      return NotificheNotifier(db, dio, ref);
     });
 
 /// Computed count of unread notifications.
 final notificheUnreadCountProvider = Provider<int>((ref) {
   return ref.watch(notificheProvider).where((n) => !n.letta).length;
 });
+
+/// Whether the last [NotificheNotifier.refresh] call failed. The Drift cache still shows
+/// whatever it had before the failure — this just lets the screen tell "genuinely no
+/// notifications" apart from "couldn't reach the server".
+final notificheHasErrorProvider = StateProvider<bool>((ref) => false);
 
 /// Provider that triggers a refresh of notifications from the backend.
 /// Call `ref.read(notificationRefreshProvider.future)` to refresh.

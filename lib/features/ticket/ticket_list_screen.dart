@@ -186,24 +186,36 @@ class _TicketListBody extends ConsumerWidget {
               ),
             ),
           ),
-          if (ticketsAsync.isLoading)
-            const SliverToBoxAdapter(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.xxxl),
-                  child: CircularProgressIndicator(),
-                ),
-              ),
-            )
-          else if (filtered.isEmpty)
-            SliverToBoxAdapter(
-              child: EmptyState(
-                icon: LucideIcons.ticket,
-                title: 'Nessun ticket',
-                body: 'I ticket sincronizzati appariranno qui.',
-              ),
-            )
-          else
+          // Loading and empty are small, mutually-exclusive, non-virtualized widgets — safe to
+          // crossfade as a unit. The populated list is not part of this switcher: it's a real
+          // SliverList (see below), still lazily built by SliverChildBuilderDelegate — a list "up
+          // to hundreds of tickets" per this file's own comment must stay virtualized, so it is
+          // never made to live inside a single AnimatedSwitcher child (which would force it to
+          // build eagerly). Its own first-appearance polish is the per-row fade in _TicketRow.
+          SliverToBoxAdapter(
+            child: AnimatedSwitcher(
+              duration: MediaQuery.of(context).disableAnimations
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: ticketsAsync.isLoading
+                  ? const Padding(
+                      key: ValueKey('loading'),
+                      padding: EdgeInsets.all(AppSpacing.xxxl),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : filtered.isEmpty
+                  ? EmptyState(
+                      key: const ValueKey('empty'),
+                      icon: LucideIcons.ticket,
+                      title: 'Nessun ticket',
+                      body: 'I ticket sincronizzati appariranno qui.',
+                    )
+                  : const SizedBox.shrink(key: ValueKey('list-placeholder')),
+            ),
+          ),
+          if (!ticketsAsync.isLoading && filtered.isNotEmpty)
             SliverList(
               delegate: SliverChildBuilderDelegate((context, i) {
                 final ticket = filtered[i];
@@ -215,6 +227,7 @@ class _TicketListBody extends ConsumerWidget {
                   location?.city,
                 ].where((s) => s != null && s.isNotEmpty).join(' · ');
                 return _TicketRow(
+                  key: ValueKey(ticket.id),
                   ticket: ticket,
                   statusName: statusName,
                   where: where,
@@ -259,7 +272,7 @@ class _PendingTicketsSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           for (final t in pendingTickets) ...[
-            _PendingTicketRow(ticket: t),
+            _PendingTicketRow(key: ValueKey(t.id), ticket: t),
             const SizedBox(height: 8),
           ],
         ],
@@ -269,7 +282,7 @@ class _PendingTicketsSection extends StatelessWidget {
 }
 
 class _PendingTicketRow extends ConsumerWidget {
-  const _PendingTicketRow({required this.ticket});
+  const _PendingTicketRow({super.key, required this.ticket});
 
   final PendingTicket ticket;
 
@@ -277,6 +290,7 @@ class _PendingTicketRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = PendingTicketState.fromString(ticket.state);
     final isFailed = state == PendingTicketState.failed;
+    final reducedMotion = MediaQuery.of(context).disableAnimations;
 
     final String subtitle = switch (state) {
       PendingTicketState.pendingSync =>
@@ -287,7 +301,12 @@ class _PendingTicketRow extends ConsumerWidget {
       PendingTicketState.submitted => 'Inviato',
     };
 
-    return Container(
+    // Queued → failed used to be a hard cut: background and icon both flip the instant a retry
+    // gives up, on a row whose whole job is telling the technician their offline work is
+    // accounted for — the one state change here that actually needs to register as "something
+    // changed," not just "something is different now."
+    return AnimatedContainer(
+      duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isFailed ? context.colors.redSoft : context.colors.bg3,
@@ -295,10 +314,16 @@ class _PendingTicketRow extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
-            size: 18,
-            color: isFailed ? context.colors.red : context.colors.inkMuted,
+          AnimatedSwitcher(
+            duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: Icon(
+              isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
+              key: ValueKey(isFailed),
+              size: 18,
+              color: isFailed ? context.colors.red : context.colors.inkMuted,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -332,9 +357,16 @@ class _PendingTicketRow extends ConsumerWidget {
           ),
           if (isFailed) ...[
             const SizedBox(width: 8),
+            // fullWidth: false — AppButton defaults to full-width (wraps itself in
+            // SizedBox(width: double.infinity)) for every variant but ghost, and this sits
+            // directly in a Row with no Expanded/Flexible around it. A Row hands a non-flex child
+            // unbounded max width, so double.infinity-in-double.infinity threw
+            // "BoxConstraints forces an infinite width" at layout — a real crash on any failed
+            // pending ticket, not just a test artifact (nothing exercised this path before).
             AppButton(
               label: 'Riprova',
               size: AppButtonSize.sm,
+              fullWidth: false,
               onPressed: () =>
                   ref.read(ticketCreationQueueProvider).retry(ticket.id),
             ),
@@ -359,6 +391,7 @@ class _PendingTicketRow extends ConsumerWidget {
 /// read as the same system without paying for it.
 class _TicketRow extends StatelessWidget {
   const _TicketRow({
+    super.key,
     required this.ticket,
     required this.statusName,
     required this.where,
@@ -400,7 +433,7 @@ class _TicketRow extends StatelessWidget {
         statusName.toLowerCase() != 'completato';
     final dueLabel = dueDate == null ? null : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
 
-    return Semantics(
+    final row = Semantics(
       // The stripe colour is a sighted-only cue; this is the same information for TalkBack/
       // VoiceOver, and for a sighted colorblind technician who can't tell the hues apart either.
       label: '${_priorityLabel(ticket.priority)}. ${ticket.title}${statusName.isNotEmpty ? ', $statusName' : ''}',
@@ -516,6 +549,20 @@ class _TicketRow extends StatelessWidget {
         ),
       ),
       ),
+    );
+
+    // A row's first appearance — scrolled into the viewport, freshly built by
+    // SliverChildBuilderDelegate — fades in rather than snapping into place. Runs once per
+    // Element lifetime (TweenAnimationBuilder does not replay on an ordinary rebuild of the same
+    // element, only when it is first created), so scrolling a row in and out of view does not
+    // re-trigger it, and it never touches the list's own virtualization above.
+    if (MediaQuery.of(context).disableAnimations) return row;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      builder: (context, value, child) => Opacity(opacity: value, child: child),
+      child: row,
     );
   }
 }

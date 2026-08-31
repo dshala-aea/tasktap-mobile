@@ -155,18 +155,15 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Ticket aggiornato')));
+      showAppToast(context, message: 'Ticket aggiornato', tone: ToastTone.success);
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(humanErrorMessage(e, azione: 'salvare le modifiche')),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'salvare le modifiche'),
+        tone: ToastTone.error,
       );
     }
   }

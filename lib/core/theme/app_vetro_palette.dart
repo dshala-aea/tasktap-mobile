@@ -54,6 +54,23 @@ abstract final class AppVetroColors {
   /// Standard blur sigma for [VetroGlass]. One value, not per-surface — a system reads as one
   /// material only if every glass surface blurs by the same amount.
   static const double blurSigma = 20;
+
+  // ── Status pairs, fixed dark-ground values ──────────────────────────────────
+  //
+  // Mirror [AppVetroPalette.dark]'s statusGood/Warn/Bad pairs exactly — same tint-on-tint
+  // discipline (saturated colour in text/dot, that same hue at ~15-18% alpha behind it), just as
+  // fixed constants because Timbra's ground never flips. Added for the Timbra hero-status
+  // redesign, which needed an "on shift" badge and a promoted guard-blocked banner; before this
+  // the only options on a permanently-dark screen were the flipping [AppVetroPalette] (wrong
+  // variant risk) or raw [AppColors] semantic colours (a different, untested-on-this-ground
+  // shade, and outside Vetro's tint/stop status vocabulary entirely).
+
+  static const Color statusGood = Color(0xFF3DD866);
+  static const Color statusGoodBg = Color(0x2934C759);
+  static const Color statusWarn = Color(0xFFFFB238);
+  static const Color statusWarnBg = Color(0x2EFF9F0A);
+  static const Color statusBad = Color(0xFFFF6961);
+  static const Color statusBadBg = Color(0x29FF453A);
 }
 
 /// The flipping half of the Vetro system — [ThemeExtension] for screens whose ground changes with

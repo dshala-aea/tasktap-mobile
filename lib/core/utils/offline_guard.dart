@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/sync/connectivity_provider.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import '../widgets/widgets.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ensureOnlineOrWarn
@@ -16,7 +16,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // and say plainly why the save didn't happen.
 //
 // Call this at the top of a form's submit handler, before setting any
-// "submitting" state. If offline, it shows a clear SnackBar and returns
+// "submitting" state. If offline, it shows a clear toast and returns
 // false — the caller must return immediately without touching the network
 // or clearing the form. Text fields already keep their contents (nothing
 // clears them on failure), so refusing to even attempt offline is what
@@ -33,28 +33,24 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 bool ensureOnlineOrWarn(BuildContext context, WidgetRef ref) {
   final isOnline = ref.read(isOnlineProvider);
   if (!isOnline) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
+    showAppToast(
+      context,
+      message:
           'Sei offline: impossibile salvare in questo momento. '
           'I dati inseriti restano nel modulo: riprova quando torni online.',
-        ),
-        backgroundColor: context.colors.red,
-      ),
+      tone: ToastTone.error,
     );
     return false;
   }
 
   final entitlement = ref.read(cachedEntitlementProvider).value;
   if (entitlement != null && entitlement.isSuspended) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
+    showAppToast(
+      context,
+      message:
           'Abbonamento non attivo: impossibile salvare finché non viene riattivato. '
           'I dati inseriti restano nel modulo.',
-        ),
-        backgroundColor: context.colors.red,
-      ),
+      tone: ToastTone.error,
     );
     return false;
   }

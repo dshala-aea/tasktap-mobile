@@ -1,10 +1,10 @@
 // dart format width=100
 // test/core/widgets/screen_header_test.dart
 //
-// `ScreenHeader.dark` defaults to false: the fixed-CHARCOAL plate it used to assume was under
-// every header/nav surface was never part of the Vetro design the app actually agreed on (light
-// frosted glass throughout) — it was a leftover of the pre-Vetro "Cassetta" shell metaphor. This
-// locks the light default in.
+// ScreenHeader always renders as the flipping frosted-glass bar — the fixed-CHARCOAL `dark`
+// plate it used to optionally render (a leftover of the pre-Vetro "Cassetta" shell metaphor, kept
+// only for timbra_screen.dart's own permanently-dark ground) was removed once Timbra stopped
+// using a ScreenHeader at all (2026-08-30, "Hybrid Card Hero").
 //
 // `HeaderIconBtn.glass` defaults to true — every header action in the app (back chevron, bell,
 // profile, a sheet's close button) renders as the real frosted disc; it is not tied to the header
@@ -57,12 +57,13 @@ void main() {
   });
 
   group('ScreenHeader', () {
-    testWidgets('is light (flipping glass bar) by default', (tester) async {
+    testWidgets('renders its title as the flipping glass bar', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: Scaffold(body: ScreenHeader(title: 'Test'))));
       await tester.pumpAndSettle();
 
-      final header = tester.widget<ScreenHeader>(find.byType(ScreenHeader));
-      expect(header.dark, isFalse);
+      expect(find.byType(ScreenHeader), findsOneWidget);
+      expect(find.text('Test'), findsOneWidget);
+      expect(find.byType(BackdropFilter), findsOneWidget);
     });
   });
 }

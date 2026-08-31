@@ -42,7 +42,10 @@ AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) => AppNotifica
 /// is actually in the fresh in-memory DB. Seeding the DB itself — rather
 /// than trying to stub post-construction state — sidesteps the race
 /// entirely: whichever write "wins", the loaded data matches.
-Future<Widget> _buildScreen({List<AppNotifica> notifiche = const []}) async {
+Future<Widget> _buildScreen({
+  List<AppNotifica> notifiche = const [],
+  bool hasError = false,
+}) async {
   final db = AppDatabase(NativeDatabase.memory());
   for (final n in notifiche) {
     await db
@@ -63,7 +66,10 @@ Future<Widget> _buildScreen({List<AppNotifica> notifiche = const []}) async {
   }
 
   return ProviderScope(
-    overrides: [notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio()))],
+    overrides: [
+      notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio(), ref)),
+      if (hasError) notificheHasErrorProvider.overrideWith((ref) => true),
+    ],
     child: const MaterialApp(home: NotificheScreen()),
   );
 }
@@ -148,6 +154,19 @@ void main() {
 
     // Only 1 unread notification shown.
     expect(find.text('Nuovo intervento'), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 7. Fetch error shows a distinct state, not the empty inbox ────────────
+  testWidgets('shows error state with retry when refresh failed and cache is empty', (
+    tester,
+  ) async {
+    await tester.pumpWidget(await _buildScreen(hasError: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Impossibile caricare le notifiche'), findsOneWidget);
+    expect(find.text('Riprova'), findsOneWidget);
+    expect(find.text('Nessuna notifica'), findsNothing);
     await drain(tester);
   });
 }

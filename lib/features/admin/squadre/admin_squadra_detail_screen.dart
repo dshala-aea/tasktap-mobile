@@ -242,18 +242,11 @@ class _SquadraDetailBody extends ConsumerWidget {
         final api = ProviderScope.containerOf(context).read(adminApiClientProvider);
         await api.removeSquadraMember(squadra['id'] as String, userId);
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Membro rimosso')));
+          showAppToast(context, message: 'Membro rimosso', tone: ToastTone.success);
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Impossibile salvare. Riprova.'),
-              backgroundColor: context.colors.red,
-            ),
-          );
+          showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
         }
       }
     }
@@ -313,19 +306,12 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
     try {
       await widget.api.addSquadraMember(widget.squadraId, userId: _selectedUserId!, ruolo: _ruolo);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Membro aggiunto')));
+        showAppToast(context, message: 'Membro aggiunto', tone: ToastTone.success);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

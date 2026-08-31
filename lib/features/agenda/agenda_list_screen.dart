@@ -108,11 +108,10 @@ class _AgendaRowState extends ConsumerState<_AgendaRow> {
       ref.invalidate(agendaListProvider);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile completare il task. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Impossibile completare il task. Riprova.',
+          tone: ToastTone.error,
         );
       }
     } finally {
@@ -140,11 +139,10 @@ class _AgendaRowState extends ConsumerState<_AgendaRow> {
       return true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile eliminare il task. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
+        showAppToast(
+          context,
+          message: 'Impossibile eliminare il task. Riprova.',
+          tone: ToastTone.error,
         );
       }
       return false;

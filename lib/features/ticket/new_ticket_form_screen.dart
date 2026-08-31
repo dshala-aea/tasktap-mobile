@@ -2,9 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/widgets/app_button.dart';
-import '../../core/widgets/app_stepper.dart';
-import '../../core/widgets/screen_header.dart';
+import '../../core/widgets/widgets.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'steps/step_assegnazione.dart';
@@ -141,37 +139,32 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
     if (!mounted) return;
 
     if (outcome.isQueuedOffline) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      showAppToast(
+        context,
+        message:
             'Sei offline: il ticket è stato salvato e verrà inviato '
             'automaticamente alla riconnessione.',
-          ),
-          backgroundColor: context.colors.amber,
-        ),
+        tone: ToastTone.warning,
       );
       Navigator.of(context).pop(true); // return true = created (locally)
     } else if (outcome.isSubmitted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ticket creato con successo'),
-          backgroundColor: context.colors.green,
-        ),
+      showAppToast(
+        context,
+        message: 'Ticket creato con successo',
+        tone: ToastTone.success,
       );
       Navigator.of(context).pop(true);
     } else {
       // Failed while online: the request may have already reached the
       // server, so we do NOT retry automatically. Data is safe locally.
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      showAppToast(
+        context,
+        message:
             'Il ticket è stato salvato in locale, ma l\'invio non è '
             'riuscito (${outcome.error}). Per evitare duplicati, controlla '
             'la lista ticket prima di riprovare dalla sezione "In sospeso".',
-          ),
-          backgroundColor: context.colors.red,
-        ),
+        tone: ToastTone.error,
       );
     }
   }

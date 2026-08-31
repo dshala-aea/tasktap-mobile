@@ -221,18 +221,15 @@ Future<void> _deleteContract(
     await ref.read(adminApiClientProvider).deleteContract(contractId);
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Contratto eliminato')));
+      showAppToast(context, message: 'Contratto eliminato', tone: ToastTone.success);
       context.pop(true);
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(humanErrorMessage(e, azione: 'eliminare il contratto')),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'eliminare il contratto'),
+        tone: ToastTone.error,
       );
     }
   }
@@ -265,24 +262,20 @@ Future<void> _openGeneraScheduleDialog(
         .generaSchedule(contractId, userId: userId);
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            result.message.isNotEmpty
-                ? result.message
-                : '${result.created} pianificazioni generate.',
-          ),
-          backgroundColor: context.colors.green,
-        ),
+      showAppToast(
+        context,
+        message: result.message.isNotEmpty
+            ? result.message
+            : '${result.created} pianificazioni generate.',
+        tone: ToastTone.success,
       );
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(humanErrorMessage(e, azione: 'generare la pianificazione')),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'generare la pianificazione'),
+        tone: ToastTone.error,
       );
     }
   }

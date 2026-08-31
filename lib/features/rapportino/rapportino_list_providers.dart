@@ -46,6 +46,17 @@ final rapportinoMaterialiProvider = StreamProvider.autoDispose
       return repo.watchMateriali(reportId);
     });
 
+/// Stream every allegato (photos + signatures) for a given report — used by
+/// RapportinoViewScreen to show what Step 6 attached and to resolve the customer signature's
+/// actual image instead of a placeholder. `watchAllegati` filters by `entityId == reportId`
+/// alone, so this list mixes photo and signature rows together; callers separate them by
+/// matching id against `DraftReport.customerSignatureAllegatoId`.
+final rapportinoAllegatiProvider = StreamProvider.autoDispose
+    .family<List<ReportAllegatiData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchAllegati(reportId);
+    });
+
 /// Derived: total ore from staff rows for a given report.
 /// Returns a formatted string like "3h 30min" or "—".
 final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, reportId) {

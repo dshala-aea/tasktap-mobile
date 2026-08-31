@@ -79,19 +79,12 @@ Future<void> _deleteCustomer(BuildContext context, WidgetRef ref, String custome
     await ref.read(adminApiClientProvider).deleteCustomer(customerId);
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Cliente eliminato')));
+      showAppToast(context, message: 'Cliente eliminato', tone: ToastTone.success);
       context.pop(true);
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Impossibile eliminare. Riprova.'),
-          backgroundColor: context.colors.red,
-        ),
-      );
+      showAppToast(context, message: 'Impossibile eliminare. Riprova.', tone: ToastTone.error);
     }
   }
 }
@@ -441,16 +434,11 @@ class _SediSection extends ConsumerWidget {
       await ref.read(adminApiClientProvider).deleteLocation(id);
       unawaited(ref.read(syncProvider.notifier).performSync());
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sede eliminata')));
+        showAppToast(context, message: 'Sede eliminata', tone: ToastTone.success);
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile eliminare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile eliminare. Riprova.', tone: ToastTone.error);
       }
     }
   }

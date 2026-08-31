@@ -180,20 +180,13 @@ class AdminReportDetailScreen extends ConsumerWidget {
           break;
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Stato aggiornato')));
+        showAppToast(context, message: 'Stato aggiornato', tone: ToastTone.success);
         // Pop to refresh list
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Impossibile salvare. Riprova.'),
-            backgroundColor: context.colors.red,
-          ),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     }
   }

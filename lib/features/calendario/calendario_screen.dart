@@ -482,6 +482,44 @@ class _CalendarioBody extends ConsumerWidget {
   }
 }
 
+// ── Loading/data/error crossfade for a date-range fetch ────────────────────────
+//
+// Every one of the four view bodies below keys `schedulesInRangeProvider` by a date range —
+// "next day," "next week," "next month" all construct a genuinely new range, so Riverpod starts a
+// fresh `.family` instance in its own `loading` state each time (there is no prior value for that
+// specific range to fall back to; this isn't a plain refresh of the same provider). Before this,
+// that meant the single most repeated interaction on this screen — tapping through dates — hard-cut
+// the whole view to a bare spinner and back on every tap. A crossfade doesn't remove that beat, but
+// it stops it reading as the screen breaking and rebuilding itself each time.
+class _AsyncViewSwitcher<T> extends StatelessWidget {
+  const _AsyncViewSwitcher({required this.async, required this.builder});
+
+  final AsyncValue<T> async;
+  final Widget Function(T data) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = async.when(
+      data: (data) => KeyedSubtree(key: const ValueKey('data'), child: builder(data)),
+      loading: () => const Center(
+        key: ValueKey('loading'),
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      error: (e, _) =>
+          const Center(key: ValueKey('error'), child: Text('Errore nel caricamento')),
+    );
+
+    return AnimatedSwitcher(
+      duration: MediaQuery.of(context).disableAnimations
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: child,
+    );
+  }
+}
+
 // ── Giorno body ───────────────────────────────────────────────────────────────
 
 class _GiornoBody extends ConsumerWidget {
@@ -506,15 +544,13 @@ class _GiornoBody extends ConsumerWidget {
     final range = DateRange(start: start, end: end);
     final async = ref.watch(schedulesInRangeProvider(range));
 
-    return async.when(
-      data: (schedules) => GiornoView(
+    return _AsyncViewSwitcher(
+      async: async,
+      builder: (schedules) => GiornoView(
         schedules: schedules,
         onTapTicket: onTapTicket,
         onTapSchedule: onTapSchedule,
       ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
 }
@@ -542,16 +578,14 @@ class _SettimanaBody extends ConsumerWidget {
     final range = DateRange(start: weekStart, end: weekEnd);
     final async = ref.watch(schedulesInRangeProvider(range));
 
-    return async.when(
-      data: (schedules) => SettimanaView(
+    return _AsyncViewSwitcher(
+      async: async,
+      builder: (schedules) => SettimanaView(
         weekStart: weekStart,
         schedules: schedules,
         onDayTap: onDayTap,
         onEventTap: onEventTap,
       ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
 }
@@ -572,16 +606,14 @@ class _MeseBody extends ConsumerWidget {
     final range = DateRange(start: monthStart, end: monthEnd);
     final async = ref.watch(schedulesInRangeProvider(range));
 
-    return async.when(
-      data: (schedules) => MeseView(
+    return _AsyncViewSwitcher(
+      async: async,
+      builder: (schedules) => MeseView(
         month: selectedDate,
         selectedDate: selectedDate,
         schedules: schedules,
         onDayTap: onDayTap,
       ),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (e, _) => const Center(child: Text('Errore nel caricamento')),
     );
   }
 }
@@ -602,12 +634,9 @@ class _ListaBody extends ConsumerWidget {
     final range = DateRange(start: start, end: end);
     final async = ref.watch(schedulesInRangeProvider(range));
 
-    return async.when(
-      data: (schedules) =>
-          ListaView(schedules: schedules, onTapTicket: onTapTicket),
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (e, _) => const Center(child: Text('Errore nel caricamento')),
+    return _AsyncViewSwitcher(
+      async: async,
+      builder: (schedules) => ListaView(schedules: schedules, onTapTicket: onTapTicket),
     );
   }
 }

@@ -11,6 +11,8 @@
 //   5. Shows "not found" empty state for unknown report id.
 //   6. Scarica PDF button present.
 
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -78,6 +81,42 @@ Future<void> _seedMateriali(AppDatabase db, String reportId) async {
           quantity: 1.0,
           freeTextName: const Value('Tubo rame'),
           unitOfMeasure: const Value('m'),
+        ),
+      );
+}
+
+/// A real file on disk, so `File(path).existsSync()` — the local-first check both
+/// `_SignatureBlock` and `_AllegatiPhotoGrid` make — is true without needing any network stub.
+/// Content doesn't need to decode as a real image: these tests check that the resolved allegato
+/// took the image branch (tappable, InteractiveViewer on tap), not that a real photo renders.
+File _makeTempFile(String name, List<int> bytes) {
+  final file = File('${Directory.systemTemp.path}/rapportino_view_test_$name');
+  file.writeAsBytesSync(bytes);
+  return file;
+}
+
+Future<void> _insertAllegato(
+  AppDatabase db, {
+  required String id,
+  required String reportId,
+  required String fileName,
+  required String storagePath,
+}) async {
+  await db
+      .into(db.reportAllegati)
+      .insert(
+        ReportAllegatiCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          fileName: fileName,
+          contentType: 'image/jpeg',
+          sizeBytes: 1024,
+          storagePath: storagePath,
+          url: storagePath,
+          entityType: 1, // Report
+          entityId: reportId,
+          uploadedByUserId: 'tecnico-1',
         ),
       );
 }
@@ -182,6 +221,94 @@ void main() {
       expect(find.text('Firma cliente'), findsOneWidget);
       expect(find.textContaining('Firmato il'), findsOneWidget);
 
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // ── Real image, not the placeholder (2026-08-30 attachment viewer) ──────
+    //
+    // The placeholder-icon fallback above covers "no allegato resolved yet" — this covers what
+    // used to be an unreachable branch: rapportino_view_screen.dart's own comment said "when the
+    // allegati watcher is added to view, this can show the image." It's added now.
+
+    testWidgets('shows the real signature image and opens the fullscreen viewer on tap', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      final file = _makeTempFile('sig.jpg', [1, 2, 3]);
+      addTearDown(() => file.deleteSync());
+      await _insertAllegato(
+        db,
+        id: 'sig-c-1',
+        reportId: 'report-1',
+        fileName: 'firma.jpg',
+        storagePath: file.path,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      // The bare placeholder icon (no resolved allegato) is gone — a resolved signature no
+      // longer shows the pen icon, it shows the image itself.
+      expect(find.byIcon(LucideIcons.penTool), findsNothing);
+      expect(find.textContaining('Firmato il'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Firmato il'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — foto (2026-08-30 attachment viewer)', () {
+    testWidgets('shows a Foto section for Step 6 allegati, tap opens the viewer', (tester) async {
+      await _seedSubmittedDraft(db);
+      final file = _makeTempFile('job-photo.jpg', [4, 5, 6]);
+      addTearDown(() => file.deleteSync());
+      // A regular report photo — not one of the two signature ids, so it lands in the photo
+      // grid rather than being resolved as a signature.
+      await _insertAllegato(
+        db,
+        id: 'photo-1',
+        reportId: 'report-1',
+        fileName: 'lavoro.jpg',
+        storagePath: file.path,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Foto (1)'), findsOneWidget);
+
+      // The thumbnail itself is the tap target — no seeded signature in this test, so it's the
+      // only Image on screen.
+      await tester.tap(find.byType(Image).first);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a signature allegato never shows up in the photo grid', (tester) async {
+      await _seedSubmittedDraft(db);
+      final file = _makeTempFile('sig-only.jpg', [7, 8, 9]);
+      addTearDown(() => file.deleteSync());
+      await _insertAllegato(
+        db,
+        id: 'sig-c-1', // matches customerSignatureAllegatoId from _seedSubmittedDraft
+        reportId: 'report-1',
+        fileName: 'firma.jpg',
+        storagePath: file.path,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      // Only the signature block claims it — the photo section never appears for zero photos.
+      expect(find.textContaining('Foto ('), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

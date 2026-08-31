@@ -108,20 +108,18 @@ Future<void> _toggleActive(BuildContext context, WidgetRef ref, MaterialiData ma
     }
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(deactivating ? 'Materiale disattivato' : 'Materiale riattivato'),
-          backgroundColor: context.colors.green,
-        ),
+      showAppToast(
+        context,
+        message: deactivating ? 'Materiale disattivato' : 'Materiale riattivato',
+        tone: ToastTone.success,
       );
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Impossibile aggiornare lo stato. Riprova.'),
-          backgroundColor: context.colors.red,
-        ),
+      showAppToast(
+        context,
+        message: 'Impossibile aggiornare lo stato. Riprova.',
+        tone: ToastTone.error,
       );
     }
   }

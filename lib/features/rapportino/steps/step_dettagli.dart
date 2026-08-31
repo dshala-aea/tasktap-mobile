@@ -289,28 +289,24 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
       ref.invalidate(aiQuotaProvider);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Bozza generata (${draft.modelUsed}). Rileggila prima di inviare.'),
-          backgroundColor: context.colors.green,
-        ),
+      showAppToast(
+        context,
+        message: 'Bozza generata (${draft.modelUsed}). Rileggila prima di inviare.',
+        tone: ToastTone.success,
       );
     } on AiQuotaExhaustedException catch (e) {
       if (!mounted) return;
       final when = e.resetsAt == null
           ? 'il primo del mese'
           : DateFormat('d MMMM', 'it').format(e.resetsAt!.toLocal());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Quota AI della tua azienda esaurita. Si azzera $when.'),
-          backgroundColor: context.colors.amber,
-        ),
+      showAppToast(
+        context,
+        message: 'Quota AI della tua azienda esaurita. Si azzera $when.',
+        tone: ToastTone.warning,
       );
     } on AiFailure catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message), backgroundColor: context.colors.red));
+      showAppToast(context, message: e.message, tone: ToastTone.error);
     } finally {
       if (mounted) setState(() => _aiBusy = false);
     }
@@ -375,17 +371,15 @@ class _GpsCapture extends ConsumerWidget {
   /// a fabricated one is not distinguishable from a real one.
   Future<void> _captureGps(BuildContext context, WidgetRef ref) async {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final messenger = ScaffoldMessenger.of(context);
 
     // Off in Impostazioni resolves to the disabled service, which answers null like a denial —
     // so say which of the two it is rather than reporting a generic failure.
     if (!ref.read(gpsPreferenceProvider)) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
+      showAppToast(
+        context,
+        message:
             'Geolocalizzazione disattivata. Attivala in Impostazioni per registrare la posizione.',
-          ),
-        ),
+        tone: ToastTone.warning,
       );
       return;
     }
@@ -414,10 +408,11 @@ class _GpsCapture extends ConsumerWidget {
     final coords = await service.getCurrentPosition();
 
     if (coords == null) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Posizione non disponibile. Controlla il GPS e i permessi, poi riprova.'),
-        ),
+      if (!context.mounted) return;
+      showAppToast(
+        context,
+        message: 'Posizione non disponibile. Controlla il GPS e i permessi, poi riprova.',
+        tone: ToastTone.error,
       );
       return;
     }
