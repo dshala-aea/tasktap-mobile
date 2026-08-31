@@ -14,7 +14,7 @@ void main() {
       // Only the active (Dashboard) label is shown.
       expect(find.text('Dashboard'), findsOneWidget);
       expect(find.text('Ticket'), findsNothing);
-      expect(find.text('Timbra'), findsNothing);
+      expect(find.text('Cantieri'), findsNothing);
       expect(find.text('Calendario'), findsNothing);
       expect(find.text('Altro'), findsNothing);
     });
@@ -61,7 +61,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byIcon(AppBottomNavIcons.dashboard), findsOneWidget);
       expect(find.byIcon(AppBottomNavIcons.ticket), findsOneWidget);
-      expect(find.byIcon(AppBottomNavIcons.timbra), findsOneWidget);
+      expect(find.byIcon(AppBottomNavIcons.cantieri), findsOneWidget);
       expect(find.byIcon(AppBottomNavIcons.calendario), findsOneWidget);
       expect(find.byIcon(AppBottomNavIcons.altro), findsOneWidget);
     });
@@ -90,6 +90,14 @@ void main() {
                 gradient.colors[1] == AppVetroColors.tintStrong;
           });
       expect(hasVetroGradient, isTrue);
+    });
+
+    test('defaultItems has Cantieri at index 2, not Timbra', () {
+      expect(AppBottomNav.defaultItems[2].label, 'Cantieri');
+      expect(
+        AppBottomNav.defaultItems.map((i) => i.label),
+        isNot(contains('Timbra')),
+      );
     });
   });
 }

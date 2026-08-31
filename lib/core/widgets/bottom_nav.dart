@@ -12,7 +12,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
   static const IconData ticket = LucideIcons.ticket;
-  static const IconData timbra = LucideIcons.clock;
+  static const IconData cantieri = LucideIcons.hardHat;
   static const IconData calendario = LucideIcons.calendar;
   static const IconData altro = LucideIcons.moreHorizontal;
 }
@@ -56,7 +56,7 @@ class AppBottomNav extends StatelessWidget {
   static const List<AppBottomNavItem> defaultItems = [
     AppBottomNavItem(icon: AppBottomNavIcons.dashboard, label: 'Dashboard'),
     AppBottomNavItem(icon: AppBottomNavIcons.ticket, label: 'Ticket'),
-    AppBottomNavItem(icon: AppBottomNavIcons.timbra, label: 'Timbra'),
+    AppBottomNavItem(icon: AppBottomNavIcons.cantieri, label: 'Cantieri'),
     AppBottomNavItem(icon: AppBottomNavIcons.calendario, label: 'Calendario'),
     AppBottomNavItem(icon: AppBottomNavIcons.altro, label: 'Altro'),
   ];
