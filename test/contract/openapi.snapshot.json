@@ -16710,6 +16710,14 @@
             ],
             "format": "uuid"
           },
+          "maintenanceTemplateId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Explicitly choose which maintenance template this ticket\u0027s checklist snapshots from,\noverriding the normal resolution (contract\u0027s pin \u2192 contract\u0027s template \u2192 ticket type\u0027s\ntemplate \u2014 ADR-0012 \u00A7B.2). Resolves to that template\u0027s latest published version, exactly\nlike a contract\u0027s own \u0060MaintenanceTemplateId\u0060 does when nothing pins it. Omit unless\nthis ticket deliberately needs a different checklist than its contract or type would give\nit \u2014 most tickets should let those decide.",
+            "format": "uuid"
+          },
           "cantiereId": {
             "type": [
               "null",
