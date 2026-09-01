@@ -5330,7 +5330,7 @@
         "tags": [
           "MaintenanceTemplates"
         ],
-        "summary": "A new curated template and its empty first draft.",
+        "summary": "A new template and its empty first draft: a curated (System-origin) template for a\nsuperuser caller, or a tenant-owned one for a permission-holding tenant caller.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -5496,6 +5496,138 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance-templates/groups/{groupId}": {
+      "put": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Edits a group in a tenant-owned draft. Superuser callers are not routed here \u2014\n    this endpoint is tenant-only, since symmetric System-draft editing is out of scope for\n    this pass (see the plan\u0027s Task 5 scope note).",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateGroupRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateGroupRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Removes a group from a tenant-owned draft.",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance-templates/controls/{controlId}": {
+      "put": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Edits a control in a tenant-owned draft.",
+        "parameters": [
+          {
+            "name": "controlId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateControlRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateControlRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Removes a control from a tenant-owned draft.",
+        "parameters": [
+          {
+            "name": "controlId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -23052,6 +23184,14 @@
               "null",
               "string"
             ]
+          },
+          "maintenanceTemplateId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The checklist a ticket of this type resolves by default, when no contract\n    overrides it. Null means this type has no default checklist.",
+            "format": "uuid"
           }
         }
       },
