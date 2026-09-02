@@ -24,6 +24,7 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter analyze
       - run: flutter test
 
@@ -48,6 +49,7 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter build apk --release
 
       - uses: actions/upload-artifact@v4
@@ -72,6 +74,7 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter build ios --release --no-codesign
 
       - uses: actions/upload-artifact@v4

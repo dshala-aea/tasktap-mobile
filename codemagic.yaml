@@ -15,6 +15,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: flutter pub get
+      - name: Generate code (drift, riverpod)
+        script: dart run build_runner build --delete-conflicting-outputs
       - name: Analyse
         script: flutter analyze
       - name: Unit tests
@@ -47,6 +49,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: flutter pub get
+      - name: Generate code (drift, riverpod)
+        script: dart run build_runner build --delete-conflicting-outputs
       - name: Analyse
         script: flutter analyze
       - name: Unit tests
@@ -115,6 +119,8 @@ workflows:
     scripts:
       - name: Install dependencies
         script: flutter pub get
+      - name: Generate code (drift, riverpod)
+        script: dart run build_runner build --delete-conflicting-outputs
       - name: Analyse
         script: flutter analyze
       - name: Unit tests

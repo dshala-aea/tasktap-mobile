@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Auto-regenerate drift/riverpod code after a pull brings in schema/provider
+# changes. Installed via `scripts/setup.sh` (sets core.hooksPath=.githooks).
+# build_runner is incremental against .dart_tool/build, so this is fast on
+# most pulls — it only does real work when generated-code inputs changed.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+echo "post-merge: regenerating generated code (dart run build_runner build)..."
+dart run build_runner build --delete-conflicting-outputs

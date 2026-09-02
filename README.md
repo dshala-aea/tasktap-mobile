@@ -6,6 +6,18 @@ Built on M5 (commit `1271cca`): full offline draft + submit loop, 204 tests gree
 
 ---
 
+## Setup
+
+```sh
+./scripts/setup.sh
+```
+
+Installs dependencies, generates code (drift tables, riverpod providers — all `*.g.dart`,
+gitignored), and wires up git hooks (`.githooks/`) that auto-regenerate it after every future
+`git pull`/branch switch. Run this once per clone; after that you generally won't need to think
+about generated code again. If you're actively editing a `@riverpod`/drift-annotated file, run
+`dart run build_runner watch --delete-conflicting-outputs` instead — it regenerates on every save.
+
 ## Build / Run
 
 All credentials are passed at build/run time via `--dart-define`. **Never commit real values.**
