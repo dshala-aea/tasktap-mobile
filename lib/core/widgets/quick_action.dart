@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// Quick action — 50 px accent circle + icon (20) + centered Inter 700/10
 /// label.
@@ -38,11 +38,7 @@ class QuickAction extends StatelessWidget {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [context.vetro.tint, context.vetro.tintStrong],
-                  ),
+                  color: AppColors.Y,
                   shape: BoxShape.circle,
                   // No shadow, same rule as AppButton: a static in-flow control, not an overlay,
                   // and a soft shadow is invisible outdoors — see app_button.dart's _shadows().

@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// A row in a list — flat, hairline-separated, full-bleed.
 ///
 /// Was a bordered "drawer front" cell (RackCell) on its own pitch of vertical gap between rows.
 /// Replaced with the shape ticket_list_screen's `_TicketRow` and rapportini_list_screen's
 /// `_RapportinoRow` already proved out for real content: no per-row card, border or radius — a
-/// bottom hairline (`context.vetro.hairline`) between rows, same as Files, Settings, and every
-/// other flat list these two screens were themselves modeled on. A per-row glass card
-/// (`VetroGlass`'s own `BackdropFilter`) was considered and rejected for the same reason those two
-/// screens rejected it: a list can run to dozens of rows, and a blur sigma per row is a real,
-/// measured cost a flat row with one border paint is not.
+/// bottom hairline (`context.colors.borderLight`) between rows, same as Files, Settings, and every
+/// other flat list these two screens were themselves modeled on. A per-row glass card was
+/// considered and rejected for the same reason those two screens rejected it: a list can run to
+/// dozens of rows, and a blur sigma per row is a real, measured cost a flat row with one border
+/// paint is not.
 ///
 /// [strapped]/[ledgeColor] keep their meaning — "this one needs you" / a state that is neither
 /// ordinary nor live — but the mechanism moves from a recolored cell border to the same 3px
 /// leading stripe `_TicketRow`'s priority marker and `_RapportinoRow`'s draft marker already use,
-/// tinted with the Vetro gradient's own accent rather than invented separately for this widget.
+/// tinted with the one accent (`AppColors.Y`) rather than invented separately for this widget.
 ///
 /// [showDivider] used to be a no-op, kept only for call-site compatibility with the cell-gap
 /// layout that made a divider redundant. It is live again now that a divider is genuinely what
@@ -48,7 +48,7 @@ class ListRow extends StatelessWidget {
   /// list's last row.
   final bool showDivider;
 
-  /// Selected, priority, or still-needs-finishing — turns the leading stripe the Vetro tint. Not
+  /// Selected, priority, or still-needs-finishing — turns the leading stripe the one accent. Not
   /// for a live/running state: see `LiveDot`.
   final bool strapped;
 
@@ -57,16 +57,22 @@ class ListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final c = context.colors;
-    final stripeColor = strapped ? v.tint : (ledgeColor ?? Colors.transparent);
+    final stripeColor = strapped
+        ? AppColors.Y
+        : (ledgeColor ?? Colors.transparent);
 
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: 11,
+        ),
         decoration: BoxDecoration(
-          border: showDivider ? Border(bottom: BorderSide(color: v.hairline)) : null,
+          border: showDivider
+              ? Border(bottom: BorderSide(color: c.borderLight))
+              : null,
         ),
         // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: a caller may size
         // this row from a SliverChildBuilderDelegate item with no bounded height for `stretch` to
@@ -78,7 +84,10 @@ class ListRow extends StatelessWidget {
               Container(
                 width: 3,
                 margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(color: stripeColor, borderRadius: BorderRadius.circular(3)),
+                decoration: BoxDecoration(
+                  color: stripeColor,
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
               if (leading != null) ...[leading!, const SizedBox(width: 12)],
               Expanded(
@@ -104,7 +113,11 @@ class ListRow extends StatelessWidget {
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: c.inkMuted),
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 12,
+                          color: c.inkMuted,
+                        ),
                       ),
                     ],
                   ],

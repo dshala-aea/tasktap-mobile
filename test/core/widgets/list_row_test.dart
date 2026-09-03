@@ -9,12 +9,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_theme.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/list_row.dart';
 
-Widget _wrap(Widget child) =>
-    MaterialApp(theme: buildAppTheme(brightness: Brightness.light), home: Scaffold(body: child));
+Widget _wrap(Widget child) => MaterialApp(
+  theme: buildAppTheme(brightness: Brightness.light),
+  home: Scaffold(body: child),
+);
 
 /// The 3px leading stripe: first Container in the row whose decoration paints a solid color
 /// (border-radius 3) — distinct from the row's own outer Container (no color, just a border).
@@ -89,9 +91,9 @@ void main() {
       expect(_stripeColor(tester), Colors.transparent);
     });
 
-    testWidgets('strapped turns the leading stripe the Vetro tint', (tester) async {
+    testWidgets('strapped turns the leading stripe the one accent', (tester) async {
       await tester.pumpWidget(_wrap(const ListRow(title: 'In evidenza', strapped: true)));
-      expect(_stripeColor(tester), AppVetroColors.tint);
+      expect(_stripeColor(tester), AppColors.Y);
     });
 
     testWidgets('an explicit ledgeColor tints the stripe when not strapped', (tester) async {
@@ -105,7 +107,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(const ListRow(title: 'Entrambi', strapped: true, ledgeColor: ledge)),
       );
-      expect(_stripeColor(tester), AppVetroColors.tint);
+      expect(_stripeColor(tester), AppColors.Y);
     });
   });
 }

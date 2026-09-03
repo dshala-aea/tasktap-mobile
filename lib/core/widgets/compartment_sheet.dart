@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_spacing.dart';
-import '../theme/app_vetro_palette.dart';
 import 'screen_header.dart';
 
 /// Opens a compartment's content as a bottom sheet over the current screen, rather than growing
@@ -12,7 +12,11 @@ import 'screen_header.dart';
 /// grid of tiles that each open a sheet, so the page itself never grows or shrinks around whatever
 /// is open. Scrollable and height-capped: the content widgets this wraps were built to sit inside
 /// an ambient scroll view, not to bound their own height, so this supplies both.
-void openCompartmentSheet(BuildContext context, {required String label, required Widget content}) {
+void openCompartmentSheet(
+  BuildContext context, {
+  required String label,
+  required Widget content,
+}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -26,7 +30,10 @@ void openCompartmentSheet(BuildContext context, {required String label, required
       expand: false,
       builder: (ctx, scrollController) => Column(
         children: [
-          const Padding(padding: EdgeInsets.only(top: 10, bottom: 4), child: SheetHandle()),
+          const Padding(
+            padding: EdgeInsets.only(top: 10, bottom: 4),
+            child: SheetHandle(),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.pagePadding,
@@ -55,11 +62,13 @@ void openCompartmentSheet(BuildContext context, {required String label, required
               ],
             ),
           ),
-          Divider(height: 1, thickness: 1, color: ctx.vetro.hairline),
+          Divider(height: 1, thickness: 1, color: ctx.colors.borderLight),
           Expanded(
             child: SingleChildScrollView(
               controller: scrollController,
-              padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
               child: content,
             ),
           ),
@@ -74,14 +83,14 @@ class SheetHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // A muted tint tone, not full-saturation accent — this is a drag affordance, not a call to
-    // action, so it stays quiet while still carrying the one Vetro hue rather than plain grey.
+    // A muted tone, not full-saturation accent — this is a drag affordance, not a call to
+    // action, so it stays quiet while still carrying the one accent hue rather than plain grey.
     return Center(
       child: Container(
         width: 36,
         height: 4,
         decoration: BoxDecoration(
-          color: context.vetro.tint.withAlpha(60),
+          color: AppColors.Y.withAlpha(60),
           borderRadius: BorderRadius.circular(2),
         ),
       ),

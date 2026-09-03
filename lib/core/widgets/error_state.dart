@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_palette.dart';
-import '../theme/app_vetro_palette.dart';
 import 'app_button.dart';
 import 'empty_state.dart';
 
@@ -15,9 +14,9 @@ import 'empty_state.dart';
 /// code of 403 ...` learns nothing actionable; they need "something went wrong" and a retry, not
 /// a stack trace.
 ///
-/// Shares [EmptyState]'s glass-card shell so a failed fetch reads as one more member of the same
+/// Shares [EmptyState]'s flat-sheet shell so a failed fetch reads as one more member of the same
 /// visual family, not a jarring red departure from it. Unlike [UnavailableState] this one *is*
-/// red (`context.vetro.statusBad`) — a failed request is something the technician can act on by
+/// red (`context.colors.red`) — a failed request is something the technician can act on by
 /// retrying, which is exactly the distinction that widget's own doc reserves the red channel for.
 ///
 /// ```dart
@@ -46,7 +45,6 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final c = context.colors;
 
     return Center(
@@ -57,8 +55,8 @@ class ErrorState extends StatelessWidget {
           child: VetroStateCard(
             iconBadge: VetroStateIconBadge(
               icon: icon,
-              tint: v.statusBad,
-              tintBg: v.statusBadBg,
+              tint: c.red,
+              tintBg: c.red.withAlpha(31),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
-import '../theme/app_vetro_palette.dart';
-import 'vetro_card.dart';
 
-/// The empty state — a Vetro glass card around a tinted icon badge.
+/// The empty state — a flat Documento sheet around a tinted icon badge.
 ///
 /// Was a "shadow board": a dashed cut-silhouette borrowed from the app's earlier van-racking
-/// design language, claiming *something belongs in this slot and it is not here*. Vetro has no
-/// rack for a slot to be cut into, so that claim now reads as a glass panel instead — the same
-/// "designated area, softly bounded" idea `VetroCard`/`VetroCompartmentTile` already carry
-/// everywhere else, rather than a metaphor specific to a design language this one replaced.
-/// Twenty call sites across sixteen screens inherit that for free — the API is unchanged.
+/// design language, claiming *something belongs in this slot and it is not here*. Il Documento has
+/// no rack for a slot to be cut into, so that claim now reads as a flat sheet instead — the same
+/// "designated area, softly bounded" idea every other card in the app already carries, rather than
+/// a metaphor specific to a design language this one replaced. Twenty call sites across sixteen
+/// screens inherit that for free — the API is unchanged.
 ///
 /// Where the emptiness is a failure rather than a fact, pass [reason]; that is the distinction the
 /// third product principle exists to protect, and [UnavailableState] is the heavier-weight version
@@ -36,7 +35,6 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final c = context.colors;
 
     return Center(
@@ -45,7 +43,11 @@ class EmptyState extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: VetroStateCard(
-            iconBadge: VetroStateIconBadge(icon: icon, tint: v.tint, tintBg: v.tint.withAlpha(31)),
+            iconBadge: VetroStateIconBadge(
+              icon: icon,
+              tint: AppColors.Y,
+              tintBg: AppColors.Y.withAlpha(31),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -97,29 +99,40 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-/// Shared shell for [EmptyState]/[ErrorState]/[UnavailableState]: a glass card around an icon
+/// Shared shell for [EmptyState]/[ErrorState]/[UnavailableState]: a flat sheet around an icon
 /// badge and whatever content each of the three needs below it. The single owner of that shape so
 /// the family cannot drift apart the way three copies of the same padding/radius eventually would.
 class VetroStateCard extends StatelessWidget {
-  const VetroStateCard({super.key, required this.iconBadge, required this.child});
+  const VetroStateCard({
+    super.key,
+    required this.iconBadge,
+    required this.child,
+  });
 
   final Widget iconBadge;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return VetroCard(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [iconBadge, const SizedBox(height: 14), child],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: const BorderRadius.all(Radius.circular(20)),
+        border: Border.all(color: context.colors.borderLight),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [iconBadge, const SizedBox(height: 14), child],
+        ),
       ),
     );
   }
 }
 
-/// The tinted circle behind a state card's icon — same "icon in a gradient-tinted disc" language
-/// as `VetroMapCard`'s pin header, sized down for an inline badge rather than a card header.
+/// The tinted circle behind a state card's icon — same "icon in a flat-tinted disc" language as
+/// `VetroMapCard`'s pin header, sized down for an inline badge rather than a card header.
 class VetroStateIconBadge extends StatelessWidget {
   const VetroStateIconBadge({
     super.key,
@@ -152,8 +165,8 @@ class VetroStateIconBadge extends StatelessWidget {
 /// a form rather than center itself on a whole screen.
 ///
 /// Was `ShadowBoard`, a dashed cut-silhouette in `rack.dart` — moved and renamed with the rest of
-/// that file's van-racking metaphor retired to Vetro; this is the family it actually belongs with
-/// now, not a shape specific to a design language this app no longer uses.
+/// that file's van-racking metaphor retired; this is the family it actually belongs with now, not
+/// a shape specific to a design language this app no longer uses.
 class CompactEmptyState extends StatelessWidget {
   const CompactEmptyState({
     super.key,
@@ -177,7 +190,6 @@ class CompactEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final c = context.colors;
 
     return Semantics(
@@ -186,33 +198,55 @@ class CompactEmptyState extends StatelessWidget {
       // as each Text's own node. A screen-reader user hears the whole empty state twice over
       // before reaching the action.
       excludeSemantics: true,
-      child: VetroCard(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: height),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (icon != null) ...[
-                VetroStateIconBadge(icon: icon!, tint: v.tint, tintBg: v.tint.withAlpha(31), size: 36, iconSize: 18),
-                const SizedBox(height: 8),
-              ],
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w600, color: c.inkMuted),
-              ),
-              if (reason != null) ...[
-                const SizedBox(height: 4),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c.surface,
+          borderRadius: const BorderRadius.all(Radius.circular(20)),
+          border: Border.all(color: c.borderLight),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: height),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  VetroStateIconBadge(
+                    icon: icon!,
+                    tint: AppColors.Y,
+                    tintBg: AppColors.Y.withAlpha(31),
+                    size: 36,
+                    iconSize: 18,
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Text(
-                  reason!,
+                  label,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: c.inkFaint),
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: c.inkMuted,
+                  ),
                 ),
+                if (reason != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    reason!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      color: c.inkFaint,
+                    ),
+                  ),
+                ],
+                if (action != null) ...[const SizedBox(height: 12), action!],
               ],
-              if (action != null) ...[const SizedBox(height: 12), action!],
-            ],
+            ),
           ),
         ),
       ),

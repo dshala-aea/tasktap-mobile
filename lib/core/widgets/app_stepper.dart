@@ -1,8 +1,8 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
-import '../theme/app_vetro_palette.dart';
 
 /// A single stepper step.
 class StepperStep {
@@ -95,12 +95,7 @@ class AppStepper extends StatelessWidget {
 }
 
 class _Segment extends StatelessWidget {
-  const _Segment({
-    required this.step,
-    required this.index,
-    required this.currentIndex,
-    this.onTap,
-  });
+  const _Segment({required this.step, required this.index, required this.currentIndex, this.onTap});
 
   final StepperStep step;
   final int index;
@@ -130,7 +125,7 @@ class _Segment extends StatelessWidget {
             curve: Curves.easeOut,
             height: 4,
             decoration: BoxDecoration(
-              color: reached ? context.vetro.tint : context.colors.borderMedium,
+              color: reached ? AppColors.Y : context.colors.borderMedium,
               borderRadius: BorderRadius.circular(2),
             ),
           ),

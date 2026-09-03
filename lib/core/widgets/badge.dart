@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// Compact rounded badge pill.
 ///
@@ -12,7 +12,7 @@ import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 /// ```dart
 /// AppBadge(label: '3');
 /// AppBadge(label: 'Nuovo', small: true);
-/// AppBadge(label: 'Tag', bgColor: context.vetro.tint.withAlpha(31), fgColor: context.vetro.tint);
+/// AppBadge(label: 'Tag', bgColor: AppColors.Y.withAlpha(31), fgColor: AppColors.Y);
 /// ```
 class AppBadge extends StatelessWidget {
   const AppBadge({
@@ -74,7 +74,12 @@ class AppBadge extends StatelessWidget {
 /// AppChip(label: 'Settimana', onTap: () {});
 /// ```
 class AppChip extends StatelessWidget {
-  const AppChip({super.key, required this.label, this.active = false, this.onTap});
+  const AppChip({
+    super.key,
+    required this.label,
+    this.active = false,
+    this.onTap,
+  });
 
   final String label;
   final bool active;
@@ -82,9 +87,9 @@ class AppChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = active ? context.vetro.tint : context.colors.surface;
+    final bg = active ? AppColors.Y : context.colors.surface;
     final fg = active ? Colors.white : context.colors.ink;
-    final borderColor = active ? context.vetro.tint : context.colors.borderMedium;
+    final borderColor = active ? AppColors.Y : context.colors.borderMedium;
 
     const radius = AppRack.insetRadius;
 

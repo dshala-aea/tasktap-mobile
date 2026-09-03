@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/core/widgets/empty_state.dart';
-import 'package:tasktap_mobile/core/widgets/vetro_card.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
@@ -22,7 +22,10 @@ void main() {
       );
       expect(find.byIcon(LucideIcons.inbox), findsOneWidget);
       expect(find.text('Nessun rapportino'), findsOneWidget);
-      expect(find.text('I rapportini che crei appariranno qui.'), findsOneWidget);
+      expect(
+        find.text('I rapportini che crei appariranno qui.'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('renders without body or action (minimal)', (tester) async {
@@ -40,7 +43,10 @@ void main() {
           EmptyState(
             icon: LucideIcons.plusCircle,
             title: 'Nessun ticket',
-            action: AppButton(label: 'Nuovo ticket', onPressed: () => pressed = true),
+            action: AppButton(
+              label: 'Nuovo ticket',
+              onPressed: () => pressed = true,
+            ),
           ),
         ),
       );
@@ -49,21 +55,47 @@ void main() {
       expect(pressed, isTrue);
     });
 
-    testWidgets('is a Vetro glass card with a tint-badged icon', (tester) async {
-      await tester.pumpWidget(_wrap(const EmptyState(icon: LucideIcons.inbox, title: 'Test')));
+    testWidgets('is a flat Documento sheet with a tint-badged icon', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(const EmptyState(icon: LucideIcons.inbox, title: 'Test')),
+      );
 
       // Was a dashed cut-silhouette (the van-racking metaphor's "shadow board") — now the same
-      // glass-card language VetroCard/VetroCompartmentTile use everywhere else, with the icon in
-      // a tinted circular badge rather than sitting bare or inside a grey disc.
-      expect(find.byType(VetroCard), findsOneWidget);
-      final badge = tester.widget<VetroStateIconBadge>(find.byType(VetroStateIconBadge));
-      expect(badge.tint, AppVetroColors.tint);
+      // flat-sheet language every other card in the app uses, with the icon in a tinted circular
+      // badge rather than sitting bare or inside a grey disc.
+      //
+      // Compared against AppPalette.light's own value, not the AppColors constant directly: the
+      // sheet reads context.colors.surface (themed, flips in dark mode), which merely happens to
+      // equal SHEET under the light palette this unthemed MaterialApp falls back to.
+      final box =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: find.byType(EmptyState),
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
+      expect(box.color, equals(AppPalette.light.surface));
+      final badge = tester.widget<VetroStateIconBadge>(
+        find.byType(VetroStateIconBadge),
+      );
+      expect(badge.tint, AppColors.Y);
     });
 
     testWidgets('no action widget when action not provided', (tester) async {
       await tester.pumpWidget(
         _wrap(
-          const EmptyState(icon: LucideIcons.inbox, title: 'Nessun elemento', body: 'Lista vuota.'),
+          const EmptyState(
+            icon: LucideIcons.inbox,
+            title: 'Nessun elemento',
+            body: 'Lista vuota.',
+          ),
         ),
       );
       expect(find.byType(AppButton), findsNothing);
@@ -71,7 +103,9 @@ void main() {
   });
 
   group('CompactEmptyState', () {
-    testWidgets('names what is missing, and reads it out as one phrase', (tester) async {
+    testWidgets('names what is missing, and reads it out as one phrase', (
+      tester,
+    ) async {
       final handle = tester.ensureSemantics();
 
       await tester.pumpWidget(
@@ -84,11 +118,15 @@ void main() {
       );
 
       expect(find.text('Nessun rapportino in coda'), findsOneWidget);
-      expect(find.text('La sincronizzazione non è ancora riuscita.'), findsOneWidget);
+      expect(
+        find.text('La sincronizzazione non è ancora riuscita.'),
+        findsOneWidget,
+      );
       expect(
         tester.getSemantics(find.byType(CompactEmptyState)),
         matchesSemantics(
-          label: 'Nessun rapportino in coda. La sincronizzazione non è ancora riuscita.',
+          label:
+              'Nessun rapportino in coda. La sincronizzazione non è ancora riuscita.',
         ),
       );
 
@@ -96,18 +134,36 @@ void main() {
     });
 
     testWidgets('an ordinary empty slot states no reason', (tester) async {
-      await tester.pumpWidget(_wrap(const CompactEmptyState(label: 'Nessun materiale')));
+      await tester.pumpWidget(
+        _wrap(const CompactEmptyState(label: 'Nessun materiale')),
+      );
 
       expect(find.text('Nessun materiale'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('is a Vetro glass card, not the old dashed silhouette', (tester) async {
+    testWidgets('is a flat Documento sheet, not the old dashed silhouette', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        _wrap(const CompactEmptyState(label: 'Nessuno', icon: LucideIcons.inbox)),
+        _wrap(
+          const CompactEmptyState(label: 'Nessuno', icon: LucideIcons.inbox),
+        ),
       );
 
-      expect(find.byType(VetroCard), findsOneWidget);
+      final box =
+          tester
+                  .widget<DecoratedBox>(
+                    find
+                        .descendant(
+                          of: find.byType(CompactEmptyState),
+                          matching: find.byType(DecoratedBox),
+                        )
+                        .first,
+                  )
+                  .decoration
+              as BoxDecoration;
+      expect(box.color, equals(AppPalette.light.surface));
       expect(find.byType(VetroStateIconBadge), findsOneWidget);
     });
   });

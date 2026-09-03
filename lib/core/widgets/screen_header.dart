@@ -1,12 +1,8 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_rack.dart';
-import '../theme/app_vetro_palette.dart';
 import 'app_tappable.dart';
-import 'vetro_glass.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass), icon 17, optional red dot
@@ -37,10 +33,10 @@ class HeaderIconBtn extends StatelessWidget {
   final VoidCallback? onTap;
   final bool showDot;
 
-  /// Real `VetroGlass` styling, reading `context.vetro` so the disc flips with the app theme —
-  /// every `ScreenHeader` is itself a flipping glass bar. Default true: this is the button every
-  /// header action in the app uses. Pass `false` only for a caller that genuinely needs the
-  /// squared, `bg3`-filled machined look instead (none do today).
+  /// A flat Documento disc, reading `context.colors` so it flips with the app theme — every
+  /// `ScreenHeader` is itself a flipping flat bar. Default true: this is the button every header
+  /// action in the app uses. Pass `false` only for a caller that genuinely needs the squared,
+  /// `bg3`-filled machined look instead (none do today).
   final bool glass;
 
   @override
@@ -61,15 +57,15 @@ class HeaderIconBtn extends StatelessWidget {
               clipBehavior: Clip.none,
               children: [
                 if (glass)
-                  // A real frosted disc — VetroGlass's own BackdropFilter blur, not a flat
-                  // translucent-white Container standing in for one. This used to be the one
-                  // "glass" surface in the app that wasn't actually glass: every card blurs what's
-                  // behind it, this button only tinted it, and the mismatch was visible wherever a
-                  // header sat over anything but a flat colour. Fill/border omitted so VetroGlass
-                  // reads them from `context.vetro` and flips with the app theme, same as the bar
-                  // it sits on.
-                  VetroGlass(
-                    borderRadius: BorderRadius.circular(19),
+                  // A flat Documento disc — the same surface/border pair every other flat sheet in
+                  // the app reads from `context.colors`, so it flips with the app theme same as the
+                  // bar it sits on.
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(19),
+                      border: Border.all(color: context.colors.borderLight),
+                    ),
                     child: SizedBox(
                       width: 38,
                       height: 38,
@@ -145,7 +141,6 @@ class ScreenHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final titleColor = context.colors.ink;
     final row = Padding(
       padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
@@ -197,29 +192,15 @@ class ScreenHeader extends StatelessWidget {
       ),
     );
 
-    // A real frosted bar, not a flat tint standing in for one — same reasoning as VetroGlass's
-    // own doc comment. Border radius zero: this spans the full screen width, so the only edge
-    // that reads is the bottom hairline the artifact's own `.tabbar`/status bar draws.
-    //
-    // RepaintBoundary around the clip+blur: without its own compositing layer, BackdropFilter
-    // here leaked an unclipped second copy of content past its ClipRect bounds on-device (the
-    // bottom nav's identical bar had the same leak — see AppBottomNav's own comment on this).
-    return RepaintBoundary(
-      child: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: AppVetroColors.blurSigma,
-            sigmaY: AppVetroColors.blurSigma,
-          ),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: v.glassFill,
-              border: Border(bottom: BorderSide(color: v.hairline)),
-            ),
-            child: row,
-          ),
-        ),
+    // A flat Documento bar, not a frosted one — DESIGN.md bans blur along with every other glass
+    // material. Border radius zero: this spans the full screen width, so the only edge that reads
+    // is the bottom hairline.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
+      child: row,
     );
   }
 }
