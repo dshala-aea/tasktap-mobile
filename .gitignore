@@ -26,3 +26,6 @@ Thumbs.db
 
 # Superpowers scratch state (brainstorm mockups, SDD workspaces)
 .superpowers/
+
+# Superpowers isolated worktrees
+.worktrees/
