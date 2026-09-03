@@ -372,12 +372,16 @@ class _StaffTileState extends State<_StaffTile> {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  row.displayName.isNotEmpty ? row.displayName : row.userId,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: context.colors.ink,
+                child: Consumer(
+                  builder: (context, ref, _) => Text(
+                    row.displayName.isNotEmpty
+                        ? row.displayName
+                        : (ref.watch(colleagueNameProvider(row.userId)).valueOrNull ?? row.userId),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: context.colors.ink,
+                    ),
                   ),
                 ),
               ),
