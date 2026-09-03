@@ -21,9 +21,20 @@ import 'app_vetro_palette.dart';
 ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   final isDark = brightness == Brightness.dark;
   final p = isDark ? AppPalette.dark : AppPalette.light;
-  // Il Documento's AppPalette.shadow is empty (DESIGN.md bans card shadows), so `.first` would
-  // throw here — these three slots are decorative shadow colours on surfaces that already render
-  // at elevation 0, so transparent is the correct empty-list fallback, not a workaround.
+  // Il Documento's AppPalette.shadow is empty (DESIGN.md bans shadows outright — "no floating
+  // cards... draw a line, not a box"), so `.first` would throw here without the empty-list
+  // fallback. `Colors.transparent` is not a behavior-preserving stand-in for the three call sites
+  // below — it is DESIGN.md's rule applied consistently everywhere a shadow colour used to live:
+  //   - appBarTheme.shadowColor: no visible change — the AppBar already renders at elevation 0.
+  //   - navigationBarTheme.shadowColor: a VISIBLE change — the bottom nav renders at elevation 4,
+  //     so this removes a real shadow that used to sit under it.
+  //   - colorScheme.shadow: Material's fallback shadow colour for *any* widget rendered at nonzero
+  //     elevation with no local shadowColor override — this app has no dialogTheme/bottomSheetTheme
+  //     override, so this also strips the shadow from every plain AlertDialog/showModalBottomSheet
+  //     app-wide, not just the two named slots above.
+  // All three are intentional consequences of DESIGN.md's blanket no-shadow rule, not scope creep
+  // limited to AppPalette's own three call sites — see task-1b-report.md's "Fix: shadow comment
+  // accuracy" note for the review that caught the original, inaccurate "no visible change" claim.
   final shadowColor = p.shadow.isEmpty ? Colors.transparent : p.shadow.first.color;
 
   final colorScheme = ColorScheme(
