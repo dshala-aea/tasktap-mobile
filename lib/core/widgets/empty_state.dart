@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_rack.dart';
 
 /// The empty state — a flat Documento sheet around a tinted icon badge.
 ///
@@ -117,7 +118,7 @@ class VetroStateCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: const BorderRadius.all(Radius.circular(20)),
+        borderRadius: AppRack.freeShape,
         border: Border.all(color: context.colors.borderLight),
       ),
       child: Padding(
@@ -201,7 +202,7 @@ class CompactEmptyState extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: c.surface,
-          borderRadius: const BorderRadius.all(Radius.circular(20)),
+          borderRadius: AppRack.freeShape,
           border: Border.all(color: c.borderLight),
         ),
         child: Padding(

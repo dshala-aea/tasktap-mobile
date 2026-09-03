@@ -148,7 +148,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.Y,
-        foregroundColor: p.ink,
+        foregroundColor: p.brandOn,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
@@ -245,7 +245,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // ── FAB ────────────────────────────────────────────────────────────────
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: AppColors.Y,
-      foregroundColor: p.ink,
+      foregroundColor: p.brandOn,
       elevation: 2,
     ),
 

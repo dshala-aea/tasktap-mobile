@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'app_button.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -80,7 +81,7 @@ class _PurposeSheet extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: c.surface,
-            borderRadius: const BorderRadius.all(Radius.circular(20)),
+            borderRadius: AppRack.freeShape,
             border: Border.all(color: c.borderLight),
           ),
           child: Padding(
