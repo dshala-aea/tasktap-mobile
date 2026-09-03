@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_vetro_palette.dart';
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -20,8 +21,9 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // An OverlayEntry, not ScaffoldMessenger: a SnackBar is queued and owned by the nearest Scaffold,
 // which is exactly why every call site above needed its own `context.colors.X` background pick —
 // there is no single shared place those lived. An overlay sits above the whole app, is not tied
-// to any one Scaffold, and reads `context.colors` for its own styling regardless of which screen
-// called it from.
+// to any one Scaffold, and reads `context.colors` for its own flat-sheet styling (and
+// `context.vetro` for its tone accents — the semantic status colors, a separate system from the
+// Vetro material this widget itself no longer uses) regardless of which screen called it from.
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum ToastTone { info, success, warning, error }
@@ -177,28 +179,34 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
     widget.onDismissed();
   }
 
-  ({Color accent, Color accentBg, IconData icon}) _toneStyle(AppPalette p) => switch (widget.tone) {
-    ToastTone.success => (
-      accent: p.green,
-      accentBg: p.green.withAlpha(31),
-      icon: LucideIcons.checkCircle2,
-    ),
-    ToastTone.warning => (
-      accent: p.amber,
-      accentBg: p.amber.withAlpha(31),
-      icon: LucideIcons.alertTriangle,
-    ),
-    ToastTone.error => (accent: p.red, accentBg: p.red.withAlpha(31), icon: LucideIcons.xCircle),
-    ToastTone.info => (
-      accent: AppColors.Y,
-      accentBg: AppColors.Y.withAlpha(31),
-      icon: LucideIcons.alertCircle,
-    ),
-  };
+  ({Color accent, Color accentBg, IconData icon}) _toneStyle(AppVetroPalette v) =>
+      switch (widget.tone) {
+        ToastTone.success => (
+          accent: v.statusGood,
+          accentBg: v.statusGoodBg,
+          icon: LucideIcons.checkCircle2,
+        ),
+        ToastTone.warning => (
+          accent: v.statusWarn,
+          accentBg: v.statusWarnBg,
+          icon: LucideIcons.alertTriangle,
+        ),
+        ToastTone.error => (
+          accent: v.statusBad,
+          accentBg: v.statusBadBg,
+          icon: LucideIcons.xCircle,
+        ),
+        ToastTone.info => (
+          accent: AppColors.Y,
+          accentBg: AppColors.Y.withAlpha(31),
+          icon: LucideIcons.alertCircle,
+        ),
+      };
 
   @override
   Widget build(BuildContext context) {
-    final style = _toneStyle(context.colors);
+    final v = context.vetro;
+    final style = _toneStyle(v);
     // Used to skip navClearance's 74px on the theory that a brief toast "slightly overlapping"
     // the floating nav pill on root-tab screens was a smaller cost than dead space on the
     // full-screen routes that have no nav. In practice the overlap wasn't slight: both this card
