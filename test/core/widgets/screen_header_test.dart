@@ -12,6 +12,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/widgets/screen_header.dart';
 
 void main() {
@@ -51,8 +52,11 @@ void main() {
         find.descendant(of: find.byType(HeaderIconBtn), matching: find.byType(Container)).first,
       );
       final decoration = container.decoration as BoxDecoration;
-      // AppRack.insetShape's machined square (radius 8) rather than glass mode's disc radius.
-      expect((decoration.borderRadius as BorderRadius?)?.topLeft, const Radius.circular(8));
+      // AppRack.insetShape's machined square rather than glass mode's disc radius.
+      expect(
+        (decoration.borderRadius as BorderRadius?)?.topLeft,
+        Radius.circular(AppRack.insetRadius),
+      );
     });
   });
 

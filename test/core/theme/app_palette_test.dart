@@ -286,8 +286,10 @@ void main() {
 
       expect(
         assets,
-        hasLength(8),
-        reason: 'Sora 400/600/700 + Manrope 400/500/600/700 + Inter (variable, Vetro)',
+        hasLength(12),
+        reason:
+            'Sora 400/600/700 + Manrope 400/500/600/700 + Inter (variable, Vetro) + Archivo '
+            '(variable) + Archivo Narrow (variable) + IBM Plex Mono 400/500 (Il Documento)',
       );
       for (final a in assets) {
         expect(File(a).existsSync(), isTrue, reason: '$a is declared but missing');

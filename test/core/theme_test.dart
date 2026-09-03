@@ -225,8 +225,8 @@ void main() {
   });
 
   group('AppColors', () {
-    test('brand accent Y is safety orange #FF7A2E', () {
-      expect(AppColors.Y, equals(const Color(0xFFFF7A2E)));
+    test('brand accent Y is stamp red #C03221', () {
+      expect(AppColors.Y, equals(const Color(0xFFC03221)));
     });
 
     test('brand alias equals Y', () {
@@ -257,12 +257,12 @@ void main() {
       expect(AppColors.CYAN, equals(const Color(0xFF06AED5)));
     });
 
-    test('BG1 is rgb(250,250,250)', () {
-      expect(AppColors.BG1, equals(const Color(0xFFFAFAFA)));
+    test('BG1 is rgb(241,238,231) — the desk', () {
+      expect(AppColors.BG1, equals(const Color(0xFFF1EEE7)));
     });
 
-    test('DIV is rgb(212,212,212)', () {
-      expect(AppColors.DIV, equals(const Color(0xFFD4D4D4)));
+    test('DIV is rgb(222,217,206) — the one hairline', () {
+      expect(AppColors.DIV, equals(const Color(0xFFDED9CE)));
     });
 
     test('SH shadow list is non-empty', () {

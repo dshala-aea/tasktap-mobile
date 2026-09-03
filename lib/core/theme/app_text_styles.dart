@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 /// TaskTap typography.
 ///
-/// Display / titles → Sora (FD).
-/// Body / labels → Manrope (FB).
+/// Display / titles → Archivo Narrow.
+/// Body / labels → Archivo.
 /// Fallback → Inter (FA, system).
 ///
 /// **These carry no colour.** They used to bake `AppColors.DARK` (and `MUTED` for the two
@@ -13,53 +13,69 @@ import 'package:flutter/material.dart';
 /// ink. A call site that needs something other than ink still says so with `copyWith`, exactly as
 /// before.
 abstract final class AppTextStyles {
-  // ── Sora — display / headings ──────────────────────────────────────────
+  // ── Archivo Narrow — display / headings ──────────────────────────────────
 
-  static TextStyle get displayLarge =>
-      TextStyle(fontFamily: 'Inter', fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5);
+  static TextStyle get displayLarge => TextStyle(
+    fontFamily: 'Archivo Narrow',
+    fontSize: 32,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.5,
+  );
 
-  static TextStyle get displayMedium =>
-      TextStyle(fontFamily: 'Inter', fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.3);
+  static TextStyle get displayMedium => TextStyle(
+    fontFamily: 'Archivo Narrow',
+    fontSize: 26,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.3,
+  );
 
-  static TextStyle get headlineLarge =>
-      TextStyle(fontFamily: 'Inter', fontSize: 22, fontWeight: FontWeight.w600, letterSpacing: -0.2);
+  static TextStyle get headlineLarge => TextStyle(
+    fontFamily: 'Archivo Narrow',
+    fontSize: 22,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.2,
+  );
 
-  static TextStyle get headlineMedium =>
-      TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.1);
+  static TextStyle get headlineMedium => TextStyle(
+    fontFamily: 'Archivo Narrow',
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.1,
+  );
 
   static TextStyle get titleLarge =>
-      TextStyle(fontFamily: 'Inter', fontSize: 16, fontWeight: FontWeight.w600);
+      TextStyle(fontFamily: 'Archivo Narrow', fontSize: 16, fontWeight: FontWeight.w600);
 
   static TextStyle get titleMedium =>
-      TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.w600);
+      TextStyle(fontFamily: 'Archivo Narrow', fontSize: 14, fontWeight: FontWeight.w600);
 
-  // ── Manrope — body / labels ────────────────────────────────────────────
+  // ── Archivo — body / labels ───────────────────────────────────────────
 
   static TextStyle get bodyLarge =>
-      TextStyle(fontFamily: 'Inter', fontSize: 16, fontWeight: FontWeight.w400);
+      TextStyle(fontFamily: 'Archivo', fontSize: 16, fontWeight: FontWeight.w400);
 
   static TextStyle get bodyMedium =>
-      TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.w400);
+      TextStyle(fontFamily: 'Archivo', fontSize: 14, fontWeight: FontWeight.w400);
 
   static TextStyle get bodySmall =>
-      TextStyle(fontFamily: 'Inter', fontSize: 12, fontWeight: FontWeight.w400);
+      TextStyle(fontFamily: 'Archivo', fontSize: 12, fontWeight: FontWeight.w400);
 
   static TextStyle get labelLarge => TextStyle(
-    fontFamily: 'Inter',
+    fontFamily: 'Archivo',
     fontSize: 14,
     fontWeight: FontWeight.w600,
     letterSpacing: 0.2,
   );
 
   static TextStyle get labelMedium => TextStyle(
-    fontFamily: 'Inter',
+    fontFamily: 'Archivo',
     fontSize: 12,
     fontWeight: FontWeight.w600,
     letterSpacing: 0.3,
   );
 
   static TextStyle get labelSmall => TextStyle(
-    fontFamily: 'Inter',
+    fontFamily: 'Archivo',
     fontSize: 11,
     fontWeight: FontWeight.w500,
     letterSpacing: 0.4,
@@ -67,19 +83,19 @@ abstract final class AppTextStyles {
 
   // ── Convenience ────────────────────────────────────────────────────────
 
-  /// KPI figure — large Sora number for dashboards (Manrope 500/36 DARK per spec).
+  /// KPI figure — large Archivo Narrow number for dashboards (500/36 ink per spec).
   static TextStyle get kpi => TextStyle(
-    fontFamily: 'Inter',
+    fontFamily: 'Archivo Narrow',
     fontSize: 36,
     fontWeight: FontWeight.w500,
     letterSpacing: -1,
   );
 
   static TextStyle get caption =>
-      TextStyle(fontFamily: 'Inter', fontSize: 11, fontWeight: FontWeight.w400);
+      TextStyle(fontFamily: 'Archivo', fontSize: 11, fontWeight: FontWeight.w400);
 }
 
-/// Returns a [TextTheme] fully populated with Sora/Manrope styles.
+/// Returns a [TextTheme] fully populated with Archivo Narrow/Archivo styles.
 TextTheme buildTextTheme() {
   return TextTheme(
     displayLarge: AppTextStyles.displayLarge,
