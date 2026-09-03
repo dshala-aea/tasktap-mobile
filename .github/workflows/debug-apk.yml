@@ -1,0 +1,48 @@
+name: Debug APK Artifact
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  build-debug-apk:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    env:
+      OIDC_ISSUER: https://tasktap-auth.advantedgeautomation.com
+      OIDC_CLIENT_ID: 383100431603138562
+      OIDC_REDIRECT_URI: it.tasktap.app://callback
+      API_BASE_URL: https://tasktap-api.advantedgeautomation.com
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Keep in lockstep with ci.yml's pin — a different/floating version here previously
+          # hit an analyzer/Dart-SDK version-skew crash (visitDotShorthandPropertyAccess)
+          # inside build_runner. Bump deliberately, together with ci.yml's pin, not
+          # independently.
+          flutter-version: '3.44.4'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Build debug APK
+        run: |
+          flutter build apk --debug \
+            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
+            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
+            --dart-define=API_BASE_URL="$API_BASE_URL"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tasktap-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
