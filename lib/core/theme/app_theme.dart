@@ -21,6 +21,10 @@ import 'app_vetro_palette.dart';
 ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   final isDark = brightness == Brightness.dark;
   final p = isDark ? AppPalette.dark : AppPalette.light;
+  // Il Documento's AppPalette.shadow is empty (DESIGN.md bans card shadows), so `.first` would
+  // throw here — these three slots are decorative shadow colours on surfaces that already render
+  // at elevation 0, so transparent is the correct empty-list fallback, not a workaround.
+  final shadowColor = p.shadow.isEmpty ? Colors.transparent : p.shadow.first.color;
 
   final colorScheme = ColorScheme(
     brightness: brightness,
@@ -46,7 +50,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     onSurfaceVariant: p.inkFaint,
     outline: p.borderMedium,
     outlineVariant: p.borderLight,
-    shadow: p.shadow.first.color,
+    shadow: shadowColor,
     scrim: Color(0x80000000),
     inverseSurface: p.surfaceInverse,
     onInverseSurface: p.inkInverse,
@@ -77,7 +81,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       foregroundColor: p.ink,
       elevation: 0,
       scrolledUnderElevation: 1,
-      shadowColor: p.shadow.first.color,
+      shadowColor: shadowColor,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: AppTextStyles.titleLarge.copyWith(color: p.ink),
       // Status-bar icons are the inverse of the bar behind them.
@@ -110,7 +114,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       }),
       height: AppSpacing.bottomNavHeight,
       elevation: 4,
-      shadowColor: p.shadow.first.color,
+      shadowColor: shadowColor,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
     ),
 

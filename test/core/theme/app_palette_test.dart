@@ -29,19 +29,22 @@ void main() {
   // pubspec.yaml, so buildAppTheme() constructs its TextTheme without touching the network. The
   // guard below fails if anything reintroduces the runtime package.
 
-  group('the light palette is exactly what shipped', () {
-    /// The migration renamed ~460 call sites from `AppColors.X` to `context.colors.y`. The one
-    /// thing that must not have happened is a value changing along the way: light mode is what
-    /// every user sees today and what every screenshot and manual check was done against.
-    test('every token still holds its old constant', () {
+  group('the light palette matches its Il Documento AppColors counterparts', () {
+    /// Il Documento repointed both token files (Task 1: `AppColors`, this task: `AppPalette`)
+    /// independently, from the same verified table. This pins that they landed on the same
+    /// values rather than silently drifting apart. `brandOn`/`shadow` are the two fields whose
+    /// *relationship* to AppColors changed on purpose in this pass (see their own doc comments):
+    /// `brandOn` is no longer "AppColors.DARK" — stamp red is dark enough for white text now —
+    /// and `shadow` has no AppColors counterpart at all, since DESIGN.md bans it outright.
+    test('every token maps to its AppColors counterpart', () {
       const p = AppPalette.light;
 
       expect(p.ink, AppColors.DARK);
       expect(p.inkMuted, AppColors.MUTED);
       expect(p.inkFaint, AppColors.FG2);
       expect(p.inkDisabled, AppColors.DIS);
-      expect(p.inkInverse, AppColors.WHITE);
-      expect(p.surface, AppColors.WHITE);
+      expect(p.inkInverse, AppColors.INV);
+      expect(p.surface, AppColors.SHEET);
       expect(p.surfaceInverse, AppColors.DARK);
       expect(p.bg1, AppColors.BG1);
       expect(p.bg2, AppColors.BG2);
@@ -57,8 +60,8 @@ void main() {
       expect(p.cyan, AppColors.CYAN);
       expect(p.red, AppColors.RED);
       expect(p.redSoft, AppColors.REDSOFT);
-      expect(p.brandOn, AppColors.DARK);
-      expect(p.shadow, AppColors.SH);
+      expect(p.brandOn, AppColors.INV);
+      expect(p.shadow, isEmpty);
     });
   });
 

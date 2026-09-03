@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/widgets/app_stepper.dart';
 
 /// Progress through a form, said once.
@@ -75,7 +76,7 @@ void main() {
       await tester.pumpWidget(_wrap(const AppStepper(steps: _steps, currentIndex: 1)));
 
       final label = tester.widget<Text>(find.text('Staff'));
-      expect(label.style?.color, const Color(0xFF363636));
+      expect(label.style?.color, AppPalette.light.ink);
     });
   });
 }

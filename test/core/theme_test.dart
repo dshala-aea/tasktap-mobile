@@ -57,9 +57,14 @@ void main() {
       expect(theme.colorScheme.primary, equals(AppColors.Y));
     });
 
-    testWidgets('onPrimary color is DARK for contrast', (tester) async {
+    testWidgets('onPrimary color is near-white for contrast on stamp red', (tester) async {
+      // Was AppColors.DARK under Cassetta's safety orange, which needed dark text. Stamp red (Il
+      // Documento's accent) is darker/more saturated — white-on-stamp clears 5.37:1 — so onPrimary
+      // now comes from AppPalette.light.brandOn, which is near-white. See AppPalette.brandOn's own
+      // doc comment.
       final theme = buildAppTheme();
-      expect(theme.colorScheme.onPrimary, equals(AppColors.DARK));
+      expect(theme.colorScheme.onPrimary, equals(AppPalette.light.brandOn));
+      expect(theme.colorScheme.onPrimary, equals(AppColors.INV));
     });
 
     testWidgets('brightness is light', (tester) async {
