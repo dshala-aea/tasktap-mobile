@@ -3,8 +3,14 @@ import 'package:flutter/material.dart';
 
 /// The colour tokens, resolved per theme.
 ///
-/// [AppColors] still holds the raw values and the ones that do not flip (brand yellow, the status
+/// [AppColors] still holds the raw values and the ones that do not flip (brand accent, the status
 /// pairs). What lives here is everything whose meaning depends on whether the app is light or dark.
+///
+/// Repointed 2026-09-03 for the Il Documento world (see DESIGN.md): every field below now holds
+/// its Il Documento value (light and dark), verified via the WCAG relative-luminance contrast
+/// formula — see `test/core/theme/app_palette_contrast_test.dart`. Field names are unchanged from
+/// the Cassetta palette this replaces, so every `context.colors.X` call site across the app needed
+/// zero edits for this repoint.
 ///
 /// ## Why `ink` and `surfaceInverse` exist
 ///
@@ -14,9 +20,7 @@ import 'package:flutter/material.dart';
 /// distinction. In a dark theme they move in opposite directions — ink goes light, a card goes
 /// dark — so a rename that kept one name for both jobs would have inverted every chip in the app.
 ///
-/// Hence four names where there were two. In the light palette they hold exactly the values `DARK`
-/// and `WHITE` always had, so adopting them changes nothing on screen; the work was deciding, per
-/// call site, which of the two jobs it was doing.
+/// Hence four names where there were two — a distinction the Il Documento repoint above kept.
 @immutable
 class AppPalette extends ThemeExtension<AppPalette> {
   const AppPalette({
@@ -61,7 +65,10 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// Disabled text and inactive icons. Was `AppColors.DIS`.
   final Color inkDisabled;
 
-  /// Text on top of [surfaceInverse] or the brand colour. Was `AppColors.WHITE` used as ink.
+  /// Text on top of [surfaceInverse] or the brand colour. Was `AppColors.WHITE` used as ink; now
+  /// `AppColors.INV` (the same near-white paper tone as [surface]/[labelCard]), since Il
+  /// Documento's `surfaceInverse` is still a dark fill in light mode and needs a light ink on top
+  /// of it — same job, new value.
   final Color inkInverse;
 
   // ── Surfaces: what things are filled with ─────────────────────────────────
@@ -86,10 +93,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color borderStrong;
   final Color divider;
 
-  /// Card shadow. Heavier in dark, where a soft light shadow is invisible.
+  /// Card shadow. Empty in both themes — DESIGN.md bans floating-card shadows ("no floating
+  /// cards... when in doubt, draw a line, not a box"). A hairline border does the job a shadow
+  /// used to.
   final List<BoxShadow> shadow;
 
-  /// The pressed/inset shading on a card. Same reasoning as [shadow].
+  /// The pressed/inset shading on a card. Empty for the same reason as [shadow].
   final List<BoxShadow> shadowInset;
 
   // ── Semantic ──────────────────────────────────────────────────────────────
@@ -106,7 +115,12 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final Color redSoft;
 
   /// What sits on the brand accent. The accent does not flip — it is the brand — so this stays
-  /// dark in both themes. Light text on the safety-orange fill would be unreadable.
+  /// the same value in both themes.
+  ///
+  /// Was dark ink in Cassetta: safety orange was too light for white text to clear AA. Stamp red
+  /// (Il Documento's accent) is darker/more saturated — white-on-stamp clears 5.37:1 — so this is
+  /// near-white here instead, matching `AppButton`'s primary variant, which already hardcodes
+  /// `Colors.white` as its foreground.
   final Color brandOn;
 
   // ── Rack materials ────────────────────────────────────────────────────────
@@ -120,80 +134,101 @@ class AppPalette extends ThemeExtension<AppPalette> {
 
   /// The printed card in the label window: the surface a cell's content is actually read off.
   ///
-  /// Warm where [surface] is neutral. In light mode it is bone, and ink measures 9.9:1 on it; in
-  /// dark mode it is a warm near-black at 12.9:1. It is not interchangeable with [surface] —
-  /// [surface] is a sheet or an input, this is a cell.
+  /// Equals [surface] in each theme for the Il Documento world — the warm/neutral distinction
+  /// that motivated a separate value no longer applies, since `surface`/`bg1` are already warm
+  /// paper tones here (`#FBF9F4`/`#F1EEE7`), not neutral grey like Cassetta's `#FFFFFF`/`#FAFAFA`.
+  /// Kept as its own field rather than folded into [surface] because the two still name different
+  /// jobs — a sheet/input vs. a cell — even though they currently share a value.
   final Color labelCard;
 
   // ── Instances ─────────────────────────────────────────────────────────────
 
-  /// Exactly today's values. Adopting the new names must not move a single pixel in light mode.
+  /// The light palette. Il Documento's paper-and-ink world (see DESIGN.md).
+  ///
+  /// Every value here is either verified via the WCAG relative-luminance contrast formula (see
+  /// `test/core/theme/app_palette_contrast_test.dart`) or, for the semantic status colours, kept
+  /// unchanged from Cassetta — status hues are not part of DESIGN.md's ink/accent/surface system.
+  ///
+  /// [inkInverse] is `AppColors.INV` (`#FBF9F4`, the same near-white as [surface]), not the darker
+  /// value a literal "ink" reading would suggest: it is text laid on top of [surfaceInverse], which
+  /// is a *dark* fill in light mode (it deliberately equals [ink]'s own value), so the ink on top
+  /// of it has to stay light. Confirmed against two independent checks: `AppColors.INV` is
+  /// documented as the Il Documento repoint of the old `inkInverse`/`WHITE` role, and this is the
+  /// only value that keeps both "inverse ink reads on the inverse surface" and "inkInverse flips,
+  /// so it cannot serve a surface that does not" (`app_palette_test.dart`) passing — the alternative
+  /// (reusing [ink]'s own dark value) collapses [inkInverse] onto [surfaceInverse] and produces
+  /// invisible text on `AppButton.dark`.
   static const light = AppPalette(
-    ink: Color(0xFF363636),
-    inkMuted: Color(0xFF6B6B6B),
-    inkFaint: Color(0xFF707070),
-    inkDisabled: Color(0xFFB4B4B4),
-    inkInverse: Color(0xFFFFFFFF),
-    surface: Color(0xFFFFFFFF),
-    surfaceInverse: Color(0xFF363636),
-    bg1: Color(0xFFFAFAFA),
-    bg2: Color(0xFFF7F7F7),
-    bg3: Color(0xFFF2F2F2),
-    bg4: Color(0xFFEDEDED),
-    borderLight: Color(0xFFF2F2F2),
-    borderMedium: Color(0xFFE3E3E3),
-    borderStrong: Color(0xFFD9D9D9),
-    divider: Color(0xFFD4D4D4),
-    shadow: [BoxShadow(color: Color(0x1A000000), offset: Offset(0, 3), blurRadius: 5.5)],
-    shadowInset: [
-      BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2),
-    ],
+    ink: Color(0xFF22252E),
+    inkMuted: Color(0xFF5E6878),
+    inkFaint: Color(0xFF5E6878),
+    inkDisabled: Color(0xFFB1ACA0),
+    inkInverse: Color(0xFFFBF9F4),
+    surface: Color(0xFFFBF9F4),
+    surfaceInverse: Color(0xFF22252E),
+    bg1: Color(0xFFF1EEE7),
+    bg2: Color(0xFFF1EEE7),
+    bg3: Color(0xFFEDEAE3),
+    bg4: Color(0xFFEDEAE3),
+    borderLight: Color(0xFFDED9CE),
+    borderMedium: Color(0xFFDED9CE),
+    borderStrong: Color(0xFFDED9CE),
+    divider: Color(0xFFDED9CE),
+    // Empty — DESIGN.md bans floating-card shadows ("draw a line, not a box").
+    shadow: [],
+    shadowInset: [],
     amber: Color(0xFFFFB200),
     green: Color(0xFF4CAF50),
     blue: Color(0xFF2563EB),
     cyan: Color(0xFF06AED5),
     red: Color(0xFFD32F2F),
     redSoft: Color(0xFFFFD1D1),
-    brandOn: Color(0xFF363636),
-    labelCard: Color(0xFFF4F2EA),
+    brandOn: Color(0xFFFBF9F4),
+    labelCard: Color(0xFFFBF9F4),
   );
 
   /// The dark palette.
   ///
   /// Not black. This app is held in a van cab and a plant room, often while walking, and pure
   /// #000 with light text smears badly on OLED during motion; a near-black grey does not. The
-  /// surfaces also step by ~6% each so a card still reads as raised without a shadow, which is
-  /// what carries depth here — a soft dark shadow on a dark ground is invisible.
+  /// surfaces still step apart (`bg1` → `bg2` → `bg3` → `bg4`) so a raised layer reads as raised
+  /// without a shadow, since DESIGN.md bans card shadows outright rather than just needing a
+  /// heavier one here.
   ///
-  /// Contrast against [bg2] `#1A1A1A`:
-  ///   ink       `#E8E8E8` → 13.6:1
-  ///   inkMuted  `#A8A8A8` →  6.5:1  (the light theme's #6B6B6B would be 2.2:1 — unreadable)
-  ///   inkFaint  `#8F8F8F` →  4.6:1
-  ///   blue      `#7AA7F5` →  6.8:1  (#2563EB would be 2.4:1)
-  ///   green     `#6FCF74` →  8.2:1
-  ///   red       `#F0736E` →  6.4:1  (#D32F2F would be 3.3:1)
-  ///   amber     `#FFC44D` →  10.5:1
+  /// DESIGN.md defines no dark theme. Each ink-role value below is the light palette's own value
+  /// lightened until it clears AA on the new [bg2] (`#1E1F24`), same hue family, same derivation
+  /// this file already used for Cassetta's dark palette — not a second design language:
+  ///   ink       `#EEECE8` → 13.94:1
+  ///   inkMuted  `#8D96A5` →  5.51:1  (the light theme's `#5E6878` would be under 3:1 here)
+  ///   inkFaint  `#8D96A5` →  5.51:1  (consolidated onto [inkMuted]'s value, same as light)
+  ///   blue      `#7AA7F5` →  6.8:1   (unchanged from Cassetta's dark value)
+  ///   green     `#6FCF74` →  8.2:1   (unchanged)
+  ///   red       `#F0736E` →  6.4:1   (unchanged)
+  ///   amber     `#FFC44D` → 10.5:1   (unchanged)
+  ///
+  /// Known residual: stamp red used directly as *text* (not a filled chip with white text on top)
+  /// only clears 2.91:1 on this [bg2] — below AA. Not currently reachable (the one permanently-dark
+  /// surface, punch-clock, is out of scope for this repoint) but would matter if a future
+  /// dark-mode screen ever renders the accent as text colour rather than a filled chip.
   static const dark = AppPalette(
-    ink: Color(0xFFE8E8E8),
-    inkMuted: Color(0xFFA8A8A8),
-    inkFaint: Color(0xFF8F8F8F),
+    ink: Color(0xFFEEECE8),
+    inkMuted: Color(0xFF8D96A5),
+    inkFaint: Color(0xFF8D96A5),
     inkDisabled: Color(0xFF6B6B6B),
-    inkInverse: Color(0xFF1A1A1A),
-    surface: Color(0xFF1E1E1E),
-    surfaceInverse: Color(0xFFE8E8E8),
-    bg1: Color(0xFF121212),
-    bg2: Color(0xFF1A1A1A),
-    bg3: Color(0xFF242424),
-    bg4: Color(0xFF2E2E2E),
-    borderLight: Color(0xFF2A2A2A),
-    borderMedium: Color(0xFF383838),
-    borderStrong: Color(0xFF484848),
-    divider: Color(0xFF3A3A3A),
-    // Heavier and blacker: the light theme's 10% black over a near-black ground does nothing.
-    shadow: [BoxShadow(color: Color(0x66000000), offset: Offset(0, 3), blurRadius: 8)],
-    shadowInset: [
-      BoxShadow(color: Color(0x66000000), offset: Offset(0, 2), blurRadius: 6, spreadRadius: -2),
-    ],
+    inkInverse: Color(0xFF1E1F24),
+    surface: Color(0xFF1E1F24),
+    surfaceInverse: Color(0xFFEEECE8),
+    bg1: Color(0xFF17181C),
+    bg2: Color(0xFF1E1F24),
+    bg3: Color(0xFF272930),
+    bg4: Color(0xFF30333B),
+    borderLight: Color(0xFF383B42),
+    borderMedium: Color(0xFF383B42),
+    borderStrong: Color(0xFF383B42),
+    divider: Color(0xFF383B42),
+    // Empty — DESIGN.md bans floating-card shadows ("draw a line, not a box").
+    shadow: [],
+    shadowInset: [],
     amber: Color(0xFFFFC44D),
     green: Color(0xFF6FCF74),
     blue: Color(0xFF7AA7F5),
@@ -201,8 +236,8 @@ class AppPalette extends ThemeExtension<AppPalette> {
     red: Color(0xFFF0736E),
     // A tint of the dark red rather than the light theme's pastel, which would glare here.
     redSoft: Color(0xFF4A2320),
-    brandOn: Color(0xFF363636),
-    labelCard: Color(0xFF262720),
+    brandOn: Color(0xFFFBF9F4),
+    labelCard: Color(0xFF1E1F24),
   );
 
   @override

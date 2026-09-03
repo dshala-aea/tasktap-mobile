@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'app_button.dart';
-import 'vetro_card.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // askPermissionPurpose
@@ -78,70 +78,77 @@ class _PurposeSheet extends StatelessWidget {
       top: false,
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: VetroCard(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Grab handle: this is a sheet, and a sheet that cannot be seen to be draggable
-              // reads as a dialog with a missing dismiss.
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: c.borderMedium,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  Icon(icon, size: 20, color: c.ink),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      titolo,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: c.ink,
-                      ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: AppRack.freeShape,
+            border: Border.all(color: c.borderLight),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Grab handle: this is a sheet, and a sheet that cannot be seen to be draggable
+                // reads as a dialog with a missing dismiss.
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: c.borderMedium,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                motivo,
-                style: TextStyle(fontFamily: 'Inter', fontSize: 14, height: 1.45, color: c.ink),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                senzaDiEsso,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  height: 1.45,
-                  color: c.inkMuted,
                 ),
-              ),
-              const SizedBox(height: 20),
-              AppButton(
-                label: cta,
-                onPressed: () => Navigator.of(context).pop(true),
-                size: AppButtonSize.lg,
-              ),
-              const SizedBox(height: 8),
-              AppButton.secondary(
-                label: 'Non ora',
-                onPressed: () => Navigator.of(context).pop(false),
-                size: AppButtonSize.lg,
-              ),
-            ],
+                Row(
+                  children: [
+                    Icon(icon, size: 20, color: c.ink),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        titolo,
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: c.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  motivo,
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 14, height: 1.45, color: c.ink),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  senzaDiEsso,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    height: 1.45,
+                    color: c.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                AppButton(
+                  label: cta,
+                  onPressed: () => Navigator.of(context).pop(true),
+                  size: AppButtonSize.lg,
+                ),
+                const SizedBox(height: 8),
+                AppButton.secondary(
+                  label: 'Non ora',
+                  onPressed: () => Navigator.of(context).pop(false),
+                  size: AppButtonSize.lg,
+                ),
+              ],
+            ),
           ),
         ),
       ),

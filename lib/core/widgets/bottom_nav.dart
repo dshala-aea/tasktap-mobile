@@ -1,10 +1,8 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
-import '../theme/app_vetro_palette.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -25,21 +23,14 @@ class AppBottomNavItem {
   final String label;
 }
 
-/// Floating bottom navigation — Vetro's tint→tintStrong gradient marks the active tab, on a
-/// frosted [VetroGlass]-style bar that flips with the app theme, the same material every card and
-/// the header now share. This used to self-paint a permanently-dark CHARCOAL plate — a leftover
-/// of the pre-Vetro "Cassetta" shell metaphor, not something the actual approved Vetro reference
-/// (light frosted glass throughout, no dark chrome) ever called for.
+/// Floating bottom navigation — a flat Documento sheet (`context.colors.surface` + a hairline
+/// border), the same material every card and the header now share. `AppColors.Y` (stamp red, the
+/// one deliberately-saturated accent in the system) marks the active tab as a flat fill — no
+/// blur, no gradient.
 ///
-/// Replaced: safety-orange (`AppColors.Y`) active fill → the Vetro gradient every other active/
-/// primary surface in the app uses (VetroButton, the rapportino completion card, ...); the
-/// "machined latch" 4px corner + tick-engaged-above indicator → a single 12px pill (VetroButton's
-/// own compact radius) whose gradient fill *is* the state, the way a VetroCompartmentTile's or
-/// VetroButton's does — a second indicator on top of a colour change was the Cassetta metaphor's
-/// own idea, not one Vetro's state language needs. Sora → Inter, matching every other Vetro
-/// surface. The active gradient itself still reads from `AppVetroColors` (fixed): the pill's own
-/// colours are the one deliberately-saturated accent in the system and must not desaturate for
-/// dark mode the way `context.vetro.dark`'s tint does.
+/// This used to be Vetro: a frosted `BackdropFilter` bar with a tint→tintStrong gradient on the
+/// active pill. DESIGN.md's Il Documento system bans both (paper, not glass; a flat accent fill,
+/// not a gradient) the same way it does for every other surface in the app.
 ///
 /// ```dart
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
@@ -70,13 +61,12 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tabs = items ?? defaultItems;
-    final v = context.vetro;
     final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
-    return wide ? _buildRail(context, tabs, v) : _buildBar(context, tabs, v);
+    return wide ? _buildRail(context, tabs) : _buildBar(context, tabs);
   }
 
   /// Compact width (phone) — pixel-identical to this widget's pre-breakpoint implementation.
-  Widget _buildBar(BuildContext context, List<AppBottomNavItem> tabs, AppVetroPalette v) {
+  Widget _buildBar(BuildContext context, List<AppBottomNavItem> tabs) {
     return SafeArea(
       top: false,
       child: Padding(
@@ -89,47 +79,37 @@ class AppBottomNav extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             boxShadow: context.colors.shadow,
           ),
-          // RepaintBoundary around the clip+blur, not just inside it: without its own compositing
-          // layer here, this bar's BackdropFilter painted a second, unclipped copy of the active
-          // tab's gradient pill into the system gesture-nav strip below it — a real leak this
-          // device reproduced every launch, not a one-off frame.
-          child: RepaintBoundary(
-            child: ClipRRect(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: AppVetroColors.blurSigma,
-                  sigmaY: AppVetroColors.blurSigma,
-                ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: v.glassFill,
-                    border: Border.all(color: v.glassBorder, width: 0.5),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Flexible, so the bar fits the phone rather than the phone fitting the
-                        // bar. The tabs' natural width is padding + icon + the active label,
-                        // which came to two pixels more than a 5.9" screen has and drew the
-                        // striped overflow bar across the bottom of every screen. Turn the
-                        // system font size up and it is far more than two. Loose fit: a tab
-                        // still takes only what it needs when there is room.
-                        for (var i = 0; i < tabs.length; i++)
-                          Flexible(
-                            child: _NavTab(
-                              item: tabs[i],
-                              active: i == currentIndex,
-                              onTap: () => onTap(i),
-                            ),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.borderLight, width: 1),
+            ),
+            child: Builder(
+              builder: (context) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Flexible, so the bar fits the phone rather than the phone fitting the
+                      // bar. The tabs' natural width is padding + icon + the active label,
+                      // which came to two pixels more than a 5.9" screen has and drew the
+                      // striped overflow bar across the bottom of every screen. Turn the
+                      // system font size up and it is far more than two. Loose fit: a tab
+                      // still takes only what it needs when there is room.
+                      for (var i = 0; i < tabs.length; i++)
+                        Flexible(
+                          child: _NavTab(
+                            item: tabs[i],
+                            active: i == currentIndex,
+                            onTap: () => onTap(i),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
@@ -137,11 +117,11 @@ class AppBottomNav extends StatelessWidget {
     );
   }
 
-  /// ≥[wideBreakpoint] (tablet/expanded window) — same tabs, same gradient-active-state, laid out
+  /// ≥[wideBreakpoint] (tablet/expanded window) — same tabs, same flat-fill active-state, laid out
   /// as a fixed vertical rail along the leading edge instead of a floating horizontal pill. Placed
   /// by [HomeShell] in a `Row` beside the page content rather than `Scaffold.bottomNavigationBar`,
   /// which only ever puts a widget at the bottom regardless of what that widget renders internally.
-  Widget _buildRail(BuildContext context, List<AppBottomNavItem> tabs, AppVetroPalette v) {
+  Widget _buildRail(BuildContext context, List<AppBottomNavItem> tabs) {
     return SafeArea(
       right: false,
       child: Padding(
@@ -151,39 +131,33 @@ class AppBottomNav extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: context.colors.shadow,
           ),
-          child: RepaintBoundary(
-            child: ClipRRect(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: AppVetroColors.blurSigma,
-                  sigmaY: AppVetroColors.blurSigma,
-                ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: v.glassFill,
-                    border: Border.all(color: v.glassBorder, width: 0.5),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (var i = 0; i < tabs.length; i++)
-                          Padding(
-                            padding: EdgeInsets.only(bottom: i == tabs.length - 1 ? 0 : 14),
-                            child: _NavTab(
-                              item: tabs[i],
-                              active: i == currentIndex,
-                              onTap: () => onTap(i),
-                              vertical: true,
-                            ),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.borderLight, width: 1),
+            ),
+            child: Builder(
+              builder: (context) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < tabs.length; i++)
+                        Padding(
+                          padding: EdgeInsets.only(bottom: i == tabs.length - 1 ? 0 : 14),
+                          child: _NavTab(
+                            item: tabs[i],
+                            active: i == currentIndex,
+                            onTap: () => onTap(i),
+                            vertical: true,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
@@ -205,7 +179,7 @@ class _NavTab extends StatelessWidget {
   final VoidCallback onTap;
 
   /// The wide-window rail's orientation — icon-above-label instead of icon-beside-label. Same
-  /// tab, same active-state gradient/logic either way; only the [Flex] direction and the padding
+  /// tab, same active-state fill/logic either way; only the [Flex] direction and the padding
   /// axis it needs change.
   final bool vertical;
 
@@ -252,13 +226,7 @@ class _NavTab extends StatelessWidget {
               ? EdgeInsets.symmetric(horizontal: 10, vertical: active ? 10 : 12)
               : EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
           decoration: BoxDecoration(
-            gradient: active
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppVetroColors.tint, AppVetroColors.tintStrong],
-                  )
-                : null,
+            color: active ? AppColors.Y : null,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Flex(
@@ -268,9 +236,9 @@ class _NavTab extends StatelessWidget {
               Icon(
                 item.icon,
                 size: 18,
-                // The active tab sits on its own saturated gradient pill regardless of theme, so
-                // its icon stays white either way. Inactive sits directly on the flipping glass
-                // bar, so it reads `inkMuted` like every other secondary icon in the app.
+                // The active tab sits on its own saturated stamp-red fill regardless of theme, so
+                // its icon stays white either way. Inactive sits directly on the flipping flat
+                // sheet, so it reads `inkMuted` like every other secondary icon in the app.
                 color: active ? Colors.white : context.colors.inkMuted,
               ),
               if (active) ...[

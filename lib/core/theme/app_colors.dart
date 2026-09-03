@@ -11,82 +11,90 @@ abstract final class AppColors {
   // used at ~120 call sites as "the one accent", and repointing what they resolve to carries the
   // whole app's yellow-scarcity discipline over to the new hue without touching those call sites.
 
-  /// Y — safety orange #FF7A2E. The one accent: primary action, attention-required, selected.
+  /// Y — stamp red #C03221. The one accent: primary action, attention-required, selected.
   ///
-  /// A more saturated `#FF5A1F` measured first but only cleared 3.88:1 against [brandOn]
-  /// (`DARK`, #363636) — under the 4.5:1 AA floor this app holds itself to (see PRODUCT.md
-  /// Accessibility & Inclusion). `#FF7A2E` clears 4.65:1 with the same dark ink and still reads
-  /// unmistakably as safety orange, not amber (compare [AMBER] #FFB200 — distinct hue, not this).
-  static const Color Y = Color(0xFFFF7A2E);
+  /// Repointed 2026-09-03 for the Il Documento world (see DESIGN.md) — Cassetta's safety orange
+  /// gives way to a stamp/seal red, the one recurring color mark of a paper-and-ink system.
+  /// `#C03221` clears 4.87:1 against `BG1` (desk, `#F1EEE7`) and 5.37:1 against `SHEET`
+  /// (`#FBF9F4`) — both above the 4.5:1 AA floor this app holds itself to (see PRODUCT.md
+  /// Accessibility & Inclusion). Values verified via the WCAG relative-luminance formula.
+  static const Color Y = Color(0xFFC03221);
 
-  /// YDark — darker orange, for pressed/gradient-adjacent states.
-  static const Color YDark = Color(0xFFD9600F);
+  /// YDark — darker stamp red, for pressed/gradient-adjacent states.
+  static const Color YDark = Color(0xFF9D2A1B);
 
-  /// YSoft — translucent orange rgba(255,122,46,0.20).
-  static const Color YSoft = Color(0x33FF7A2E);
+  /// YSoft — translucent stamp red rgba(192,50,33,0.20).
+  static const Color YSoft = Color(0x33C03221);
 
   // ── Ink ─────────────────────────────────────────────────────────────────
 
-  /// DARK #363636.
-  static const Color DARK = Color(0xFF363636);
+  /// DARK #22252E — Il Documento's carbon ink.
+  static const Color DARK = Color(0xFF22252E);
 
-  /// CHARCOAL — the case shell. Was a neutral #292929; nudged warmer to #2B2A24 for the Cassetta
-  /// world (gunmetal-black tool case, not a neutral studio black) at matching luminance — 0.0230
-  /// vs the original 0.0222, so every existing contrast relationship against this token holds.
-  static const Color CHARCOAL = Color(0xFF2B2A24);
+  /// CHARCOAL — consolidated onto the same carbon ink as [DARK] for the Il Documento world (see
+  /// DESIGN.md): one ink, not a separate case-shell shade. 13.21:1 on `BG1`, 14.55:1 on `SHEET`.
+  static const Color CHARCOAL = Color(0xFF22252E);
 
-  /// FG2 rgb(112,112,112).
-  static const Color FG2 = Color(0xFF707070);
+  /// FG2 — consolidated onto the same value as [MUTED] for the Il Documento world (see
+  /// DESIGN.md): one secondary-text value, not a separate step. 4.86:1 on `BG1`, 5.35:1 on
+  /// `SHEET`.
+  static const Color FG2 = Color(0xFF5E6878);
 
-  /// MUTED rgb(107,107,107) — secondary text on light surfaces.
+  /// MUTED — secondary text on light surfaces, Il Documento's slate.
   ///
-  /// Was `#908F8F`, which measured 3.23:1 on white and 2.88:1 on [BG3] — below the 4.5:1 WCAG AA
-  /// floor for normal-size text. It is baked into [AppTextStyles.caption] and `labelSmall` and
-  /// used directly in ~97 more places, so that single value was the app's largest source of
-  /// unreadable text: nearly every list row's second line. This app is read outdoors, in direct
-  /// sun, by someone who is not going to squint at it twice.
-  ///
-  /// `#6B6B6B` clears AA on both surfaces the app actually uses (5.33:1 on white, 4.76:1 on BG3).
-  /// `#707070` — the obvious "reuse FG2" answer — passes on white but still fails at 4.42:1 on
-  /// BG3, so it is not enough.
-  static const Color MUTED = Color(0xFF6B6B6B);
+  /// Repointed 2026-09-03 for the Il Documento world (see DESIGN.md). `#5E6878` clears AA on
+  /// both surfaces the app actually uses (4.86:1 on `BG1`/desk, 5.35:1 on `SHEET`). This app is
+  /// read outdoors, in direct sun, by someone who is not going to squint at it twice.
+  static const Color MUTED = Color(0xFF5E6878);
 
-  /// DIS rgb(180,180,180).
-  static const Color DIS = Color(0xFFB4B4B4);
+  /// DIS rgb(177,172,160) — disabled text is AA-exempt, no contrast floor applies.
+  static const Color DIS = Color(0xFFB1ACA0);
 
-  /// INV rgb(242,242,242).
-  static const Color INV = Color(0xFFF2F2F2);
+  /// INV rgb(251,249,244) — repointed to [SHEET]'s value for the Il Documento world.
+  static const Color INV = Color(0xFFFBF9F4);
 
   /// WHITE.
   static const Color WHITE = Color(0xFFFFFFFF);
 
   // ── Surfaces ─────────────────────────────────────────────────────────────
 
-  /// BG1 rgb(250,250,250).
-  static const Color BG1 = Color(0xFFFAFAFA);
+  /// BG1 rgb(241,238,231) — the desk. DESIGN.md's page ground for the Il Documento world.
+  static const Color BG1 = Color(0xFFF1EEE7);
 
-  /// BG2 rgb(247,247,247).
-  static const Color BG2 = Color(0xFFF7F7F7);
+  /// BG2 — consolidated onto [BG1] for the Il Documento world (see DESIGN.md): the old four-step
+  /// background scale collapses onto DESIGN.md's two named surfaces (desk/sheet).
+  static const Color BG2 = Color(0xFFF1EEE7);
 
-  /// BG3 rgb(242,242,242).
-  static const Color BG3 = Color(0xFFF2F2F2);
+  /// BG3 rgb(237,234,227) — the muted fill. DESIGN.md's one named `--muted` (input/muted fill).
+  /// 12.74:1 against ink.
+  static const Color BG3 = Color(0xFFEDEAE3);
 
-  /// BG4 rgb(237,237,237).
-  static const Color BG4 = Color(0xFFEDEDED);
+  /// BG4 — consolidated onto [BG3] for the Il Documento world (see DESIGN.md): same flattening
+  /// as [BG2]/[BG1].
+  static const Color BG4 = Color(0xFFEDEAE3);
+
+  /// The sheet surface — a card, a form panel, an input fill's raised state. Distinct from [BG1]
+  /// (the page ground/desk) — DESIGN.md's two named surfaces, not previously distinguished in
+  /// this token set (BG1-4 were four steps of the same ground).
+  static const Color SHEET = Color(0xFFFBF9F4);
 
   // ── Borders ──────────────────────────────────────────────────────────────
+  //
+  // BL/BM/BS/DIV consolidate onto one hairline value for the Il Documento world (see DESIGN.md):
+  // "hairlines do the work... when in doubt, draw a line, not a box" — the old three-step border
+  // scale doesn't have a DESIGN.md equivalent, so all four collapse onto its one named `--border`.
 
-  /// BL rgb(242,242,242) — lightest border.
-  static const Color BL = Color(0xFFF2F2F2);
+  /// BL rgb(222,217,206) — the one hairline border/divider value.
+  static const Color BL = Color(0xFFDED9CE);
 
-  /// BM rgb(227,227,227).
-  static const Color BM = Color(0xFFE3E3E3);
+  /// BM — consolidated onto the same hairline value as [BL].
+  static const Color BM = Color(0xFFDED9CE);
 
-  /// BS rgb(217,217,217).
-  static const Color BS = Color(0xFFD9D9D9);
+  /// BS — consolidated onto the same hairline value as [BL].
+  static const Color BS = Color(0xFFDED9CE);
 
-  /// DIV rgb(212,212,212) — divider.
-  static const Color DIV = Color(0xFFD4D4D4);
+  /// DIV — consolidated onto the same hairline value as [BL]. Divider.
+  static const Color DIV = Color(0xFFDED9CE);
 
   // ── Semantic ─────────────────────────────────────────────────────────────
 

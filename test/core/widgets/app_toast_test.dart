@@ -1,6 +1,10 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/app_toast.dart';
 
 Widget _buildApp(void Function(BuildContext) captureContext) {
@@ -92,5 +96,75 @@ void main() {
 
     expect(tapped, isTrue);
     expect(find.text('Salvato'), findsNothing);
+  });
+
+  group('tone colors come from AppVetroPalette, not AppPalette', () {
+    // Regression coverage: app_toast.dart's tone → color mapping was briefly (and wrongly)
+    // repointed from AppVetroPalette to AppPalette's green/amber/red fields before being reverted.
+    // Those two sources carry materially different hex values, so pinning the icon color to the
+    // vetro status tokens (and asserting it away from the AppPalette ones) would fail if that swap
+    // ever comes back.
+    testWidgets('success uses vetro statusGood', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(_buildApp((c) => ctx = c));
+      showAppToast(
+        ctx,
+        message: 'ok',
+        tone: ToastTone.success,
+        duration: const Duration(seconds: 10),
+      );
+      await tester.pump();
+
+      final icon = tester.widget<Icon>(find.byIcon(LucideIcons.checkCircle2));
+      expect(icon.color, equals(AppVetroPalette.light.statusGood));
+      expect(icon.color, isNot(equals(AppPalette.light.green)));
+    });
+
+    testWidgets('warning uses vetro statusWarn', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(_buildApp((c) => ctx = c));
+      showAppToast(
+        ctx,
+        message: 'attenzione',
+        tone: ToastTone.warning,
+        duration: const Duration(seconds: 10),
+      );
+      await tester.pump();
+
+      final icon = tester.widget<Icon>(find.byIcon(LucideIcons.alertTriangle));
+      expect(icon.color, equals(AppVetroPalette.light.statusWarn));
+      expect(icon.color, isNot(equals(AppPalette.light.amber)));
+    });
+
+    testWidgets('error uses vetro statusBad', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(_buildApp((c) => ctx = c));
+      showAppToast(
+        ctx,
+        message: 'errore',
+        tone: ToastTone.error,
+        duration: const Duration(seconds: 10),
+      );
+      await tester.pump();
+
+      final icon = tester.widget<Icon>(find.byIcon(LucideIcons.xCircle));
+      expect(icon.color, equals(AppVetroPalette.light.statusBad));
+      expect(icon.color, isNot(equals(AppPalette.light.red)));
+    });
+
+    testWidgets('info uses the brand accent, not a status color', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(_buildApp((c) => ctx = c));
+      showAppToast(
+        ctx,
+        message: 'info',
+        tone: ToastTone.info,
+        duration: const Duration(seconds: 10),
+      );
+      await tester.pump();
+
+      final icon = tester.widget<Icon>(find.byIcon(LucideIcons.alertCircle));
+      expect(icon.color, equals(AppColors.Y));
+    });
   });
 }

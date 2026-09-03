@@ -57,9 +57,14 @@ void main() {
       expect(theme.colorScheme.primary, equals(AppColors.Y));
     });
 
-    testWidgets('onPrimary color is DARK for contrast', (tester) async {
+    testWidgets('onPrimary color is near-white for contrast on stamp red', (tester) async {
+      // Was AppColors.DARK under Cassetta's safety orange, which needed dark text. Stamp red (Il
+      // Documento's accent) is darker/more saturated — white-on-stamp clears 5.37:1 — so onPrimary
+      // now comes from AppPalette.light.brandOn, which is near-white. See AppPalette.brandOn's own
+      // doc comment.
       final theme = buildAppTheme();
-      expect(theme.colorScheme.onPrimary, equals(AppColors.DARK));
+      expect(theme.colorScheme.onPrimary, equals(AppPalette.light.brandOn));
+      expect(theme.colorScheme.onPrimary, equals(AppColors.INV));
     });
 
     testWidgets('brightness is light', (tester) async {
@@ -225,8 +230,8 @@ void main() {
   });
 
   group('AppColors', () {
-    test('brand accent Y is safety orange #FF7A2E', () {
-      expect(AppColors.Y, equals(const Color(0xFFFF7A2E)));
+    test('brand accent Y is stamp red #C03221', () {
+      expect(AppColors.Y, equals(const Color(0xFFC03221)));
     });
 
     test('brand alias equals Y', () {
@@ -257,12 +262,12 @@ void main() {
       expect(AppColors.CYAN, equals(const Color(0xFF06AED5)));
     });
 
-    test('BG1 is rgb(250,250,250)', () {
-      expect(AppColors.BG1, equals(const Color(0xFFFAFAFA)));
+    test('BG1 is rgb(241,238,231) — the desk', () {
+      expect(AppColors.BG1, equals(const Color(0xFFF1EEE7)));
     });
 
-    test('DIV is rgb(212,212,212)', () {
-      expect(AppColors.DIV, equals(const Color(0xFFD4D4D4)));
+    test('DIV is rgb(222,217,206) — the one hairline', () {
+      expect(AppColors.DIV, equals(const Color(0xFFDED9CE)));
     });
 
     test('SH shadow list is non-empty', () {

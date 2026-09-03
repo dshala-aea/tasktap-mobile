@@ -15,7 +15,7 @@ import 'empty_state.dart';
 /// code of 403 ...` learns nothing actionable; they need "something went wrong" and a retry, not
 /// a stack trace.
 ///
-/// Shares [EmptyState]'s glass-card shell so a failed fetch reads as one more member of the same
+/// Shares [EmptyState]'s flat-sheet shell so a failed fetch reads as one more member of the same
 /// visual family, not a jarring red departure from it. Unlike [UnavailableState] this one *is*
 /// red (`context.vetro.statusBad`) — a failed request is something the technician can act on by
 /// retrying, which is exactly the distinction that widget's own doc reserves the red channel for.
@@ -46,8 +46,8 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final c = context.colors;
+    final v = context.vetro;
 
     return Center(
       child: Padding(

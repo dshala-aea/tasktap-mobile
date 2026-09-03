@@ -102,6 +102,9 @@ dev_dependencies:
   # a transitive dep of path_provider already, declared directly for the same reason as above.
   path_provider_platform_interface: ^2.1.3
   plugin_platform_interface: ^2.1.8
+  # Golden-image testing (test/golden/) — CI compares against committed goldens, local runs
+  # render but don't fail on mismatch (font rendering varies by OS).
+  alchemist: ^0.12.1
 
   # App icon + splash generation
   # Run: flutter pub run flutter_launcher_icons
@@ -184,3 +187,22 @@ flutter:
     - family: Inter
       fonts:
         - asset: assets/fonts/InterVariable.ttf
+    # Archivo, Archivo Narrow and IBM Plex Mono, for the Il Documento restyle (2026-09-03). Same
+    # bundled-asset approach as Sora/Manrope/Inter above, for the same reason: `google_fonts` sits
+    # in `dependencies` unused (nothing in lib/ imports it) precisely because its runtime-download
+    # default is wrong for this offline-first app. Archivo and Archivo Narrow ship upstream only as
+    # variable fonts (like Inter above) — one file each, weight resolved against the file's own
+    # `wght` axis. IBM Plex Mono ships static per-weight files (like Sora/Manrope); only the
+    # weights DESIGN.md calls for (400/500) are shipped.
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/ArchivoVariable.ttf
+    - family: Archivo Narrow
+      fonts:
+        - asset: assets/fonts/ArchivoNarrowVariable.ttf
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-400.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-500.ttf
+          weight: 500

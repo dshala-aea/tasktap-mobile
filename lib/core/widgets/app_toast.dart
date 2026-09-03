@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_vetro_palette.dart';
@@ -13,15 +14,16 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 // showAppToast
 //
-// Replaces the app's ~33 ScaffoldMessenger.showSnackBar call sites with one shared, Vetro-styled
+// Replaces the app's ~33 ScaffoldMessenger.showSnackBar call sites with one shared, flat-Documento
 // floating toast — same call shape (a message + a tone that maps to the existing status colors)
 // so migrating a call site is mechanical, not a rewrite.
 //
 // An OverlayEntry, not ScaffoldMessenger: a SnackBar is queued and owned by the nearest Scaffold,
 // which is exactly why every call site above needed its own `context.colors.X` background pick —
 // there is no single shared place those lived. An overlay sits above the whole app, is not tied
-// to any one Scaffold, and reads `context.vetro` for its own styling regardless of which screen
-// (fixed-dark Timbra or a flipping light/dark one) called it from.
+// to any one Scaffold, and reads `context.colors` for its own flat-sheet styling (and
+// `context.vetro` for its tone accents — the semantic status colors, a separate system from the
+// Vetro material this widget itself no longer uses) regardless of which screen called it from.
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum ToastTone { info, success, warning, error }
@@ -177,13 +179,29 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
     widget.onDismissed();
   }
 
-  ({Color accent, Color accentBg, IconData icon}) _toneStyle(AppVetroPalette v) => switch (widget
-      .tone) {
-    ToastTone.success => (accent: v.statusGood, accentBg: v.statusGoodBg, icon: LucideIcons.checkCircle2),
-    ToastTone.warning => (accent: v.statusWarn, accentBg: v.statusWarnBg, icon: LucideIcons.alertTriangle),
-    ToastTone.error => (accent: v.statusBad, accentBg: v.statusBadBg, icon: LucideIcons.xCircle),
-    ToastTone.info => (accent: v.tint, accentBg: v.tint.withAlpha(31), icon: LucideIcons.alertCircle),
-  };
+  ({Color accent, Color accentBg, IconData icon}) _toneStyle(AppVetroPalette v) =>
+      switch (widget.tone) {
+        ToastTone.success => (
+          accent: v.statusGood,
+          accentBg: v.statusGoodBg,
+          icon: LucideIcons.checkCircle2,
+        ),
+        ToastTone.warning => (
+          accent: v.statusWarn,
+          accentBg: v.statusWarnBg,
+          icon: LucideIcons.alertTriangle,
+        ),
+        ToastTone.error => (
+          accent: v.statusBad,
+          accentBg: v.statusBadBg,
+          icon: LucideIcons.xCircle,
+        ),
+        ToastTone.info => (
+          accent: AppColors.Y,
+          accentBg: AppColors.Y.withAlpha(31),
+          icon: LucideIcons.alertCircle,
+        ),
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -218,8 +236,8 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
                   vertical: AppSpacing.md,
                 ),
                 decoration: BoxDecoration(
-                  color: v.glassFill,
-                  border: Border.all(color: v.glassBorder),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.borderLight),
                   borderRadius: AppRack.freeShape,
                   boxShadow: [
                     BoxShadow(

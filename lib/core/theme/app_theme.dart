@@ -21,6 +21,21 @@ import 'app_vetro_palette.dart';
 ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   final isDark = brightness == Brightness.dark;
   final p = isDark ? AppPalette.dark : AppPalette.light;
+  // Il Documento's AppPalette.shadow is empty (DESIGN.md bans shadows outright — "no floating
+  // cards... draw a line, not a box"), so `.first` would throw here without the empty-list
+  // fallback. `Colors.transparent` is not a behavior-preserving stand-in for the three call sites
+  // below — it is DESIGN.md's rule applied consistently everywhere a shadow colour used to live:
+  //   - appBarTheme.shadowColor: no visible change — the AppBar already renders at elevation 0.
+  //   - navigationBarTheme.shadowColor: a VISIBLE change — the bottom nav renders at elevation 4,
+  //     so this removes a real shadow that used to sit under it.
+  //   - colorScheme.shadow: Material's fallback shadow colour for *any* widget rendered at nonzero
+  //     elevation with no local shadowColor override — this app has no dialogTheme/bottomSheetTheme
+  //     override, so this also strips the shadow from every plain AlertDialog/showModalBottomSheet
+  //     app-wide, not just the two named slots above.
+  // All three are intentional consequences of DESIGN.md's blanket no-shadow rule, not scope creep
+  // limited to AppPalette's own three call sites — see task-1b-report.md's "Fix: shadow comment
+  // accuracy" note for the review that caught the original, inaccurate "no visible change" claim.
+  final shadowColor = p.shadow.isEmpty ? Colors.transparent : p.shadow.first.color;
 
   final colorScheme = ColorScheme(
     brightness: brightness,
@@ -46,7 +61,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     onSurfaceVariant: p.inkFaint,
     outline: p.borderMedium,
     outlineVariant: p.borderLight,
-    shadow: p.shadow.first.color,
+    shadow: shadowColor,
     scrim: Color(0x80000000),
     inverseSurface: p.surfaceInverse,
     onInverseSurface: p.inkInverse,
@@ -77,7 +92,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       foregroundColor: p.ink,
       elevation: 0,
       scrolledUnderElevation: 1,
-      shadowColor: p.shadow.first.color,
+      shadowColor: shadowColor,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: AppTextStyles.titleLarge.copyWith(color: p.ink),
       // Status-bar icons are the inverse of the bar behind them.
@@ -110,7 +125,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       }),
       height: AppSpacing.bottomNavHeight,
       elevation: 4,
-      shadowColor: p.shadow.first.color,
+      shadowColor: shadowColor,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
     ),
 
@@ -133,7 +148,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.Y,
-        foregroundColor: p.ink,
+        foregroundColor: p.brandOn,
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
@@ -230,7 +245,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // ── FAB ────────────────────────────────────────────────────────────────
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: AppColors.Y,
-      foregroundColor: p.ink,
+      foregroundColor: p.brandOn,
       elevation: 2,
     ),
 
