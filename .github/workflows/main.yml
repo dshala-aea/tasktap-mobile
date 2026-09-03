@@ -23,12 +23,19 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.2'
+          # Pinned to the version confirmed working in ci.yml (develop branch) — a floating/
+          # different pin here previously hit an analyzer/Dart-SDK version-skew crash
+          # (visitDotShorthandPropertyAccess) inside build_runner. Bump deliberately, together
+          # with ci.yml's pin, not independently.
+          flutter-version: '3.44.4'
           channel: stable
           cache: true
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Generate code (drift, riverpod)
+        run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build debug APK
         run: |
