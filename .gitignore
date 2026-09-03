@@ -23,3 +23,6 @@ Thumbs.db
 
 # Impeccable decision-page scratch state
 .impeccable/
+
+# Superpowers scratch state (brainstorm mockups, SDD workspaces)
+.superpowers/
