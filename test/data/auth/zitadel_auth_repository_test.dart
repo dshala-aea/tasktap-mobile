@@ -169,6 +169,98 @@ void main() {
     });
   });
 
+  group('cold start — structured AppAuth error that is not a real session failure', () {
+    // Regression: _restore() used to wipe the refresh token on ANY refreshSession() failure that
+    // wasn't literally NetworkError. flutter_appauth's native AppAuth SDK throws
+    // FlutterAppAuthPlatformException for a whole family of internal glitches (server hiccup, JSON
+    // deserialization failure, malformed token response) that have nothing to do with whether the
+    // refresh token itself is still good — AppAuth's own GeneralErrors category never populates the
+    // OAuth `error` field for these, only errorDescription (English text) does, and that text isn't
+    // guaranteed to contain any of the old code's network/socket/connection/host keywords. The old
+    // code would then fall through past NetworkError entirely, land on UnknownAuthError, and
+    // _restore() would wipe the token and force an interactive re-login the user never actually
+    // needed. See ZitadelAuthRepository._mapError/._restore doc comments for the full rationale.
+    setUp(() {
+      store[_refreshTokenKey] = 'rt-cached';
+      store[_cachedIdentityKey] = jsonEncode({
+        'id': 'u1',
+        'email': 'tech@tasktap.io',
+        'displayName': 'Tecnico',
+      });
+    });
+
+    test('a structured AppAuth error with no OAuth error code does NOT sign the user out',
+        () async {
+      when(() => appAuth.token(any())).thenThrow(
+        FlutterAppAuthPlatformException(
+          code: 'token_failed',
+          message: 'Failed to get token: [error: null, description: Server error]',
+          platformErrorDetails: FlutterAppAuthPlatformErrorDetails(
+            type: '0',
+            code: '4',
+            error: null,
+            errorDescription: 'Server error',
+          ),
+        ),
+      );
+
+      final repo = await restoredRepo();
+
+      expect(repo.currentUser, isNotNull);
+      expect(repo.currentUser!.id, 'u1');
+      expect(store[_refreshTokenKey], 'rt-cached');
+    });
+
+    test('an invalid_grant structured error DOES sign the user out, even with unrelated message text',
+        () async {
+      // Message text deliberately contains none of _mapError's string-matched keywords (no
+      // "invalid_grant"/"refresh"/"expired"/"network"/etc.) — proves classification comes from the
+      // structured platformErrorDetails.error field, not from sniffing e.toString().
+      when(() => appAuth.token(any())).thenThrow(
+        FlutterAppAuthPlatformException(
+          code: 'token_failed',
+          message: 'Failed to get token: something unexpected happened',
+          platformErrorDetails: FlutterAppAuthPlatformErrorDetails(
+            type: '2',
+            code: '9',
+            error: 'invalid_grant',
+            errorDescription: 'The refresh token is invalid or has been revoked',
+          ),
+        ),
+      );
+
+      final repo = await restoredRepo();
+
+      expect(repo.currentUser, isNull);
+      expect(store.containsKey(_refreshTokenKey), isFalse);
+      expect(store.containsKey(_cachedIdentityKey), isFalse);
+    });
+
+    test('a structured AppAuth error with an unrelated OAuth error code does NOT sign the user out',
+        () async {
+      // invalid_client/unauthorized_client etc. mean something is wrong with the app's own client
+      // registration, not that this specific refresh token is dead — must not be conflated with
+      // SessionExpired.
+      when(() => appAuth.token(any())).thenThrow(
+        FlutterAppAuthPlatformException(
+          code: 'token_failed',
+          message: 'Failed to get token: [error: invalid_client, description: null]',
+          platformErrorDetails: FlutterAppAuthPlatformErrorDetails(
+            type: '2',
+            code: '1',
+            error: 'invalid_client',
+            errorDescription: null,
+          ),
+        ),
+      );
+
+      final repo = await restoredRepo();
+
+      expect(repo.currentUser, isNotNull);
+      expect(store[_refreshTokenKey], 'rt-cached');
+    });
+  });
+
   group('cold start — network failure with nothing cached to fall back to', () {
     test('falls through to sign-out (no identity to show as signed-in)', () async {
       store[_refreshTokenKey] = 'rt-cached';

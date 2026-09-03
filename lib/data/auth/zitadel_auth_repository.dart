@@ -304,29 +304,35 @@ class ZitadelAuthRepository implements IAuthRepository {
 
   /// On startup, mint a fresh session from the stored refresh token (if any).
   ///
-  /// WHY network failures are not treated as sign-out (do not "simplify" this
+  /// WHY only [SessionExpired] triggers sign-out (do not "simplify" this
   /// away): this app is offline-first — clocking in, viewing cached tickets,
   /// etc. all work with zero network. If a technician's phone reboots on a
   /// job site with no signal, [refreshSession] will fail here with a
   /// [NetworkError] (see [_mapError]) purely because Zitadel is unreachable —
   /// that says *nothing* about whether the stored refresh token is still
-  /// good. Treating that the same as a real auth failure would wipe the
-  /// token and bounce the user to /login, which needs an interactive OIDC
-  /// browser round trip — which itself needs network. Net effect would be:
-  /// no signal on restart -> locked out of the entire app, including the
-  /// purely local features that have nothing to do with the network at all.
+  /// good. The same is true of a whole family of native AppAuth SDK glitches
+  /// (a server hiccup, a malformed token response, a JSON parsing failure)
+  /// that [_mapError] cannot always name precisely — none of them are proof
+  /// the refresh token itself is dead. Treating any of these the same as a
+  /// real auth failure would wipe the token and bounce the user to /login,
+  /// which needs an interactive OIDC browser round trip — which itself needs
+  /// network. Net effect would be: no signal (or any transient glitch) on
+  /// restart -> locked out of the entire app, including the purely local
+  /// features that have nothing to do with the network at all.
   ///
-  /// So a [NetworkError] here keeps the refresh token on disk and falls back
-  /// to the last-known identity (cached alongside it, tokens never included)
-  /// so the app can run signed-in-but-offline. [AuthReconnectWatcher] retries
-  /// the real refresh the moment connectivity returns (via the existing
+  /// So anything short of a confirmed [SessionExpired] keeps the refresh
+  /// token on disk and falls back to the last-known identity (cached
+  /// alongside it, tokens never included) so the app can run
+  /// signed-in-but-offline. [AuthReconnectWatcher] retries the real refresh
+  /// the moment connectivity returns (via the existing
   /// `connectivityProvider.onReconnect` hook — see
   /// `lib/data/auth/auth_reconnect_watcher.dart`); the ordinary 401 → silent
   /// refresh path in `AuthInterceptor` also naturally retries it on the next
-  /// API call. Only a *genuine* auth failure (invalid_grant, revoked,
-  /// expired-beyond-refresh — i.e. anything that is not a [NetworkError])
-  /// means the session is actually gone, and only then do we wipe the token
-  /// and sign out.
+  /// API call. Only [SessionExpired] — which [_mapError] only returns when
+  /// Zitadel has positively responded with the OAuth `invalid_grant` error
+  /// code, i.e. the refresh token really is revoked/expired/dead — means the
+  /// session is actually gone, and only then do we wipe the token and sign
+  /// out.
   Future<void> _restore() async {
     final refreshToken = await _storage.read(key: _refreshTokenKey);
     if (refreshToken == null || refreshToken.isEmpty) {
@@ -340,7 +346,7 @@ class ZitadelAuthRepository implements IAuthRepository {
       return;
     }
 
-    if (result.failure is NetworkError) {
+    if (result.failure is! SessionExpired) {
       final cached = await _readCachedIdentity();
       if (cached != null) {
         _emit(_offlineUserFrom(cached, refreshToken));
@@ -438,6 +444,24 @@ class ZitadelAuthRepository implements IAuthRepository {
   }
 
   AuthFailure _mapError(Object e) {
+    // Prefer flutter_appauth's structured error over string-sniffing e.toString() when it's
+    // available: `platformErrorDetails.error` is only ever populated from a real OAuth error
+    // response from the identity provider (AuthorizationException's OAUTH_TOKEN_ERRORS category on
+    // Android) — never from its GeneralErrors category (network/server/JSON/parsing glitches),
+    // which leaves `error` null and only sets a free-text `errorDescription`. Sniffing that text for
+    // keywords is exactly what let a native SDK hiccup get misclassified as SessionExpired before.
+    final structuredError = switch (e) {
+      FlutterAppAuthPlatformException(:final platformErrorDetails) => platformErrorDetails.error,
+      FlutterAppAuthUserCancelledException(:final platformErrorDetails) => platformErrorDetails.error,
+      _ => null,
+    };
+    if (structuredError == FlutterAppAuthOAuthError.invalidGrant) {
+      // The identity provider itself said the refresh token is dead — a positively confirmed
+      // session failure, not a guess. This is the only structured signal _restore() trusts enough
+      // to wipe the stored token.
+      return const SessionExpired();
+    }
+
     final msg = e.toString().toLowerCase();
     if (msg.contains('cancel')) {
       // User dismissed the browser — not a real error; surface benignly.
