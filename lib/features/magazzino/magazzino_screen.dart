@@ -207,8 +207,9 @@ class _MagazzinoBody extends ConsumerWidget {
                       label: 'Tutti',
                       active: activeCategory == null,
                       onTap: () {
-                        if (activeCategory != null)
+                        if (activeCategory != null) {
                           onCategoryChanged(activeCategory!);
+                        }
                       },
                     ),
                   ),
