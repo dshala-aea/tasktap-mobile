@@ -102,6 +102,9 @@ dev_dependencies:
   # a transitive dep of path_provider already, declared directly for the same reason as above.
   path_provider_platform_interface: ^2.1.3
   plugin_platform_interface: ^2.1.8
+  # Golden-image testing (test/golden/) — CI compares against committed goldens, local runs
+  # render but don't fail on mismatch (font rendering varies by OS).
+  alchemist: ^0.12.1
 
   # App icon + splash generation
   # Run: flutter pub run flutter_launcher_icons
