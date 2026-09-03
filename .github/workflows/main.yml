@@ -1,0 +1,46 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    env:
+      OIDC_ISSUER: https://tasktap-auth.advantedgeautomation.com
+      OIDC_CLIENT_ID: 383100431603138562
+      OIDC_REDIRECT_URI: it.tasktap.app://callback
+      API_BASE_URL: https://tasktap-api.advantedgeautomation.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.0'
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: |
+          flutter build apk --debug \
+            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
+            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
+            --dart-define=API_BASE_URL="$API_BASE_URL"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasktap-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
