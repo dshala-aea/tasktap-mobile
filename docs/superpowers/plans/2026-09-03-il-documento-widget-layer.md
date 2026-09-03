@@ -207,6 +207,170 @@ git commit -m "feat(theme): repoint tokens to Il Documento palette/type/radius"
 
 ---
 
+### Task 1b: `AppPalette` — repoint the theme-extension most widgets actually read
+
+**Added after Task 1 shipped.** Task 1's implementer found, correctly, that `AppColors` is not
+what most of the app reads for color — `context.colors` (used pervasively by `AppButton`,
+`AppCard`, and nearly everything else) resolves through `lib/core/theme/app_palette.dart`'s
+`AppPalette`, a **separate, hand-duplicated** token set (`AppPalette.light`/`.dark`, a
+`ThemeExtension`). Task 1 only repointed `AppColors`; this task repoints `AppPalette`, which is
+what actually cascades to the app. Without this task, Task 2's `AppCard`/`AppButton` rewrite would
+show stamp red on the primary button (reads `AppColors.Y` directly) while every secondary/dark/
+ghost/danger variant and every `AppCard` border still shows old Cassetta colors (reads
+`context.colors.*` → unrepointed `AppPalette`) — a visibly broken, half-migrated state.
+
+**Files:**
+- Modify: `lib/core/theme/app_palette.dart`
+- Test: `test/core/theme/app_palette_contrast_test.dart` (new file)
+
+**Interfaces:**
+- Produces: `AppPalette.light`/`AppPalette.dark`'s field VALUES change; field NAMES and the
+  `ThemeExtension` shape are unchanged — every `context.colors.X` call site across the app needs
+  zero edits.
+
+DESIGN.md defines no dark theme. Rather than leave dark mode broken or invent an unrelated look,
+the dark palette below was derived the same way this file's own existing dark palette was
+originally derived (documented in its own doc comments): lighten each light-mode ink-role color
+until it clears AA on the new dark ground, keep the same hue family, don't invent a second design
+language for dark mode. All values below were computed and verified via the WCAG contrast formula
+during plan-writing — trust them, don't re-derive.
+
+Real correction made in this pass, beyond a mechanical repoint: `brandOn` (text on the brand
+accent fill) was dark ink in Cassetta because safety orange was too light for white text to clear
+AA on. Stamp red is darker/more saturated — white-on-stamp clears 5.37:1 (verified) — so `brandOn`
+becomes near-white here, not dark ink. This also matches Task 2's `AppButton` code, which already
+hardcodes `Colors.white` as the primary variant's foreground; this task makes `AppPalette.brandOn`
+consistent with that rather than leaving a token that disagrees with the code that (in the
+concrete case) doesn't even read it.
+
+Also real: DESIGN.md's Rules explicitly ban card shadows ("no floating cards... draw a line, not a
+box") — `shadow`/`shadowInset` become empty lists, not just recolored.
+
+| Field | Light (new) | Dark (new) | Note |
+|---|---|---|---|
+| `ink` | `#22252E` | `#EEECE8` | dark clears 13.94:1 on `bg2` dark |
+| `inkMuted` | `#5E6878` | `#8D96A5` | dark clears 5.51:1 on `bg2` dark |
+| `inkFaint` | `#5E6878` | `#8D96A5` | consolidated onto `inkMuted`'s value — DESIGN.md has no third text tier (same consolidation Task 1 already applied to `AppColors.FG2`) |
+| `inkDisabled` | `#B1ACA0` | `#6B6B6B` (unchanged from today's dark value — disabled text is AA-exempt, no need to re-derive) |
+| `inkInverse` | `#22252E` | `#1E1F24` | text on `surfaceInverse` — same value as the new `ink`/`bg2`-dark pairing in each theme |
+| `surface` | `#FBF9F4` | `#1E1F24` | the sheet |
+| `surfaceInverse` | `#22252E` | `#EEECE8` | a deliberately-contrasting fill; equals `ink`'s value in each theme, same relationship the current light palette already has (`ink`==`surfaceInverse` conceptually swapped) |
+| `bg1` | `#F1EEE7` | `#17181C` | desk / deepest dark ground |
+| `bg2` | `#F1EEE7` | `#1E1F24` | consolidated onto `bg1` in light (DESIGN.md has two NAMED surfaces, not four steps — same consolidation Task 1 applied) |
+| `bg3` | `#EDEAE3` | `#272930` | muted fill |
+| `bg4` | `#EDEAE3` | `#30333B` | consolidated onto `bg3` in light |
+| `borderLight`/`borderMedium`/`borderStrong`/`divider` | `#DED9CE` (all four collapse to one hairline) | `#383B42` (all four collapse to one hairline) | DESIGN.md: "hairlines do the work... draw a line, not a box" |
+| `shadow` | `[]` | `[]` | DESIGN.md bans floating-card shadows |
+| `shadowInset` | `[]` | `[]` | same |
+| `amber`/`green`/`blue`/`cyan`/`red`/`redSoft` | **unchanged** from current light values | **unchanged** from current dark values | semantic status colors are not part of DESIGN.md's ink/accent/surface system — same "leave untouched" decision Task 1 already made for `AppColors.RED`/`GREEN`/`BLUE`/`CYAN`/`AMBER` |
+| `brandOn` | `#FBF9F4` | `#FBF9F4` | same value in both themes — the brand accent itself doesn't flip with theme, so neither does its foreground (see correction note above) |
+| `labelCard` | `#FBF9F4` | `#1E1F24` | equals `surface` in each theme — the warm/neutral distinction that motivated a separate `labelCard` no longer applies, since Il Documento's `surface`/`bg1` are already warm paper tones, not neutral grey (unlike Cassetta's `#FFFFFF`/`#FAFAFA`) |
+
+Known residual, not fixed by this task: stamp red used directly as **text** (not a button fill
+with white text on top) only clears 2.91:1 on the new dark `bg2` — below AA. This doesn't
+currently matter (punch-clock, the one permanently-dark surface in the app, is out of scope for
+this whole plan) but would matter if a future dark-mode screen ever renders the accent as text
+color rather than a filled chip. Noted here rather than silently left for someone to discover via
+a failed contrast check later.
+
+- [ ] **Step 1: Write the failing contrast test**
+
+```dart
+// test/core/theme/app_palette_contrast_test.dart
+import 'dart:math';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
+
+double _linearize(double v) => v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4).toDouble();
+
+double _luminance(Color c) =>
+    0.2126 * _linearize(c.r) + 0.7152 * _linearize(c.g) + 0.0722 * _linearize(c.b);
+
+double _contrast(Color a, Color b) {
+  final la = _luminance(a), lb = _luminance(b);
+  final lighter = la > lb ? la : lb;
+  final darker = la > lb ? lb : la;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+void main() {
+  group('AppPalette AA contrast — light', () {
+    test('ink clears 4.5:1 on bg2', () {
+      expect(_contrast(AppPalette.light.ink, AppPalette.light.bg2), greaterThanOrEqualTo(4.5));
+    });
+    test('inkMuted clears 4.5:1 on bg2', () {
+      expect(_contrast(AppPalette.light.inkMuted, AppPalette.light.bg2), greaterThanOrEqualTo(4.5));
+    });
+    test('inkMuted clears 4.5:1 on surface', () {
+      expect(_contrast(AppPalette.light.inkMuted, AppPalette.light.surface), greaterThanOrEqualTo(4.5));
+    });
+    test('brandOn clears 4.5:1 on the brand accent (0xFFC03221)', () {
+      expect(_contrast(AppPalette.light.brandOn, const Color(0xFFC03221)), greaterThanOrEqualTo(4.5));
+    });
+    test('shadow and shadowInset are empty — DESIGN.md bans floating-card shadows', () {
+      expect(AppPalette.light.shadow, isEmpty);
+      expect(AppPalette.light.shadowInset, isEmpty);
+    });
+  });
+
+  group('AppPalette AA contrast — dark', () {
+    test('ink clears 4.5:1 on bg2', () {
+      expect(_contrast(AppPalette.dark.ink, AppPalette.dark.bg2), greaterThanOrEqualTo(4.5));
+    });
+    test('inkMuted clears 4.5:1 on bg2', () {
+      expect(_contrast(AppPalette.dark.inkMuted, AppPalette.dark.bg2), greaterThanOrEqualTo(4.5));
+    });
+    test('brandOn clears 4.5:1 on the brand accent (0xFFC03221)', () {
+      expect(_contrast(AppPalette.dark.brandOn, const Color(0xFFC03221)), greaterThanOrEqualTo(4.5));
+    });
+    test('shadow and shadowInset are empty — DESIGN.md bans floating-card shadows', () {
+      expect(AppPalette.dark.shadow, isEmpty);
+      expect(AppPalette.dark.shadowInset, isEmpty);
+    });
+  });
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `flutter test test/core/theme/app_palette_contrast_test.dart`
+Expected: FAIL — current `AppPalette.light`/`.dark` still hold Cassetta values, `shadow`/
+`shadowInset` are non-empty, `brandOn` doesn't clear AA against the new stamp-red accent yet.
+
+- [ ] **Step 3: Apply the token values**
+
+In `lib/core/theme/app_palette.dart`, replace every field's value in both `static const light`
+and `static const dark` per the table above (keep the class structure, `copyWith`, `lerp`, and the
+`AppPaletteContext` extension completely unchanged — only the literal values inside the two
+`static const` instances change). Update the class-level and per-field doc comments that describe
+*why* a value is what it is (e.g. `brandOn`'s doc comment currently says light text would be
+unreadable on the brand fill — that's no longer true, replace it with the corrected reasoning from
+this task's own notes above). Do not touch `shadow`'s/`shadowInset`'s doc comments' explanation of
+*why dark needs heavier shadows* — replace both with a comment explaining they're empty now
+because DESIGN.md bans card shadows entirely, not because dark/light need different weights.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `flutter test test/core/theme/app_palette_contrast_test.dart`
+Expected: PASS — all assertions.
+
+Then run the full suite: `flutter test`. Task 1's 9 AppPalette-driven failures (documented in its
+report) should now pass, since this task is exactly what those failures were waiting on. If any
+of those 9 still fail, read the actual assertion — it may be pinned to an old literal value that
+also needs updating (matching the same "old-value pin" pattern Task 1's implementer already fixed
+5 instances of), not a sign this task's token values are wrong.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lib/core/theme/app_palette.dart test/core/theme/app_palette_contrast_test.dart
+git commit -m "feat(theme): repoint AppPalette to Il Documento — the layer context.colors actually reads"
+```
+
+---
+
 ### Task 2: `AppCard` and `AppButton` — retire their Vetro dependency
 
 **Files:**
