@@ -99,6 +99,42 @@ void main() {
       // fabrication the dashboard hero used to make with its literal '00:00:00'.
       expect(dto.duration, isNull);
     });
+
+    // Regression: an overnight session (start 20:02, end 06:10 next day) has startTime/endTime as
+    // bare time-of-day TimeSpans with no date attached — endTime is numerically SMALLER than
+    // startTime. A naive endTime-startTime subtraction gives -13:52 instead of +10:08. The backend
+    // (TicketWorkLog.DurationHours) already computes this correctly and sends it as durationHours;
+    // this DTO must use that value rather than recomputing it wrong from the bare time-of-day pair.
+    test('an overnight session uses the backend-computed durationHours, not a naive subtraction', () {
+      final dto = TicketWorkLogDto.fromJson({
+        'id': 'w1',
+        'ticketId': 't1',
+        'userId': 'u1',
+        'workDate': '2026-08-14T00:00:00Z',
+        'startTime': '20:02:00',
+        'endTime': '06:10:00',
+        'durationHours': 10.133333333333333,
+      });
+
+      expect(dto.duration, isNotNull);
+      expect(dto.duration!.isNegative, isFalse);
+      expect(dto.duration!.inMinutes, 608); // 10h08m
+    });
+
+    test('durationHours absent falls back to the naive same-day subtraction (existing behavior)', () {
+      // No durationHours in the payload at all — matches a same-day session, where the naive
+      // fallback happens to already be correct, so nothing regresses for the common case.
+      final dto = TicketWorkLogDto.fromJson({
+        'id': 'w1',
+        'ticketId': 't1',
+        'userId': 'u1',
+        'workDate': '2026-08-14T00:00:00Z',
+        'startTime': '08:00:00',
+        'endTime': '10:30:00',
+      });
+
+      expect(dto.duration, const Duration(hours: 2, minutes: 30));
+    });
   });
 
   group('history parsing', () {

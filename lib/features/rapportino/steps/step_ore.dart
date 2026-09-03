@@ -275,25 +275,28 @@ class WorklogHoursSuggestion {
 /// set — so setting hoursWorked alongside an existing range would silently do nothing visible,
 /// which is worse than not offering the suggestion at all.
 WorklogHoursSuggestion? _worklogSuggestionFor(List<TicketWorkLogDto> entries, StaffRow row) {
-  final completed = entries.where((e) => e.userId == row.userId && !e.isRunning).toList();
+  // .duration (not a hand-derived endTime-startTime/workDate+endTime) is what handles an
+  // overnight session correctly — see TicketWorkLogDto.duration's doc comment. A completed entry
+  // with a null duration (a malformed/legacy payload missing durationHours) is excluded rather
+  // than risked here.
+  final completed = entries
+      .where((e) => e.userId == row.userId && !e.isRunning && e.duration != null)
+      .toList();
   if (completed.isEmpty) return null;
 
   if (completed.length == 1) {
     final e = completed.single;
     final start = e.workDate.add(e.startTime);
-    final end = e.workDate.add(e.endTime!);
+    final end = start.add(e.duration!);
     return WorklogHoursSuggestion(
-      hours: end.difference(start).inMinutes / 60.0,
+      hours: e.duration!.inMinutes / 60.0,
       startTime: start,
       endTime: end,
     );
   }
 
   if (row.startTime != null || row.endTime != null) return null;
-  final totalMinutes = completed.fold<int>(
-    0,
-    (sum, e) => sum + (e.endTime! - e.startTime).inMinutes,
-  );
+  final totalMinutes = completed.fold<int>(0, (sum, e) => sum + e.duration!.inMinutes);
   return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
 }
 

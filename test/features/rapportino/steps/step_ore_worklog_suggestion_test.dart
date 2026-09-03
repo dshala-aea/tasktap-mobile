@@ -39,6 +39,7 @@ TicketWorkLogDto _entry({
   required DateTime workDate,
   required Duration startTime,
   Duration? endTime,
+  Duration? duration,
 }) => TicketWorkLogDto(
   id: 'wl-${userId}_${startTime.inMinutes}',
   ticketId: _ticketId,
@@ -47,6 +48,7 @@ TicketWorkLogDto _entry({
   startTime: startTime,
   endTime: endTime,
   isManualEntry: false,
+  duration: duration,
 );
 
 ProviderContainer _buildContainer({
@@ -162,6 +164,46 @@ void main() {
         expect(row.endTime, isNull);
       },
     );
+
+    // Regression: an overnight session (start 20:02, end 06:10 next day) has endTime numerically
+    // smaller than startTime. The suggestion used to derive `end` as `workDate + endTime` (same
+    // calendar day as start) and separately hand-subtract endTime-startTime for the multi-session
+    // sum — both gave a negative duration. Now both branches use TicketWorkLogDto.duration (the
+    // backend-computed value) instead of re-deriving it.
+    testWidgets('an overnight session suggests the correct positive duration, not a negative one', (
+      tester,
+    ) async {
+      final workDate = DateTime.utc(2026, 8, 31);
+      final container = _buildContainer(
+        db: db,
+        staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: workDate,
+            startTime: const Duration(hours: 20, minutes: 2),
+            endTime: const Duration(hours: 6, minutes: 10),
+            duration: const Duration(hours: 10, minutes: 8),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Da worklog:'), findsOneWidget);
+      expect(find.textContaining('10,1h'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Da worklog:'));
+      await tester.pumpAndSettle();
+
+      final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+      expect(row.hoursWorked, closeTo(10.133, 0.01));
+      // The suggested end must land on the day AFTER start, not the same day.
+      expect(row.endTime!.isAfter(row.startTime!), isTrue);
+      expect(row.endTime!.difference(row.startTime!).isNegative, isFalse);
+    });
 
     testWidgets('a still-running session is never suggested', (tester) async {
       final container = _buildContainer(

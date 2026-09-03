@@ -216,7 +216,8 @@ class TicketWorkLogDto {
     this.endTime,
     this.description,
     this.approvalStatus,
-  });
+    Duration? duration,
+  }) : _duration = duration;
 
   final String id;
   final String ticketId;
@@ -231,6 +232,10 @@ class TicketWorkLogDto {
   final String? description;
   final String? approvalStatus;
 
+  /// The backend's own computed duration (`TicketWorkLog.DurationHours`), when known — see
+  /// [duration]'s doc comment for why this must be preferred over a client-side subtraction.
+  final Duration? _duration;
+
   bool get isRunning => endTime == null;
 
   /// Elapsed time for a closed entry, or null while it is still open.
@@ -238,7 +243,16 @@ class TicketWorkLogDto {
   /// A running entry has no duration yet, and returning `Duration.zero` for one would render a
   /// stopped-looking `0:00` next to a timer that is actually counting — the same fabrication the
   /// dashboard hero used to make.
-  Duration? get duration => endTime == null ? null : endTime! - startTime;
+  ///
+  /// Prefers the backend's own `durationHours` (parsed into [_duration] by [fromJson]) over a
+  /// naive `endTime - startTime` subtraction: [startTime]/[endTime] are bare time-of-day values
+  /// with no date attached, so for an overnight session (e.g. start 20:02, end 06:10 the next day)
+  /// that subtraction gives a negative duration instead of the correct positive one. The server
+  /// entity already handles the day rollover correctly — trust it rather than re-deriving it here.
+  /// Falls back to the naive subtraction only when constructed directly without an explicit
+  /// [duration] (tests, or a payload that genuinely omits `durationHours`) — correct for same-day
+  /// sessions, which covers the fallback's only real callers.
+  Duration? get duration => endTime == null ? null : (_duration ?? endTime! - startTime);
 
   factory TicketWorkLogDto.fromJson(Map<String, dynamic> json) =>
       TicketWorkLogDto(
@@ -253,7 +267,17 @@ class TicketWorkLogDto {
         isManualEntry: json['isManualEntry'] as bool? ?? false,
         description: json['description'] as String?,
         approvalStatus: json['approvalStatus']?.toString(),
+        duration: _parseDurationHours(json['durationHours']),
       );
+}
+
+/// `durationHours` arrives as a JSON number (decimal hours) — `TicketWorkLog.DurationHours`
+/// server-side. Null when absent (older/malformed payload) or when the entry is still running.
+Duration? _parseDurationHours(Object? value) {
+  if (value == null) return null;
+  final hours = value is num ? value.toDouble() : double.tryParse(value.toString());
+  if (hours == null) return null;
+  return Duration(milliseconds: (hours * Duration.millisecondsPerHour).round());
 }
 
 /// One field change on a ticket.
