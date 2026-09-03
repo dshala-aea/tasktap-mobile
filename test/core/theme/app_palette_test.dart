@@ -343,6 +343,13 @@ void main() {
       // flipping one (a ticket's own timer bar), so a single theme-independent green is the one
       // value correct in both places — see LiveDot's own doc comment.
       'GREEN',
+      // AppCard's flat Documento sheet. The Il Documento restyle spec pins this literally
+      // (`docs/superpowers/specs/2026-09-03-il-documento-mobile-restyle-design.md`, "Surface
+      // (sheet/card) → `#FBF9F4` flat") rather than routing it through a themed token — DESIGN.md
+      // defines no dark theme for this restyle (see AppPalette.dark's own doc comment), so there
+      // is no second value for a flip to be correct or incorrect against. Fixed-light, the mirror
+      // image of the fixed-dark exceptions above.
+      'SHEET',
     };
 
     final offenders = <String>[];

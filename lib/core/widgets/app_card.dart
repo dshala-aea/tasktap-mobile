@@ -1,23 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_vetro_palette.dart';
-import 'vetro_glass.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_rack.dart';
 
-/// The app's general-purpose container — a Vetro glass panel.
+/// The app's general-purpose container — a flat Documento sheet.
 ///
-/// The public API is unchanged on purpose. Thirty-three call sites across thirteen screens say
-/// `AppCard(child: …)`, and every one of them means "a block of content," which [VetroGlass]
-/// renders directly now rather than through `RackCell`'s drawer-front cell.
-///
-/// This is deliberately not routed through [VetroCard]: that widget's own doc comment explains
-/// why it stays minimal (no state-marking concept), and [strapped]/[borderColor] are real,
-/// currently-used capability — recoloring the glass border rather than a separate ledge bar,
-/// which is the same move `ListRow`'s state marking made (a property of the surface's own edge,
-/// not a second material glued onto it).
-///
-/// [flush] no longer does anything: it distinguished a cell butted against the rail from a free
-/// one, and Vetro has no rail for a card to be flush against. Kept on the constructor only so
-/// call sites need no change.
+/// Public API unchanged — every `AppCard(child: …)` call site across the app means "a block of
+/// content" exactly as before; only the material changed (flat sheet + hairline, not glass/blur).
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -30,7 +19,6 @@ class AppCard extends StatelessWidget {
     this.flush = true,
   });
 
-  /// Tappable variant with ink ripple.
   const AppCard.pressable({
     super.key,
     required this.child,
@@ -46,34 +34,33 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onTap;
 
-  /// Overrides the glass border colour. [strapped] wins when both are set.
+  /// Overrides the sheet's border colour. [strapped] wins when both are set.
   final Color? borderColor;
 
   final Color? backgroundColor;
 
-  /// Selected, priority, or still-needs-finishing — turns the glass border the Vetro tint. Not
-  /// for a live/running state: that's `LiveDot`, deliberately a different mark (see its doc
-  /// comment).
+  /// Selected, priority, or still-needs-finishing — turns the border stamp-red. Not for a
+  /// live/running state: that's `LiveDot`, a different mark.
   final bool strapped;
 
-  /// No longer consulted — see class doc. Kept so existing call sites need no change.
+  /// No longer consulted (kept for call-site compatibility — see the pre-existing `flush` field
+  /// on this widget before this change; it already did nothing).
   final bool flush;
 
   static const EdgeInsets _defaultPadding = EdgeInsets.fromLTRB(14, 12, 14, 12);
-  static const _radius = BorderRadius.all(Radius.circular(20));
+  static const _radius = AppRack.freeShape;
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
-    final border = strapped ? v.tint : borderColor;
+    final border = strapped ? AppColors.Y : (borderColor ?? const Color(0xFFDED9CE));
     final content = Padding(padding: padding ?? _defaultPadding, child: child);
 
-    return VetroGlass(
-      borderRadius: _radius,
-      fill: backgroundColor,
-      border: border,
-      // VetroGlass would otherwise apply its own padding around `content`, double-padding it —
-      // padding is handled here instead so an `onTap` row's ink can reach the full glass bounds.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor ?? AppColors.SHEET,
+        borderRadius: _radius,
+        border: Border.all(color: border, width: 1),
+      ),
       child: onTap == null
           ? content
           : Material(

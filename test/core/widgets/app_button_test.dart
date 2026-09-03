@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
@@ -16,14 +15,15 @@ void main() {
       expect(tapped, isTrue);
     });
 
-    testWidgets('primary has the Vetro tint gradient background', (tester) async {
-      await tester.pumpWidget(_wrap(AppButton(label: 'Test', onPressed: () {})));
-      final container = tester.widget<DecoratedBox>(
-        find.descendant(of: find.byType(AppButton), matching: find.byType(DecoratedBox)).first,
+    testWidgets('primary variant has no gradient fill', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: AppButton(label: 'Salva', onPressed: () {}))),
       );
-      final box = container.decoration as BoxDecoration;
-      final gradient = box.gradient as LinearGradient;
-      expect(gradient.colors, [AppVetroPalette.light.tint, AppVetroPalette.light.tintStrong]);
+
+      final decoratedBox = tester.widget<DecoratedBox>(find.byType(DecoratedBox).first);
+      final decoration = decoratedBox.decoration as BoxDecoration;
+      expect(decoration.gradient, isNull);
+      expect(decoration.color, AppColors.Y);
     });
 
     testWidgets('secondary variant renders', (tester) async {

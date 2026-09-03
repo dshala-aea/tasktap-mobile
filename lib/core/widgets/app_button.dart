@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_vetro_palette.dart';
+import '../theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Button variant.
 ///
-/// - [primary]   — Vetro tint→tintStrong gradient / white fg
+/// - [primary]   — flat AppColors.Y fill / white fg
 /// - [secondary] — BG3 bg / MUTED fg
 /// - [dark]      — DARK bg / INV fg
 /// - [ghost]     — transparent bg / DARK fg
@@ -147,26 +147,16 @@ class AppButton extends StatelessWidget {
 
   // ── Colour tokens ────────────────────────────────────────────────────────
 
-  /// Solid fallback for [variant]s that don't paint the Vetro gradient (disabled state,
-  /// splash/highlight colour math) — [primary]'s real fill is [_gradient].
+  /// Solid fill for every variant, including [primary] — DESIGN.md has no gradient fills
+  /// ("no glassy gradients"). [primary] is now a flat [AppColors.Y] fill, matching every other
+  /// variant's flat-fill treatment.
   Color _bg(BuildContext context) => switch (variant) {
-    AppButtonVariant.primary => context.vetro.tint,
+    AppButtonVariant.primary => AppColors.Y,
     AppButtonVariant.secondary => context.colors.bg3,
     AppButtonVariant.dark => context.colors.surfaceInverse,
     AppButtonVariant.ghost => Colors.transparent,
     AppButtonVariant.danger => context.colors.redSoft,
   };
-
-  /// The primary variant's real fill — the same tint→tintStrong gradient as `AppBottomNav`'s
-  /// active tab and the rapportino completion card, so the one accent colour in the app means
-  /// the same thing everywhere it appears.
-  Gradient? _gradient(BuildContext context) => variant == AppButtonVariant.primary
-      ? LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [context.vetro.tint, context.vetro.tintStrong],
-        )
-      : null;
 
   Color _fg(BuildContext context) => switch (variant) {
     AppButtonVariant.primary => Colors.white,
@@ -254,8 +244,7 @@ class AppButton extends StatelessWidget {
     final enabled = onPressed != null || isLoading;
     Widget button = DecoratedBox(
       decoration: BoxDecoration(
-        gradient: enabled ? _gradient(context) : null,
-        color: enabled ? (_gradient(context) == null ? _bg(context) : null) : bgDisabled,
+        color: enabled ? _bg(context) : bgDisabled,
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: onPressed != null ? _shadows(context) : const [],
       ),
