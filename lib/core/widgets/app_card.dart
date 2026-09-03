@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
 
 /// The app's general-purpose container — a flat Documento sheet.
@@ -52,12 +53,12 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final border = strapped ? AppColors.Y : (borderColor ?? const Color(0xFFDED9CE));
+    final border = strapped ? AppColors.Y : (borderColor ?? context.colors.borderLight);
     final content = Padding(padding: padding ?? _defaultPadding, child: child);
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppColors.SHEET,
+        color: backgroundColor ?? context.colors.surface,
         borderRadius: _radius,
         border: Border.all(color: border, width: 1),
       ),
