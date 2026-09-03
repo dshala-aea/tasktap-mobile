@@ -13,7 +13,12 @@ jobs:
 
     env:
       OIDC_ISSUER: https://tasktap-auth.advantedgeautomation.com
-      OIDC_CLIENT_ID: 383100431603138562
+      # Quoted deliberately: unquoted, this 18-digit literal exceeds 2^53 and GitHub Actions'
+      # workflow engine resolves unquoted numeric YAML scalars through double-precision floats,
+      # silently corrupting the last 2 digits (383100431603138562 -> ...560) and baking a wrong
+      # OIDC client id into the built APK via --dart-define. Zitadel then rejects it with HTTP 400.
+      # `flutter run` locally never hits this path (the id is passed as a literal shell string).
+      OIDC_CLIENT_ID: "383100431603138562"
       OIDC_REDIRECT_URI: it.tasktap.app://callback
       API_BASE_URL: https://tasktap-api.advantedgeautomation.com
 
