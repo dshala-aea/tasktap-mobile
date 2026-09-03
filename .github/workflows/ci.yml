@@ -7,7 +7,12 @@ on:
     branches: [main, develop]
 
 env:
-  FLUTTER_VERSION: '3.x'
+  # Pinned to the exact version developers build against locally — a floating
+  # '3.x' range let CI silently pick up a Flutter/Dart patch release with an
+  # analyzer/language-feature version skew (a "Missing implementation of
+  # visitDotShorthandPropertyAccess" crash in analyzer's internal linker,
+  # not reproducible locally on 3.44.4). Bump deliberately, not implicitly.
+  FLUTTER_VERSION: '3.44.4'
 
 jobs:
   analyze:
