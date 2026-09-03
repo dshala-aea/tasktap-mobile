@@ -573,9 +573,20 @@ git commit -m "feat(widgets): AppCard/AppButton render flat Documento sheets, no
 - Test: `test/core/widgets/bottom_nav_test.dart` (extend if it exists, else create)
 
 **Interfaces:**
-- Consumes: `AppColors.Y`, `AppColors.SHEET`, `AppRack.cellRadius` (Task 1).
+- Consumes: `AppColors.Y` (Task 1, the brand accent — theme-invariant, same legitimate exception
+  `AppButton`'s primary variant already uses, confirmed correct in Task 2's review),
+  `context.colors.surface`/`context.colors.borderLight` (Task 1b's `AppPalette`, theme-flipping —
+  see the correction note below), `AppRack.cellRadius` (Task 1).
 - Produces: `AppBottomNav`'s constructor and `defaultItems`/`wideBreakpoint` are unchanged —
   `HomeShell` (the only consumer) needs zero edits.
+
+**Correction made during Task 2's fix-loop, applies here too:** the original version of this
+task's code (below) used `AppColors.SHEET` and a hardcoded border hex directly — the same
+theme-invariant-constant-instead-of-theme-flipping-token bug Task 2's review caught and fixed in
+`AppCard`. `AppColors.SHEET` is `surface`'s LIGHT-mode value only; reading it directly means the
+bottom nav would render a bright cream bar even in dark mode, a live regression given this app has
+a real, persisted dark-mode toggle (`main.dart`, confirmed in Task 2's review). Already fixed in
+the code below — `context.colors.surface`/`context.colors.borderLight`, not the raw constants.
 
 Per the Global Constraints: keep the floating pill's position/shape/clearance math exactly as-is
 (`_buildBar`/`_buildRail`'s `Padding`/`SafeArea`/`AppRack.navBarHeight` structure, and
@@ -607,8 +618,8 @@ with:
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: AppColors.SHEET,
-              border: Border.all(color: const Color(0xFFDED9CE), width: 1),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.borderLight, width: 1),
             ),
             child: Builder(
               builder: (context) {
@@ -724,12 +735,12 @@ below, from the current repo state):
 |---|---|
 | `context.vetro.tint` | `AppColors.Y` |
 | `context.vetro.tintStrong` | `AppColors.Y` (no second gradient stop — flat fill, both references collapse to the one accent) |
-| `context.vetro.glassFill` | `AppColors.SHEET` |
-| `context.vetro.glassBorder` | `const Color(0xFFDED9CE)` |
-| `context.vetro.hairline` | `const Color(0xFFDED9CE)` |
+| `context.vetro.glassFill` | `context.colors.surface` (theme-flipping — NOT `AppColors.SHEET`, which is light-mode-only; see the correction note above Task 3) |
+| `context.vetro.glassBorder` | `context.colors.borderLight` |
+| `context.vetro.hairline` | `context.colors.borderLight` |
 | `context.vetro.statusGood`/`statusWarn`/`statusBad` | unchanged — these are semantic status colors, not part of the Vetro material system; leave as-is (they'll be redefined in a later, separate task if DESIGN.md's status-chip treatment needs them touched — out of scope here per this plan's Task 4 boundary) |
 | `AppVetroColors.blurSigma` (and any `ImageFilter.blur(...)` using it) | delete the blur entirely — remove the `BackdropFilter`/`ClipRRect` wrapper, keep only what it wrapped |
-| `VetroGlass(...)` as a direct call | replace with a `DecoratedBox(decoration: BoxDecoration(color: AppColors.SHEET, borderRadius: <same radius the VetroGlass call used>, border: Border.all(color: const Color(0xFFDED9CE))), child: <same child>)` |
+| `VetroGlass(...)` as a direct call | replace with a `DecoratedBox(decoration: BoxDecoration(color: context.colors.surface, borderRadius: <same radius the VetroGlass call used>, border: Border.all(color: context.colors.borderLight)), child: <same child>)` |
 | `VetroCard(...)` as a direct call | same replacement as `VetroGlass` above (VetroCard is a thin wrapper) |
 | Any `LinearGradient(colors: [context.vetro.tint, context.vetro.tintStrong])` | replace the whole `gradient:` property with `color: AppColors.Y` on the same `BoxDecoration` |
 | `import '../theme/app_vetro_palette.dart';` | remove (once no `context.vetro`/`AppVetroColors`/`AppVetroPalette` reference remains in the file) |
@@ -840,7 +851,9 @@ Expected: PASS.
 Also run the full existing widget test suite for these 15 files (`flutter test test/core/widgets/`)
 to confirm no pre-existing test broke from the material change (a test asserting on a specific
 `Color`/`Gradient` value from before this task would need updating — if any fail, update their
-expected values to the new `AppColors.Y`/`AppColors.SHEET` tokens, not skip them).
+expected values to `AppColors.Y` (brand accent, theme-invariant) or `context.colors.surface`/
+`.borderLight` (theme-flipping — assert against `AppPalette.light`/`.dark`, not `AppColors.SHEET`,
+mirroring Task 2's `app_card_test.dart` fix), not skip them).
 
 - [ ] **Step 5: Commit**
 
@@ -1017,7 +1030,10 @@ silently included as if executable now — this is a real, load-bearing sequenci
 (deleting the Vetro files before their remaining call sites are gone breaks the build), not a
 placeholder. Every other task has complete, concrete code.
 
-**Type consistency:** `AppColors.SHEET` (Task 1) is the exact name used by Tasks 2-4's code.
+**Type consistency:** `AppColors.SHEET` (Task 1) is a real token, but Tasks 2-4's widget code reads
+it through the theme-flipping `context.colors.surface`/`.borderLight` (`AppPalette`, Task 1b), not
+`AppColors.SHEET` directly — corrected globally post-Task-2 (see the note above Task 3); `SHEET`
+itself is only read directly by Task 1's own contrast tests, which are theme-invariant by design.
 `AppRack.freeShape`/`insetShape` (pre-existing, unchanged names, new radius value from Task 1) are
 used consistently in Task 2's `AppCard` rewrite. `AppColors.Y` (existing name, new value) is used
 consistently as "the one accent" across Tasks 2-4, matching the spec's token-mapping table.
