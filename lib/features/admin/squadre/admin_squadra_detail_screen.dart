@@ -6,8 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
@@ -147,7 +145,7 @@ class _SquadraDetailBody extends ConsumerWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              child: VetroCard(
+              child: AppCard(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                 child: Column(
                   children: [
@@ -371,7 +369,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: VetroButton(
+            child: AppButton(
               label: _isSaving ? 'Salvataggio…' : 'Aggiungi',
               onPressed: _isSaving ? null : _save,
             ),

@@ -9,8 +9,6 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/error_message.dart';
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
@@ -112,7 +110,7 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                child: VetroCard(
+                child: AppCard(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +158,7 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                child: VetroCard(
+                child: AppCard(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,7 +182,7 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: VetroCard(
+                  child: AppCard(
                     padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,7 +467,7 @@ class _AddMatricolaSheetState extends State<_AddMatricolaSheet> {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: VetroButton(
+              child: AppButton(
                 label: _isSaving ? 'Salvataggio…' : 'Salva',
                 onPressed: _isSaving ? null : _save,
               ),

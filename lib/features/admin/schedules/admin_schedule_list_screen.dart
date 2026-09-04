@@ -1,15 +1,14 @@
 // dart format width=100
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/theme/app_vetro_palette.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -392,11 +391,9 @@ class _FilterButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = activeCount > 0;
-    final tint = context.vetro.tint;
-    // White clears contrast on the light-theme tint but not on dark mode's lighter tint
-    // (#7C93FF measures ~2.8:1 with white — well under the 4.5:1 AA floor); computed from the
-    // active tint's own luminance rather than a fixed foreground, so this stays correct if either
-    // palette's tint value ever moves.
+    final tint = AppColors.Y;
+    // Computed from the tint's own luminance rather than a fixed foreground, so this stays
+    // correct if the brand accent value ever moves.
     final activeFg = tint.computeLuminance() > 0.3 ? Colors.black : Colors.white;
     return AppTappable(
       onTap: onTap,
@@ -641,7 +638,7 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: VetroButton(
+                  child: AppButton(
                     label: 'Applica',
                     onPressed: () => Navigator.pop(
                       context,
