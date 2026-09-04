@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_vetro_palette.dart';
-import '../../core/widgets/vetro_glass.dart';
+import '../../core/theme/app_palette.dart';
+import '../../core/widgets/app_card.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// The dashboard hero — Vetro glass direction.
+/// The dashboard hero — flat Documento direction.
 ///
-/// Was a flat "ID plate" band (no shadow, no gradient), approved after on-device testing for
-/// cantiere safety-signage legibility. Re-skinned to full Vetro glass — same call made for
-/// Timbra (Module #1), whose identical flat/no-glass rationale was overridden in favour of the
-/// app-wide Vetro identity. Fixed `AppVetroColors`, not flipping `context.vetro`: this hero is a
-/// permanently-dark ground regardless of app theme, same status as `AppColors.punchGround`.
+/// A flat "ID plate" band: `AppColors.Y`, no shadow, no gradient, no blur — the treatment
+/// on-device testing originally approved for cantiere safety-signage legibility, and what this
+/// hero returns to now that the Vetro glass/gradient detour (module-by-module, see this app's own
+/// nav-restructure history) has reached Dashboard's turn. `AppColors.Y` is used directly rather
+/// than through `context.colors`: it's the one theme-invariant brand accent, same status as every
+/// other flat `AppColors.Y` fill in the app (`AppButton.primary`, `AppFab`, the active bottom-nav
+/// tab).
 class IdPlateHeroComp extends StatelessWidget {
   const IdPlateHeroComp({
     super.key,
@@ -35,13 +37,7 @@ class IdPlateHeroComp extends StatelessWidget {
     final dateLabel = DateFormat('EEEE d MMM', 'it').format(DateTime.now()).toUpperCase();
 
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppVetroColors.tint, AppVetroColors.tintStrong],
-        ),
-      ),
+      decoration: const BoxDecoration(color: AppColors.Y),
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -87,13 +83,12 @@ class IdPlateHeroComp extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              // The plate's readout line — a glass panel over the gradient, numerals doing the
-              // talking. Was a bordered flat band; VetroGlass gives it the same real translucency
-              // every other Vetro secondary surface uses.
-              VetroGlass(
-                fill: AppVetroColors.glassFillOnDark,
-                border: AppVetroColors.glassBorderOnDark,
-                borderRadius: BorderRadius.circular(16),
+              // The plate's readout line — a flat card over the accent band, numerals doing the
+              // talking. Was a Vetro glass panel; AppCard gives it the same flat sheet + hairline
+              // every other Documento secondary surface uses, its ink read through `context.colors`
+              // like any other card (the surrounding band, not this card, is the fixed element —
+              // see this file's own header comment).
+              AppCard(
                 padding: const EdgeInsets.symmetric(
                   vertical: 14,
                   horizontal: AppSpacing.base,
@@ -112,7 +107,7 @@ class IdPlateHeroComp extends StatelessWidget {
                         width: 1,
                         height: 32,
                         margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                        color: AppColors.WHITE.withAlpha(40),
+                        color: context.colors.borderLight,
                       ),
                       _Readout(
                         value: '$remaining',
@@ -141,11 +136,12 @@ class _Readout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Was AppColors.Y (safety-orange) for the accented readout — dropped on the gradient ground,
-    // where that accent no longer has the contrast it had against flat CHARCOAL. Full-opacity
-    // white for the accent, dimmed white for the calm one, same distinction the label already
-    // made.
-    const color = AppColors.WHITE;
+    // This readout now sits on a plain AppCard (the flat-Documento replacement for the old Vetro
+    // glass chip — see build() above), so its ink reads through `context.colors` like any other
+    // card's text, not the fixed white this needed against the old dark/glass ground. AppColors.Y
+    // for the accented readout, same "one accent marks emphasis" language badge.dart/AppTabs
+    // already use, matching this readout's own pre-Vetro flat treatment.
+    final color = context.colors.ink;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -167,7 +163,7 @@ class _Readout extends StatelessWidget {
             fontFamily: 'Inter',
             fontSize: 10,
             fontWeight: FontWeight.w700,
-            color: accent ? AppColors.WHITE : AppColors.WHITE.withAlpha(150),
+            color: accent ? AppColors.Y : context.colors.inkMuted,
             letterSpacing: 0.8,
           ),
         ),

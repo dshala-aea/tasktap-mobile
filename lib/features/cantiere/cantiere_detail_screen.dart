@@ -14,8 +14,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/widgets/vetro_button.dart';
-import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import 'cantiere_providers.dart';
 
@@ -80,7 +78,7 @@ class CantiereDetailScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        VetroCard(
+                        AppCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -110,7 +108,7 @@ class CantiereDetailScreen extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        VetroButton(
+                        AppButton(
                           label: 'Timbra cantiere',
                           icon: const Icon(LucideIcons.mapPin),
                           onPressed: () => context.push(
@@ -144,7 +142,7 @@ class CantiereDetailScreen extends ConsumerWidget {
                                 ),
                               );
                             }
-                            return VetroCard(
+                            return AppCard(
                               padding: EdgeInsets.zero,
                               child: Column(
                                 children: tickets.asMap().entries.map((entry) {
