@@ -10,10 +10,10 @@ import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// Calendario → Settimana view: 7-column day grid for the selected week with
 /// compact event chips per day. Columns are scrollable horizontally; chips
@@ -74,14 +74,7 @@ class SettimanaView extends ConsumerWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
-                    gradient: isToday
-                        ? LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [context.vetro.tint, context.vetro.tintStrong],
-                          )
-                        : null,
-                    color: Colors.transparent,
+                    color: isToday ? AppColors.Y : Colors.transparent,
                     borderRadius: AppRack.insetShape,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_vetro_palette.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'calendario_providers.dart';
@@ -197,7 +197,7 @@ class _PeriodBar extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: context.colors.surface,
-        border: Border(bottom: BorderSide(color: context.vetro.hairline)),
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
       padding: const EdgeInsets.fromLTRB(AppSpacing.xs, 6, AppSpacing.sm, 6),
       child: Row(
@@ -315,7 +315,7 @@ class _WeekDayScroller extends ConsumerWidget {
       height: 80,
       decoration: BoxDecoration(
         color: context.colors.surface,
-        border: Border(bottom: BorderSide(color: context.vetro.hairline)),
+        border: Border(bottom: BorderSide(color: context.colors.borderLight)),
       ),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
@@ -351,7 +351,7 @@ class _WeekDayScroller extends ConsumerWidget {
                         fontFamily: 'Inter',
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: isSelected ? context.vetro.tint : context.colors.inkMuted,
+                        color: isSelected ? AppColors.Y : context.colors.inkMuted,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -361,17 +361,10 @@ class _WeekDayScroller extends ConsumerWidget {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        gradient: isSelected
-                            ? LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [context.vetro.tint, context.vetro.tintStrong],
-                              )
-                            : null,
                         color: isSelected
-                            ? null
+                            ? AppColors.Y
                             : isToday
-                            ? context.vetro.tint.withAlpha(31)
+                            ? AppColors.Y.withAlpha(31)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -405,7 +398,7 @@ class _WeekDayScroller extends ConsumerWidget {
                         width: 5,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: isSelected ? context.vetro.tint : context.colors.amber,
+                          color: isSelected ? AppColors.Y : context.colors.amber,
                           shape: BoxShape.circle,
                         ),
                       ),

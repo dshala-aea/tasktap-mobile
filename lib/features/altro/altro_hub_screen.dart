@@ -6,9 +6,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/widgets/vetro_card.dart';
-import '../../core/widgets/vetro_compartment_tile.dart';
-import '../../core/widgets/vetro_glass.dart';
+import '../../core/widgets/app_compartment_tile.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/entitlements/entitlement_repository.dart';
@@ -191,7 +189,7 @@ class AltroHubScreen extends ConsumerWidget {
     return [
       for (final t in tiles)
         if (moduleIsOffered(t.module, entitlement))
-          VetroCompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
+          AppCompartmentTile(icon: t.icon, label: t.label, onTap: t.onTap),
     ];
   }
 }
@@ -215,8 +213,7 @@ class _UserCard extends StatelessWidget {
       // of the dashboard hero's or the header's excuse for it: it isn't a nav anchor or a primary
       // action surface, just identity info, and being the odd dark thing on the page made it
       // compete for attention it doesn't need. Flips with the app theme like every other card now.
-      child: VetroGlass(
-        borderRadius: BorderRadius.circular(20),
+      child: AppCard(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
@@ -423,7 +420,7 @@ class _LogoutRow extends StatelessWidget {
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-        child: VetroCard(
+        child: AppCard(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,

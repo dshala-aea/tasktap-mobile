@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_rack.dart';
-import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/gdpr/gdpr_api_client.dart';
 import '../../data/sync/connectivity_provider.dart';
@@ -102,7 +101,7 @@ class _Body extends ConsumerWidget {
         if (identity != null) ...[
           StepLabel(title: 'La tua anagrafica'),
           const SizedBox(height: 8),
-          VetroCard(
+          AppCard(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
@@ -123,7 +122,7 @@ class _Body extends ConsumerWidget {
 
         StepLabel(title: 'Cosa è registrato su di te'),
         const SizedBox(height: 8),
-        VetroCard(
+        AppCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
           child: Column(
             children: [
@@ -270,7 +269,7 @@ class _ConsentBlock extends ConsumerWidget {
     final consents = ref.watch(consentStatusProvider);
 
     return consents.when(
-      loading: () => const VetroCard(
+      loading: () => const AppCard(
         child: Center(
           child: Padding(
             padding: EdgeInsets.all(AppSpacing.md),
@@ -282,7 +281,7 @@ class _ConsentBlock extends ConsumerWidget {
           ),
         ),
       ),
-      error: (e, _) => VetroCard(
+      error: (e, _) => AppCard(
         child: Text(
           'Elenco consensi non disponibile in questo momento.',
           style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.inkMuted),
@@ -290,14 +289,14 @@ class _ConsentBlock extends ConsumerWidget {
       ),
       data: (list) {
         if (list.isEmpty) {
-          return VetroCard(
+          return AppCard(
             child: Text(
               'Nessun consenso risulta registrato a tuo nome.',
               style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.inkMuted),
             ),
           );
         }
-        return VetroCard(
+        return AppCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Column(
             children: [

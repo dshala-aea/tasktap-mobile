@@ -8,10 +8,10 @@ import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
-import 'package:tasktap_mobile/core/theme/app_vetro_palette.dart';
 
 /// Calendario → Mese view: month calendar grid (weeks × 7). Each day cell
 /// shows event dots / count. Tapping a day selects it and switches to Giorno.
@@ -126,21 +126,14 @@ class MeseView extends ConsumerWidget {
                           padding: const EdgeInsets.all(2),
                           child: AppTappable(
                             onTap: () => onDayTap?.call(day),
-                            gradient: isSelected
-                                ? LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [context.vetro.tint, context.vetro.tintStrong],
-                                  )
-                                : null,
                             color: isSelected
-                                ? null
+                                ? AppColors.Y
                                 : isToday
-                                ? context.vetro.tint.withAlpha(31)
+                                ? AppColors.Y.withAlpha(31)
                                 : Colors.transparent,
                             borderRadius: AppRack.insetShape,
                             border: isToday && !isSelected
-                                ? Border.all(color: context.vetro.tint, width: 1.5)
+                                ? Border.all(color: AppColors.Y, width: 1.5)
                                 : null,
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -206,7 +199,7 @@ class _EventDots extends StatelessWidget {
               child: Icon(
                 LucideIcons.users,
                 size: 8,
-                color: isSelected ? context.vetro.tint : context.colors.amber,
+                color: isSelected ? AppColors.Y : context.colors.amber,
               ),
             ),
           ...List.generate(show, (i) {
@@ -215,7 +208,7 @@ class _EventDots extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: BoxDecoration(
-                color: isSelected ? context.vetro.tint : context.colors.amber,
+                color: isSelected ? AppColors.Y : context.colors.amber,
                 shape: BoxShape.circle,
               ),
             );
