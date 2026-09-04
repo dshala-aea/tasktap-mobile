@@ -10,7 +10,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
@@ -244,7 +243,6 @@ class _RapportinoRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final v = context.vetro;
     final summary = ref.watch(rapportinoRowSummaryProvider(draft.id));
 
     final staffCount = summary.staffCount;
@@ -285,7 +283,7 @@ class _RapportinoRow extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
+          border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),
         // IntrinsicHeight for the stripe — same reasoning as `_TicketRow`'s own comment: this row
         // sits in a SliverChildBuilderDelegate item with no bounded height for a bare
@@ -298,7 +296,7 @@ class _RapportinoRow extends ConsumerWidget {
                 width: 3,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
-                  color: isSubmitted ? context.colors.inkDisabled : v.tint,
+                  color: isSubmitted ? context.colors.inkDisabled : AppColors.Y,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),

@@ -3,8 +3,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -236,7 +234,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             // ── Stato (Gap 11) — edit mode only: `createCustomer` has no isActive param, every
             // new customer starts active server-side, so there is nothing to toggle at creation.
             if (widget.isEditMode) ...[
-              VetroCard(
+              AppCard(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.base,
                   vertical: AppSpacing.xs,
@@ -257,7 +255,7 @@ class _AdminCustomerFormScreenState extends ConsumerState<AdminCustomerFormScree
             ],
 
             // ── Submit ─────────────────────────────────────────────────────
-            VetroButton(
+            AppButton(
               label: widget.isEditMode ? 'Salva modifiche' : 'Crea cliente',
               onPressed: _isSubmitting ? null : _onSubmit,
               isLoading: _isSubmitting,

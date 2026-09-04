@@ -7,8 +7,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_rack.dart';
 import '../../../core/utils/offline_guard.dart';
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/magazzino/magazzino_api_client.dart';
 import '../../magazzino/magazzino_providers.dart';
@@ -206,7 +204,7 @@ class _AdminMagazzinoFormScreenState extends ConsumerState<AdminMagazzinoFormScr
             const SizedBox(height: 16),
 
             if (_isEditing)
-              VetroCard(
+              AppCard(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppSpacing.base,
                   vertical: AppSpacing.xs,
@@ -225,7 +223,7 @@ class _AdminMagazzinoFormScreenState extends ConsumerState<AdminMagazzinoFormScr
               ),
             const SizedBox(height: 32),
 
-            VetroButton(
+            AppButton(
               label: _isEditing ? 'Salva modifiche' : 'Crea magazzino',
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,

@@ -14,9 +14,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_vetro_palette.dart';
-import '../../core/widgets/vetro_button.dart';
-import '../../core/widgets/vetro_card.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
@@ -146,7 +144,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
-                    child: VetroCard(
+                    child: AppCard(
                       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -214,7 +212,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: VetroCard(
+                      child: AppCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -245,7 +243,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: VetroCard(
+                      child: AppCard(
                         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -302,7 +300,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: VetroCard(
+                      child: AppCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -325,7 +323,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: VetroCard(
+                      child: AppCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -358,7 +356,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                     child: Row(
                       children: [
                         Expanded(
-                          child: VetroButton(
+                          child: AppButton(
                             label: 'Scarica PDF',
                             icon: const Icon(LucideIcons.download, size: 16),
                             onPressed: () => _openReportPdf(context, ref, draft.id),
@@ -469,12 +467,11 @@ class _SharePdfButtonState extends ConsumerState<_SharePdfButton> {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
       child: AppTappable(
         onTap: _busy ? null : _share,
-        color: v.tint.withAlpha(31),
+        color: AppColors.Y.withAlpha(31),
         borderRadius: BorderRadius.circular(16),
         semanticLabel: 'Condividi PDF',
         child: Center(
@@ -482,9 +479,9 @@ class _SharePdfButtonState extends ConsumerState<_SharePdfButton> {
               ? SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
                 )
-              : Icon(LucideIcons.share2, size: 18, color: v.tint),
+              : Icon(LucideIcons.share2, size: 18, color: AppColors.Y),
         ),
       ),
     );
@@ -600,7 +597,7 @@ class _RejectionBannerState extends ConsumerState<_RejectionBanner> {
             style: TextStyle(color: context.colors.ink, fontSize: 13),
           ),
           const SizedBox(height: 12),
-          VetroButton(
+          AppButton(
             label: 'Rilavora',
             icon: const Icon(LucideIcons.penTool),
             onPressed: _busy ? null : _rilavora,

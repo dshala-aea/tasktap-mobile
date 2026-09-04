@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/notifications/notification_service.dart';
-import '../../core/theme/app_vetro_palette.dart';
+import '../../core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/widgets/widgets.dart';
@@ -116,9 +116,9 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                             fontWeight: FontWeight.w600,
                             // The header is a flipping ScreenHeader now, not a permanently-dark
                             // CHARCOAL plate — fixed white here was unreadable (white-on-white) in
-                            // light mode. context.vetro.tint matches every other tinted header
-                            // action in the app and flips correctly with the theme.
-                            color: context.vetro.tint,
+                            // light mode. AppColors.Y is the brand accent, theme-invariant by
+                            // design, and matches every other tinted header action in the app.
+                            color: AppColors.Y,
                           ),
                         ),
                       ),

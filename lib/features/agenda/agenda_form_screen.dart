@@ -7,7 +7,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_rack.dart';
 import '../../core/utils/offline_guard.dart';
-import '../../core/widgets/vetro_button.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/agenda/agenda_api_client.dart';
 import '../admin/admin_widgets.dart';
@@ -193,7 +192,7 @@ class _AgendaFormScreenState extends ConsumerState<AgendaFormScreen> {
             ),
             const SizedBox(height: 32),
 
-            VetroButton(
+            AppButton(
               label: _isEditing ? 'Salva modifiche' : 'Crea task',
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,

@@ -4,9 +4,9 @@ import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/theme/app_vetro_palette.dart';
-import '../../core/widgets/vetro_compartment_tile.dart';
+import '../../core/widgets/app_compartment_tile.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -34,7 +34,6 @@ class RapportinoFormScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final v = context.vetro;
     final editorState = ref.watch(reportEditorProvider(reportId));
     final subtitle = editorState.title.isEmpty ? null : editorState.title;
 
@@ -68,9 +67,14 @@ class RapportinoFormScreen extends ConsumerWidget {
                         key: const ValueKey('saving'),
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: v.tint),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
                       )
-                    : Icon(LucideIcons.cloud, key: const ValueKey('saved'), size: 20, color: v.tint),
+                    : Icon(
+                        LucideIcons.cloud,
+                        key: const ValueKey('saved'),
+                        size: 20,
+                        color: AppColors.Y,
+                      ),
               ),
             ),
           ),
@@ -178,7 +182,6 @@ class _CompletionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final ready = completed == _total;
     final reducedMotion = MediaQuery.of(context).disableAnimations;
     return Material(
@@ -191,13 +194,13 @@ class _CompletionCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
             borderRadius: AppRack.freeShape,
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [v.tint, v.tintStrong],
-            ),
+            color: AppColors.Y,
             boxShadow: [
-              BoxShadow(color: v.tint.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
+              BoxShadow(
+                color: AppColors.Y.withAlpha(90),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
+              ),
             ],
           ),
           child: Row(
@@ -320,7 +323,7 @@ class _StepTile extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        VetroCompartmentTile(icon: icon, label: label, onTap: onTap),
+        AppCompartmentTile(icon: icon, label: label, onTap: onTap),
         Positioned(
           top: 10,
           right: 10,

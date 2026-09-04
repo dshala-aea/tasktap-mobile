@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/utils/offline_guard.dart';
-import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -339,7 +338,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                 ),
                 const SizedBox(height: 32),
 
-                VetroButton(
+                AppButton(
                   label: _isEditing ? 'Salva modifiche' : 'Crea cantiere',
                   onPressed: _isSaving ? null : _save,
                   isLoading: _isSaving,

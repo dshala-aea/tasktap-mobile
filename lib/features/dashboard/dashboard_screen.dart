@@ -6,8 +6,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_vetro_palette.dart';
-import '../../core/widgets/vetro_glass.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
@@ -208,45 +206,43 @@ class _ClockInPrompt extends ConsumerWidget {
       }
     });
 
-    return VetroGlass(
-      fill: AppVetroColors.glassFillOnDark,
-      border: AppVetroColors.glassBorderOnDark,
-      borderRadius: BorderRadius.circular(14),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: busy
-              ? null
-              : () => ref
-                    .read(punchNotifierProvider.notifier)
-                    .punch(ref.read(timbraStateProvider)),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
-            child: Row(
-              children: [
-                if (busy)
-                  const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
-                  )
-                else
-                  const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
-                const SizedBox(width: 10),
-                const Text(
-                  'Timbra ingresso',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.WHITE,
-                  ),
-                ),
-                const Spacer(),
-                Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
-              ],
+    // A CTA, not a passive readout — flat AppColors.Y fill + white ink, same primary-action
+    // language AppButton's own primary variant already uses (this replaces the old VetroGlass
+    // panel, which only read as an action via its own onTap; AppCard's onTap does that job here
+    // instead of a hand-rolled Material/InkWell). AppColors.Y as a raw constant is the sanctioned
+    // exception (see the batch's own colour rule) — it's this app's one theme-invariant accent.
+    return AppCard(
+      padding: EdgeInsets.zero,
+      backgroundColor: AppColors.Y,
+      onTap: busy
+          ? null
+          : () =>
+                ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
+        child: Row(
+          children: [
+            if (busy)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
+              )
+            else
+              const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
+            const SizedBox(width: 10),
+            const Text(
+              'Timbra ingresso',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.WHITE,
+              ),
             ),
-          ),
+            const Spacer(),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+          ],
         ),
       ),
     );

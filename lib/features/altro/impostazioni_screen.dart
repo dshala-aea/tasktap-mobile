@@ -9,7 +9,6 @@ import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
 import '../../core/security/biometric_service.dart';
-import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
@@ -410,7 +409,7 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: VetroCard(
+      child: AppCard(
         child: Row(
           children: [
             AppAvatar(
@@ -498,7 +497,7 @@ class _SettingsGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      child: VetroCard(
+      child: AppCard(
         padding: EdgeInsets.zero,
         child: Column(children: children),
       ),
@@ -683,7 +682,7 @@ class _LogoutSettingRow extends StatelessWidget {
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-        child: VetroCard(
+        child: AppCard(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,

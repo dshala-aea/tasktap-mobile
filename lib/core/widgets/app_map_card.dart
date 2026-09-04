@@ -2,42 +2,38 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_rack.dart';
 import '../theme/app_spacing.dart';
-import '../theme/app_vetro_palette.dart';
 import '../utils/maps_launcher.dart';
-import 'vetro_card.dart';
+import 'app_card.dart';
 
-/// A location summary + "Naviga" action — added to close a real gap the Vetro mockup's own
-/// `.mapcard` called for on both Ticket detail and Cantiere detail: an address shown with no way
-/// to act on it. Not a real map SDK (the mockup's own `.mapviz` is a stylised placeholder, not
-/// map tiles either) — a decorative pin panel plus a single external maps launch, no API key, no
-/// new native map dependency.
-class VetroMapCard extends StatelessWidget {
-  const VetroMapCard({super.key, required this.address});
+/// Flat Documento replacement for the old `VetroMapCard` — same interface (one `address` prop),
+/// so its 2 call sites (Ticket detail, Cantiere detail) swap one name for the other with no other
+/// changes. Still not a real map SDK — a flat pin panel plus a single external maps launch,
+/// exactly what the old widget's own doc comment already scoped it as.
+class AppMapCard extends StatelessWidget {
+  const AppMapCard({super.key, required this.address});
 
   final String address;
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
-    return VetroCard(
+    return AppCard(
       padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            height: 84,
+          DecoratedBox(
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [v.tint.withAlpha(46), v.tintStrong.withAlpha(31)],
-              ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              color: context.colors.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+              border: Border(bottom: BorderSide(color: context.colors.borderLight)),
             ),
-            child: Center(
-              child: Icon(LucideIcons.mapPin, size: 28, color: v.tint),
+            child: const SizedBox(
+              height: 84,
+              child: Center(child: Icon(LucideIcons.mapPin, size: 28, color: AppColors.Y)),
             ),
           ),
           Padding(
@@ -75,18 +71,15 @@ class _NavigaButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     return Material(
-      color: v.tint,
-      borderRadius: BorderRadius.circular(10),
+      color: AppColors.Y,
+      borderRadius: AppRack.insetShape,
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: AppRack.insetShape,
         onTap: () => openMapsForAddress(address),
-        // 8dp vertical padding alone is ~32px tall — under the 44pt/48dp floor for the sole
-        // control that launches navigation from this card.
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          child: const Padding(
+          child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               mainAxisSize: MainAxisSize.min,

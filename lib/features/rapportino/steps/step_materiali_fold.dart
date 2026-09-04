@@ -10,9 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/theme/app_vetro_palette.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_message.dart';
-import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../core/scanner/barcode_scan_sheet.dart';
 import '../../../data/local/app_database.dart';
@@ -71,7 +70,7 @@ class StepMaterialiFold extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── "Nessun materiale" toggle ──────────────────────────────────────
-          VetroCard(
+          AppCard(
             padding: EdgeInsets.fromLTRB(
               AppSpacing.base,
               AppSpacing.xs,
@@ -185,7 +184,7 @@ class StepMaterialiFold extends ConsumerWidget {
                   icon: const Icon(LucideIcons.camera),
                   label: const Text('Fotocamera'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: context.vetro.tint,
+                    backgroundColor: AppColors.Y,
                     foregroundColor: Colors.white,
                     minimumSize: const Size(0, 52),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -526,7 +525,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
       child: Row(
         children: [
@@ -850,7 +849,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
     final rows = ref.watch(reportEditorProvider(widget.reportId).select((s) => s.controlloRows));
     final existing = _findExisting(rows);
 
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

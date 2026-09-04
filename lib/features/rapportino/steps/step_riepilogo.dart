@@ -11,10 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_vetro_palette.dart';
 import '../../../core/utils/error_message.dart';
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/draft_submission_state.dart';
@@ -135,7 +132,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           // `Cliente  3f2a1c8e-…`, and separate `Ticket` / `Ticket (lib.)` rows for what is one
           // fact stored two ways. Nobody can check a rapportino against a GUID, so the step that
           // exists to be checked could not be.
-          VetroCard(
+          AppCard(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
             child: Column(
               children: [
@@ -231,12 +228,18 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       subtitle: draft?.submissionError,
                     ),
                     const SizedBox(height: 12),
-                    VetroButton(
+                    // AppButton has no gradientColors escape hatch (VetroButton's own — the old
+                    // fixed stopLight/stopDark pair had no themed equivalent to move to). This
+                    // resubmit action is exactly the case AppButton's own `danger` variant exists
+                    // for — a destructive/error-recovery affordance — and its fill/fg already read
+                    // through `context.colors.redSoft`/`context.colors.red` rather than a fixed
+                    // hex pair, so it carries the same "this failed, look here" language across
+                    // both themes instead of one gradient tuned for light mode only.
+                    AppButton.danger(
                       label: 'Riprova invio',
                       icon: const Icon(LucideIcons.refreshCw),
                       onPressed: _submitting ? null : _onInvia,
                       isLoading: _submitting,
-                      gradientColors: const [AppColors.stopLight, AppColors.stopDark],
                     ),
                   ],
                 );
@@ -258,7 +261,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                     Text(_submitError!, style: TextStyle(color: context.colors.red, fontSize: 12)),
                   ],
                   const SizedBox(height: 12),
-                  VetroButton(
+                  AppButton(
                     label: _submitting ? 'Invio in corso...' : 'Invia rapportino',
                     icon: _submitting ? null : const Icon(LucideIcons.send),
                     onPressed: validation.isValid && !_submitting ? _onInvia : null,
@@ -415,7 +418,7 @@ class _SignatureBlock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final captured = localPath != null && allegatoId != null;
 
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -467,7 +470,7 @@ class _SignatureBlock extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            VetroButton(
+            AppButton(
               label: 'Acquisisci firma $label',
               icon: const Icon(LucideIcons.penTool),
               onPressed: () => _captureSig(context, ref),
@@ -595,7 +598,7 @@ class _SigDialogState extends State<_SigDialog> {
                 },
                 child: Text(
                   'Conferma',
-                  style: TextStyle(color: context.vetro.tint, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
                 ),
               ),
             ],

@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/lookup_field.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../data/local/app_database.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
@@ -148,7 +148,7 @@ class _CustomerSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +176,7 @@ class _LocationSummary extends StatelessWidget {
       if (location.city != null && location.city!.isNotEmpty) location.city!,
     ];
 
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

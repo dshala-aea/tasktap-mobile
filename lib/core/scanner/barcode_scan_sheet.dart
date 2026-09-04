@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
-import '../theme/app_vetro_palette.dart';
+import '../theme/app_colors.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BarcodeScanSheet
@@ -116,7 +116,7 @@ class _ScanOverlay extends StatelessWidget {
             width: 260,
             height: 180,
             decoration: BoxDecoration(
-              border: Border.all(color: AppVetroColors.tint, width: 3),
+              border: Border.all(color: AppColors.Y, width: 3),
               borderRadius: BorderRadius.circular(16),
             ),
           ),

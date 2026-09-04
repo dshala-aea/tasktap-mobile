@@ -6,8 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_vetro_palette.dart';
-import '../../../core/widgets/vetro_card.dart';
+import '../../../core/theme/app_colors.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -357,9 +356,8 @@ class _StaffTileState extends State<_StaffTile> {
   @override
   Widget build(BuildContext context) {
     final row = widget.row;
-    final v = context.vetro;
 
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.base),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,8 +368,8 @@ class _StaffTileState extends State<_StaffTile> {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(color: v.tint.withAlpha(31), shape: BoxShape.circle),
-                child: Icon(LucideIcons.user, size: 18, color: v.tint),
+                decoration: BoxDecoration(color: AppColors.Y.withAlpha(31), shape: BoxShape.circle),
+                child: Icon(LucideIcons.user, size: 18, color: AppColors.Y),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -493,7 +491,6 @@ class _WorklogSuggestionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
     final hoursLabel = suggestion.hours.toStringAsFixed(1).replaceAll('.', ',');
     final label = suggestion.startTime != null
         ? 'Da worklog: ${hoursLabel}h (${_fmtTime(suggestion.startTime!)}–'
@@ -502,21 +499,24 @@ class _WorklogSuggestionChip extends StatelessWidget {
 
     return AppTappable(
       onTap: onApply,
-      color: v.tint.withAlpha(31),
+      color: AppColors.Y.withAlpha(31),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: v.tint),
+      border: Border.all(color: AppColors.Y),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.clock, size: 14, color: v.tint),
+          Icon(LucideIcons.clock, size: 14, color: AppColors.Y),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: context.colors.ink),
           ),
           const SizedBox(width: 6),
-          Text('· Usa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: v.tint)),
+          Text(
+            '· Usa',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.Y),
+          ),
         ],
       ),
     );
@@ -560,12 +560,11 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
     final mm = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
     final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
 
-    final v = context.vetro;
     return AppTappable(
       onTap: widget.onStop,
-      color: v.tint.withAlpha(31),
+      color: AppColors.Y.withAlpha(31),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: v.tint),
+      border: Border.all(color: AppColors.Y),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Text(
         '$hh:$mm:$ss',
@@ -622,20 +621,15 @@ class _TotalOreCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final v = context.vetro;
-    // Vetro gradient, not CHARCOAL/AppColors.Y — same "Compilazione N di 4" readout job as
+    // Flat AppColors.Y fill — same "Compilazione N di 4" readout job as
     // rapportino_form_screen.dart's own _CompletionCard, same reasoning for the switch.
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         borderRadius: AppRack.freeShape,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [v.tint, v.tintStrong],
-        ),
+        color: AppColors.Y,
         boxShadow: [
-          BoxShadow(color: v.tint.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
+          BoxShadow(color: AppColors.Y.withAlpha(90), blurRadius: 24, offset: const Offset(0, 12)),
         ],
       ),
       child: Row(

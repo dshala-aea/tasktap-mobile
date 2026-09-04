@@ -8,7 +8,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/utils/offline_guard.dart';
-import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
@@ -502,10 +501,10 @@ class _GiacenzaRow extends ConsumerWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          // VetroCard as the sheet shell, ListRow for each action — same vocabulary the rest of
+          // AppCard as the sheet shell, ListRow for each action — same vocabulary the rest of
           // the app's action lists use (ticket_detail_screen's attachment/report rows), rather
           // than the plain ListTiles this sheet used to hand-roll.
-          child: VetroCard(
+          child: AppCard(
             padding: EdgeInsets.zero,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -580,7 +579,7 @@ class _GiacenzaRow extends ConsumerWidget {
         builder: (ctx, setDialogState) {
           return Dialog(
             backgroundColor: Colors.transparent,
-            child: VetroCard(
+            child: AppCard(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -715,7 +714,7 @@ class _GiacenzaRow extends ConsumerWidget {
         builder: (ctx, setDialogState) {
           return Dialog(
             backgroundColor: Colors.transparent,
-            child: VetroCard(
+            child: AppCard(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -890,7 +889,7 @@ class _GiacenzaRow extends ConsumerWidget {
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
-        child: VetroCard(
+        child: AppCard(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
