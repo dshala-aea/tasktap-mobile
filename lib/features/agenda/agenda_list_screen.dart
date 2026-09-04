@@ -5,8 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/agenda/agenda_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -167,10 +167,7 @@ class _AgendaRowState extends ConsumerState<_AgendaRow> {
           onTap: _complete,
           child: RowIconTile(
             icon: item.isCompleted ? LucideIcons.checkCircle2 : LucideIcons.circle,
-            // context.vetro.tint, not the fixed AppVetroColors.tint — this row sits on the
-            // normal flipping page ground, not a permanently-dark surface, so it needs the
-            // theme-appropriate tint (the fixed light-mode value read lower-contrast in dark).
-            color: item.isCompleted ? context.colors.green : context.vetro.tint,
+            color: item.isCompleted ? context.colors.green : AppColors.Y,
           ),
         ),
         title: item.title,

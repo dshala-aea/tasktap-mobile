@@ -3,7 +3,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
-import '../../../core/widgets/vetro_button.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -206,7 +205,7 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
               ),
             const SizedBox(height: 32),
 
-            VetroButton(
+            AppButton(
               label: _isEditing ? 'Salva modifiche' : 'Crea squadra',
               onPressed: _isSaving ? null : _save,
               isLoading: _isSaving,
