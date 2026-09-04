@@ -9,12 +9,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/widgets/vetro_button.dart';
-import '../../core/widgets/vetro_card.dart';
-import '../../core/widgets/vetro_compartment_tile.dart';
-import '../../core/widgets/vetro_map_card.dart';
+import '../../core/widgets/app_compartment_tile.dart';
+import '../../core/widgets/app_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
@@ -346,7 +343,7 @@ class _TicketDetailBody extends ConsumerWidget {
                 // address shown with no way to act on it. Lives in the scrollable body, not the
                 // fixed header/status-row/bottom-action-stack chrome this file's own comments
                 // warn is already squeezed — this sliver just adds to the elastic scroll area
-                // the same way every other VetroCard here already does.
+                // the same way every other card here already does.
                 if (locationAddress.isNotEmpty)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -356,7 +353,7 @@ class _TicketDetailBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: VetroMapCard(address: locationAddress),
+                      child: AppMapCard(address: locationAddress),
                     ),
                   ),
 
@@ -372,7 +369,7 @@ class _TicketDetailBody extends ConsumerWidget {
                       AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
-                    child: VetroCard(
+                    child: AppCard(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.base,
                       ),
@@ -436,7 +433,7 @@ class _TicketDetailBody extends ConsumerWidget {
                       ),
                       children: [
                         for (final label in sectionLabels)
-                          VetroCompartmentTile(
+                          AppCompartmentTile(
                             icon: _sectionIcon(label),
                             label: label,
                             onTap: () => openCompartmentSheet(
@@ -480,7 +477,7 @@ class _TicketDetailBody extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 AppSpacing.base,
               ),
-              child: VetroButton(
+              child: AppButton(
                 label: 'Crea rapportino',
                 onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
               ),
@@ -506,7 +503,7 @@ class _TicketDetailBody extends ConsumerWidget {
       customerId: ticket.customerId,
       // The ticket's own tenant, rather than whatever row the mirror lookup finds first.
       tenantId: ticket.tenantId,
-      // Same address VetroMapCard already shows on this screen — a technician who needed it
+      // Same address AppMapCard already shows on this screen — a technician who needed it
       // typed by hand every single time is exactly the friction "prefill everything possible"
       // is about.
       workAddress: locationAddress.isEmpty ? null : locationAddress,
@@ -934,7 +931,7 @@ class _TicketControlStatusCard extends StatelessWidget {
     };
     final valueLabel = _valueLabel(c);
 
-    return VetroCard(
+    return AppCard(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.base,
         vertical: 10,
@@ -1232,7 +1229,7 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: VetroButton(
+          child: AppButton(
             label: 'Fotocamera',
             icon: const Icon(LucideIcons.camera),
             isLoading: _busy,
@@ -1572,7 +1569,7 @@ class _AssignSheetState extends State<_AssignSheet> {
               ),
             ),
           const SizedBox(height: 16),
-          VetroButton(
+          AppButton(
             label: _isSaving ? 'Salvataggio…' : 'Salva',
             isLoading: _isSaving,
             onPressed: _isSaving ? null : _save,
@@ -1634,7 +1631,7 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     // Offline is stated, not hidden behind a disabled button with no explanation. These writes
     // have no idempotent upsert to queue against, so there is nothing to promise here.
     if (async.hasError && async.error is TicketDetailOfflineException) {
-      return VetroCard(
+      return AppCard(
         child: Row(
           children: [
             Icon(LucideIcons.cloudOff, size: 16, color: c.inkMuted),
@@ -1653,7 +1650,7 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
     final isRunning = running != null;
 
-    return VetroCard(
+    return AppCard(
       child: Row(
         children: [
           if (isRunning) ...[const LiveDot(), const SizedBox(width: 10)],
@@ -1683,22 +1680,38 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          else
-            VetroButton(
-              label: isRunning ? 'Ferma' : 'Avvia',
-              compact: true,
-              // Same stop-red/tint split as TimbraScreen's punch button — "ending" a running
-              // clock reuses that colour, not a fresh red.
-              gradientColors: isRunning
-                  ? const [AppColors.stopLight, AppColors.stopDark]
-                  : null,
+          else if (isRunning)
+            // AppButton has no gradientColors escape hatch (VetroButton's own — the old fixed
+            // stopLight/stopDark pair had no themed equivalent to move to). "Ferma" ends a running
+            // clock, exactly the case AppButton's own `danger` variant exists for — its fill/fg
+            // already read through `context.colors.redSoft`/`context.colors.red` rather than a
+            // fixed hex pair, matching the same "ending" language step_riepilogo.dart's resubmit
+            // button uses.
+            //
+            // fullWidth: false — same reasoning as _PendingTicketRow's own Riprova button below:
+            // AppButton defaults to full-width and this sits directly in a Row with no Expanded/
+            // Flexible around it, so the unbounded-width SizedBox blows up layout otherwise.
+            AppButton.danger(
+              label: 'Ferma',
+              size: AppButtonSize.sm,
+              fullWidth: false,
               onPressed: async.isLoading
                   ? null
                   : () => _run(() {
                       final api = ref.read(ticketWorkflowApiClientProvider);
-                      return isRunning
-                          ? api.stopTimer(widget.ticketId)
-                          : api.startTimer(widget.ticketId);
+                      return api.stopTimer(widget.ticketId);
+                    }),
+            )
+          else
+            AppButton(
+              label: 'Avvia',
+              size: AppButtonSize.sm,
+              fullWidth: false,
+              onPressed: async.isLoading
+                  ? null
+                  : () => _run(() {
+                      final api = ref.read(ticketWorkflowApiClientProvider);
+                      return api.startTimer(widget.ticketId);
                     }),
             ),
         ],
@@ -1898,7 +1911,14 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
             child: CircularProgressIndicator(strokeWidth: 2),
           )
         else if (unassigned)
-          VetroButton(label: 'Prendi in carico', compact: true, onPressed: _selfAssign),
+          // fullWidth: false — same reasoning as _PendingTicketRow's own Riprova button and the
+          // timer bar's Avvia/Ferma above: this sits directly in a Row with no Expanded/Flexible.
+          AppButton(
+            label: 'Prendi in carico',
+            size: AppButtonSize.sm,
+            fullWidth: false,
+            onPressed: _selfAssign,
+          ),
       ],
     );
   }
@@ -1964,7 +1984,7 @@ class _OreTab extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              VetroCard(
+              AppCard(
                 child: Row(
                   children: [
                     if (running > 0) ...[const LiveDot(), const SizedBox(width: 8)],

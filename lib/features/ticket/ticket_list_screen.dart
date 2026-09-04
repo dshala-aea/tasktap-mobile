@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
@@ -385,10 +386,9 @@ class _PendingTicketRow extends ConsumerWidget {
 /// A priority stripe (real `Ticket.priority`, synced since schema 20 — see `app_database.dart`)
 /// replaces the old leading icon tile; description, cliente/località (resolved the same way
 /// `work_queue_section.dart` already does, not a new lookup) and due date fill out the row. No
-/// `VetroGlass`/blur here on purpose: this list can run to hundreds of rows, and a per-row
-/// backdrop filter during scroll is exactly the "many small instances" cost that widget's own doc
-/// comment warns against — flat rows on the page ground, divided by `context.vetro.hairline`,
-/// read as the same system without paying for it.
+/// blur here on purpose: this list can run to hundreds of rows, and a per-row backdrop filter
+/// during scroll is exactly the "many small instances" cost blur is expensive for — flat rows on
+/// the page ground, divided by a hairline border, read as the same system without paying for it.
 class _TicketRow extends StatelessWidget {
   const _TicketRow({
     super.key,
@@ -407,9 +407,11 @@ class _TicketRow extends StatelessWidget {
   final bool isLast;
 
   Color _priorityColor(BuildContext context, AppVetroPalette v, String? priority) => switch (priority) {
+    // statusBad/statusWarn: context.vetro's semantic status tokens, out of scope for this sweep
+    // (see status_colors.dart) — left as-is, not converted to a flat AppColors constant.
     'Urgente' => v.statusBad,
     'Alta' => v.statusWarn,
-    'Media' => v.tint,
+    'Media' => AppColors.Y,
     _ => context.colors.inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
   };
 
@@ -443,7 +445,7 @@ class _TicketRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
+          border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),
         // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
         // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the

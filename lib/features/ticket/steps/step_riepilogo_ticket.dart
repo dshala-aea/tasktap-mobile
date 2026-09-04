@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_button.dart';
+import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/key_val.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
@@ -63,7 +63,7 @@ class StepRiepilogoTicket extends ConsumerWidget {
       ),
       children: [
         // ── Summary ────────────────────────────────────────────────────────
-        VetroCard(
+        AppCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Column(
             children: [
