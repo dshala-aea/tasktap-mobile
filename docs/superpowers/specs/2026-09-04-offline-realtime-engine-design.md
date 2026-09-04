@@ -35,15 +35,31 @@ pattern to two more flows), then real-time (the only piece requiring new infrast
 - Uses the existing `ConnectivityNotifier` (`sync/connectivity_provider.dart`) as the
   online/offline signal — already real, already OS-level, no new detection mechanism.
 
-### 2. Coverage expansion
+### 2. Coverage expansion — RULED CLOSED, no plan written (amended 2026-09-04)
 
-- Rapportino creation gets the same offline-queue treatment as ticket creation — mirrors
-  `TicketCreationQueue`'s established shape (a Drift-backed outbox table, a watcher that drains it
-  on reconnect), not a new pattern invented from scratch.
-- Magazzino's actual current offline behavior gets determined during planning (grounding found two
-  files reference "offline" there but didn't characterize what they do) — the plan either extends
-  the same queue pattern if it's genuinely missing, or documents that it's already adequate if it
-  turns out to be.
+Investigated at plan-writing time, not just grounding time — both assumed gaps turned out not to
+be gaps:
+
+- **Rapportino creation is already fully offline-safe.** `create_draft.dart`'s draft creation is a
+  pure local Drift write (no network call at all — nothing to fail offline). Submission already
+  goes through the existing `SubmissionQueue` (`lib/data/sync/submission_queue.dart`), confirmed
+  genuinely wired at app startup via `initSubmissionQueueWatcher` in `HomeShell` (not dead
+  infrastructure). Nothing to build.
+- **Magazzino's stock movements (carico/scarico) are offline-blocked by deliberate design, not by
+  gap.** `ensureOnlineOrWarn` (`lib/core/utils/offline_guard.dart`) is used across every
+  admin-style write in this app (customers, locations, schedules, contracts, squadre, prodotti,
+  materiali, cantieri, magazzino movements) — its own doc comment states the reasoning explicitly:
+  "queuing them was judged not worth the risk (a wrong queue is worse than an honest error)." This
+  is a considered architectural stance already made in this exact codebase, not an oversight.
+  Building a new offline queue for magazzino movements specifically would contradict that decision
+  for no stated reason strong enough to override it.
+
+**Ruling:** no coverage-expansion plan is written. If the `ensureOnlineOrWarn` design philosophy
+itself should be revisited for some subset of these forms, that is a separate, explicit design
+conversation — not something this plan silently does on the strength of an assumption that turned
+out to be wrong. Cost if this ruling is wrong: low — nothing destructive happens by not building
+this; a future request to make a specific admin flow offline-capable is a normal follow-up, not a
+correction of damage done.
 
 ### 3. Real-time feel — hybrid, deliberately scoped
 
