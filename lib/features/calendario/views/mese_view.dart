@@ -199,7 +199,7 @@ class _EventDots extends StatelessWidget {
               child: Icon(
                 LucideIcons.users,
                 size: 8,
-                color: isSelected ? AppColors.Y : context.colors.amber,
+                color: isSelected ? Colors.white : context.colors.amber,
               ),
             ),
           ...List.generate(show, (i) {
@@ -208,7 +208,7 @@ class _EventDots extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: BoxDecoration(
-                color: isSelected ? AppColors.Y : context.colors.amber,
+                color: isSelected ? Colors.white : context.colors.amber,
                 shape: BoxShape.circle,
               ),
             );
