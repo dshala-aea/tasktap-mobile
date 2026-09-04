@@ -18,7 +18,7 @@ final pendingSyncCountProvider = StreamProvider<PendingSyncCount>((ref) {
 
   final reportsStream = (db.select(
     db.draftReports,
-  )..where((r) => r.submissionState.isNotValue('submitted'))).watch();
+  )..where((r) => r.submissionState.isIn([..._reportPending, 'failed']))).watch();
   final ticketsStream = (db.select(
     db.pendingTickets,
   )..where((t) => t.state.isNotValue('submitted'))).watch();

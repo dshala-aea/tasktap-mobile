@@ -40,6 +40,33 @@ void main() {
     expect(find.textContaining('Offline'), findsOneWidget);
   });
 
+  testWidgets('shows the queued count alongside offline instead of hiding it', (tester) async {
+    await tester.pumpWidget(
+      _wrap([
+        connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
+        pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 3, failed: 0))),
+      ]),
+    );
+    await tester.pump();
+
+    expect(find.text('Offline · 3 in coda'), findsOneWidget);
+  });
+
+  testWidgets('shows the failed count alongside offline, taking precedence over pending', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap([
+        connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
+        pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 1, failed: 2))),
+      ]),
+    );
+    await tester.pump();
+
+    expect(find.text('Offline · 2 da riprovare'), findsOneWidget);
+    expect(find.textContaining('in coda'), findsNothing);
+  });
+
   testWidgets('shows a pending count when online but items are queued', (tester) async {
     await tester.pumpWidget(
       _wrap([

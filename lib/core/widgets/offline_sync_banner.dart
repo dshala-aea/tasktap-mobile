@@ -17,9 +17,17 @@ class OfflineSyncBanner extends ConsumerWidget {
     final isOnline = ref.watch(connectivityProvider).valueOrNull ?? true;
     final counts = ref.watch(pendingSyncCountProvider).valueOrNull ?? (pending: 0, failed: 0);
 
+    // Same failed-wins-over-pending precedence either way — offline just also surfaces whichever
+    // count applies, instead of hiding it: offline is exactly the state where the queue grows.
     final String? label;
     if (!isOnline) {
-      label = 'Offline';
+      if (counts.failed > 0) {
+        label = 'Offline · ${counts.failed} da riprovare';
+      } else if (counts.pending > 0) {
+        label = 'Offline · ${counts.pending} in coda';
+      } else {
+        label = 'Offline';
+      }
     } else if (counts.failed > 0) {
       label = '${counts.failed} da riprovare';
     } else if (counts.pending > 0) {
@@ -44,17 +52,22 @@ class OfflineSyncBanner extends ConsumerWidget {
     final Color bg = isFailed ? context.colors.red : context.colors.bg3;
     final Color fg = isFailed ? context.colors.inkInverse : context.colors.inkMuted;
 
-    return SafeArea(
-      bottom: false,
-      child: Container(
-        key: const Key('offlineSyncBannerContainer'),
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        color: bg,
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
+    // Non-interactive: this banner has no tap targets of its own, but it sits in a Stack directly
+    // above ScreenHeader's back/action buttons (home_shell.dart), and a hit-test-opaque Container
+    // at that same top edge would otherwise silently swallow taps meant for those buttons.
+    return IgnorePointer(
+      child: SafeArea(
+        bottom: false,
+        child: Container(
+          key: const Key('offlineSyncBannerContainer'),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          color: bg,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
         ),
       ),
     );
