@@ -52,7 +52,8 @@ class HomeShell extends ConsumerStatefulWidget {
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
+class _HomeShellState extends ConsumerState<HomeShell>
+    with WidgetsBindingObserver {
   Timer? _reconcilePoll;
 
   // Cancel functions for every connectivityProvider.onReconnect() registration made below. A
@@ -165,7 +166,10 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   Widget build(BuildContext context) {
     // Rack is a passthrough now (see its own doc comment) — kept only so this one call site
     // needs no change from when it painted the van-racking rail behind every tab.
-    final content = Rack(bottom: AppRack.navBarHeight, child: widget.navigationShell);
+    final content = Rack(
+      bottom: AppRack.navBarHeight,
+      child: widget.navigationShell,
+    );
     final nav = AppBottomNav(
       currentIndex: widget.navigationShell.currentIndex,
       onTap: _onDestinationSelected,
@@ -178,11 +182,36 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
     // out beside the content in a `Row` instead is the minimal restructuring that actually lets it
     // sit at the side.
     if (MediaQuery.sizeOf(context).width >= AppBottomNav.wideBreakpoint) {
-      return Scaffold(body: Row(children: [nav, Expanded(child: content)]));
+      return Scaffold(
+        body: Row(
+          children: [
+            nav,
+            Expanded(
+              child: Stack(
+                children: [
+                  content,
+                  const Align(
+                    alignment: Alignment.topCenter,
+                    child: OfflineSyncBanner(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     return Scaffold(
-      body: content,
+      body: Stack(
+        children: [
+          content,
+          const Align(
+            alignment: Alignment.topCenter,
+            child: OfflineSyncBanner(),
+          ),
+        ],
+      ),
       // Extend body behind the floating pill so the hero/content scrolls under it.
       extendBody: true,
       bottomNavigationBar: nav,
