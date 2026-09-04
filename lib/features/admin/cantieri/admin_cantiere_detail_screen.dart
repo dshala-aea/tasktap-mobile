@@ -10,9 +10,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/utils/error_message.dart';
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
-import '../../../core/widgets/vetro_map_card.dart';
+import '../../../core/widgets/app_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
@@ -174,7 +172,7 @@ class _CantiereDetailBody extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 0,
               ),
-              child: VetroMapCard(
+              child: AppMapCard(
                 address: [
                   cantiere.address,
                   cantiere.city,
@@ -186,7 +184,7 @@ class _CantiereDetailBody extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.pagePadding),
-            child: VetroCard(
+            child: AppCard(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
                 children: [
@@ -230,7 +228,7 @@ class _CantiereDetailBody extends ConsumerWidget {
               AppSpacing.pagePadding,
               AppSpacing.pagePadding,
             ),
-            child: VetroButton(
+            child: AppButton(
               label: 'Crea rapportino',
               icon: const Icon(LucideIcons.fileText),
               onPressed: () => _createRapportino(context, ref, cantiere),
@@ -574,7 +572,7 @@ class _ContactFormSheetState extends State<_ContactFormSheet> {
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: VetroButton(
+              child: AppButton(
                 label: _isSaving ? 'Salvataggio…' : 'Salva',
                 onPressed: _isSaving ? null : _save,
               ),
@@ -816,7 +814,7 @@ class _AddAssignmentSheetState extends State<_AddAssignmentSheet> {
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
-            child: VetroButton(
+            child: AppButton(
               label: _isSaving ? 'Salvataggio…' : 'Aggiungi',
               onPressed: (_selectedUserId == null || _isSaving) ? null : _save,
             ),

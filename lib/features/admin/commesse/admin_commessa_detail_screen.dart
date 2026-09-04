@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_rack.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../ticket/ticket_providers.dart';
 import 'commesse_providers.dart';
@@ -39,9 +38,7 @@ class AdminCommessaDetailScreen extends ConsumerWidget {
             children: [
               ScreenHeader(title: 'Commessa', showBack: true),
               Expanded(
-                child: ErrorState(
-                  onRetry: () => ref.invalidate(commessaByIdProvider(commessaId)),
-                ),
+                child: ErrorState(onRetry: () => ref.invalidate(commessaByIdProvider(commessaId))),
               ),
             ],
           ),
@@ -111,7 +108,7 @@ class _CommessaDetailBody extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            child: VetroCard(
+            child: AppCard(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -10,8 +10,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/utils/error_message.dart';
 import '../../../core/utils/offline_guard.dart';
-import '../../../core/widgets/vetro_button.dart';
-import '../../../core/widgets/vetro_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
@@ -103,7 +101,7 @@ class AdminContractDetailScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.pagePadding),
-                    child: VetroCard(
+                    child: AppCard(
                       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
                       child: Column(
                         children: [
@@ -174,9 +172,8 @@ class AdminContractDetailScreen extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: VetroButton(
+                      child: AppButton.secondary(
                         label: 'Genera pianificazione',
-                        secondary: true,
                         onPressed: () => _openGeneraScheduleDialog(context, ref, contract),
                       ),
                     ),
