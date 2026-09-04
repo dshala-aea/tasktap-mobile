@@ -65,12 +65,17 @@ correction of damage done.
 
 Two distinct things get worked on, not one:
 
-**A. Optimistic UI (the user's own actions feel instant).** Tap "Avvia" → UI shows "In corso"
-immediately, sync happens in the background via the existing offline-queue infrastructure. This is
-a UI-layer pattern applied to the actions that currently wait on a network round trip before
-reflecting the user's own change — no new backend infrastructure, works both online and offline
-uniformly (the queue is always the actual mechanism; optimistic UI is just not waiting for it to
-confirm before updating the screen).
+**A. Optimistic UI — DROPPED (amended 2026-09-04).** Investigated at plan-writing time: the most
+obvious candidate (ticket/cantiere worklog timer start/stop) turned out to be deliberately
+non-optimistic by existing, documented design — `_TicketTimerBar`'s own code comment: "these writes
+have no idempotent upsert to queue against, so there is nothing to promise here" (starting/stopping
+a server-authoritative timer twice, or racing a stop against an optimistically-shown start, would
+produce genuinely wrong elapsed-time data — not a UI polish problem, a correctness one). This is
+the second deliberate "already decided against this" finding while writing these plans (the first
+was magazzino's `ensureOnlineOrWarn`, see the Coverage section above) — ruled out rather than
+overridden. No optimistic-UI plan is written. If a genuinely safe, idempotent candidate for
+optimistic UI is identified later, that is a separate, narrowly-scoped follow-up, not something
+forced into existence here on the strength of the original spec's blanket assumption.
 
 **B. A deliberately small-scope SignalR hub (other users' actions appear without a manual
 refresh).** Not "replace polling everywhere" — a targeted set of events, tenant/permission-scoped:
