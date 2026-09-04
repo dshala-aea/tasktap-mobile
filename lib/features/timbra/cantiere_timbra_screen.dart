@@ -25,11 +25,10 @@
 //     stays usable with no signal at all, matching the personal Timbra
 //     screen's own offline model.
 //
-// VETRO (2026-08-26, module #1) — this screen flips light/dark (`context.colors.bg2`), unlike
-// personal Timbra's permanently-dark ground, so it reads `context.vetro` rather than the fixed
-// `AppVetroColors`. Re-skinned so far: the cantiere picker (VetroCard) and the primary clock-in/
-// clock-out actions (VetroButton). `AppCard`/`AppButton` call sites elsewhere on this screen —
-// the progressive-disclosure detail forms — are next, not yet touched.
+// This screen flips light/dark (`context.colors.bg2`), unlike personal Timbra's permanently-dark
+// ground — so its one remaining `context.vetro` reference (the active-session status dot/label,
+// via `context.vetro.statusGood`) reads the flipping semantic-status tokens rather than the fixed
+// `AppVetroColors` pair personal Timbra uses. Everything else on this screen is AppCard/AppButton.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'dart:async' show unawaited;
@@ -46,8 +45,6 @@ import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/utils/error_message.dart';
-import '../../core/widgets/vetro_button.dart';
-import '../../core/widgets/vetro_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
@@ -632,7 +629,7 @@ class _CheckInBody extends StatelessWidget {
         children: [
           // Context banner (linked ticket)
           if (ticketId != null) ...[
-            VetroCard(
+            AppCard(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.base,
                 vertical: AppSpacing.md,
@@ -705,8 +702,7 @@ class _CheckInBody extends StatelessWidget {
                   );
                 }
 
-                final v = context.vetro;
-                return VetroCard(
+                return AppCard(
                   padding: EdgeInsets.zero,
                   child: Column(
                     children: ordered.asMap().entries.map((entry) {
@@ -729,11 +725,13 @@ class _CheckInBody extends StatelessWidget {
                             vertical: AppSpacing.md,
                           ),
                           decoration: BoxDecoration(
-                            // Vetro's one accent for "selected", not AppColors.YSoft — the tint at
+                            // The brand accent for "selected", not AppColors.YSoft — the tint at
                             // low alpha reads as the same "strapped/active" idea Cassetta's YSoft
                             // signalled, in the new system's own colour.
-                            color: isSelected ? v.tint.withAlpha(31) : Colors.transparent,
-                            border: isLast ? null : Border(bottom: BorderSide(color: v.hairline)),
+                            color: isSelected ? AppColors.Y.withAlpha(31) : Colors.transparent,
+                            border: isLast
+                                ? null
+                                : Border(bottom: BorderSide(color: context.colors.borderLight)),
                           ),
                           child: Row(
                             children: [
@@ -765,7 +763,7 @@ class _CheckInBody extends StatelessWidget {
                                 ),
                               ),
                               if (isSelected)
-                                Icon(LucideIcons.checkCircle2, size: 18, color: v.tint),
+                                Icon(LucideIcons.checkCircle2, size: 18, color: AppColors.Y),
                             ],
                           ),
                         ),
@@ -776,7 +774,7 @@ class _CheckInBody extends StatelessWidget {
               },
             ),
           ] else
-            VetroCard(
+            AppCard(
               child:
                   fixedCantiereAsync?.when(
                     loading: () => const Center(
@@ -885,7 +883,7 @@ class _CheckInBody extends StatelessWidget {
           // Clock-in button — disabled (not hidden) when there is nothing to
           // select, so the reason above stays visible instead of the row
           // just disappearing.
-          VetroButton(
+          AppButton(
             label: 'Timbra ingresso cantiere',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
@@ -1133,7 +1131,7 @@ class _ActiveSessionBody extends ConsumerWidget {
           // `context.vetro` status tokens (not the fixed AppVetroColors pair personal Timbra
           // uses) because this card, unlike personal Timbra's permanently-dark ground, is on
           // this screen's own light/dark-flipping surface — see this file's own doc comment.
-          VetroCard(
+          AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1182,7 +1180,7 @@ class _ActiveSessionBody extends ConsumerWidget {
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.8,
-                    color: context.vetro.tint,
+                    color: AppColors.Y,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
@@ -1240,15 +1238,15 @@ class _ActiveSessionBody extends ConsumerWidget {
             const SizedBox(height: 16),
           ],
 
-          // Clock-out button — the same stop-red gradient TimbraScreen's punch button uses for
-          // "ending", not the default tint fill: this action is destructive/session-ending, same
-          // semantic as there.
-          VetroButton(
+          // Clock-out button — AppButton.danger, not the default primary fill: this action is
+          // destructive/session-ending, the same "ending" semantic TicketDetailScreen's own
+          // timer-bar "Ferma" button uses its danger variant for (its fill/fg read through
+          // `context.colors.redSoft`/`context.colors.red` rather than a fixed hex pair).
+          AppButton.danger(
             label: 'Timbra uscita cantiere',
             icon: const Icon(LucideIcons.logOut),
             isLoading: isLoading,
             onPressed: isLoading ? null : onEnd,
-            gradientColors: const [AppColors.stopLight, AppColors.stopDark],
           ),
         ],
       ),

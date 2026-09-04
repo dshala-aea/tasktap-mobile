@@ -20,7 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
-import 'package:tasktap_mobile/core/widgets/vetro_button.dart';
+import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
@@ -530,8 +530,8 @@ void main() {
         await tester.pumpWidget(_buildScreen(db: db, apiClient: api, cantiereId: 'missing-id'));
         await tester.pumpAndSettle();
 
-        final button = tester.widget<VetroButton>(
-          find.widgetWithText(VetroButton, 'Timbra ingresso cantiere'),
+        final button = tester.widget<AppButton>(
+          find.widgetWithText(AppButton, 'Timbra ingresso cantiere'),
         );
         expect(button.onPressed, isNull);
 
@@ -565,8 +565,8 @@ void main() {
       await tester.pump();
 
       expect(find.byType(CircularProgressIndicator), findsWidgets);
-      final button = tester.widget<VetroButton>(
-        find.widgetWithText(VetroButton, 'Timbra ingresso cantiere'),
+      final button = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Timbra ingresso cantiere'),
       );
       expect(button.onPressed, isNull);
 

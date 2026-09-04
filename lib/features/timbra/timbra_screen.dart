@@ -1,20 +1,18 @@
 // dart format width=100
 import 'package:flutter/material.dart';
-import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
+import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/row_icon_tile.dart';
-import '../../core/widgets/vetro_card.dart';
-import '../../core/widgets/vetro_glass.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -22,11 +20,11 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // TimbraScreen
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Clock-in / clock-out screen — Vetro.
+/// Clock-in / clock-out screen.
 ///
 ///   - (2026-08-26 redesign, module #1; hero restructured 2026-08-30, "Status-First Hero"; chrome
-///     removed 2026-08-30, "Hybrid Card Hero"; hero card dropped entirely 2026-08-30, full flip —
-///     see below.)
+///     removed 2026-08-30, "Hybrid Card Hero"; hero card dropped entirely 2026-08-30, full flip;
+///     flat Documento material, no more gradients, 2026-09-04 — see below.)
 ///   - The screen used to be permanently dark, top to bottom, with its own fixed `ScreenHeader`
 ///     plate. A first pass narrowed that to one dark "hero card" wrapping just the punch control
 ///     (the sun-glare argument for a dark, high-contrast surface was real — see the git history on
@@ -36,7 +34,7 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///     below it. This pass drops the card: every surface on this page, including the punch/pause
 ///     controls, now reads `context.colors`/`context.vetro` and flips with the app theme like
 ///     every other screen. The sun-glare property is kept differently — the punch/pause buttons
-///     are still a saturated gradient fill with white text/icon, which stays legible regardless of
+///     are still a saturated flat fill with white text/icon, which stays legible regardless of
 ///     the surrounding theme, without needing a dedicated dark ground under them.
 ///   - `ScreenHeader` is gone. The title and date are plain inline text at the top of the page.
 ///   - Punch/pause are now full-width rounded-rect buttons, not a floating disc/small pill — more
@@ -50,9 +48,9 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///     [showAppToast], the same shared feedback surface every other screen in the app uses, so
 ///     the layout doesn't shift to make room for an error line.
 ///   - The punch button gets a brief `AnimatedScale` press-down instead of an ink splash (a splash
-///     over a saturated gradient fill read as a smudge, not a press — still true, still avoided),
-///     and its gradient/state crossfades on tap instead of snapping; the status badge crossfades
-///     on state change; the guard banner animates its own height in/out instead of popping.
+///     over a saturated fill read as a smudge, not a press — still true, still avoided), and its
+///     fill/state crossfades on tap instead of snapping; the status badge crossfades on state
+///     change; the guard banner animates its own height in/out instead of popping.
 class TimbraScreen extends ConsumerStatefulWidget {
   const TimbraScreen({super.key});
 
@@ -387,7 +385,7 @@ class _HeroStatus extends StatelessWidget {
               fontFamily: 'Inter',
               fontSize: 56,
               fontWeight: FontWeight.w800,
-              color: v.tint,
+              color: AppColors.Y,
               letterSpacing: -1.5,
               height: 1.0,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -510,15 +508,18 @@ class _PunchButtonState extends State<_PunchButton> {
     final enabled = !widget.isLoading && !blocked;
     final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-    // Gradient fill, checked against a simulated direct-sunlight wash before being kept — reads
-    // clearly against either app theme on its own, without needing a dedicated dark ground under
-    // it. Both stops reuse existing colours rather than inventing a Vetro-specific gradient:
-    // [AppColors.stopLight]/[stopDark] were already this exact red family; tint/tintStrong come
-    // from `context.vetro` so the "active" gradient still flips with the theme.
-    final v = context.vetro;
-    final gradientColors = isOnShift
-        ? const [AppColors.stopLight, AppColors.stopDark]
-        : [v.tint, v.tintStrong];
+    // Flat fill (no gradient — DESIGN.md's flat Documento material has none), checked against a
+    // simulated direct-sunlight wash before being kept — reads clearly against either app theme
+    // on its own, without needing a dedicated dark ground under it. AppColors.Y for "starting",
+    // the same theme-invariant brand-accent exception every other primary fill in the app reads;
+    // AppColors.stopDark for "ending" — not a flipping `context.colors.red`/`redSoft` pair,
+    // because the white icon/text on top of this fill has to stay legible under BOTH themes, and
+    // those two tokens are tuned to flip (`redSoft` goes near-white in light mode, `red` goes a
+    // light salmon in dark mode — either one under fixed white text fails contrast in one theme
+    // or the other). `stopDark` alone clears >7:1 against white regardless of theme, which is the
+    // same "does not flip, does not belong in AppPalette" reasoning `AppColors`'s own "Punch
+    // clock (theme-invariant)" section already documents this pair for.
+    final fillColor = isOnShift ? AppColors.stopDark : AppColors.Y;
 
     // Dimmed and inert rather than hidden: a button that disappears leaves the user with no
     // idea what happened, and the reason is shown above via _GuardBanner.
@@ -526,7 +527,7 @@ class _PunchButtonState extends State<_PunchButton> {
       button: true,
       enabled: !blocked,
       label: blocked && widget.guard.reason != null ? '$label — ${widget.guard.reason}' : label,
-      // The press target deliberately has no splash. It is a full-width gradient fill with a
+      // The press target deliberately has no splash. It is a full-width saturated fill with a
       // coloured glow; ink over that reads as a smudge rather than a press, and the control
       // already answers a tap within the frame by swapping to a spinner. AnimatedScale gives it
       // a tactile press-down instead, with no smudge risk. The secondary pause button below it
@@ -551,14 +552,10 @@ class _PunchButtonState extends State<_PunchButton> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: gradientColors,
-                ),
+                color: fillColor,
                 boxShadow: [
                   BoxShadow(
-                    color: gradientColors.first.withAlpha(110),
+                    color: fillColor.withAlpha(110),
                     blurRadius: 24,
                     offset: const Offset(0, 10),
                   ),
@@ -573,7 +570,7 @@ class _PunchButtonState extends State<_PunchButton> {
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // White on both gradients — both tint and stop are dark/saturated
+                        // White on both fills — both AppColors.Y and stopDark are dark/saturated
                         // enough that white reads clearly on either.
                         Icon(icon, size: 24, color: AppColors.WHITE),
                         const SizedBox(width: 10),
@@ -606,10 +603,10 @@ class _PunchButtonState extends State<_PunchButton> {
 /// Deliberately understated next to [_PunchButton]: starting/ending the shift is the
 /// primary action, pause/resume is a secondary one that happens mid-shift.
 ///
-/// Full-width to match [_PunchButton]'s new shape, at `borderRadius: 20` (matching the punch
-/// button's own radius, not the pill shape this used when it floated as a small centered chip).
-/// `VetroGlass` reads its default `context.vetro.glassFill`/`glassBorder` here — flips with the
-/// app theme like the rest of the page now that this screen isn't a fixed-dark ground anymore.
+/// Full-width to match [_PunchButton]'s shape, not the pill shape this used when it floated as a
+/// small centered chip. `AppCard`'s own default fill/border already flip with the app theme like
+/// the rest of the page now that this screen isn't a fixed-dark ground anymore — same
+/// `context.colors.surface`/`borderLight` pair `VetroGlass`'s own defaults used to read here.
 class _PauseButton extends StatelessWidget {
   const _PauseButton({
     required this.shiftState,
@@ -639,41 +636,35 @@ class _PauseButton extends StatelessWidget {
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
       child: Opacity(
         opacity: blocked ? 0.4 : 1,
-        // VetroGlass paints the blur + tint fill; AppTappable sits inside it purely for the
-        // splash (transparent `color`, so it isn't painting a second fill on top of the glass).
         child: SizedBox(
           width: double.infinity,
           height: 64,
-          child: VetroGlass(
-            borderRadius: BorderRadius.circular(20),
-            child: AppTappable(
-              onTap: isLoading || blocked ? null : onTap,
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (isLoading)
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                    )
-                  else
-                    Icon(icon, size: 18, color: accent),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                      color: accent,
-                    ),
+          child: AppCard(
+            onTap: isLoading || blocked ? null : onTap,
+            padding: EdgeInsets.zero,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (isLoading)
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                  )
+                else
+                  Icon(icon, size: 18, color: accent),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: accent,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -723,10 +714,9 @@ class _SessionsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      // A normal flipping VetroCard now — the frame around the dark hero reads as the rest of
+      // A normal flipping AppCard now — the frame around the dark hero reads as the rest of
       // the app, not a permanently-dark plate matching a header that no longer exists.
-      child: VetroCard(
-        borderRadius: AppRack.freeShape,
+      child: AppCard(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           // Matches the empty-state Expanded below: a min-sized Column asked to also host a flex
@@ -935,11 +925,11 @@ class _TotalRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text(
           _formatHoursMinutesSeconds(total),
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'Inter',
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: context.vetro.tint,
+            color: AppColors.Y,
           ),
         ),
       ],
