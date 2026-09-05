@@ -7,7 +7,7 @@
 //   1. Renders KeyVal rows (Sede, Tecnico, Cliente, Ore).
 //   2. Renders StatusPill with correct label.
 //   3. Renders Materiali list rows when materiali seeded.
-//   4. Firma cliente block shown when signature allegato id is set.
+//   4. Firma cliente and Firma tecnico blocks shown when their signature allegato ids are set.
 //   5. Shows "not found" empty state for unknown report id.
 //   6. Scarica PDF button present.
 
@@ -219,7 +219,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Firma cliente'), findsOneWidget);
-      expect(find.textContaining('Firmato il'), findsOneWidget);
+      // _seedSubmittedDraft sets both signature ids — no allegato row seeded for either here, so
+      // both sections render the "Firmato il" placeholder.
+      expect(find.textContaining('Firmato il'), findsNWidgets(2));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -248,15 +250,67 @@ void main() {
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();
 
-      // The bare placeholder icon (no resolved allegato) is gone — a resolved signature no
-      // longer shows the pen icon, it shows the image itself.
-      expect(find.byIcon(LucideIcons.penTool), findsNothing);
-      expect(find.textContaining('Firmato il'), findsOneWidget);
+      // Customer's resolved to a real image (no pen icon); technician's has no allegato row
+      // seeded, so it still shows the placeholder — one pen icon, one "Firmato il" each.
+      expect(find.byIcon(LucideIcons.penTool), findsOneWidget);
+      expect(find.textContaining('Firmato il'), findsNWidgets(2));
 
-      await tester.tap(find.textContaining('Firmato il'));
+      // The customer block (first in the list) is the one actually wrapped in a tappable —
+      // the placeholder branch isn't tappable at all.
+      await tester.tap(find.textContaining('Firmato il').first);
       await tester.pumpAndSettle();
 
       expect(find.byType(InteractiveViewer), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — firma tecnico', () {
+    testWidgets('firma block shown when technicianSignatureAllegatoId is set', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Firma tecnico'), findsOneWidget);
+      // Both signature blocks render "Firmato il" — one for each section.
+      expect(find.textContaining('Firmato il'), findsNWidgets(2));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows the real technician signature image, distinct from the customer one', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db);
+      final custFile = _makeTempFile('sig-c.jpg', [1, 2, 3]);
+      final techFile = _makeTempFile('sig-t.jpg', [4, 5, 6]);
+      addTearDown(() => custFile.deleteSync());
+      addTearDown(() => techFile.deleteSync());
+      await _insertAllegato(
+        db,
+        id: 'sig-c-1',
+        reportId: 'report-1',
+        fileName: 'firma-cliente.jpg',
+        storagePath: custFile.path,
+      );
+      await _insertAllegato(
+        db,
+        id: 'sig-t-1',
+        reportId: 'report-1',
+        fileName: 'firma-tecnico.jpg',
+        storagePath: techFile.path,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      // Both signatures resolved to real images — the placeholder pen icon is gone entirely.
+      expect(find.byIcon(LucideIcons.penTool), findsNothing);
+      expect(find.text('Firma cliente'), findsOneWidget);
+      expect(find.text('Firma tecnico'), findsOneWidget);
+
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -316,6 +370,11 @@ void main() {
 
   group('RapportinoViewScreen — download', () {
     testWidgets('Scarica PDF button is present', (tester) async {
+      // The Firma tecnico section (shown by default — _seedSubmittedDraft sets both signature
+      // ids) pushes this section below the default test surface height.
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       await _seedSubmittedDraft(db);
       await tester.pumpWidget(_buildView(db: db));
       await tester.pumpAndSettle();

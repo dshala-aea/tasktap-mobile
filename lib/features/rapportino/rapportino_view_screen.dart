@@ -115,6 +115,9 @@ class _RapportinoViewBody extends ConsumerWidget {
     final customerSignatureAllegato = draft.customerSignatureAllegatoId == null
         ? null
         : allegati.where((a) => a.id == draft.customerSignatureAllegatoId).firstOrNull;
+    final technicianSignatureAllegato = draft.technicianSignatureAllegatoId == null
+        ? null
+        : allegati.where((a) => a.id == draft.technicianSignatureAllegatoId).firstOrNull;
 
     // Names, not user ids. This joined raw GUIDs — on the read-only view of the document that
     // becomes an invoice, where "who did the work" is the line a customer actually reads back.
@@ -332,6 +335,37 @@ class _RapportinoViewBody extends ConsumerWidget {
                             _SignatureBlock(
                               dio: dio,
                               allegato: customerSignatureAllegato,
+                              signedAt:
+                                  draft.customerSignoffAt ??
+                                  draft.inviatoAt ??
+                                  draft.updatedAt ??
+                                  draft.createdAt,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // ── Firma tecnico ─────────────────────────────────────────────
+                if (draft.technicianSignatureAllegatoId != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionTitle(title: 'Firma tecnico'),
+                            const SizedBox(height: 8),
+                            _SignatureBlock(
+                              dio: dio,
+                              allegato: technicianSignatureAllegato,
                               signedAt:
                                   draft.customerSignoffAt ??
                                   draft.inviatoAt ??
