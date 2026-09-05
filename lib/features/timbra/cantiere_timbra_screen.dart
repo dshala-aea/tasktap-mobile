@@ -673,6 +673,14 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       _selectedCantiere = null;
       _closingDescription = null;
       _safetyNotes = null;
+      // Check-in side too — this screen doesn't navigate away on end (picker mode returns
+      // straight to the picker), so a leftover value here would silently resend into the next
+      // check-in's StartCantiereRequest/BatchStartCantiereRequest.
+      _description = null;
+      _workOrderNumber = null;
+      _equipmentUsed = null;
+      _teamSize = null;
+      _weatherConditions = null;
     });
     showAppToast(
       context,
