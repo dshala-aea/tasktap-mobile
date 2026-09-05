@@ -8,6 +8,7 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/entitlements/entitlement_providers.dart';
+import '../../../data/realtime/realtime_connection.dart';
 import '../../../data/realtime/realtime_event_router.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
@@ -48,7 +49,11 @@ import '../../../data/timbratura/work_log_reconciler.dart';
 /// Realtime: [initRealtimeEventWatcher] opens the one persistent SignalR connection for this
 /// shell's lifetime and routes each pushed event to the existing provider(s)/sync it should
 /// trigger — see realtime_event_router.dart. Best-effort: a device that never connects, or loses
-/// the connection, keeps working exactly as it does today via the triggers above.
+/// the connection, keeps working exactly as it does today via the triggers above. On every
+/// foreground resume (not just an offline→online transition — see `didChangeAppLifecycleState`)
+/// this also forces [RealtimeConnection.reconnect], since the SignalR client's own
+/// automatic-reconnect gives up permanently after a fixed retry window shorter than a typical
+/// backgrounding.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.navigationShell});
 
@@ -158,6 +163,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
       ref.read(syncProvider.notifier).performSync();
       ref.read(workLogReconcilerProvider).reconcile();
       ref.read(cantiereWorkLogReconcilerProvider).reconcile();
+      // connectivityProvider.onReconnect (wired in initRealtimeEventWatcher) only fires on an
+      // offline→online transition — it does NOT fire when the app is simply backgrounded past
+      // the SignalR client's automatic-reconnect retry window (~42s) on a device that never lost
+      // its network interface, which is the common case for this app. Forcing a fresh attempt on
+      // every resume closes that gap regardless of what connectivity did while backgrounded.
+      ref.read(realtimeConnectionProvider).reconnect();
       _startReconcilePoll();
     } else {
       // Backgrounded (paused/inactive/hidden): stop the foreground fallback poll. This is

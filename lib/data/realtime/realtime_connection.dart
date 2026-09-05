@@ -67,45 +67,62 @@ class RealtimeConnection {
   Stream<RealtimeEvent> get events => _eventsController.stream;
 
   /// Connects if not already connected/connecting. No-op when there's no access token
-  /// (unauthenticated) or a connection attempt is already in flight/established.
+  /// (unauthenticated), no configured API base URL, or a connection attempt is already in
+  /// flight/established.
   ///
-  /// Never throws: a failed connection just leaves this best-effort feature dark, callers
-  /// don't need to handle it.
+  /// The "already in flight/established" check is state-aware, not just null-aware: the
+  /// package's automatic-reconnect retry policy (`withAutomaticReconnect()`'s default delays,
+  /// `[0, 2000, 10000, 30000, null]`) gives up permanently after ~42s of failed retries, and
+  /// nothing about that gives up transitions `_connection` back to null on its own — the
+  /// `onclose` handler registered below is what does that, for exactly this reason. Without it,
+  /// a `_connection` left non-null-but-actually-`disconnected` would make this method a
+  /// permanent no-op for the rest of the app session.
+  ///
+  /// Never throws: a failed connection (including a build-time failure, e.g. a malformed/empty
+  /// URL) just leaves this best-effort feature dark, callers don't need to handle it.
   Future<void> connect() async {
-    if (_connection != null) return;
+    final existing = _connection;
+    if (existing != null && existing.state != HubConnectionState.disconnected) return;
 
-    if (_accessTokenProvider().isEmpty) return;
-
-    // accessTokenFactory (not a token baked into the URL) so every reconnect attempt —
-    // automatic or via reconnect() — fetches the *current* token rather than replaying
-    // whatever was valid when connect() was first called. The package appends it as
-    // ?access_token=<token> on the websocket handshake URL itself, matching the backend's
-    // JwtBearerEvents.OnMessageReceived handling for the /api/hubs path prefix.
-    final connection = HubConnectionBuilder()
-        .withUrl(
-          '${Env.apiBaseUrl}/api/hubs/notifications',
-          options: HttpConnectionOptions(
-            accessTokenFactory: () async => _accessTokenProvider(),
-          ),
-        )
-        .withAutomaticReconnect()
-        .build();
-
-    connection.on('ReceiveEvent', (arguments) {
-      if (arguments == null || arguments.isEmpty) return;
-      final raw = arguments[0];
-      if (raw is Map) {
-        _eventsController.add(RealtimeEvent.fromHubPayload(raw.cast<String, dynamic>()));
-      }
-    });
-
-    _connection = connection;
+    if (_accessTokenProvider().isEmpty || Env.apiBaseUrl.isEmpty) return;
 
     try {
+      // accessTokenFactory (not a token baked into the URL) so every reconnect attempt —
+      // automatic or via reconnect() — fetches the *current* token rather than replaying
+      // whatever was valid when connect() was first called. The package appends it as
+      // ?access_token=<token> on the websocket handshake URL itself, matching the backend's
+      // JwtBearerEvents.OnMessageReceived handling for the /api/hubs path prefix.
+      final connection = HubConnectionBuilder()
+          .withUrl(
+            '${Env.apiBaseUrl}/api/hubs/notifications',
+            options: HttpConnectionOptions(
+              accessTokenFactory: () async => _accessTokenProvider(),
+            ),
+          )
+          .withAutomaticReconnect()
+          .build();
+
+      connection.on('ReceiveEvent', (arguments) {
+        if (arguments == null || arguments.isEmpty) return;
+        final raw = arguments[0];
+        if (raw is Map) {
+          _eventsController.add(RealtimeEvent.fromHubPayload(raw.cast<String, dynamic>()));
+        }
+      });
+
+      // Fires on ANY close — a clean stop(), the server closing it, or the automatic-reconnect
+      // policy above exhausting its retries and giving up. Clearing `_connection` here (rather
+      // than only in the start() failure path below) is what keeps the guard above accurate: a
+      // connection that's truly dead must look dead to the next connect() call.
+      connection.onclose(({Object? error}) => _connection = null);
+
+      _connection = connection;
+
       await connection.start();
     } catch (_) {
-      // Best-effort: negotiation/handshake failure (offline, hub unreachable, expired
-      // token, ...) must not propagate. Clear so a later connect()/reconnect() can retry.
+      // Best-effort: a build-time throw (malformed/empty URL) or a negotiation/handshake
+      // failure (offline, hub unreachable, expired token, ...) must not propagate. Clear so a
+      // later connect()/reconnect() can retry.
       _connection = null;
     }
   }
@@ -114,14 +131,29 @@ class RealtimeConnection {
   /// resumes from background). `withAutomaticReconnect()` already handles transient drops
   /// on its own — this is for cases that need an explicit restart.
   Future<void> reconnect() async {
-    await _connection?.stop();
-    _connection = null;
+    await stop();
     await connect();
   }
 
-  Future<void> dispose() async {
-    await _connection?.stop();
+  /// Stops the underlying connection (if any) without closing [events] — unlike [dispose], this
+  /// instance stays reusable for a later [connect()] call. Used when a caller needs the
+  /// connection genuinely torn down (e.g. HomeShell.dispose() on a forced sign-out) but the
+  /// `RealtimeConnection` instance itself survives, because it's a root-scoped provider that the
+  /// next mount (possibly a different signed-in user/tenant) will reuse rather than recreate —
+  /// see realtime_event_router.dart's `initRealtimeEventWatcher` for why that matters.
+  Future<void> stop() async {
+    try {
+      await _connection?.stop();
+    } catch (_) {
+      // Best-effort — see connect()'s own doc comment. A stop() failure must not block clearing
+      // `_connection` below, which is what actually matters: it's what lets the next connect()
+      // treat this as a fresh start rather than "already connected".
+    }
     _connection = null;
+  }
+
+  Future<void> dispose() async {
+    await stop();
     await _eventsController.close();
   }
 }

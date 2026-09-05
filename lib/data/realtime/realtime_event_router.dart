@@ -102,6 +102,15 @@ void routeRealtimeEvent(ProviderContainer container, RealtimeEvent event) {
 ///
 /// Returns the cancel function to invoke from the caller's `dispose()` — see
 /// timbra_sync_watcher.dart's doc comment for why this matters.
+///
+/// The cancel function also stops the underlying SignalR connection (via [RealtimeConnection.stop],
+/// not [RealtimeConnection.dispose]) rather than just unsubscribing locally. `realtimeConnectionProvider`
+/// is root-scoped and outlives a `HomeShell` remount — a forced sign-out tears down and recreates the
+/// whole `HomeShell` (see home_shell.dart's own comment on `_reconnectUnsubs`), and without an explicit
+/// stop here the next mount's `connect()` call would see the SAME instance still holding a live
+/// connection authenticated under the PREVIOUS session's token and joined to the PREVIOUS tenant's
+/// group — the new sign-in would get zero realtime events for its own tenant. `stop()` (rather than
+/// `dispose()`) leaves the instance's `events` stream open so the next mount's `connect()` still works.
 VoidCallback initRealtimeEventWatcher(WidgetRef ref) {
   final container = ProviderScope.containerOf(ref.context, listen: false);
   final connection = ref.read(realtimeConnectionProvider);
@@ -119,5 +128,6 @@ VoidCallback initRealtimeEventWatcher(WidgetRef ref) {
   return () {
     eventsSub.cancel();
     reconnectCancel();
+    connection.stop();
   };
 }
