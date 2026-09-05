@@ -8252,6 +8252,39 @@
         }
       }
     },
+    "/api/Reports/from-cantiere-worklogs": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Creates a cantiere-only report directly from the caller\u0027s already-logged\n\u0060CantiereWorkLog\u0060 entries for the given cantiere \u2014 no manual hour entry. Always\ncreates and returns a report, even when there is nothing new to consume (see\nTask\u0026lt;Guid\u0026gt; IReportService.CreateFromCantiereWorkLogsAsync(Guid? tenantId, Guid creatingUserId, Guid cantiereId, CancellationToken ct = default(CancellationToken))).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFromCantiereWorkLogsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFromCantiereWorkLogsRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFromCantiereWorkLogsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Reports/{id}/firma-cliente": {
       "post": {
         "tags": [
@@ -16506,6 +16539,17 @@
           }
         },
         "description": "Request model for creating a customer."
+      },
+      "CreateFromCantiereWorkLogsRequest": {
+        "type": "object",
+        "properties": {
+          "cantiereId": {
+            "type": "string",
+            "description": "The cantiere whose unconsumed CantiereWorkLog entries should populate the new report.",
+            "format": "uuid"
+          }
+        },
+        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; ReportsController.CreateFromCantiereWorkLogs(CreateFromCantiereWorkLogsRequest request, CancellationToken ct)."
       },
       "CreateLocationRequest": {
         "type": "object",
