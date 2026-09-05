@@ -119,6 +119,36 @@ final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
   return events.any((e) => e.isPendingSync);
 });
 
+/// Sums today's *closed* (ingresso→uscita) intervals on [cantiereId] into a total duration.
+///
+/// Deliberately excludes a still-open interval at the end of the list — that portion needs a
+/// live per-second tick to stay accurate, which a value recomputed only when the event list
+/// changes can't give you. The UI combines this closed-interval total with a separately-ticking
+/// "current session" elapsed widget (see `_CantiereElapsedTicker`) to show the running total.
+///
+/// Scoped to one cantiere (not a cross-cantiere daily total) — matches the screen's own context:
+/// "how much have I worked *here* today."
+final cantiereTodayHoursProvider = Provider.autoDispose.family<Duration, String>((
+  ref,
+  cantiereId,
+) {
+  final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
+  CantierePunche? opener;
+  var total = Duration.zero;
+  for (final e in events) {
+    switch (e.eventType) {
+      case 'ingresso':
+        opener = e;
+      case 'uscita':
+        if (opener != null && opener.cantiereId == cantiereId) {
+          total += e.eventTime.difference(opener.eventTime);
+        }
+        opener = null;
+    }
+  }
+  return total;
+});
+
 /// The minimal "am I on site" signal the screen needs — offline-durable, derived from the local
 /// event log the same way `timbraStateProvider` derives shift state for personal Timbra.
 class CantiereActiveSession {

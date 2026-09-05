@@ -1018,4 +1018,147 @@ void main() {
       },
     );
   });
+
+  group('cantiereTodayHoursProvider', () {
+    ProviderContainer buildContainer(AppDatabase db) => ProviderContainer(
+      overrides: [appDatabaseProvider.overrideWithValue(db)],
+    );
+
+    Future<void> punch(
+      AppDatabase db, {
+      required String id,
+      required DateTime eventTime,
+      required String eventType,
+      String? cantiereId,
+    }) => db
+        .into(db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: id,
+            eventTime: eventTime,
+            eventType: eventType,
+            cantiereId: Value(cantiereId),
+          ),
+        );
+
+    test('sums a single closed ingresso→uscita interval for the given cantiere', () async {
+      final container = buildContainer(db);
+      addTearDown(container.dispose);
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+
+      await punch(db, id: 'e1', eventTime: start, eventType: 'ingresso', cantiereId: 'cant-1');
+      await punch(
+        db,
+        id: 'e2',
+        eventTime: start.add(const Duration(hours: 3)),
+        eventType: 'uscita',
+      );
+
+      // Let the StreamProvider this derives from emit its first value.
+      container.listen(todayCantiereEventsProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      final result = container.read(cantiereTodayHoursProvider('cant-1'));
+
+      expect(result, const Duration(hours: 3));
+    });
+
+    test('ignores events for a different cantiere', () async {
+      final container = buildContainer(db);
+      addTearDown(container.dispose);
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+
+      await punch(db, id: 'e1', eventTime: start, eventType: 'ingresso', cantiereId: 'cant-OTHER');
+      await punch(
+        db,
+        id: 'e2',
+        eventTime: start.add(const Duration(hours: 3)),
+        eventType: 'uscita',
+      );
+
+      container.listen(todayCantiereEventsProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      final result = container.read(cantiereTodayHoursProvider('cant-1'));
+
+      expect(result, Duration.zero);
+    });
+
+    test('excludes a still-open interval (no matching uscita yet)', () async {
+      final container = buildContainer(db);
+      addTearDown(container.dispose);
+      final today = DateTime.now();
+      final closedStart = DateTime(today.year, today.month, today.day, 7).toUtc();
+
+      await punch(
+        db,
+        id: 'e1',
+        eventTime: closedStart,
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+      await punch(
+        db,
+        id: 'e2',
+        eventTime: closedStart.add(const Duration(hours: 2)),
+        eventType: 'uscita',
+      );
+      // A second, still-open interval later the same day.
+      await punch(
+        db,
+        id: 'e3',
+        eventTime: closedStart.add(const Duration(hours: 4)),
+        eventType: 'ingresso',
+        cantiereId: 'cant-1',
+      );
+
+      container.listen(todayCantiereEventsProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      final result = container.read(cantiereTodayHoursProvider('cant-1'));
+
+      // Only the first, closed 2h interval counts — the open 'ingresso' with no 'uscita' after it
+      // must not contribute anything (that portion is the live-ticking concern, not this provider).
+      expect(result, const Duration(hours: 2));
+    });
+
+    test('sums multiple closed intervals for the same cantiere', () async {
+      final container = buildContainer(db);
+      addTearDown(container.dispose);
+      final today = DateTime.now();
+      final s1 = DateTime(today.year, today.month, today.day, 7).toUtc();
+      final s2 = DateTime(today.year, today.month, today.day, 12).toUtc();
+
+      await punch(db, id: 'e1', eventTime: s1, eventType: 'ingresso', cantiereId: 'cant-1');
+      await punch(db, id: 'e2', eventTime: s1.add(const Duration(hours: 2)), eventType: 'uscita');
+      await punch(db, id: 'e3', eventTime: s2, eventType: 'ingresso', cantiereId: 'cant-1');
+      await punch(
+        db,
+        id: 'e4',
+        eventTime: s2.add(const Duration(minutes: 90)),
+        eventType: 'uscita',
+      );
+
+      container.listen(todayCantiereEventsProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      final result = container.read(cantiereTodayHoursProvider('cant-1'));
+
+      expect(result, const Duration(hours: 3, minutes: 30));
+    });
+
+    test('returns Duration.zero when there are no events at all', () async {
+      final container = buildContainer(db);
+      addTearDown(container.dispose);
+
+      container.listen(todayCantiereEventsProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      final result = container.read(cantiereTodayHoursProvider('cant-1'));
+
+      expect(result, Duration.zero);
+    });
+  });
 }
