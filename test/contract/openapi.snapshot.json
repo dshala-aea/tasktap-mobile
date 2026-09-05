@@ -256,31 +256,6 @@
         }
       }
     },
-    "/api/admin/migrations/migrate": {
-      "post": {
-        "tags": [
-          "AdminMigrations"
-        ],
-        "summary": "Schema migrations no longer needed \u2014 flat schema with RLS.\nKept as a stub for backwards-compat with any automation scripts.",
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/admin/migrations/tenants": {
-      "get": {
-        "tags": [
-          "AdminMigrations"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/agenda": {
       "get": {
         "tags": [
@@ -9193,7 +9168,7 @@
         "tags": [
           "RolePermissions"
         ],
-        "summary": "The tenant\u0027s current matrix. Empty means the tenant is on the default grants.",
+        "summary": "The tenant\u0027s current EFFECTIVE matrix: every role\u0027s real grants, computed from the default\nmatrix when the tenant has no stored overrides, or read from those overrides when it does.\nNever empty for a tenant with real roles \u2014 a defaults-only tenant\u0027s grants are just\ncomputed rather than stored. See Task\u0026lt;IReadOnlyList\u0026lt;RolePermissionEntry\u0026gt;\u0026gt; RolePermissionMatrixService.GetEffectiveMatrixAsync(Guid tenantId, CancellationToken ct = default(CancellationToken)).",
         "responses": {
           "200": {
             "description": "OK",
@@ -25675,7 +25650,8 @@
           "Draft",
           "Submitted",
           "Approved",
-          "Rejected"
+          "Rejected",
+          "Imported"
         ],
         "description": "Approval workflow state for a WorkLogs entry (\u0060WorkLog\u0060, \u0060CantiereWorkLog\u0060,\n\u0060TicketWorkLog\u0060). Draft (default, freely editable) \u2192 Submitted (raises the\nWorkLogs module\u0027s \u0060WorkLogSubmittedIntegrationEvent\u0060) \u2192 Approved or Rejected.\nOnly Draft\u2192Submitted and Submitted\u2192(Approved|Rejected) are legal transitions; anything\nelse throws \u0060TaskTapAPI.Core.Exceptions.DomainRuleException\u0060."
       },
@@ -25762,9 +25738,6 @@
     },
     {
       "name": "AbsenceRequests"
-    },
-    {
-      "name": "AdminMigrations"
     },
     {
       "name": "Agenda"
