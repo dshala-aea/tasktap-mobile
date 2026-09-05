@@ -151,7 +151,11 @@ Future<String> resolveDeviceTenantId(AppDatabase db) async {
 ///
 /// Copies the header fields the mobile editor tracks (title/details/technicianNotes/
 /// ticket-cantiere-schedule-customer-location links, materialiNotRequired) plus every
-/// staff/materiali/controlli row. Deliberately does NOT copy the signatures or the customer sign-off text — those
+/// staff/materiali/controlli row, and every job photo (not the signatures — see below). Photos
+/// are re-marked `isPendingUpload: true` under the new report id so `SubmissionQueue` uploads
+/// them fresh (the same local file, still on disk — nothing here deletes it after a successful
+/// upload) rather than trying to re-attach an id the server already tied to the rejected report.
+/// Deliberately does NOT copy the signatures or the customer sign-off text — those
 /// attest to a specific version of the report the office already rejected, and must be recaptured
 /// for the reworked one.
 Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
@@ -231,6 +235,30 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
         stringValue: Value(c.stringValue),
         boolValue: Value(c.boolValue),
         dateValue: Value(c.dateValue),
+      ),
+    );
+  }
+
+  final signatureIds = {
+    source.customerSignatureAllegatoId,
+    source.technicianSignatureAllegatoId,
+  }.whereType<String>().toSet();
+  for (final a in await repo.getAllegati(source.id)) {
+    if (signatureIds.contains(a.id)) continue;
+    await repo.insertAllegato(
+      ReportAllegatiCompanion.insert(
+        id: _uuid.v4(),
+        tenantId: source.tenantId,
+        createdAt: now,
+        fileName: a.fileName,
+        contentType: a.contentType,
+        sizeBytes: a.sizeBytes,
+        storagePath: a.storagePath,
+        url: a.storagePath,
+        entityType: 1, // Report
+        entityId: id,
+        uploadedByUserId: user.id,
+        isPendingUpload: const Value(true),
       ),
     );
   }

@@ -453,6 +453,71 @@ void main() {
       expect((await repo.getStaff('report-1')).single.id, 's-1');
     });
 
+    testWidgets(
+      'clones job photos under the new report id as pending-upload, but never the signatures',
+      (tester) async {
+        await repo.createDraft(
+          _rejectedReportCompanion().copyWith(
+            customerSignatureAllegatoId: const Value('sig-c-1'),
+            technicianSignatureAllegatoId: const Value('sig-t-1'),
+          ),
+        );
+        await repo.insertAllegato(
+          ReportAllegatiCompanion.insert(
+            id: 'photo-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1),
+            fileName: 'lavoro.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 123,
+            storagePath: '/tmp/lavoro.jpg',
+            url: '/tmp/lavoro.jpg',
+            entityType: 1,
+            entityId: 'report-1',
+            uploadedByUserId: 'user-1',
+            isPendingUpload: const Value(false),
+          ),
+        );
+        await repo.insertAllegato(
+          ReportAllegatiCompanion.insert(
+            id: 'sig-c-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 6, 1),
+            fileName: 'firma-cliente.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 45,
+            storagePath: '/tmp/firma-cliente.jpg',
+            url: '/tmp/firma-cliente.jpg',
+            entityType: 1,
+            entityId: 'report-1',
+            uploadedByUserId: 'user-1',
+            isPendingUpload: const Value(false),
+          ),
+        );
+
+        final source = (await repo.getDraft('report-1'))!;
+        final container = buildContainer(user: _testUser);
+        addTearDown(container.dispose);
+
+        final newId = await _callCreateReworkDraft(tester, container, source);
+
+        final newAllegati = await repo.getAllegati(newId!);
+        expect(newAllegati, hasLength(1), reason: 'the signature must not be copied as a photo');
+        final photo = newAllegati.single;
+        expect(photo.fileName, 'lavoro.jpg');
+        expect(photo.storagePath, '/tmp/lavoro.jpg');
+        expect(photo.id, isNot('photo-1'), reason: 'a new row id, not reusing the source one');
+        expect(
+          photo.isPendingUpload,
+          isTrue,
+          reason: 'must be re-uploaded fresh under the new report id',
+        );
+
+        // The rejected report's own allegati are untouched.
+        expect(await repo.getAllegati('report-1'), hasLength(2));
+      },
+    );
+
     testWidgets('refuses (returns null) with no signed-in author, same as createLocalDraft', (
       tester,
     ) async {
