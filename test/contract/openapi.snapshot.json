@@ -24729,6 +24729,13 @@
               "boolean"
             ],
             "description": "Is active."
+          },
+          "requireWorkLogApproval": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "When false, TicketWorkLog/CantiereWorkLog entries auto-approve on close. When true, they\nkeep the manual Draft -\u0026gt; Submitted -\u0026gt; Approved/Rejected workflow."
           }
         },
         "description": "Request model for updating a tenant."
