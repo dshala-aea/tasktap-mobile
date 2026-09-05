@@ -125,60 +125,66 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                             final name =
                                 ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
 
-                            return InkWell(
-                              onTap: () => _toggle(a.userId),
-                              borderRadius: i == 0
-                                  ? const BorderRadius.vertical(top: Radius.circular(20))
-                                  : (isLast
-                                        ? const BorderRadius.vertical(bottom: Radius.circular(20))
-                                        : BorderRadius.zero),
-                              child: Container(
-                                constraints: const BoxConstraints(minHeight: 56),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppSpacing.base,
-                                  vertical: AppSpacing.md,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppColors.Y.withAlpha(31)
-                                      : Colors.transparent,
-                                  border: isLast
-                                      ? null
-                                      : Border(
-                                          bottom: BorderSide(color: ctx.colors.borderLight),
-                                        ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      isSelected ? LucideIcons.checkCircle2 : LucideIcons.square,
-                                      size: 20,
-                                      color: isSelected ? AppColors.Y : ctx.colors.inkMuted,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        name,
-                                        style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: ctx.colors.ink,
+                            // A screen reader otherwise announces only the name — never whether
+                            // this row is currently checked — because the checkbox-like icon is
+                            // purely visual (an Icon carries no semantic checked state on its
+                            // own).
+                            return Semantics(
+                              button: true,
+                              checked: isSelected,
+                              child: InkWell(
+                                onTap: () => _toggle(a.userId),
+                                borderRadius: i == 0
+                                    ? const BorderRadius.vertical(top: Radius.circular(20))
+                                    : (isLast
+                                          ? const BorderRadius.vertical(bottom: Radius.circular(20))
+                                          : BorderRadius.zero),
+                                child: Container(
+                                  constraints: const BoxConstraints(minHeight: 56),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppSpacing.base,
+                                    vertical: AppSpacing.md,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppColors.Y.withAlpha(31)
+                                        : Colors.transparent,
+                                    border: isLast
+                                        ? null
+                                        : Border(bottom: BorderSide(color: ctx.colors.borderLight)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isSelected ? LucideIcons.checkCircle2 : LucideIcons.square,
+                                        size: 20,
+                                        color: isSelected ? AppColors.Y : ctx.colors.inkMuted,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          style: TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: ctx.colors.ink,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    if (a.isLead)
-                                      Text(
-                                        'LEAD',
-                                        style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.6,
-                                          color: ctx.colors.inkMuted,
+                                      if (a.isLead)
+                                        Text(
+                                          'LEAD',
+                                          style: TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 0.6,
+                                            color: ctx.colors.inkMuted,
+                                          ),
                                         ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );

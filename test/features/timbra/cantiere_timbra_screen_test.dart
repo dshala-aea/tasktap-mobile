@@ -897,5 +897,125 @@ void main() {
         await _teardown(tester);
       },
     );
+
+    testWidgets(
+      'shows a success toast counting how many people were actually started',
+      (tester) async {
+        // Final-review fix: a fully successful batch used to leave the lead's own screen
+        // unchanged (nothing to clock in/out of themselves), so there was no feedback at all that
+        // anything happened.
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+            CantiereCrewAssignmentDto(id: 'a3', userId: 'teammate-2', isLead: false),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Tutta la squadra'));
+        await tester.tap(find.text('Tutta la squadra'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Timbrate 3 persone'), findsOneWidget);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
+      'still shows the success-count toast alongside the failures dialog on a partial success',
+      (tester) async {
+        // The toast must appear regardless of whether some people also failed — the lead should
+        // always get a count of what worked, not just what didn't.
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+          ],
+        );
+        api.batchStartResponseBuilder = (request) => BatchStartResponse(
+          results: [
+            const BatchStartResult(userId: 'me', success: true, workLogId: 'wl-me'),
+            const BatchStartResult(userId: 'teammate-1', success: false, error: 'AlreadyOpen'),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Tutta la squadra'));
+        await tester.tap(find.text('Tutta la squadra'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Timbrata 1 persona'), findsOneWidget);
+        expect(find.text('Alcuni membri non sono stati avviati'), findsOneWidget);
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
+      "resolves a failed teammate's real name in the failures dialog, not just the raw id",
+      (tester) async {
+        // Regression test for the colleagueNameProvider misuse: _showBatchFailuresDialog used to
+        // call `ref.read(colleagueNameProvider(...))` inside a one-shot `showDialog` builder, which
+        // captures whatever the (async, Drift-backed) provider's state happened to be at that exact
+        // instant — almost always AsyncLoading — and never rebuilds, so a colleague row that
+        // resolves moments later stayed invisible and the dialog was stuck on the raw userId
+        // forever. It now watches from a Consumer scoped to each row.
+        await seedCantiere(db);
+        await db
+            .into(db.colleagues)
+            .insert(ColleaguesCompanion.insert(id: 'teammate-1', displayName: 'Luigi Bianchi'));
+
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+          ],
+        );
+        api.batchStartResponseBuilder = (request) => BatchStartResponse(
+          results: [
+            const BatchStartResult(userId: 'me', success: true, workLogId: 'wl-me'),
+            const BatchStartResult(userId: 'teammate-1', success: false, error: 'AlreadyOpen'),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Tutta la squadra'));
+        await tester.tap(find.text('Tutta la squadra'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Luigi Bianchi: ha già una timbratura aperta'), findsOneWidget);
+        expect(find.textContaining('teammate-1:'), findsNothing);
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        await _teardown(tester);
+      },
+    );
   });
 }

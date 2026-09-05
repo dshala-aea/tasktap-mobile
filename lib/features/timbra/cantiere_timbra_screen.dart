@@ -446,17 +446,19 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         // Not reachable — queue locally instead of failing the punch outright. The batch upsert
         // this syncs through only carries description among the rich fields (see
         // cantiere_worklog_api_client.dart); the rest are captured for the online path only.
-        await ref.read(cantiereSessionRepositoryProvider).addEvent(
-          id: _uuid.v4(),
-          eventTime: DateTime.now().toUtc(),
-          eventType: 'ingresso',
-          cantiereId: cantiere.id,
-          customerId: customerId,
-          ticketId: widget.ticketId,
-          description: _description,
-          latitude: location?.lat,
-          longitude: location?.lng,
-        );
+        await ref
+            .read(cantiereSessionRepositoryProvider)
+            .addEvent(
+              id: _uuid.v4(),
+              eventTime: DateTime.now().toUtc(),
+              eventType: 'ingresso',
+              cantiereId: cantiere.id,
+              customerId: customerId,
+              ticketId: widget.ticketId,
+              description: _description,
+              latitude: location?.lat,
+              longitude: location?.lng,
+            );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         if (mounted) setState(() => _isLoading = false);
       } else if (mounted) {
@@ -538,6 +540,18 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       if (!mounted) return;
       await ref.read(activeCantiereLogProvider.notifier).refresh();
       setState(() => _isLoading = false);
+      // The lead's own screen state doesn't change on a teammates-only batch, so without this a
+      // fully successful batch was indistinguishable from nothing happening at all. Shown
+      // regardless of whether some people also failed — alongside the failures dialog below, not
+      // instead of it — so the lead always gets a count of what worked, not just what didn't.
+      final successCount = response.results.where((r) => r.success).length;
+      if (mounted) {
+        showAppToast(
+          context,
+          message: successCount == 1 ? 'Timbrata 1 persona' : 'Timbrate $successCount persone',
+          tone: ToastTone.success,
+        );
+      }
       final failures = response.results.where((r) => !r.success).toList();
       if (failures.isNotEmpty && mounted) _showBatchFailuresDialog(failures);
     } on DioException catch (e) {
@@ -564,12 +578,14 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
+        // A large crew (or large accessibility text scaling) can overflow a plain min-size
+        // Column — scrollable makes the content area scroll instead.
+        scrollable: true,
         title: const Text('Alcuni membri non sono stati avviati'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: failures.map((f) {
-            final name = ref.read(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
             final reason = switch (f.error) {
               'AlreadyOpen' => 'ha già una timbratura aperta',
               'NotAssigned' => 'non risulta assegnato a questo cantiere',
@@ -577,7 +593,19 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
             };
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text('$name: $reason'),
+              // A plain `showDialog` builder never rebuilds on its own, so `colleagueNameProvider`
+              // — a StreamProvider backed by a Drift watchSingleOrNull() query that resolves
+              // asynchronously — must be watched from a Consumer scoped to just this row, not read
+              // once from the enclosing method. `ref.read` here would capture whatever the
+              // provider's state happened to be at that exact instant (almost always still
+              // loading) and never update. Same fallback contract as everywhere else
+              // colleagueNameProvider is read (see teammate_picker_sheet.dart).
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final name = ref.watch(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
+                  return Text('$name: $reason');
+                },
+              ),
             );
           }).toList(),
         ),
@@ -608,12 +636,14 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       _onEndedSuccessfully(offline: false);
     } on DioException catch (e) {
       if (_isOfflineFailure(e)) {
-        await ref.read(cantiereSessionRepositoryProvider).addEvent(
-          id: _uuid.v4(),
-          eventTime: DateTime.now().toUtc(),
-          eventType: 'uscita',
-          description: _closingDescription,
-        );
+        await ref
+            .read(cantiereSessionRepositoryProvider)
+            .addEvent(
+              id: _uuid.v4(),
+              eventTime: DateTime.now().toUtc(),
+              eventType: 'uscita',
+              description: _closingDescription,
+            );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
         _onEndedSuccessfully(offline: true);
       } else if (mounted) {
@@ -701,10 +731,24 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     if (status == 404) {
       return 'Nessuna sessione cantiere attiva trovata.';
     }
+    // A 403 the backend tagged specifically "NotAssigned" (same error-code field/value the
+    // batch-start response uses for the analogous per-person check — see BatchStartResult.error)
+    // reads to a technician as "you lack a permission", but the actual fact is narrower and more
+    // useful: they're just not on this cantiere's crew. Anything else still falls through to the
+    // shared humaniser's generic permission-denied copy below.
+    if (status == 403 && _errorCode(e) == 'NotAssigned') {
+      return 'Non risulti assegnato a questo cantiere. Chiedi in ufficio.';
+    }
     // Everything else goes through the shared humaniser. This used to end in
     // `Errore server ($status)` — a number the technician cannot use, in the one line telling
     // them their presence on site was not recorded.
     return humanErrorMessage(e);
+  }
+
+  /// The backend's own error code from a JSON error body, when present — e.g. `"NotAssigned"`.
+  String? _errorCode(DioException e) {
+    final data = e.response?.data;
+    return data is Map ? data['error'] as String? : null;
   }
 }
 
@@ -1009,7 +1053,10 @@ class _CheckInBody extends StatelessWidget {
               child: AppTappable(
                 onTap: onOpenDetails,
                 borderRadius: AppRack.insetShape,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.base),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.base,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1401,7 +1448,10 @@ class _ActiveSessionBody extends ConsumerWidget {
               child: AppTappable(
                 onTap: onOpenClosingDetails,
                 borderRadius: AppRack.insetShape,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.base),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.base,
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
