@@ -70,6 +70,15 @@ dependencies:
   open_filex: ^4.7.0
   share_plus: ^11.0.0
 
+  # Realtime — SignalR client for NotificationHub's tenant event broadcasts.
+  # NOTE: the plan's sketch assumed `signalr_netcore`, but that package is stale (last publish
+  # ~12 months ago, 130/160 pub points, 56 open GitHub issues incl. reconnect-breaking bugs that
+  # directly conflict with this task's "best-effort, must reconnect" requirement). `signalr_hub`
+  # is its actively-maintained, verified-publisher successor (160/160 pub points, 0 open issues,
+  # explicitly fixes reconnection stability) — used instead. See task-3-report.md for the full
+  # research trail.
+  signalr_hub: ^2.1.1
+
   # Crash reporting (Sentry)
   # DSN is supplied via --dart-define=SENTRY_DSN=... at build time.
   # When the dart-define is absent (tests, local runs without a DSN) Sentry

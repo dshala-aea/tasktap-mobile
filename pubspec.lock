@@ -650,6 +650,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.5"
+  get_it:
+    dependency: transitive
+    description:
+      name: get_it
+      sha256: "568d62f0e68666fb5d95519743b3c24a34c7f19d834b0658c46e26d778461f66"
+      url: "https://pub.dev"
+    source: hosted
+    version: "9.2.1"
   glob:
     dependency: transitive
     description:
@@ -943,6 +951,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.0"
+  message_pack_dart:
+    dependency: transitive
+    description:
+      name: message_pack_dart
+      sha256: "71b9f0ff60e5896e60b337960bb535380d7dba3297b457ac763ccae807385b59"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.1"
   meta:
     dependency: transitive
     description:
@@ -1311,6 +1327,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.0"
+  signalr_hub:
+    dependency: "direct main"
+    description:
+      name: signalr_hub
+      sha256: dd5f3adc785e05e9d0259e9b54ba2aa1f92bf2ca25120b3767d82859e23b61ba
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   signature:
     dependency: "direct main"
     description:
@@ -1388,6 +1412,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.41.2"
+  sse:
+    dependency: transitive
+    description:
+      name: sse
+      sha256: a9a804dbde8bfd369da3b4aa241d44d63a6486a97388c54ec166073d88c52302
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.0"
+  sse_channel:
+    dependency: transitive
+    description:
+      name: sse_channel
+      sha256: ad85fda353fae12533fd762dbd3ff275e710f216644e39459bf11a138124acad
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.2.2"
   stack_trace:
     dependency: transitive
     description:
