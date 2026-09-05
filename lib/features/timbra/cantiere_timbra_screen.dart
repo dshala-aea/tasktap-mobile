@@ -50,8 +50,10 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
+import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../cantiere/cantiere_providers.dart';
+import 'teammate_picker_sheet.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -177,6 +179,33 @@ final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession
   );
 });
 
+/// Crew assignments for a cantiere — GET /api/cantieri/{id}/assegnazioni. Used to derive whether
+/// the current user is lead (see [isLeadForCantiereProvider]) and to populate the teammate
+/// picker's checkbox list.
+///
+/// A live fetch-and-derive provider, not a Drift mirror: this concept is new and has no local
+/// offline table of its own. Failing (including offline) leaves this provider in `AsyncError`,
+/// which [isLeadForCantiereProvider] reads as "not lead" — the explicit single-button fallback per
+/// the plan's Global Constraints, not a bug.
+final cantiereCrewAssignmentsProvider = FutureProvider.autoDispose
+    .family<List<CantiereCrewAssignmentDto>, String>((ref, cantiereId) async {
+      final client = ref.watch(cantiereWorklogApiClientProvider);
+      return client.getAssegnazioni(cantiereId);
+    });
+
+/// Whether the signed-in technician is the lead for the given cantiere, derived from
+/// [cantiereCrewAssignmentsProvider].
+///
+/// False (never null) while loading, on error, or offline — this screen only ever needs a yes/no
+/// answer to decide which button set to render, and a lead-only affordance has no business
+/// blocking anyone else's — or a temporarily-unreachable lead's — plain single-button clock-in.
+final isLeadForCantiereProvider = Provider.autoDispose.family<bool, String>((ref, cantiereId) {
+  final userId = ref.watch(currentUserProvider)?.id;
+  final assignments = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).valueOrNull;
+  if (userId == null || assignments == null) return false;
+  return assignments.any((a) => a.userId == userId && a.isLead);
+});
+
 /// Combines a server work log's date-only `workDate` with its `startTime` ("HH:mm:ss") into the
 /// actual clock-in instant.
 ///
@@ -275,6 +304,14 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         ? ref.watch(cantiereByIdProvider(widget.cantiereId!))
         : null;
 
+    // Only meaningful once a cantiere is resolved (picker selection or direct-entry) — before
+    // then there is nothing to be lead *of*, so this reads as "not lead" like any other
+    // loading/error case (see isLeadForCantiereProvider's own doc comment).
+    final effectiveCantiereId = _effectiveCantiere?.id;
+    final isLead = effectiveCantiereId != null
+        ? ref.watch(isLeadForCantiereProvider(effectiveCantiereId))
+        : false;
+
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
@@ -311,8 +348,11 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                       isLoading: _isLoading,
                       errorMessage: _errorMessage,
                       hasDetails: _hasCheckInDetails,
+                      isLead: isLead,
                       onCantiereSelected: (c) => setState(() => _selectedCantiere = c),
                       onStart: _handleStartCantiere,
+                      onSelectSquadra: _handleSelectSquadra,
+                      onTuttaLaSquadra: _handleTuttaLaSquadra,
                       onOpenDetails: _openDetailsSheet,
                     ),
             ),
@@ -433,6 +473,117 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         });
       }
     }
+  }
+
+  /// "Seleziona squadra" — opens the checkbox picker over this cantiere's crew assignments, then
+  /// batch-starts whichever subset the lead confirms. A null/empty result (dismissed without
+  /// confirming) is silently a no-op — the picker's own "Conferma" button is disabled until at
+  /// least one person is checked, so an empty confirm is unreachable; null just means "changed
+  /// their mind."
+  Future<void> _handleSelectSquadra() async {
+    final cantiere = _effectiveCantiere;
+    if (cantiere == null) return;
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    final selected = await openTeammatePickerSheet(context, assignments: assignments);
+    if (!mounted || selected == null || selected.isEmpty) return;
+    await _handleBatchStart(selected);
+  }
+
+  /// "Tutta la squadra" — batch-starts every person this cantiere has an assignment row for
+  /// (lead included, since the lead is themselves assigned).
+  Future<void> _handleTuttaLaSquadra() async {
+    final cantiere = _effectiveCantiere;
+    if (cantiere == null) return;
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    if (assignments.isEmpty) return;
+    await _handleBatchStart(assignments.map((a) => a.userId).toList());
+  }
+
+  /// Shared batch-start call for both "Seleziona squadra" and "Tutta la squadra" — mirrors
+  /// [_handleStartCantiere]'s shape (GPS purpose confirmation, spinner, rich fields) but has no
+  /// offline fallback: batch-start is online-only per the plan's Global Constraints, so a
+  /// connection failure here surfaces as an error rather than queueing locally.
+  Future<void> _handleBatchStart(List<String> userIds) async {
+    final cantiere = _effectiveCantiere;
+    if (cantiere == null) {
+      setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
+      return;
+    }
+    if (!await _confirmGpsPurpose()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final customerId = cantiere.customerId ?? widget.customerId ?? '';
+    final location = await ref.read(locationServiceProvider).getCurrentPosition();
+
+    try {
+      final client = ref.read(cantiereWorklogApiClientProvider);
+      final response = await client.batchStart(
+        BatchStartCantiereRequest(
+          cantiereId: cantiere.id,
+          customerId: customerId,
+          userIds: userIds,
+          description: _description,
+          workOrderNumber: _workOrderNumber,
+          equipmentUsed: _equipmentUsed,
+          teamSize: _teamSize,
+          arrivalLatitude: location?.lat,
+          arrivalLongitude: location?.lng,
+          weatherConditions: _weatherConditions,
+        ),
+      );
+      if (!mounted) return;
+      await ref.read(activeCantiereLogProvider.notifier).refresh();
+      setState(() => _isLoading = false);
+      final failures = response.results.where((r) => !r.success).toList();
+      if (failures.isNotEmpty && mounted) _showBatchFailuresDialog(failures);
+    } on DioException catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = _networkErrorMessage(e);
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Errore imprevisto. Riprova.';
+        });
+      }
+    }
+  }
+
+  /// Names every offender rather than silently dropping a person or failing the whole batch —
+  /// mirrors the endpoint's own "name every offender" contract. Deliberately a plain dialog, not a
+  /// new bespoke widget: a handful of "name: reason" lines is the whole of what this needs.
+  void _showBatchFailuresDialog(List<BatchStartResult> failures) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Alcuni membri non sono stati avviati'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: failures.map((f) {
+            final name = ref.read(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
+            final reason = switch (f.error) {
+              'AlreadyOpen' => 'ha già una timbratura aperta',
+              'NotAssigned' => 'non risulta assegnato a questo cantiere',
+              _ => 'errore sconosciuto',
+            };
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text('$name: $reason'),
+            );
+          }).toList(),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+      ),
+    );
   }
 
   Future<void> _handleEndCantiere() async {
@@ -570,8 +721,11 @@ class _CheckInBody extends StatelessWidget {
     required this.isLoading,
     required this.errorMessage,
     required this.hasDetails,
+    required this.isLead,
     required this.onCantiereSelected,
     required this.onStart,
+    required this.onSelectSquadra,
+    required this.onTuttaLaSquadra,
     required this.onOpenDetails,
   });
 
@@ -592,8 +746,16 @@ class _CheckInBody extends StatelessWidget {
   final bool isLoading;
   final String? errorMessage;
   final bool hasDetails;
+
+  /// Whether the current user is the lead on the resolved cantiere — gates the three-way choice
+  /// (Solo io / Seleziona squadra / Tutta la squadra) below in place of the single button. False
+  /// while no cantiere is resolved yet, on fetch error, or offline (see isLeadForCantiereProvider)
+  /// — the explicit fallback to today's unchanged single-button flow.
+  final bool isLead;
   final ValueChanged<CantieriData?> onCantiereSelected;
   final VoidCallback onStart;
+  final VoidCallback onSelectSquadra;
+  final VoidCallback onTuttaLaSquadra;
   final VoidCallback onOpenDetails;
 
   @override
@@ -880,15 +1042,49 @@ class _CheckInBody extends StatelessWidget {
             const SizedBox(height: 16),
           ],
 
-          // Clock-in button — disabled (not hidden) when there is nothing to
-          // select, so the reason above stays visible instead of the row
-          // just disappearing.
-          AppButton(
-            label: 'Timbra ingresso cantiere',
-            icon: const Icon(LucideIcons.mapPin),
-            isLoading: isLoading,
-            onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
-          ),
+          // Clock-in button(s) — disabled (not hidden) when there is nothing to select, so the
+          // reason above stays visible instead of the row just disappearing.
+          if (isLead) ...[
+            Text(
+              'Chi timbra ingresso?',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: context.colors.inkMuted,
+              ),
+            ),
+            const SizedBox(height: 8),
+            AppButton(
+              label: 'Solo io',
+              icon: const Icon(LucideIcons.user),
+              isLoading: isLoading,
+              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
+            ),
+            const SizedBox(height: 8),
+            AppButton.secondary(
+              label: 'Seleziona squadra',
+              icon: const Icon(LucideIcons.userPlus),
+              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere)
+                  ? null
+                  : onSelectSquadra,
+            ),
+            const SizedBox(height: 8),
+            AppButton.secondary(
+              label: 'Tutta la squadra',
+              icon: const Icon(LucideIcons.users),
+              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere)
+                  ? null
+                  : onTuttaLaSquadra,
+            ),
+          ] else
+            AppButton(
+              label: 'Timbra ingresso cantiere',
+              icon: const Icon(LucideIcons.mapPin),
+              isLoading: isLoading,
+              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
+            ),
         ],
       ),
     );

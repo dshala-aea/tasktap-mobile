@@ -24,8 +24,10 @@ import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
+import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart';
 import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
@@ -41,11 +43,19 @@ class _FakeApiClient extends CantiereWorklogApiClient {
     this.activeLog,
     this.endShouldThrow = false,
     this.startShouldThrow = false,
+    this.assegnazioni = const [],
+    this.assegnazioniShouldThrow = false,
   }) : super(Dio());
 
   final CantiereWorkLogDto? activeLog;
   final bool endShouldThrow;
   final bool startShouldThrow;
+
+  /// Crew assignments getAssegnazioni() answers with. Empty by default — matches "no assignment
+  /// row for me" for every pre-existing test in this file, which never overrides this and so keeps
+  /// getting today's single-button flow unchanged (isLeadForCantiereProvider reads "not lead").
+  final List<CantiereCrewAssignmentDto> assegnazioni;
+  final bool assegnazioniShouldThrow;
 
   /// Captures the [StartCantiereRequest] passed to startCantiere.
   final List<StartCantiereRequest> startedRequests = [];
@@ -53,7 +63,35 @@ class _FakeApiClient extends CantiereWorklogApiClient {
   /// Captures batch-upsert calls the offline-fallback path makes.
   final List<List<CantiereMobileSessionDto>> upsertCalls = [];
 
+  /// Captures the [BatchStartCantiereRequest]s passed to batchStart.
+  final List<BatchStartCantiereRequest> batchStartRequests = [];
+
+  /// Overrides the default all-success response for a given batchStart call.
+  BatchStartResponse Function(BatchStartCantiereRequest)? batchStartResponseBuilder;
+
   bool endCalled = false;
+
+  @override
+  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async {
+    if (assegnazioniShouldThrow) {
+      throw DioException(
+        requestOptions: RequestOptions(path: '/api/cantieri/$cantiereId/assegnazioni'),
+        type: DioExceptionType.connectionError,
+      );
+    }
+    return assegnazioni;
+  }
+
+  @override
+  Future<BatchStartResponse> batchStart(BatchStartCantiereRequest request) async {
+    batchStartRequests.add(request);
+    if (batchStartResponseBuilder != null) return batchStartResponseBuilder!(request);
+    return BatchStartResponse(
+      results: request.userIds
+          .map((id) => BatchStartResult(userId: id, success: true, workLogId: 'wl-$id'))
+          .toList(),
+    );
+  }
 
   @override
   Future<List<CantiereWorkLogDto>> getActive() async => activeLog != null ? [activeLog!] : [];
@@ -120,6 +158,16 @@ AppDatabase _makeDb() {
   return AppDatabase(NativeDatabase.memory());
 }
 
+/// Test AuthUser for lead-branching tests — id matches the fake assignments' own `userId: 'me'`
+/// rows so isLeadForCantiereProvider can resolve "am I the lead" against them.
+final _testUser = AuthUser(
+  id: 'me',
+  email: 'tecnico@example.com',
+  accessToken: 'tok',
+  refreshToken: 'ref',
+  expiresAt: DateTime.utc(2030, 1, 1),
+);
+
 Widget _buildScreen({
   required AppDatabase db,
   required _FakeApiClient apiClient,
@@ -127,6 +175,7 @@ Widget _buildScreen({
   String? ticketId,
   String? customerId,
   String? cantiereId,
+  AuthUser? currentUser,
 }) {
   return ProviderScope(
     overrides: [
@@ -134,6 +183,7 @@ Widget _buildScreen({
       cantiereWorklogApiClientProvider.overrideWithValue(apiClient),
       locationServiceProvider.overrideWithValue(locationService ?? _FakeLocationService()),
       activeCantiereLogProvider.overrideWith(() => _FakeActiveNotifier(apiClient.activeLog)),
+      currentUserProvider.overrideWithValue(currentUser),
     ],
     child: MaterialApp(
       home: CantiereTimbraScreen(
@@ -623,6 +673,127 @@ void main() {
         // *screen* never blocked on reachability, not that the queue stays pending forever.
         expect(events.single.isPendingSync, isFalse);
         expect(api.upsertCalls, isNotEmpty);
+
+        await _teardown(tester);
+      },
+    );
+  });
+
+  // ── Lead branching (Task 3) ────────────────────────────────────────────────
+
+  group('lead branching', () {
+    Future<void> seedCantiere(AppDatabase db) => db
+        .into(db.cantieri)
+        .insert(
+          CantieriCompanion.insert(
+            id: 'cant-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Cantiere Via Roma',
+          ),
+        );
+
+    testWidgets(
+      'shows the three-way choice for a lead, instead of the single button',
+      (tester) async {
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Solo io'), findsOneWidget);
+        expect(find.text('Seleziona squadra'), findsOneWidget);
+        expect(find.text('Tutta la squadra'), findsOneWidget);
+        expect(find.text('Timbra ingresso cantiere'), findsNothing);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
+      'shows exactly the single button for a non-lead, with no branching prompt',
+      (tester) async {
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false)],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Timbra ingresso cantiere'), findsOneWidget);
+        expect(find.text('Solo io'), findsNothing);
+        expect(find.text('Seleziona squadra'), findsNothing);
+        expect(find.text('Tutta la squadra'), findsNothing);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
+      'shows exactly the single button when the assignment fetch fails (offline fallback)',
+      (tester) async {
+        await seedCantiere(db);
+        final api = _FakeApiClient(assegnazioniShouldThrow: true);
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Timbra ingresso cantiere'), findsOneWidget);
+        expect(find.text('Solo io'), findsNothing);
+        expect(find.text('Seleziona squadra'), findsNothing);
+        expect(find.text('Tutta la squadra'), findsNothing);
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
+      '"Tutta la squadra" calls batchStart with every assigned userId',
+      (tester) async {
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+            CantiereCrewAssignmentDto(id: 'a3', userId: 'teammate-2', isLead: false),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(
+            db: db,
+            apiClient: api,
+            cantiereId: 'cant-1',
+            customerId: 'cust-1',
+            currentUser: _testUser,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Tutta la squadra'));
+        await tester.tap(find.text('Tutta la squadra'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(api.batchStartRequests, hasLength(1));
+        expect(
+          api.batchStartRequests.first.userIds,
+          unorderedEquals(['me', 'teammate-1', 'teammate-2']),
+        );
+        expect(api.batchStartRequests.first.cantiereId, 'cant-1');
 
         await _teardown(tester);
       },

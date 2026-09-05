@@ -3,15 +3,25 @@
 // CantiereWorklogApiClient
 //
 // Thin Dio wrapper for the cantiere work-log backend endpoints:
-//   POST /api/cantiereworklog/start  — arrive at site (open log)
-//   POST /api/cantiereworklog/end    — leave site (close log)
-//   GET  /api/cantiereworklog        — list logs (filtered to open ones for
-//                                      the current user)
+//   POST /api/cantiereworklog/start        — arrive at site (open log)
+//   POST /api/cantiereworklog/end          — leave site (close log)
+//   GET  /api/cantiereworklog              — list logs (filtered to open ones
+//                                            for the current user)
+//   GET  /api/cantieri/{id}/assegnazioni   — crew assignments for a cantiere
+//                                            (lead + teammates)
+//   POST /api/cantiereworklog/batch-start  — a lead clocking in on behalf of
+//                                            one or more assigned teammates
 //
 // Mirrors the style of WorklogApiClient / ReportSubmitApiClient.
 // Field names match StartCantiereWorkLogRequest / EndCantiereWorkLogRequest
 // in CantiereWorkLogController.cs verbatim (PascalCase from C# → camelCase
 // as serialised by ASP.NET default JsonSerializerOptions).
+//
+// `getAssegnazioni`/`batchStart` live here rather than on a dedicated
+// CantieriApiClient: they exist purely to serve this screen's own lead/batch
+// flow (cantiere_timbra_screen.dart), so they follow this file's existing
+// no-try/catch convention and share its Dio instance rather than adding a new
+// client class for two methods.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:dio/dio.dart';
@@ -214,6 +224,121 @@ class CantiereWorkLogDto {
   );
 }
 
+// ── Crew assignments / batch-start DTOs ─────────────────────────────────────
+//
+// The *new* lead/teammate assignment concept (backend entity CantiereCrewAssignment), distinct
+// from the older Role/StartDate/EndDate scheduling "assignments" already surfaced as a raw Map on
+// GET /api/cantieri/{id} and consumed by admin_cantiere_detail_screen.dart's
+// _CrewSection/_AddAssignmentSheet via AdminApiClient's own `/api/cantieri/$id/assignments`
+// endpoint. Named CrewAssignment (not a bare CantiereAssignment) specifically to avoid colliding
+// with that unrelated concept — do not touch or extend the older one from here.
+
+/// One crew assignment row from GET /api/cantieri/{id}/assegnazioni.
+class CantiereCrewAssignmentDto {
+  const CantiereCrewAssignmentDto({required this.id, required this.userId, required this.isLead});
+
+  final String id;
+  final String userId;
+
+  /// Whether this person is the lead for the cantiere — the current user's own row's `isLead`
+  /// gates the three-way choice on CantiereTimbraScreen (see isLeadForCantiereProvider there).
+  final bool isLead;
+
+  factory CantiereCrewAssignmentDto.fromJson(Map<String, dynamic> json) =>
+      CantiereCrewAssignmentDto(
+        id: json['id'] as String,
+        userId: json['userId'] as String,
+        isLead: json['isLead'] as bool? ?? false,
+      );
+}
+
+/// Mirrors the batch-start request body (CantiereWorkLogController.BatchStart, backend) —
+/// [StartCantiereRequest]'s optional field set, but `userIds` replaces the single implicit "self"
+/// the online single-person start assumes.
+class BatchStartCantiereRequest {
+  const BatchStartCantiereRequest({
+    required this.cantiereId,
+    required this.customerId,
+    required this.userIds,
+    this.description,
+    this.workOrderNumber,
+    this.equipmentUsed,
+    this.teamSize,
+    this.latitude,
+    this.longitude,
+    this.arrivalLatitude,
+    this.arrivalLongitude,
+    this.weatherConditions,
+    this.workLogType = 0, // 0 = Site (default)
+  });
+
+  final String cantiereId;
+  final String customerId;
+  final List<String> userIds;
+  final String? description;
+  final String? workOrderNumber;
+  final String? equipmentUsed;
+  final int? teamSize;
+  final double? latitude;
+  final double? longitude;
+  final double? arrivalLatitude;
+  final double? arrivalLongitude;
+  final String? weatherConditions;
+
+  /// CantiereWorkLogTypeEnum: Site=0, Travel=1, Setup=2.
+  final int workLogType;
+
+  Map<String, dynamic> toJson() => {
+    'cantiereId': cantiereId,
+    'customerId': customerId,
+    'userIds': userIds,
+    if (description != null) 'description': description,
+    if (workOrderNumber != null) 'workOrderNumber': workOrderNumber,
+    if (equipmentUsed != null) 'equipmentUsed': equipmentUsed,
+    if (teamSize != null) 'teamSize': teamSize,
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
+    if (arrivalLatitude != null) 'arrivalLatitude': arrivalLatitude,
+    if (arrivalLongitude != null) 'arrivalLongitude': arrivalLongitude,
+    if (weatherConditions != null) 'weatherConditions': weatherConditions,
+    'workLogType': workLogType,
+  };
+}
+
+/// One person's outcome from a batch-start call — never dropped silently, per the endpoint's
+/// "name every offender" contract (see BatchStartResponse.fromJson).
+class BatchStartResult {
+  const BatchStartResult({required this.userId, required this.success, this.workLogId, this.error});
+
+  final String userId;
+  final bool success;
+  final String? workLogId;
+
+  /// "NotAssigned" or "AlreadyOpen" when [success] is false, else null.
+  final String? error;
+
+  factory BatchStartResult.fromJson(Map<String, dynamic> json) => BatchStartResult(
+    userId: json['userId'] as String,
+    success: json['success'] as bool? ?? false,
+    workLogId: json['workLogId'] as String?,
+    error: json['error'] as String?,
+  );
+}
+
+/// Response envelope from POST /api/cantiereworklog/batch-start.
+class BatchStartResponse {
+  const BatchStartResponse({required this.results});
+
+  final List<BatchStartResult> results;
+
+  factory BatchStartResponse.fromJson(Map<String, dynamic> json) {
+    final raw = json['results'] as List<dynamic>? ?? [];
+    return BatchStartResponse(
+      results: raw.cast<Map<String, dynamic>>().map(BatchStartResult.fromJson).toList(),
+    );
+  }
+}
+
 // ── Client ────────────────────────────────────────────────────────────────────
 
 class CantiereWorklogApiClient {
@@ -285,6 +410,35 @@ class CantiereWorklogApiClient {
         .map(CantiereWorkLogDto.fromJson)
         .where((log) => log.isActive)
         .toList();
+  }
+
+  /// GET /api/cantieri/{id}/assegnazioni
+  ///
+  /// Every crew assignment for a cantiere — used to derive whether the current user is lead and
+  /// to populate the teammate picker (see cantiere_timbra_screen.dart). Returns a bare JSON array
+  /// (no pagination envelope), unlike [getActive]. Throws [DioException] on error, including
+  /// offline — callers fall back to today's single-button flow in that case rather than blocking.
+  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async {
+    final response = await _dio.get<List<dynamic>>('/api/cantieri/$cantiereId/assegnazioni');
+    final data = response.data ?? [];
+    return data.cast<Map<String, dynamic>>().map(CantiereCrewAssignmentDto.fromJson).toList();
+  }
+
+  /// POST /api/cantiereworklog/batch-start
+  ///
+  /// A lead's clock-in on behalf of one or more assigned teammates at once. Never fails the whole
+  /// batch for one person's failure — per-person outcomes come back inside the 200 response (see
+  /// [BatchStartResult.error]). Throws [DioException] only on a request-level error (e.g. the
+  /// device cannot reach the server at all) — this endpoint is online-only, with no offline queue
+  /// fallback, per the plan's Global Constraints.
+  Future<BatchStartResponse> batchStart(BatchStartCantiereRequest request) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/cantiereworklog/batch-start',
+      data: request.toJson(),
+    );
+    final data = response.data;
+    if (data == null) throw StateError('Risposta vuota da batchStart');
+    return BatchStartResponse.fromJson(data);
   }
 }
 

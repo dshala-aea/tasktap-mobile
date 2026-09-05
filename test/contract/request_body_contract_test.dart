@@ -897,6 +897,12 @@ void main() {
       'POST /api/devices':
           'sent by NotificationService, which builds its own Dio from Env at call time rather '
           'than taking one, so there is no seam to capture without changing production code',
+      'POST /api/cantiereworklog/batch-start':
+          'CantiereWorkLogController.BatchStart shipped on a separate backend branch this '
+          'mobile-only task (lead branching + teammate picker on CantiereTimbraScreen) must not '
+          'resync — test/contract/openapi.snapshot.json still predates it, so there is no schema '
+          'here to compare against yet. Add a contractTest once the snapshot is refreshed from '
+          'the backend (see this file\'s header comment for the refresh command).',
     };
 
     /// Proof that the checks above did something.
