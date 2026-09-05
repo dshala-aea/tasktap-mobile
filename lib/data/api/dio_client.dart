@@ -70,15 +70,16 @@ final dioProvider = Provider<Dio>((ref) {
 /// Dio interceptor that:
 /// 1. Attaches the current JWT as `Authorization: Bearer <token>`.
 /// 2. On 401: silently refreshes the token once, retries the request.
-/// 3. If that refresh fails because Zitadel is merely unreachable (a [NetworkError] — a cold
-///    start racing the radio still registering, a tunnel, airplane mode): leaves the session
-///    alone and lets this one request fail. Says nothing about whether the refresh token itself
-///    is still good — the same distinction [IAuthRepository]'s own offline-restore path already
-///    makes on cold start; forcing sign-out here would silently undo it one layer up, requiring
-///    a fresh interactive login (which itself needs network) every time a request happened to
-///    race a signal gap.
-/// 4. If that refresh fails for a real reason (expired/revoked/invalid_grant): calls
-///    [AuthInterceptor.onForcedSignOut] so the app can route to /login.
+/// 3. If that refresh fails with anything other than a confirmed [SessionExpired] — a
+///    [NetworkError] (Zitadel merely unreachable: a cold start racing the radio still
+///    registering, a tunnel, airplane mode) or an [UnknownAuthError] (a malformed token
+///    response, a JSON parsing hiccup, a Zitadel 5xx): leaves the session alone and lets this
+///    one request fail. None of these are proof the refresh token itself is dead — the same
+///    distinction [IAuthRepository]'s own offline-restore path already makes on cold start;
+///    forcing sign-out here would silently undo it one layer up, requiring a fresh interactive
+///    login (which itself needs network) on an ordinary transient glitch.
+/// 4. Only a confirmed [SessionExpired] (the identity provider positively said `invalid_grant`)
+///    calls [AuthInterceptor.onForcedSignOut] so the app can route to /login.
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({required this.dio, required this.authRepo});
 
@@ -118,23 +119,23 @@ class AuthInterceptor extends Interceptor {
         } on DioException catch (retryErr) {
           return handler.next(retryErr);
         }
-      } else if (refreshResult.failure is NetworkError) {
-        // Refresh itself couldn't reach Zitadel — says nothing about whether the refresh token
-        // is still good (see ZitadelAuthRepository._restore's own identical reasoning). This is
-        // the common case on a cold start: HomeShell fires its first sync before the radio has
-        // finished registering with the carrier, this 401 fires on the stale/empty in-memory
-        // access token, and the refresh attempt lands in that same dead window. Treating a
-        // network hiccup as "sign out" was forcing a fresh interactive login (which itself needs
-        // network) on every such cold start — exactly the offline lockout _restore() was written
-        // to prevent, just reintroduced one layer up. Leave the session alone; this request fails
-        // for now, and the next request (or AuthReconnectWatcher, once connectivity actually
-        // returns) gets a real chance to refresh.
-        return handler.next(err);
-      } else {
-        // A genuine auth failure (SessionExpired, revoked, invalid_grant) — the refresh token
-        // itself is no longer good, not just unreachable. Force sign-out and navigate to login.
+      } else if (refreshResult.failure is SessionExpired) {
+        // The identity provider positively confirmed the refresh token is dead (invalid_grant) —
+        // the only failure that means the session is actually gone (see
+        // ZitadelAuthRepository._restore's identical narrowing). Force sign-out and navigate to
+        // login.
         await authRepo.signOut();
         onForcedSignOut?.call();
+        return handler.next(err);
+      } else {
+        // NetworkError (Zitadel unreachable) or anything _mapError couldn't classify precisely
+        // (UnknownAuthError — a malformed token response, a JSON parsing hiccup, a Zitadel 5xx
+        // during refresh) — none of these are proof the refresh token itself is bad, only that
+        // this one refresh attempt didn't work. Treating them as a real auth failure was forcing
+        // a fresh interactive login (which itself needs network) on ordinary transient glitches —
+        // exactly the offline lockout _restore() was written to prevent, just reintroduced one
+        // layer up. Leave the session alone; this request fails for now, and the next request (or
+        // AuthReconnectWatcher, once connectivity actually returns) gets a real chance to refresh.
         return handler.next(err);
       }
     }

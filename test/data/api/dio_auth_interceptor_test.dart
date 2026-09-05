@@ -237,6 +237,53 @@ void main() {
     });
   });
 
+  // ── onError: 401 + refresh fails with an unclassified error → session preserved ──
+  //
+  // Regression: _mapError's fallback returns UnknownAuthError for things that are not proof the
+  // refresh token is dead — a malformed/glitchy token response, a JSON parsing hiccup, a Zitadel
+  // 5xx during refresh. Only a confirmed SessionExpired means the session is actually gone (see
+  // ZitadelAuthRepository._restore's identical narrowing). Forcing sign-out on anything broader
+  // was bouncing users to the login screen on ordinary transient glitches.
+
+  group('onError — 401 + refresh fails with an unclassified error', () {
+    setUp(() {
+      when(
+        () => repo.refreshSession(),
+      ).thenAnswer((_) async => (user: null, failure: const UnknownAuthError('glitch')));
+      when(() => repo.signOut()).thenAnswer((_) async {});
+    });
+
+    test('does NOT call signOut', () async {
+      final options = RequestOptions(path: '/api/data');
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      verifyNever(() => repo.signOut());
+    });
+
+    test('does NOT invoke onForcedSignOut', () async {
+      var called = false;
+      interceptor.onForcedSignOut = () => called = true;
+
+      final options = RequestOptions(path: '/api/data');
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      expect(called, isFalse);
+    });
+
+    test('still passes the original error through (the request fails for now)', () async {
+      final options = RequestOptions(path: '/api/data');
+      final handler = MockErrorInterceptorHandler();
+
+      await interceptor.onError(_make401(options), handler);
+
+      verify(() => handler.next(any())).called(1);
+    });
+  });
+
   // ── onError: already-retried request skips refresh ────────────────────
 
   group('onError — retry guard', () {
