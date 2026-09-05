@@ -3,10 +3,14 @@
 // RealtimeConnection
 //
 // One persistent SignalR connection to NotificationHub's tenant-broadcast
-// "ReceiveEvent" messages, regardless of how many screens are open. Auth is via
-// ?access_token=<jwt> on the connection URL, matching Program.cs's existing
-// JwtBearerEvents.OnMessageReceived handling for the /api/hubs path prefix — the
-// backend already built this mechanism for the hub, this just points at it.
+// "ReceiveEvent" messages, regardless of how many screens are open. Auth is via an
+// accessTokenFactory, which signalr_hub appends as ?access_token=<jwt> on the
+// websocket handshake URL — matching Program.cs's existing
+// JwtBearerEvents.OnMessageReceived handling for the /api/hubs path prefix (the
+// backend already built this mechanism for the hub, this just points at it).
+// Using a factory rather than baking the token into the URL once means every
+// reconnect attempt (automatic or explicit) picks up the *current* token instead
+// of replaying whatever was valid when connect() was first called.
 //
 // Best-effort by design: if the connection never succeeds, or drops and can't
 // reconnect, the app must keep working exactly as it does today via existing
@@ -70,11 +74,20 @@ class RealtimeConnection {
   Future<void> connect() async {
     if (_connection != null) return;
 
-    final token = _accessTokenProvider();
-    if (token.isEmpty) return;
+    if (_accessTokenProvider().isEmpty) return;
 
+    // accessTokenFactory (not a token baked into the URL) so every reconnect attempt —
+    // automatic or via reconnect() — fetches the *current* token rather than replaying
+    // whatever was valid when connect() was first called. The package appends it as
+    // ?access_token=<token> on the websocket handshake URL itself, matching the backend's
+    // JwtBearerEvents.OnMessageReceived handling for the /api/hubs path prefix.
     final connection = HubConnectionBuilder()
-        .withUrl('${Env.apiBaseUrl}/api/hubs/notifications?access_token=$token')
+        .withUrl(
+          '${Env.apiBaseUrl}/api/hubs/notifications',
+          options: HttpConnectionOptions(
+            accessTokenFactory: () async => _accessTokenProvider(),
+          ),
+        )
         .withAutomaticReconnect()
         .build();
 
