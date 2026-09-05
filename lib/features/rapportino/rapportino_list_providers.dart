@@ -57,6 +57,26 @@ final rapportinoAllegatiProvider = StreamProvider.autoDispose
       return repo.watchAllegati(reportId);
     });
 
+/// Sums the hours actually worked across staff rows, in minutes.
+///
+/// `hoursWorked` wins whenever it's set, matching `StaffRow.effectiveHours` (the same value these
+/// rows were persisted with by `ReportEditorNotifier._staffToCompanion`) — not just as a no-timer
+/// fallback. Once a timer has been stopped at least once, `hoursWorked` holds the per-segment
+/// accumulated total, while the raw startTime→endTime span also covers any idle gap between a
+/// stop and a later restart (startTime is pinned to the first start). Falling back to the span
+/// here would double-count that gap in the list's own total even though the fix in
+/// `StaffRow.effectiveHours` already keeps it out of what gets saved.
+double totalOreMinutes(List<ReportStaffTableData> rows) {
+  return rows.fold<double>(0, (acc, r) {
+    if (r.hoursWorked != null) return acc + (r.hoursWorked! * 60.0);
+    if (r.startTime != null && r.endTime != null) {
+      final worked = r.endTime!.difference(r.startTime!).inMinutes - r.pauseMinutes;
+      return acc + worked;
+    }
+    return acc;
+  });
+}
+
 /// Derived: total ore from staff rows for a given report.
 /// Returns a formatted string like "3h 30min" or "—".
 final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, reportId) {
@@ -65,13 +85,7 @@ final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, 
     loading: () => '—',
     error: (e, s) => '—',
     data: (rows) {
-      final totalMinutes = rows.fold<double>(0, (acc, r) {
-        if (r.startTime != null && r.endTime != null) {
-          final worked = r.endTime!.difference(r.startTime!).inMinutes - r.pauseMinutes;
-          return acc + worked;
-        }
-        return acc + ((r.hoursWorked ?? 0.0) * 60.0);
-      });
+      final totalMinutes = totalOreMinutes(rows);
       if (totalMinutes <= 0) return '—';
       final h = totalMinutes ~/ 60;
       final m = (totalMinutes % 60).round();

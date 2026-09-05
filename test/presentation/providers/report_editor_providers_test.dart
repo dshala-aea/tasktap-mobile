@@ -294,6 +294,27 @@ void main() {
       expect(row.effectiveHours, 5.5);
     });
 
+    test(
+      'effectiveHours prefers hoursWorked over the startTime/endTime span once both are set '
+      '(a resumed timer\'s span includes the idle gap between stop and restart, but hoursWorked '
+      'is accumulated per-segment by stopTimer and must win — same reason a manual "Ore" edit '
+      'after using the timer must not be silently overridden by the stale span)',
+      () {
+        final start = DateTime.utc(2026, 6, 21, 8, 0);
+        final end = DateTime.utc(2026, 6, 21, 16, 0); // 8h span if taken naively
+
+        final row = StaffRow(
+          id: 's-1',
+          userId: 'u-1',
+          startTime: start,
+          endTime: end,
+          hoursWorked: 3.0, // the actually-accumulated (or manually corrected) value
+        );
+
+        expect(row.effectiveHours, 3.0);
+      },
+    );
+
     test('effectiveHours returns 0 when neither timer nor hoursWorked set', () {
       const row = StaffRow(id: 's-1', userId: 'u-1');
 

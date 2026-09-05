@@ -146,4 +146,52 @@ void main() {
       }
     });
   });
+
+  group('totalOreMinutes', () {
+    ReportStaffTableData row({
+      double? hoursWorked,
+      DateTime? startTime,
+      DateTime? endTime,
+      int pauseMinutes = 0,
+    }) => ReportStaffTableData(
+      id: 's-1',
+      tenantId: 'tenant-1',
+      createdAt: DateTime.utc(2026, 6, 1),
+      reportId: 'r-1',
+      userId: 'user-1',
+      hoursWorked: hoursWorked,
+      kmTraveled: 0.0,
+      startTime: startTime,
+      endTime: endTime,
+      pauseMinutes: pauseMinutes,
+    );
+
+    test('sums hoursWorked in minutes when no timer was used', () {
+      expect(totalOreMinutes([row(hoursWorked: 2.5)]), 150.0);
+    });
+
+    test('falls back to the startTime/endTime span minus pauses when hoursWorked is unset', () {
+      final start = DateTime.utc(2026, 6, 21, 8, 0);
+      final end = DateTime.utc(2026, 6, 21, 16, 0);
+      expect(totalOreMinutes([row(startTime: start, endTime: end, pauseMinutes: 60)]), 420.0);
+    });
+
+    test(
+      'prefers hoursWorked over the span once both are set — a stopped-then-restarted timer '
+      'accumulates hoursWorked per segment, but the span also covers the idle gap in between',
+      () {
+        final start = DateTime.utc(2026, 6, 21, 8, 0);
+        final end = DateTime.utc(2026, 6, 21, 16, 0); // 8h span, includes an idle gap
+        final r = row(startTime: start, endTime: end, hoursWorked: 5.0); // 2 real segments
+        expect(totalOreMinutes([r]), 300.0);
+      },
+    );
+
+    test('sums across multiple staff rows', () {
+      expect(
+        totalOreMinutes([row(hoursWorked: 1.0), row(hoursWorked: 2.0)]),
+        180.0,
+      );
+    });
+  });
 }

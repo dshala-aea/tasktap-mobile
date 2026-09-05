@@ -84,13 +84,24 @@ class StaffRow {
     );
   }
 
-  /// Effective hours from timer (start→end minus pauses), or hoursWorked.
+  /// Effective hours: `hoursWorked` when set, else the timer's start→end span minus pauses.
+  ///
+  /// `hoursWorked` wins whenever it's set — not just as a no-timer fallback — for two reasons:
+  /// [ReportEditorNotifier.stopTimer] already accumulates it per-segment (each stop adds just
+  /// that run's duration), so once a timer has been stopped at least once, the raw
+  /// startTime→endTime span covers every segment PLUS any idle gap between a stop and a later
+  /// restart (startTime is pinned to the very first start; only [pauseMinutes] — never surfaced
+  /// in the UI — could subtract it). And a manual "Ore" edit after using the timer only ever
+  /// touches `hoursWorked` (see step_ore.dart) — if the span won instead, that edit would render
+  /// in the field but be silently ignored everywhere it's actually used (the total, the DB save,
+  /// the submit payload).
   double get effectiveHours {
+    if (hoursWorked != null) return hoursWorked!;
     if (startTime != null && endTime != null) {
       final worked = endTime!.difference(startTime!).inMinutes - pauseMinutes;
       return worked / 60.0;
     }
-    return hoursWorked ?? 0.0;
+    return 0.0;
   }
 }
 
