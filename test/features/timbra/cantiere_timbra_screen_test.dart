@@ -236,21 +236,21 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('renders Seleziona cantiere section', (tester) async {
+    testWidgets('renders Cantiere section', (tester) async {
       final api = _FakeApiClient();
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      expect(find.text('Seleziona cantiere'), findsOneWidget);
+      expect(find.text('Cantiere'), findsOneWidget);
       await _teardown(tester);
     });
 
-    testWidgets('renders Timbra ingresso cantiere button', (tester) async {
+    testWidgets('renders Inizia timbratura button', (tester) async {
       final api = _FakeApiClient();
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      expect(find.text('Timbra ingresso cantiere'), findsOneWidget);
+      expect(find.text('Inizia timbratura'), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -323,8 +323,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap clock-in button.
-      await tester.ensureVisible(find.text('Timbra ingresso cantiere'));
-      await tester.tap(find.text('Timbra ingresso cantiere'));
+      await tester.ensureVisible(find.text('Inizia timbratura'));
+      await tester.tap(find.text('Inizia timbratura'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -359,8 +359,8 @@ void main() {
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
       await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Timbra ingresso cantiere'));
-      await tester.tap(find.text('Timbra ingresso cantiere'));
+      await tester.ensureVisible(find.text('Inizia timbratura'));
+      await tester.tap(find.text('Inizia timbratura'));
       await tester.pumpAndSettle();
 
       expect(find.text('Seleziona un cantiere prima di timbrare.'), findsOneWidget);
@@ -539,8 +539,8 @@ void main() {
       // cantiere alone (see _effectiveCantiere in cantiere_timbra_screen.dart; this used to fall
       // through to the "Seleziona un cantiere" validation error because _handleStartCantiere read
       // the picker-only _selectedCantiere field instead).
-      await tester.ensureVisible(find.text('Timbra ingresso cantiere'));
-      await tester.tap(find.text('Timbra ingresso cantiere'));
+      await tester.ensureVisible(find.text('Inizia timbratura'));
+      await tester.tap(find.text('Inizia timbratura'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -581,7 +581,7 @@ void main() {
         await tester.pumpAndSettle();
 
         final button = tester.widget<AppButton>(
-          find.widgetWithText(AppButton, 'Timbra ingresso cantiere'),
+          find.widgetWithText(AppButton, 'Inizia timbratura'),
         );
         expect(button.onPressed, isNull);
 
@@ -616,7 +616,7 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsWidgets);
       final button = tester.widget<AppButton>(
-        find.widgetWithText(AppButton, 'Timbra ingresso cantiere'),
+        find.widgetWithText(AppButton, 'Inizia timbratura'),
       );
       expect(button.onPressed, isNull);
 
@@ -651,8 +651,8 @@ void main() {
         await tester.tap(find.text('Cantiere Via Roma'));
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Timbra ingresso cantiere'));
-        await tester.tap(find.text('Timbra ingresso cantiere'));
+        await tester.ensureVisible(find.text('Inizia timbratura'));
+        await tester.tap(find.text('Inizia timbratura'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
@@ -1050,6 +1050,237 @@ void main() {
 
       // Only the 2h since midnight counts, not the 5h before it.
       expect(clampedElapsedSinceMidnight(start, now), const Duration(hours: 2));
+    });
+  });
+
+  group('check-in body — OGGI header and lead menu', () {
+    testWidgets('shows OGGI 0h 00m when no hours logged yet today', (tester) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient();
+
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api, currentUser: _testUser));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OGGI'), findsOneWidget);
+      expect(find.text('0h 00m'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('OGGI total reflects a closed interval logged earlier today', (tester) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day, 7).toUtc();
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'e1',
+              eventTime: start,
+              eventType: 'ingresso',
+              cantiereId: const Value('cant-1'),
+            ),
+          );
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'e2',
+              eventTime: start.add(const Duration(hours: 2, minutes: 30)),
+              eventType: 'uscita',
+            ),
+          );
+
+      final api = _FakeApiClient();
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('2h 30m'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('shows a single Inizia timbratura button and no menu for a non-lead', (
+      tester,
+    ) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient(
+        assegnazioni: const [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false)],
+      );
+
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inizia timbratura'), findsOneWidget);
+      expect(find.textContaining('Per:'), findsNothing);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('shows the Inizia timbratura button plus a Per: Me menu for a lead', (
+      tester,
+    ) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient(
+        assegnazioni: const [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+          CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inizia timbratura'), findsOneWidget);
+      expect(find.textContaining('Per: Me'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('tapping Inizia timbratura starts solo, for a lead or non-lead alike', (
+      tester,
+    ) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient(
+        assegnazioni: const [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true)],
+      );
+
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Inizia timbratura'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.startedRequests, hasLength(1));
+      expect(api.batchStartRequests, isEmpty);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('picking Squadra from the Per menu opens the teammate picker', (tester) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient(
+        assegnazioni: const [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+          CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Per: Me'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Squadra'));
+      await tester.pumpAndSettle();
+
+      // The teammate picker sheet is now open (same sheet _handleSelectSquadra always opened).
+      expect(find.text('teammate-1'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('picking Me e squadra from the Per menu batch-starts everyone', (tester) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient(
+        assegnazioni: const [
+          CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+          CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Per: Me'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Me e squadra'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.batchStartRequests, hasLength(1));
+      expect(
+        api.batchStartRequests.first.userIds,
+        unorderedEquals(['me', 'teammate-1']),
+      );
+
+      await _teardown(tester);
     });
   });
 

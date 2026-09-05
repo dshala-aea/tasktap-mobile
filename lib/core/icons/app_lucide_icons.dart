@@ -91,6 +91,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData chevronDown = IconData(
+    0xf1f5,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData chevronLeft = IconData(
     0xf1f9,
     fontFamily: 'Lucide',

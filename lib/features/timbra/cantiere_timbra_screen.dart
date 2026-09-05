@@ -428,6 +428,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                       ticketId: widget.ticketId,
                       cantieriAsync: cantieriAsync,
                       selectedCantiere: _effectiveCantiere,
+                      cantiereId: effectiveCantiereId,
                       showPicker: widget.cantiereId == null,
                       fixedCantiereAsync: fixedCantiereAsync,
                       isLoading: _isLoading,
@@ -847,12 +848,13 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
 // ── _CheckInBody ──────────────────────────────────────────────────────────────
 
-class _CheckInBody extends StatelessWidget {
+class _CheckInBody extends ConsumerWidget {
   const _CheckInBody({
     required this.customerId,
     required this.ticketId,
     required this.cantieriAsync,
     required this.selectedCantiere,
+    required this.cantiereId,
     required this.showPicker,
     this.fixedCantiereAsync,
     required this.isLoading,
@@ -871,6 +873,11 @@ class _CheckInBody extends StatelessWidget {
   final AsyncValue<List<CantieriData>> cantieriAsync;
   final CantieriData? selectedCantiere;
 
+  /// The resolved cantiere's id, or null before one is picked (picker mode, nothing tapped yet).
+  /// Feeds the "OGGI" header's `cantiereTodayHoursProvider` watch — null shows a static "0h 00m"
+  /// with no provider call, since there is nothing to scope hours to yet.
+  final String? cantiereId;
+
   /// When false, the cantiere picker (section header + selectable list) is skipped in favour of a
   /// compact fixed-cantiere card — the direct-entry path (`CantiereTimbraScreen.cantiereId` set).
   final bool showPicker;
@@ -884,10 +891,9 @@ class _CheckInBody extends StatelessWidget {
   final String? errorMessage;
   final bool hasDetails;
 
-  /// Whether the current user is the lead on the resolved cantiere — gates the three-way choice
-  /// (Solo io / Seleziona squadra / Tutta la squadra) below in place of the single button. False
-  /// while no cantiere is resolved yet, on fetch error, or offline (see isLeadForCantiereProvider)
-  /// — the explicit fallback to today's unchanged single-button flow.
+  /// Whether the current user is the lead on the resolved cantiere — gates the "Per: Me ▾" menu
+  /// below the main button. False while no cantiere is resolved yet, on fetch error, or offline
+  /// (see isLeadForCantiereProvider) — the explicit fallback to the plain single-button flow.
   final bool isLead;
   final ValueChanged<CantieriData?> onCantiereSelected;
   final VoidCallback onStart;
@@ -896,25 +902,14 @@ class _CheckInBody extends StatelessWidget {
   final VoidCallback onOpenDetails;
 
   @override
-  Widget build(BuildContext context) {
-    // The picker reads the local Drift mirror `SyncService` keeps warm (see cantieriProvider's own
-    // doc comment) — once the stream has emitted at least once, an empty list means this tenant has
-    // no active cantieri synced to this device yet, not that the feature is unimplemented.
-    //
-    // Only gates the button in picker mode: `cantieriAsync` is the Active-only cantieri list, but
-    // a direct-entry cantiere reached via a ticket link may be Completed/Cancelled (so absent from
-    // that list) or the tenant may simply have zero other Active cantieri right now — neither
-    // should disable a button that's about to act on an already-resolved fixed cantiere.
+  Widget build(BuildContext context, WidgetRef ref) {
     final cantieriValue = cantieriAsync.valueOrNull;
     final noCantieriAvailable = showPicker && cantieriValue != null && cantieriValue.isEmpty;
-
-    // Direct-entry mode's own gate: the fixed-cantiere card above already shows a distinct
-    // message for "still loading" vs. "not synced locally" (see fixedCantiereAsync.when above),
-    // but until now the start button stayed enabled through both, and tapping it fell through to
-    // the generic "Seleziona un cantiere prima di timbrare." — self-contradictory on a screen with
-    // no picker to select from. `selectedCantiere` is `_effectiveCantiere` in direct-entry mode,
-    // so it's null in exactly those two states and non-null once resolved.
     final noFixedCantiere = !showPicker && selectedCantiere == null;
+
+    final todayHours = cantiereId != null
+        ? ref.watch(cantiereTodayHoursProvider(cantiereId!))
+        : Duration.zero;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -926,6 +921,35 @@ class _CheckInBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // "OGGI" header — plain text hierarchy, not another elevated card, per the redesign's
+          // own stated reasoning: stacking a card onto an already-card-heavy screen would just be
+          // clutter restyled, not clutter removed.
+          Text(
+            'OGGI',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: context.colors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            formatHoursMinutes(todayHours),
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.8,
+              color: context.colors.ink,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Divider(color: context.colors.borderLight, height: 1),
+          const SizedBox(height: 16),
+
           // Context banner (linked ticket)
           if (ticketId != null) ...[
             AppCard(
@@ -955,9 +979,8 @@ class _CheckInBody extends StatelessWidget {
           ],
 
           if (showPicker) ...[
-            // Section header
             Text(
-              'Seleziona cantiere',
+              'Cantiere',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 11,
@@ -1136,12 +1159,54 @@ class _CheckInBody extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // Progressive disclosure: occasional/optional fields, off the primary flow.
+          if (errorMessage != null) ...[
+            _ErrorBanner(message: errorMessage!),
+            const SizedBox(height: 16),
+          ],
+
+          AppButton(
+            label: 'Inizia timbratura',
+            icon: const Icon(LucideIcons.mapPin),
+            isLoading: isLoading,
+            onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
+          ),
+
+          if (isLead) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: PopupMenuButton<VoidCallback>(
+                enabled: !(isLoading || noCantieriAvailable || noFixedCantiere),
+                onSelected: (handler) => handler(),
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: onSelectSquadra, child: const Text('Squadra')),
+                  PopupMenuItem(value: onTuttaLaSquadra, child: const Text('Me e squadra')),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Per: Me',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.inkMuted,
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronDown, size: 16, color: context.colors.inkMuted),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
           Center(
             child: ConstrainedBox(
-              // A 48dp floor, not padding alone: the visible content (a 14px icon + 13px text)
-              // is much smaller than Android's touch-target minimum — same reasoning as
-              // HeaderIconBtn's box around its own smaller visible disc.
               constraints: const BoxConstraints(minHeight: 48),
               child: AppTappable(
                 onTap: onOpenDetails,
@@ -1173,58 +1238,6 @@ class _CheckInBody extends StatelessWidget {
               ),
             ),
           ),
-
-          const SizedBox(height: 16),
-
-          // Error message
-          if (errorMessage != null) ...[
-            _ErrorBanner(message: errorMessage!),
-            const SizedBox(height: 16),
-          ],
-
-          // Clock-in button(s) — disabled (not hidden) when there is nothing to select, so the
-          // reason above stays visible instead of the row just disappearing.
-          if (isLead) ...[
-            Text(
-              'Chi timbra ingresso?',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: context.colors.inkMuted,
-              ),
-            ),
-            const SizedBox(height: 8),
-            AppButton(
-              label: 'Solo io',
-              icon: const Icon(LucideIcons.user),
-              isLoading: isLoading,
-              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
-            ),
-            const SizedBox(height: 8),
-            AppButton.secondary(
-              label: 'Seleziona squadra',
-              icon: const Icon(LucideIcons.userPlus),
-              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere)
-                  ? null
-                  : onSelectSquadra,
-            ),
-            const SizedBox(height: 8),
-            AppButton.secondary(
-              label: 'Tutta la squadra',
-              icon: const Icon(LucideIcons.users),
-              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere)
-                  ? null
-                  : onTuttaLaSquadra,
-            ),
-          ] else
-            AppButton(
-              label: 'Timbra ingresso cantiere',
-              icon: const Icon(LucideIcons.mapPin),
-              isLoading: isLoading,
-              onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
-            ),
         ],
       ),
     );
