@@ -698,73 +698,6 @@ void main() {
         );
 
     testWidgets(
-      'shows the three-way choice for a lead, instead of the single button',
-      (tester) async {
-        await seedCantiere(db);
-        final api = _FakeApiClient(
-          assegnazioni: const [
-            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
-            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
-          ],
-        );
-
-        await tester.pumpWidget(
-          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('Solo io'), findsOneWidget);
-        expect(find.text('Seleziona squadra'), findsOneWidget);
-        expect(find.text('Tutta la squadra'), findsOneWidget);
-        expect(find.text('Timbra ingresso cantiere'), findsNothing);
-
-        await _teardown(tester);
-      },
-    );
-
-    testWidgets(
-      'shows exactly the single button for a non-lead, with no branching prompt',
-      (tester) async {
-        await seedCantiere(db);
-        final api = _FakeApiClient(
-          assegnazioni: const [CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: false)],
-        );
-
-        await tester.pumpWidget(
-          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('Timbra ingresso cantiere'), findsOneWidget);
-        expect(find.text('Solo io'), findsNothing);
-        expect(find.text('Seleziona squadra'), findsNothing);
-        expect(find.text('Tutta la squadra'), findsNothing);
-
-        await _teardown(tester);
-      },
-    );
-
-    testWidgets(
-      'shows exactly the single button when the assignment fetch fails (offline fallback)',
-      (tester) async {
-        await seedCantiere(db);
-        final api = _FakeApiClient(assegnazioniShouldThrow: true);
-
-        await tester.pumpWidget(
-          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('Timbra ingresso cantiere'), findsOneWidget);
-        expect(find.text('Solo io'), findsNothing);
-        expect(find.text('Seleziona squadra'), findsNothing);
-        expect(find.text('Tutta la squadra'), findsNothing);
-
-        await _teardown(tester);
-      },
-    );
-
-    testWidgets(
       '"Tutta la squadra" calls batchStart with every assigned userId',
       (tester) async {
         await seedCantiere(db);
@@ -787,8 +720,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Tutta la squadra'));
-        await tester.tap(find.text('Tutta la squadra'));
+        await tester.tap(find.textContaining('Per: Me'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Me e squadra'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
 
@@ -830,8 +764,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Tutta la squadra'));
-        await tester.tap(find.text('Tutta la squadra'));
+        await tester.tap(find.textContaining('Per: Me'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Me e squadra'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
@@ -871,8 +806,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Seleziona squadra'));
-        await tester.tap(find.text('Seleziona squadra'));
+        await tester.tap(find.textContaining('Per: Me'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Squadra'));
         await tester.pumpAndSettle();
 
         // Toggle exactly two of the four assigned rows (skip 'me' the lead, and skip
@@ -922,8 +858,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Tutta la squadra'));
-        await tester.tap(find.text('Tutta la squadra'));
+        await tester.tap(find.textContaining('Per: Me'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Me e squadra'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
@@ -958,8 +895,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Tutta la squadra'));
-        await tester.tap(find.text('Tutta la squadra'));
+        await tester.tap(find.textContaining('Per: Me'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Me e squadra'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
@@ -1006,8 +944,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.ensureVisible(find.text('Tutta la squadra'));
-        await tester.tap(find.text('Tutta la squadra'));
+        await tester.tap(find.textContaining('Per: Me'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Me e squadra'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
         await tester.pumpAndSettle();
@@ -1179,6 +1118,32 @@ void main() {
 
       expect(find.text('Inizia timbratura'), findsOneWidget);
       expect(find.textContaining('Per: Me'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('shows no Per menu when the assignment fetch fails (offline fallback)', (
+      tester,
+    ) async {
+      await db
+          .into(db.cantieri)
+          .insert(
+            CantieriCompanion.insert(
+              id: 'cant-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              name: 'Cantiere Via Roma',
+            ),
+          );
+      final api = _FakeApiClient(assegnazioniShouldThrow: true);
+
+      await tester.pumpWidget(
+        _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inizia timbratura'), findsOneWidget);
+      expect(find.textContaining('Per:'), findsNothing);
 
       await _teardown(tester);
     });
