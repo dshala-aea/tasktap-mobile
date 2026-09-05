@@ -53,7 +53,11 @@ class UserSignatureApiClient {
   /// meant to be surfaced, not swallowed.
   Future<UserSignatureUploadResult> uploadSignature(Uint8List bytes) async {
     final formData = FormData.fromMap({
-      'file': MultipartFile.fromBytes(bytes, filename: 'signature.png'),
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: 'signature.png',
+        contentType: DioMediaType.parse('image/png'),
+      ),
     });
 
     final response = await _dio.post<Map<String, dynamic>>(
