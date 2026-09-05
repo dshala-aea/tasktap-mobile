@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/scanner/barcode_scan_sheet.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
@@ -51,13 +52,20 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
   bool _prefillFailed = false;
 
   // ── Barcodes + image (Gap 5) ────────────────────────────────────────────────
-  // Neither is mirrored in Drift (no local table for either), so both are read live from
-  // `GET /api/materiali/{id}` on open — best-effort: offline just leaves this section
-  // unavailable for the session rather than blocking the base-field prefill above, which
-  // already comes from Drift and works offline.
+  // Neither is mirrored in Drift (no local table for either), so in edit mode both are read live
+  // from `GET /api/materiali/{id}` on open — best-effort: offline just leaves this section
+  // unavailable for the session rather than blocking the base-field prefill above, which already
+  // comes from Drift and works offline.
+  //
+  // In create mode there is no materialeId yet to hang either on, so barcodes are held here as a
+  // local pending list (no server 'id', flagged by the 'local-' prefix on ours) and flushed to
+  // `POST /api/materiali/{id}/barcodes` right after the create call returns its new id — see
+  // [_save]. The image section stays edit-only: uploading needs a materialeId to attach to and,
+  // unlike a barcode, there's no local-preview-then-upload pattern established elsewhere to reuse
+  // for it here without inventing one — out of scope for this fix.
   List<Map<String, dynamic>> _barcodes = [];
   String? _imageContentUrl;
-  bool _detailLoaded = false;
+  late bool _detailLoaded = !_isEditing;
   bool _isUploadingImage = false;
 
   bool get _isEditing => widget.materialeId != null;
@@ -151,8 +159,9 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
           salePrice: salePrice,
           aliquotaIva: aliquotaIva,
         );
+        unawaited(ref.read(syncProvider.notifier).performSync());
       } else {
-        await api.createMateriale(
+        final newId = await api.createMateriale(
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
           description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
@@ -165,16 +174,40 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
           salePrice: salePrice,
           aliquotaIva: aliquotaIva,
         );
+
+        var barcodeFailures = 0;
+        for (final b in _barcodes) {
+          try {
+            await api.addMaterialeBarcode(
+              newId,
+              barcode: b['barcode'] as String,
+              barcodeType: b['barcodeType'] as String?,
+              isPrimary: b['isPrimary'] as bool? ?? false,
+            );
+          } catch (_) {
+            barcodeFailures++;
+          }
+        }
+
+        unawaited(ref.read(syncProvider.notifier).performSync());
+
+        if (mounted) {
+          if (barcodeFailures > 0) {
+            showAppToast(
+              context,
+              message: 'Materiale creato, ma $barcodeFailures barcode non salvati.',
+              tone: ToastTone.error,
+            );
+          } else {
+            showAppToast(context, message: 'Materiale creato', tone: ToastTone.success);
+          }
+          context.pop(true);
+        }
+        return;
       }
 
-      unawaited(ref.read(syncProvider.notifier).performSync());
-
       if (mounted) {
-        showAppToast(
-          context,
-          message: _isEditing ? 'Materiale aggiornato' : 'Materiale creato',
-          tone: ToastTone.success,
-        );
+        showAppToast(context, message: 'Materiale aggiornato', tone: ToastTone.success);
         context.pop(true);
       }
     } catch (e) {
@@ -203,7 +236,21 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
             children: [
               AppFieldShell(
                 label: 'Barcode',
-                child: TextField(controller: barcodeCtrl, autofocus: true),
+                child: TextField(
+                  key: const Key('add-barcode-dialog-barcode-field'),
+                  controller: barcodeCtrl,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    suffixIcon: IconButton(
+                      icon: const Icon(LucideIcons.scanLine),
+                      tooltip: 'Scansiona',
+                      onPressed: () async {
+                        final code = await openBarcodeScanSheet(ctx, title: 'Scansiona barcode');
+                        if (code != null && code.isNotEmpty) barcodeCtrl.text = code;
+                      },
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               AppFieldShell(
@@ -231,17 +278,27 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
               onPressed: () async {
                 final barcode = barcodeCtrl.text.trim();
                 if (barcode.isEmpty) return;
+                final type = typeCtrl.text.trim().isEmpty ? null : typeCtrl.text.trim();
                 Navigator.pop(ctx);
-                await _mutateBarcode(
-                  () => ref
-                      .read(adminApiClientProvider)
-                      .addMaterialeBarcode(
-                        widget.materialeId!,
-                        barcode: barcode,
-                        barcodeType: typeCtrl.text.trim().isEmpty ? null : typeCtrl.text.trim(),
-                        isPrimary: isPrimary,
-                      ),
-                );
+                if (_isEditing) {
+                  await _mutateBarcode(
+                    () => ref
+                        .read(adminApiClientProvider)
+                        .addMaterialeBarcode(
+                          widget.materialeId!,
+                          barcode: barcode,
+                          barcodeType: type,
+                          isPrimary: isPrimary,
+                        ),
+                  );
+                } else {
+                  _addLocalBarcode({
+                    'id': 'local-${DateTime.now().microsecondsSinceEpoch}',
+                    'barcode': barcode,
+                    'barcodeType': type,
+                    'isPrimary': isPrimary,
+                  });
+                }
               },
               child: const Text('Aggiungi'),
             ),
@@ -265,6 +322,33 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
         );
       }
     }
+  }
+
+  // Not yet saved to the server — no materialeId exists until [_save] creates it. Held here and
+  // flushed to POST /api/materiali/{id}/barcodes right after that call returns its new id.
+  void _addLocalBarcode(Map<String, dynamic> barcode) {
+    setState(() {
+      if (barcode['isPrimary'] == true) {
+        for (final b in _barcodes) {
+          b['isPrimary'] = false;
+        }
+      }
+      _barcodes = [..._barcodes, barcode];
+    });
+  }
+
+  void _setLocalPrimary(String localId) {
+    setState(() {
+      for (final b in _barcodes) {
+        b['isPrimary'] = b['id'] == localId;
+      }
+    });
+  }
+
+  void _deleteLocalBarcode(String localId) {
+    setState(() {
+      _barcodes = _barcodes.where((b) => b['id'] != localId).toList();
+    });
   }
 
   // ── Image ────────────────────────────────────────────────────────────────────
@@ -426,23 +510,27 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                 onPickCamera: () => _pickAndUploadImage(ImageSource.camera),
                 onDelete: _deleteImage,
               ),
-              const SizedBox(height: 24),
-              _BarcodesSection(
-                barcodes: _barcodes,
-                loaded: _detailLoaded,
-                onAdd: _showAddBarcodeDialog,
-                onSetPrimary: (barcodeId) => _mutateBarcode(
-                  () => ref
-                      .read(adminApiClientProvider)
-                      .setPrimaryMaterialeBarcode(widget.materialeId!, barcodeId),
-                ),
-                onDelete: (barcodeId) => _mutateBarcode(
-                  () => ref
-                      .read(adminApiClientProvider)
-                      .deleteMaterialeBarcode(widget.materialeId!, barcodeId),
-                ),
-              ),
             ],
+            const SizedBox(height: 24),
+            _BarcodesSection(
+              barcodes: _barcodes,
+              loaded: _detailLoaded,
+              onAdd: _showAddBarcodeDialog,
+              onSetPrimary: _isEditing
+                  ? (barcodeId) => _mutateBarcode(
+                      () => ref
+                          .read(adminApiClientProvider)
+                          .setPrimaryMaterialeBarcode(widget.materialeId!, barcodeId),
+                    )
+                  : _setLocalPrimary,
+              onDelete: _isEditing
+                  ? (barcodeId) => _mutateBarcode(
+                      () => ref
+                          .read(adminApiClientProvider)
+                          .deleteMaterialeBarcode(widget.materialeId!, barcodeId),
+                    )
+                  : _deleteLocalBarcode,
+            ),
             const SizedBox(height: 32),
 
             AppButton(
