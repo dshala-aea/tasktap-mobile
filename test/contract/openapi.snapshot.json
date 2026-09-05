@@ -1421,13 +1421,64 @@
         }
       }
     },
+    "/api/CantiereWorkLog/batch-start": {
+      "post": {
+        "tags": [
+          "CantiereWorkLog"
+        ],
+        "summary": "Batch-starts cantiere clock-in for multiple teammates at once. Restricted to a caller\nwho is themselves assigned to this cantiere as lead (bool CantiereCrewAssignment.IsLead)\n\u2014 a non-lead uses Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.StartWork(StartCantiereWorkLogRequest request, CancellationToken ct) for their own clock-in and cannot batch-start\nfor anyone else through this endpoint, including themselves.",
+        "description": "Per-person, not all-or-nothing: an already-open shift or a userId not assigned to this\ncantiere names that person as a failure in the response (mirroring\n\u0060RolePermissionMatrixService.SetMatrixAsync\u0060\u0027s \u0022name every offender\u0022 pattern) rather\nthan either silently dropping them or failing the whole batch for everyone else.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchStartCantiereWorkLogRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchStartCantiereWorkLogRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchStartCantiereWorkLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchStartResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchStartResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchStartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/CantiereWorkLog/mobile/sessions": {
       "post": {
         "tags": [
           "CantiereWorkLog"
         ],
         "summary": "Idempotent batch upsert of cantiere punches captured on a device.",
-        "description": "The offline counterpart to Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.StartWork(StartCantiereWorkLogRequest request, CancellationToken ct)/Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.EndWork(EndCantiereWorkLogRequest? request = null), mirroring\n\u0060POST /api/WorkLog/mobile/sessions\u0060. A phone records a punch locally, queues it, and\nsends the same payload \u2014 including a client-generated \u0060clientId\u0060 \u2014 on every attempt\nuntil one succeeds. The upsert keys on (tenant, user, clientId), so a retry after a timeout\nupdates the row it already created rather than opening a second shift on the site.\n\nWithout this the client had no safe retry: the only signal available was the status code,\nso a repeated clock-in had to be inferred from a 400 \u2014 which also swallows 400s raised for\nunrelated reasons and marks a genuinely lost punch as delivered. A site technician\u0027s hours\nare the basis of what the customer is billed, so guessing is not an option.\n\nAll-or-nothing: one transaction for the whole batch, so a rejection on item N does not\nleave items 1..N-1 committed with the client still believing the batch failed.",
+        "description": "The offline counterpart to Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.StartWork(StartCantiereWorkLogRequest request, CancellationToken ct)/Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.EndWork(EndCantiereWorkLogRequest? request = null), mirroring\n\u0060POST /api/WorkLog/mobile/sessions\u0060. A phone records a punch locally, queues it, and\nsends the same payload \u2014 including a client-generated \u0060clientId\u0060 \u2014 on every attempt\nuntil one succeeds. The upsert keys on (tenant, user, clientId), so a retry after a timeout\nupdates the row it already created rather than opening a second shift on the site.\n\nWithout this the client had no safe retry: the only signal available was the status code,\nso a repeated clock-in had to be inferred from a 400 \u2014 which also swallows 400s raised for\nunrelated reasons and marks a genuinely lost punch as delivered. A site technician\u0027s hours\nare the basis of what the customer is billed, so guessing is not an option.\n\nAll-or-nothing: one transaction for the whole batch, so a rejection on item N does not\nleave items 1..N-1 committed with the client still believing the batch failed.\n\nDeliberately does NOT enforce the CantiereCrewAssignment gate that\nTask\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.StartWork(StartCantiereWorkLogRequest request, CancellationToken ct) enforces. A hard per-session \u0022NotAssigned\u0022 throw here would abort\nthis entire all-or-nothing transaction \u2014 the whole offline-sync batch, not just the one\nunassigned session \u2014 the moment any queued punch belongs to a cantiere this branch\u0027s own\nmigration created the (still-empty, no-backfill) CantiereCrewAssignment table for, which\nis strictly worse than the current gap. Ruling recorded in\n.superpowers/sdd/2026-09-05-cantiere-assignment-batch-timbra/progress.md; revisit once the\ncrew-assignment backfill lands.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2142,6 +2193,262 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/cantieri/{id}/assegnazioni": {
+      "get": {
+        "tags": [
+          "Cantieri"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CantiereCrewAssignment"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CantiereCrewAssignment"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CantiereCrewAssignment"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Cantieri"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCantiereCrewAssignmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCantiereCrewAssignmentRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCantiereCrewAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cantieri/{id}/assegnazioni/{userId}": {
+      "delete": {
+        "tags": [
+          "Cantieri"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -14094,6 +14401,18 @@
         "type": "integer",
         "description": "What kind of time this is. The three are not interchangeable: attendance is the working day,\ncantiere is time on a site, ticket is time against a job."
       },
+      "AddCantiereCrewAssignmentRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isLead": {
+            "type": "boolean"
+          }
+        }
+      },
       "AddManualTicketWorkLogRequest": {
         "type": "object",
         "properties": {
@@ -14350,6 +14669,163 @@
         },
         "description": "Basic primary key response for created/updated entities."
       },
+      "BatchStartCantiereWorkLogRequest": {
+        "type": "object",
+        "properties": {
+          "cantiereId": {
+            "type": "string",
+            "description": "Cantiere ID.",
+            "format": "uuid"
+          },
+          "customerId": {
+            "type": "string",
+            "description": "Customer ID.",
+            "format": "uuid"
+          },
+          "userIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The users to start a cantiere punch for."
+          },
+          "workLogType": {
+            "description": "Work log type (Site, Travel, Setup) \u2014 shared by every row this batch creates.",
+            "$ref": "#/components/schemas/CantiereWorkLogTypeEnum"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Description of work."
+          },
+          "workOrderNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Work order number."
+          },
+          "equipmentUsed": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Equipment used."
+          },
+          "teamSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Number of workers in the team.",
+            "format": "int32"
+          },
+          "latitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Starting latitude coordinate.",
+            "format": "double"
+          },
+          "longitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Starting longitude coordinate.",
+            "format": "double"
+          },
+          "arrivalLatitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Arrival latitude coordinate.",
+            "format": "double"
+          },
+          "arrivalLongitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Arrival longitude coordinate.",
+            "format": "double"
+          },
+          "weatherConditions": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Weather conditions."
+          }
+        },
+        "description": "Request model for Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.BatchStart(BatchStartCantiereWorkLogRequest request, CancellationToken ct): the fields\nStartCantiereWorkLogRequest already has, minus the per-person ones (no\n\u0060TicketId\u0060 \u2014 a batch punch has no per-person ticket context), shared across the whole\nbatch, plus the list of user ids to start a punch for."
+      },
+      "BatchStartResponse": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchStartResultItem"
+            }
+          }
+        },
+        "description": "Names every offender rather than silently dropping them or failing the whole batch \u2014 mirrors\n\u0060RolePermissionMatrixService.SetMatrixAsync\u0060\u0027s response shape."
+      },
+      "BatchStartResultItem": {
+        "required": [
+          "userId",
+          "success",
+          "workLogId",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "The user this result is for.",
+            "format": "uuid"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether a cantiere work log entry was created for this user."
+          },
+          "workLogId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The created entry\u0027s id, when Success is true.",
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Machine-readable failure code when Success is false: \u0060\u0022NotAssigned\u0022\u0060\n(no CantiereCrewAssignment row for this user on this cantiere) or\n\u0060\u0022AlreadyOpen\u0022\u0060 (this user already has an active cantiere work log entry elsewhere)."
+          }
+        },
+        "description": "One person\u0027s outcome from a Task\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.BatchStart(BatchStartCantiereWorkLogRequest request, CancellationToken ct) call."
+      },
       "BillingPortalRequest": {
         "required": [
           "returnUrl"
@@ -14595,6 +15071,54 @@
             "format": "date-time"
           }
         }
+      },
+      "CantiereCrewAssignment": {
+        "type": "object",
+        "properties": {
+          "cantiereId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isLead": {
+            "type": "boolean"
+          },
+          "assignedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "assignedByUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "One person\u0027s assignment to a cantiere. Individual, not squadra-based \u2014 a person can be\nassigned to a cantiere regardless of which squadra they normally belong to, and bool CantiereCrewAssignment.IsLead is set per assignment, independent of any squadra role they hold elsewhere.\nA lead may batch-start clock-in (\u003Csee cref=\u0022!:CantiereWorkLogController.BatchStart\u0022 /\u003E) for\nevery other person assigned to the same cantiere."
       },
       "CantiereDetailResponse": {
         "required": [
@@ -18552,6 +19076,19 @@
           }
         },
         "description": "One submitted grant."
+      },
+      "MessageResponse": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Human-readable confirmation of the completed action."
+          }
+        },
+        "description": "Simple success-message body for mutation endpoints (PUT/DELETE that need a message)."
       },
       "MobileSessionDto": {
         "type": "object",
