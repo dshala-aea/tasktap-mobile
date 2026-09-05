@@ -798,5 +798,104 @@ void main() {
         await _teardown(tester);
       },
     );
+
+    testWidgets(
+      'names every offender when batch-start partially fails, without dropping anyone',
+      (tester) async {
+        // The endpoint's own "name every offender" contract (see BatchStartResult.error): a
+        // failed person must never be silently dropped, and the whole batch must not fail just
+        // because one person's clock-in did.
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+            CantiereCrewAssignmentDto(id: 'a3', userId: 'teammate-2', isLead: false),
+          ],
+        );
+        api.batchStartResponseBuilder = (request) => BatchStartResponse(
+          results: [
+            const BatchStartResult(userId: 'me', success: true, workLogId: 'wl-me'),
+            const BatchStartResult(userId: 'teammate-1', success: false, error: 'AlreadyOpen'),
+            const BatchStartResult(userId: 'teammate-2', success: false, error: 'NotAssigned'),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Tutta la squadra'));
+        await tester.tap(find.text('Tutta la squadra'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Alcuni membri non sono stati avviati'), findsOneWidget);
+        // Neither the local mirror nor the fake seeds a colleague row for these ids, so the
+        // dialog falls back to the raw userId — same fallback contract as colleagueNameProvider
+        // everywhere else in the app.
+        expect(find.text('teammate-1: ha già una timbratura aperta'), findsOneWidget);
+        expect(find.text('teammate-2: non risulta assegnato a questo cantiere'), findsOneWidget);
+        // The one person who *did* succeed must not appear in the failures dialog.
+        expect(find.textContaining('me:'), findsNothing);
+
+        // Close the dialog before teardown.
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets(
+      '"Seleziona squadra" calls batchStart with only the checked subset of userIds',
+      (tester) async {
+        await seedCantiere(db);
+        final api = _FakeApiClient(
+          assegnazioni: const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'me', isLead: true),
+            CantiereCrewAssignmentDto(id: 'a2', userId: 'teammate-1', isLead: false),
+            CantiereCrewAssignmentDto(id: 'a3', userId: 'teammate-2', isLead: false),
+            CantiereCrewAssignmentDto(id: 'a4', userId: 'teammate-3', isLead: false),
+          ],
+        );
+
+        await tester.pumpWidget(
+          _buildScreen(db: db, apiClient: api, cantiereId: 'cant-1', currentUser: _testUser),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Seleziona squadra'));
+        await tester.tap(find.text('Seleziona squadra'));
+        await tester.pumpAndSettle();
+
+        // Toggle exactly two of the four assigned rows (skip 'me' the lead, and skip
+        // 'teammate-2') — the fake seeds no colleague rows, so the picker falls back to raw
+        // userIds as the row labels (same fallback contract as colleagueNameProvider).
+        await tester.tap(find.text('teammate-1'));
+        await tester.tap(find.text('teammate-3'));
+        await tester.pump();
+
+        await tester.ensureVisible(find.text('Conferma (2)'));
+        await tester.tap(find.text('Conferma (2)'));
+        await tester.pumpAndSettle();
+
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(api.batchStartRequests, hasLength(1));
+        expect(
+          api.batchStartRequests.first.userIds,
+          unorderedEquals(['teammate-1', 'teammate-3']),
+        );
+        // Neither the lead nor the skipped teammate should have been included.
+        expect(api.batchStartRequests.first.userIds, isNot(contains('me')));
+        expect(api.batchStartRequests.first.userIds, isNot(contains('teammate-2')));
+
+        await _teardown(tester);
+      },
+    );
   });
 }
