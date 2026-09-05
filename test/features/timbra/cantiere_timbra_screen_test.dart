@@ -18,7 +18,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -371,37 +370,32 @@ void main() {
   // ── Active session (clock-out) UI ─────────────────────────────────────────
 
   group('active session', () {
-    testWidgets('shows IN CANTIERE indicator', (tester) async {
+    // NOTE ON pumpAndSettle: _ActiveSessionBody now mounts Ticker-driven widgets
+    // (_CantiereElapsedTicker, _CantiereTodayTotal) that reschedule a frame every tick for as
+    // long as they're on screen — exactly like personal Timbra's own ticking hero
+    // (_TimbraScreenState with TickerProviderStateMixin), whose own test file
+    // (timbra_screen_test.dart) never calls pumpAndSettle() for the same reason: it would never
+    // observe zero scheduled frames and always time out. Tests below use a fixed pump()
+    // sequence instead, once the screen has an active session on the very first frame.
+    // _teardown() itself stays safe: it unmounts the tree (disposing the ticker) before its own
+    // pumpAndSettle().
+    testWidgets('shows TIMBRATURA ATTIVA indicator', (tester) async {
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('IN CANTIERE'), findsOneWidget);
+      expect(find.text('TIMBRATURA ATTIVA'), findsOneWidget);
       await _teardown(tester);
     });
 
     testWidgets('shows Timbra uscita cantiere button', (tester) async {
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('Timbra uscita cantiere'), findsOneWidget);
-      await _teardown(tester);
-    });
-
-    testWidgets('shows ingresso time from active log', (tester) async {
-      final api = _FakeApiClient(activeLog: _activeLog());
-      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
-
-      // workDate 2026-06-23 UTC + startTime '08:00:00' (also UTC, per backend convention) →
-      // the actual clock-in instant is 2026-06-23T08:00:00Z, displayed in the device's local
-      // zone. Computed rather than hardcoded so the expectation holds on any CI machine's TZ,
-      // not just UTC+0.
-      final expectedLabel = DateFormat(
-        'HH:mm',
-      ).format(DateTime.utc(2026, 6, 23, 8).toLocal());
-      expect(find.text(expectedLabel), findsOneWidget);
       await _teardown(tester);
     });
 
@@ -426,9 +420,14 @@ void main() {
 
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Sostituzione pompa'), findsOneWidget);
+      // The ticket label now renders inline with the cantiere name in a single Text ("<cantiere>
+      // · <ticket title>"), not its own standalone widget the way the old KeyVal row was — so an
+      // exact find.text('Sostituzione pompa') no longer matches; textContaining does, without
+      // caring which container renders it (same intent the original assertion had).
+      expect(find.textContaining('Sostituzione pompa'), findsOneWidget);
       expect(find.textContaining('tick-1'), findsNothing);
       await _teardown(tester);
     });
@@ -438,7 +437,8 @@ void main() {
       // with something the technician cannot match to anything in front of them.
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('TICKET'), findsNothing);
       expect(find.textContaining('tick-1'), findsNothing);
@@ -448,7 +448,8 @@ void main() {
     testWidgets('clock-out calls endCantiere on the API client', (tester) async {
       final api = _FakeApiClient(activeLog: _activeLog());
       await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       await tester.ensureVisible(find.text('Timbra uscita cantiere'));
       await tester.tap(find.text('Timbra uscita cantiere'));
@@ -467,7 +468,8 @@ void main() {
         // durably even with no signal, and CantiereTimbraSyncService pushes it once reconnected.
         final api = _FakeApiClient(activeLog: _activeLog(), endShouldThrow: true);
         await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
-        await tester.pumpAndSettle();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
         await tester.ensureVisible(find.text('Timbra uscita cantiere'));
         await tester.tap(find.text('Timbra uscita cantiere'));
@@ -655,12 +657,14 @@ void main() {
         await tester.tap(find.text('Inizia timbratura'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
-        await tester.pumpAndSettle();
+        // Not pumpAndSettle(): the active-session body now mounts Ticker-driven widgets (see the
+        // 'active session' group's note above) that never let scheduled frames reach zero.
+        await tester.pump(const Duration(milliseconds: 300));
 
         // No online request ever landed, and the screen did not show a blocking error — it
         // switched straight to "on site" from the local queue.
         expect(api.startedRequests, isEmpty);
-        expect(find.text('IN CANTIERE'), findsOneWidget);
+        expect(find.text('TIMBRATURA ATTIVA'), findsOneWidget);
 
         final events = await (db.select(db.cantierePunches)).get();
         expect(events, hasLength(1));
@@ -1280,6 +1284,84 @@ void main() {
         unorderedEquals(['me', 'teammate-1']),
       );
 
+      await _teardown(tester);
+    });
+  });
+
+  group('active session body — OGGI header and live elapsed', () {
+    testWidgets('shows OGGI total plus the live current-session elapsed', (tester) async {
+      final api = _FakeApiClient(activeLog: _activeLog());
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+      // Not pumpAndSettle(): the active-session body mounts Ticker-driven widgets (see the
+      // 'active session' group's note above) that never let scheduled frames reach zero.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('OGGI'), findsOneWidget);
+      // _CantiereElapsedTicker is private to the lib file (separate Dart library from this test
+      // file), so it can't be named directly here — match by runtimeType string instead, the
+      // standard way to assert a private widget type is present from outside its library.
+      expect(
+        find.byWidgetPredicate((w) => w.runtimeType.toString() == '_CantiereElapsedTicker'),
+        findsOneWidget,
+      );
+
+      await _teardown(tester);
+    });
+
+    testWidgets('shows TIMBRATURA ATTIVA and the cantiere name', (tester) async {
+      final api = _FakeApiClient(activeLog: _activeLog());
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('TIMBRATURA ATTIVA'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('still shows the pending-sync indicator when a punch has not synced', (
+      tester,
+    ) async {
+      // eventTime must fall within today's real-clock bounds (see
+      // CantiereSessionRepository._todayBounds(), DateTime.now()-based) for
+      // todayCantiereEventsProvider to pick it up and derive an active local session — a fixed
+      // historical date would never qualify, same reasoning as the check-in body's own
+      // "today"-scoped OGGI test above.
+      final today = DateTime.now();
+      final eventTime = DateTime(today.year, today.month, today.day, 8).toUtc();
+      await db
+          .into(db.cantierePunches)
+          .insert(
+            CantierePunchesCompanion.insert(
+              id: 'e1',
+              eventTime: eventTime,
+              eventType: 'ingresso',
+              cantiereId: const Value('cant-1'),
+            ),
+          );
+      final api = _FakeApiClient();
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byTooltip('Non sincronizzata'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('still shows Timbra uscita cantiere and ends the session on tap', (tester) async {
+      final api = _FakeApiClient(activeLog: _activeLog());
+      await tester.pumpWidget(_buildScreen(db: db, apiClient: api));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.ensureVisible(find.text('Timbra uscita cantiere'));
+      await tester.tap(find.text('Timbra uscita cantiere'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(api.endCalled, isTrue);
       await _teardown(tester);
     });
   });

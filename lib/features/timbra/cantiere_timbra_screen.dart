@@ -38,7 +38,6 @@ import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:uuid/uuid.dart';
 
@@ -158,6 +157,13 @@ String formatHoursMinutes(Duration d) {
   return '${h}h ${m}m';
 }
 
+/// Resolves a cantiere's name from the local mirror for display on the active-session card —
+/// falls back to the raw id if the mirror doesn't have it yet (matches the same
+/// not-found-falls-back-to-itself contract used elsewhere in this screen, e.g. colleague names).
+String _cantiereNameFor(WidgetRef ref, String cantiereId) {
+  return ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull?.name ?? cantiereId;
+}
+
 /// Elapsed time since [startTime], clamped so it never counts time before local midnight — a
 /// session that started yesterday and is still open must only contribute its since-midnight
 /// portion to a "today" reading. Uses the exact same midnight expression as
@@ -201,6 +207,52 @@ class _CantiereElapsedTickerState extends State<_CantiereElapsedTicker>
   Widget build(BuildContext context) {
     final elapsed = clampedElapsedSinceMidnight(widget.startTime, DateTime.now());
     return Text(formatHoursMinutes(elapsed), style: widget.style);
+  }
+}
+
+/// The "OGGI" total on the active-session card: closed-interval hours (recomputed only when the
+/// event list changes) plus the live-ticking current session — added together and re-rendered
+/// every tick, so the grand total visibly climbs in real time while checked in.
+class _CantiereTodayTotal extends StatefulWidget {
+  const _CantiereTodayTotal({required this.closedHours, required this.sessionStart});
+
+  final Duration closedHours;
+  final DateTime sessionStart;
+
+  @override
+  State<_CantiereTodayTotal> createState() => _CantiereTodayTotalState();
+}
+
+class _CantiereTodayTotalState extends State<_CantiereTodayTotal>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker((_) => setState(() {}));
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final liveElapsed = clampedElapsedSinceMidnight(widget.sessionStart, DateTime.now());
+    return Text(
+      formatHoursMinutes(widget.closedHours + liveElapsed),
+      style: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 30,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.8,
+        color: context.colors.ink,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
   }
 }
 
@@ -1435,31 +1487,14 @@ class _ActiveSessionBody extends ConsumerWidget {
   final VoidCallback onEnd;
   final VoidCallback onOpenClosingDetails;
 
-  /// "Xh Ym" — no seconds, matching personal Timbra's own [_HeroStatus] elapsed reading. Not
-  /// live-ticking: recomputed on rebuild only, same non-ticking choice as personal Timbra's
-  /// (a number that changes a few times an hour does not need to visibly age in real time).
-  static String _formatElapsed(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    return '${h}h ${m}m';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dateLabel = DateFormat('dd/MM/yyyy', 'it').format(local.startTime.toLocal());
-    // Not serverLog.startTime.substring(0, 5) — that's a raw "HH:mm:ss" backend string with no
-    // timezone conversion possible on a String, and the backend stores/transmits it as UTC. local
-    // carries the same instant as a proper DateTime, so .toLocal() applies correctly.
-    final startLabel = DateFormat('HH:mm').format(local.startTime.toLocal());
-
-    // The session carries a ticket id and nothing else, so the row used to read `#3f2a1c8e`.
-    // Resolved against the local mirror to the job's own name — which is what the technician is
-    // standing in front of — and dropped entirely when the mirror does not hold it, rather than
-    // printing the id back at them.
     final ticketId = serverLog?.ticketId ?? local.ticketId;
     final ticketLabel = ticketId == null
         ? null
         : ref.watch(ticketByIdProvider(ticketId)).valueOrNull?.title;
+
+    final closedTodayHours = ref.watch(cantiereTodayHoursProvider(local.cantiereId));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
@@ -1471,85 +1506,88 @@ class _ActiveSessionBody extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Active session card
-          //
-          // Status-first hero (2026-08-30, matches personal Timbra's own hero restructuring):
-          // the elapsed-since-check-in reading is now the largest thing on the card — what a
-          // technician glances at this screen to answer is "how long have I been on site," the
-          // same question the personal screen's own hero answers. Uses the flipping
-          // `context.vetro` status tokens (not the fixed AppVetroColors pair personal Timbra
-          // uses) because this card, unlike personal Timbra's permanently-dark ground, is on
-          // this screen's own light/dark-flipping surface — see this file's own doc comment.
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: context.vetro.statusGood,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'IN CANTIERE',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          color: context.vetro.statusGood,
-                        ),
-                      ),
-                    ),
-                    if (hasPendingSync)
-                      Tooltip(
-                        message: 'Non sincronizzata',
-                        child: Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: context.colors.amber,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _formatElapsed(DateTime.now().difference(local.startTime.toLocal())),
+          // "OGGI" header — same visual continuity as the check-in body, with the live-ticking
+          // current-session elapsed folded into the total once it starts. Watching
+          // cantiereTodayHoursProvider (closed intervals only) here, then adding the ticker's own
+          // live elapsed separately, keeps the "closed sum" and "live tick" concerns apart the
+          // same way they're computed apart.
+          Text(
+            'OGGI',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+              color: context.colors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          _CantiereTodayTotal(closedHours: closedTodayHours, sessionStart: local.startTime),
+          const SizedBox(height: 16),
+          Divider(color: context.colors.borderLight, height: 1),
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'TIMBRATURA ATTIVA',
                   style: TextStyle(
                     fontFamily: 'Inter',
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.8,
-                    color: AppColors.Y,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: context.vetro.statusGood,
                   ),
                 ),
-                const SizedBox(height: 12),
-                KeyVal(label: 'Data', value: dateLabel),
-                KeyVal(label: 'Ingresso', value: startLabel),
-                if (ticketLabel != null)
-                  KeyVal(label: 'Ticket', value: ticketLabel, showDivider: false),
-              ],
+              ),
+              if (hasPendingSync)
+                Tooltip(
+                  message: 'Non sincronizzata',
+                  child: Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: context.colors.amber,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            ticketLabel != null
+                ? '${_cantiereNameFor(ref, local.cantiereId)} · $ticketLabel'
+                : _cantiereNameFor(ref, local.cantiereId),
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: context.colors.ink,
             ),
           ),
 
           const SizedBox(height: 16),
 
-          // Progressive disclosure for the closing note/safety fields.
+          Center(
+            child: _CantiereElapsedTicker(
+              startTime: local.startTime,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.4,
+                color: context.colors.inkMuted,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           Center(
             child: ConstrainedBox(
-              // A 48dp floor, not padding alone: the visible content (a 14px icon + 13px text)
-              // is much smaller than Android's touch-target minimum — same reasoning as
-              // HeaderIconBtn's box around its own smaller visible disc.
               constraints: const BoxConstraints(minHeight: 48),
               child: AppTappable(
                 onTap: onOpenClosingDetails,
@@ -1584,16 +1622,11 @@ class _ActiveSessionBody extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
-          // Error message
           if (errorMessage != null) ...[
             _ErrorBanner(message: errorMessage!),
             const SizedBox(height: 16),
           ],
 
-          // Clock-out button — AppButton.danger, not the default primary fill: this action is
-          // destructive/session-ending, the same "ending" semantic TicketDetailScreen's own
-          // timer-bar "Ferma" button uses its danger variant for (its fill/fg read through
-          // `context.colors.redSoft`/`context.colors.red` rather than a fixed hex pair).
           AppButton.danger(
             label: 'Timbra uscita cantiere',
             icon: const Icon(LucideIcons.logOut),
