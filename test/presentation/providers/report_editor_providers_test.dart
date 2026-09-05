@@ -40,6 +40,22 @@ class _FakeLocationService extends ILocationService {
   Future<GpsCoords?> getCurrentPosition() async => _coords;
 }
 
+/// Pins the "never prompts mid-signature" contract — same shape as
+/// timbra_providers_test.dart's `_WouldPromptLocationService`. `getCurrentPosition()` throws if
+/// ever called, so a test reaching past it without throwing is the assertion that
+/// `_captureGpsSilently` short-circuited on `willPromptForPermission()` instead of prompting.
+class _WouldPromptLocationService extends ILocationService {
+  const _WouldPromptLocationService();
+
+  @override
+  Future<bool> willPromptForPermission() async => true;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async {
+    throw StateError('must not be called when willPromptForPermission() is true');
+  }
+}
+
 /// Build an editor notifier backed by an in-memory DB.
 ///
 /// Awaits [ReportEditorNotifier.ready] before returning: the notifier's constructor kicks off an
@@ -540,6 +556,32 @@ void main() {
 
         final allegati = await repo.getAllegati('draft-1');
         final row = allegati.firstWhere((a) => a.id == 'sig-cust-no-gps');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNotNull);
+      },
+    );
+
+    test(
+      'saveCustomerSignature never prompts for location permission mid-signature',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _WouldPromptLocationService(),
+        );
+
+        // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching past
+        // this call without throwing is the assertion that _captureGpsSilently short-circuited on
+        // willPromptForPermission() instead of prompting.
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-would-prompt',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-cust-would-prompt.png',
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-would-prompt');
         expect(row.capturedLatitude, isNull);
         expect(row.capturedLongitude, isNull);
         expect(row.capturedAt, isNotNull);
