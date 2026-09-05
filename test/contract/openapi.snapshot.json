@@ -8459,16 +8459,56 @@
           }
         ],
         "requestBody": {
-          "description": "The uploaded image (photo or signature). Allowed: image/jpeg, image/png, image/webp, image/heic; \u2264 10 MB.",
+          "description": "Device UTC timestamp at capture, if the client provided it.",
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "properties": {
-                  "file": {
-                    "$ref": "#/components/schemas/IFormFile"
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "file": {
+                        "$ref": "#/components/schemas/IFormFile"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "capturedLatitude": {
+                        "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+                        "type": [
+                          "number",
+                          "string"
+                        ],
+                        "format": "double"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "capturedLongitude": {
+                        "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+                        "type": [
+                          "number",
+                          "string"
+                        ],
+                        "format": "double"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "capturedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           },
@@ -12791,6 +12831,105 @@
         "responses": {
           "200": {
             "description": "Success message."
+          }
+        }
+      }
+    },
+    "/api/Users/me/signature": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Sets the caller\u0027s own reusable signature, replacing any previous one.",
+        "description": "Mirrors Task\u0026lt;IActionResult\u0026gt; MaterialiController.UploadImage(Guid id, IFormFile file, CancellationToken ct) exactly, through the same shared\nattachment subsystem \u2014 but self-scoped like Task\u0026lt;IActionResult\u0026gt; UsersController.GetCurrentUser()/\nTask\u0026lt;IActionResult\u0026gt; UsersController.UpdatePreferences(UpdatePreferencesRequest request) above rather than keyed by a route id: a technician can only\never save their own signature, so there is no \u0060[RequirePermission]\u0060 here, same as those\ntwo actions.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSignatureResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSignatureResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSignatureResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Users/me/signature/content": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Serves the caller\u0027s own saved signature by redirecting to a freshly minted, short-lived\nstorage link \u2014 same redirect contract as Task\u0026lt;IActionResult\u0026gt; MaterialiController.GetImageContent(Guid id, CancellationToken ct).",
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -26005,6 +26144,24 @@
         "type": "integer",
         "description": "Defines the user roles in the system."
       },
+      "UserSignatureResponse": {
+        "required": [
+          "allegatoId",
+          "contentUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "allegatoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contentUrl": {
+            "type": "string",
+            "description": "API route serving the bytes \u2014 never a storage key or a signed URL."
+          }
+        },
+        "description": "The caller\u0027s saved signature, as returned by the upload endpoint."
+      },
       "WorkLogAction": {
         "enum": [
           "ClockIn",
@@ -26187,8 +26344,7 @@
           "Draft",
           "Submitted",
           "Approved",
-          "Rejected",
-          "Imported"
+          "Rejected"
         ],
         "description": "Approval workflow state for a WorkLogs entry (\u0060WorkLog\u0060, \u0060CantiereWorkLog\u0060,\n\u0060TicketWorkLog\u0060). Draft (default, freely editable) \u2192 Submitted (raises the\nWorkLogs module\u0027s \u0060WorkLogSubmittedIntegrationEvent\u0060) \u2192 Approved or Rejected.\nOnly Draft\u2192Submitted and Submitted\u2192(Approved|Rejected) are legal transitions; anything\nelse throws \u0060TaskTapAPI.Core.Exceptions.DomainRuleException\u0060."
       },
