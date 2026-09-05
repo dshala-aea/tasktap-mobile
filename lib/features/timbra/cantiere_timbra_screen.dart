@@ -169,8 +169,8 @@ String _cantiereNameFor(WidgetRef ref, String cantiereId) {
 /// portion to a "today" reading. Uses the exact same midnight expression as
 /// `CantiereSessionRepository._todayBounds()`.
 Duration clampedElapsedSinceMidnight(DateTime startTime, DateTime now) {
-  final today = DateTime.now();
-  final todayStartUtc = DateTime(today.year, today.month, today.day).toUtc();
+  final localNow = now.toLocal();
+  final todayStartUtc = DateTime(localNow.year, localNow.month, localNow.day).toUtc();
   final effectiveStart = startTime.isAfter(todayStartUtc) ? startTime : todayStartUtc;
   return now.difference(effectiveStart);
 }
@@ -178,10 +178,17 @@ Duration clampedElapsedSinceMidnight(DateTime startTime, DateTime now) {
 /// Live-ticking elapsed-time text, clamped to today (see [clampedElapsedSinceMidnight]). Same
 /// Ticker-based pattern as `rapportino/step_ore.dart`'s `_RunningTimerBadge`.
 class _CantiereElapsedTicker extends StatefulWidget {
-  const _CantiereElapsedTicker({required this.startTime, required this.style});
+  const _CantiereElapsedTicker({
+    required this.startTime,
+    required this.style,
+    this.clock = DateTime.now,
+  });
 
   final DateTime startTime;
   final TextStyle style;
+
+  /// Injectable so tests can control "now" instead of depending on the real wall clock.
+  final DateTime Function() clock;
 
   @override
   State<_CantiereElapsedTicker> createState() => _CantiereElapsedTickerState();
@@ -205,19 +212,37 @@ class _CantiereElapsedTickerState extends State<_CantiereElapsedTicker>
 
   @override
   Widget build(BuildContext context) {
-    final elapsed = clampedElapsedSinceMidnight(widget.startTime, DateTime.now());
+    final elapsed = clampedElapsedSinceMidnight(widget.startTime, widget.clock());
     return Text(formatHoursMinutes(elapsed), style: widget.style);
   }
 }
+
+/// Test-only construction hook for [_CantiereElapsedTicker] — the widget itself stays private
+/// (an internal detail of this screen), but a test file is a separate Dart library and so can't
+/// name it directly; this lets a test pump the ticker on its own, with a fixed [clock], instead
+/// of only asserting its presence by runtime-type string on the whole screen.
+@visibleForTesting
+Widget cantiereElapsedTickerForTest({
+  required DateTime startTime,
+  required TextStyle style,
+  required DateTime Function() clock,
+}) => _CantiereElapsedTicker(startTime: startTime, style: style, clock: clock);
 
 /// The "OGGI" total on the active-session card: closed-interval hours (recomputed only when the
 /// event list changes) plus the live-ticking current session — added together and re-rendered
 /// every tick, so the grand total visibly climbs in real time while checked in.
 class _CantiereTodayTotal extends StatefulWidget {
-  const _CantiereTodayTotal({required this.closedHours, required this.sessionStart});
+  const _CantiereTodayTotal({
+    required this.closedHours,
+    required this.sessionStart,
+    this.clock = DateTime.now,
+  });
 
   final Duration closedHours;
   final DateTime sessionStart;
+
+  /// Injectable so tests can control "now" instead of depending on the real wall clock.
+  final DateTime Function() clock;
 
   @override
   State<_CantiereTodayTotal> createState() => _CantiereTodayTotalState();
@@ -241,7 +266,7 @@ class _CantiereTodayTotalState extends State<_CantiereTodayTotal>
 
   @override
   Widget build(BuildContext context) {
-    final liveElapsed = clampedElapsedSinceMidnight(widget.sessionStart, DateTime.now());
+    final liveElapsed = clampedElapsedSinceMidnight(widget.sessionStart, widget.clock());
     return Text(
       formatHoursMinutes(widget.closedHours + liveElapsed),
       style: TextStyle(
@@ -255,6 +280,16 @@ class _CantiereTodayTotalState extends State<_CantiereTodayTotal>
     );
   }
 }
+
+/// Test-only construction hook for [_CantiereTodayTotal] — same reasoning as
+/// [cantiereElapsedTickerForTest] above: the widget stays private, this lets a test pump it
+/// directly with a fixed [clock] to prove the closed-hours + live-elapsed sum.
+@visibleForTesting
+Widget cantiereTodayTotalForTest({
+  required Duration closedHours,
+  required DateTime sessionStart,
+  required DateTime Function() clock,
+}) => _CantiereTodayTotal(closedHours: closedHours, sessionStart: sessionStart, clock: clock);
 
 /// The minimal "am I on site" signal the screen needs — offline-durable, derived from the local
 /// event log the same way `timbraStateProvider` derives shift state for personal Timbra.
@@ -1226,29 +1261,35 @@ class _CheckInBody extends ConsumerWidget {
           if (isLead) ...[
             const SizedBox(height: 8),
             Center(
-              child: PopupMenuButton<VoidCallback>(
-                enabled: !(isLoading || noCantieriAvailable || noFixedCantiere),
-                onSelected: (handler) => handler(),
-                itemBuilder: (context) => [
-                  PopupMenuItem(value: onSelectSquadra, child: const Text('Squadra')),
-                  PopupMenuItem(value: onTuttaLaSquadra, child: const Text('Me e squadra')),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Per: Me',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.inkMuted,
+              // A 48dp floor, not padding alone — same reasoning as the "Altri dettagli" affordance
+              // below: the visible content (13px text + 16px icon) is much smaller than Android's
+              // touch-target minimum, and this is now a lead's only path to batch-starting the crew.
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: PopupMenuButton<VoidCallback>(
+                  enabled: !(isLoading || noCantieriAvailable || noFixedCantiere),
+                  onSelected: (handler) => handler(),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(value: onSelectSquadra, child: const Text('Squadra')),
+                    PopupMenuItem(value: onTuttaLaSquadra, child: const Text('Me e squadra')),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Per: Me',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.inkMuted,
+                          ),
                         ),
-                      ),
-                      Icon(LucideIcons.chevronDown, size: 16, color: context.colors.inkMuted),
-                    ],
+                        Icon(LucideIcons.chevronDown, size: 16, color: context.colors.inkMuted),
+                      ],
+                    ),
                   ),
                 ),
               ),

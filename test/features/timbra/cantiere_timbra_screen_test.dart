@@ -672,9 +672,10 @@ void main() {
         expect(events.single.cantiereId, 'cant-1');
         // The queued event's own background sync (fire-and-forget, via
         // CantiereTimbraSyncService) races the rest of this test — the fake API client answers
-        // that push successfully, so by the time `pumpAndSettle` above has flushed every pending
-        // microtask, the event is already marked synced. The point of this test is that the
-        // *screen* never blocked on reachability, not that the queue stays pending forever.
+        // that push successfully, so by the time the two `pump(300ms)` calls above have drained
+        // the microtask/immediate-future chain against the in-memory fake DB/API client, the
+        // event is already marked synced. The point of this test is that the *screen* never
+        // blocked on reachability, not that the queue stays pending forever.
         expect(events.single.isPendingSync, isFalse);
         expect(api.upsertCalls, isNotEmpty);
 
@@ -993,6 +994,57 @@ void main() {
 
       // Only the 2h since midnight counts, not the 5h before it.
       expect(clampedElapsedSinceMidnight(start, now), const Duration(hours: 2));
+    });
+  });
+
+  group('_CantiereElapsedTicker / _CantiereTodayTotal — injected clock', () {
+    testWidgets('_CantiereElapsedTicker shows elapsed time computed from its injected clock', (
+      tester,
+    ) async {
+      final start = DateTime.utc(2026, 6, 21, 8, 0);
+      final fixedNow = DateTime.utc(2026, 6, 21, 9, 30);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: cantiereElapsedTickerForTest(
+              startTime: start,
+              style: const TextStyle(),
+              clock: () => fixedNow,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('1h 30m'), findsOneWidget);
+
+      await _teardown(tester);
+    });
+
+    testWidgets('_CantiereTodayTotal combines closed hours with the live session elapsed', (
+      tester,
+    ) async {
+      final sessionStart = DateTime.utc(2026, 6, 21, 8, 0);
+      final fixedNow = DateTime.utc(2026, 6, 21, 9, 0); // 1h into the current session
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: cantiereTodayTotalForTest(
+              closedHours: const Duration(hours: 2),
+              sessionStart: sessionStart,
+              clock: () => fixedNow,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 2h closed + 1h live = 3h 00m
+      expect(find.text('3h 00m'), findsOneWidget);
+
+      await _teardown(tester);
     });
   });
 
