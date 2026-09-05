@@ -499,5 +499,50 @@ void main() {
       final rows = await repo.getAllegati('r-1');
       expect(rows.first.sizeBytes, 512);
     });
+
+    test('persists capturedLatitude/capturedLongitude/capturedAt when provided', () async {
+      final capturedAt = DateTime.utc(2026, 9, 5, 14, 0);
+      await repo.saveSignature(
+        reportId: 'r-1',
+        allegatoId: 'sig-gps-1',
+        tenantId: 'tenant-1',
+        uploadedByUserId: 'user-1',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        localPath: '/tmp/sig-gps-1.png',
+        isCustomer: true,
+        capturedLatitude: 45.4642,
+        capturedLongitude: 9.19,
+        capturedAt: capturedAt,
+      );
+
+      final rows = await repo.getAllegati('r-1');
+      final row = rows.firstWhere((a) => a.id == 'sig-gps-1');
+      expect(row.capturedLatitude, 45.4642);
+      expect(row.capturedLongitude, 9.19);
+      // .toUtc(): drift's default DateTime storage round-trips the same instant but drops the
+      // UTC flag (reads back as local-zone), and DateTime's `==` considers that flag — so compare
+      // instants via a UTC-normalized value rather than raw `==` against the UTC fixture.
+      expect(row.capturedAt?.toUtc(), capturedAt);
+    });
+
+    test('leaves capturedLatitude/capturedLongitude/capturedAt null when GPS is unavailable', () async {
+      // GPS must never block signature capture — a denied/unavailable position is the normal
+      // case, not an error, and it must not prevent the signature itself from being saved.
+      await repo.saveSignature(
+        reportId: 'r-1',
+        allegatoId: 'sig-no-gps',
+        tenantId: 'tenant-1',
+        uploadedByUserId: 'user-1',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-no-gps.png',
+        isCustomer: false,
+      );
+
+      final rows = await repo.getAllegati('r-1');
+      final row = rows.firstWhere((a) => a.id == 'sig-no-gps');
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNull);
+    });
   });
 }

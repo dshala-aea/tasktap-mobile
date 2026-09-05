@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/draft_report_repository.dart';
 import '../../data/sync/sync_service.dart';
@@ -433,12 +434,15 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   ReportEditorNotifier({
     required ReportEditorState initialState,
     required DraftReportRepository repo,
+    ILocationService? locationService,
   }) : _repo = repo,
+       _locationService = locationService ?? const DisabledLocationService(),
        super(initialState) {
     ready = _hydrate();
   }
 
   final DraftReportRepository _repo;
+  final ILocationService _locationService;
 
   /// Resolves once hydration has either applied the draft's saved data or given up.
   ///
@@ -810,11 +814,25 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   // ── Step 5: Firme ──────────────────────────────────────────────────────────
 
+  /// Best-effort GPS capture for a signature. Mirrors `PunchNotifier._captureGpsSilently`:
+  /// never prompts (a mid-signature system permission dialog with no explanation would be worse
+  /// than no position) and never throws — a denied/unavailable position simply comes back null,
+  /// and the signature is saved anyway. GPS must never block signature capture.
+  Future<GpsCoords?> _captureGpsSilently() async {
+    try {
+      if (await _locationService.willPromptForPermission()) return null;
+      return await _locationService.getCurrentPosition();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> saveCustomerSignature({
     required String allegatoId,
     required Uint8List bytes,
     required String localPath,
   }) async {
+    final coords = await _captureGpsSilently();
     await _repo.saveSignature(
       reportId: state.reportId,
       allegatoId: allegatoId,
@@ -823,6 +841,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       bytes: bytes,
       localPath: localPath,
       isCustomer: true,
+      capturedLatitude: coords?.lat,
+      capturedLongitude: coords?.lng,
+      capturedAt: DateTime.now().toUtc(),
     );
     state = state.copyWith(
       customerSignatureLocalPath: localPath,
@@ -836,6 +857,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     required Uint8List bytes,
     required String localPath,
   }) async {
+    final coords = await _captureGpsSilently();
     await _repo.saveSignature(
       reportId: state.reportId,
       allegatoId: allegatoId,
@@ -844,6 +866,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       bytes: bytes,
       localPath: localPath,
       isCustomer: false,
+      capturedLatitude: coords?.lat,
+      capturedLongitude: coords?.lng,
+      capturedAt: DateTime.now().toUtc(),
     );
     state = state.copyWith(
       technicianSignatureLocalPath: localPath,
@@ -1069,5 +1094,6 @@ final reportEditorProvider = StateNotifierProvider.autoDispose
       return ReportEditorNotifier(
         initialState: ReportEditorState(reportId: reportId, isLoading: true),
         repo: repo,
+        locationService: ref.watch(locationServiceProvider),
       );
     });

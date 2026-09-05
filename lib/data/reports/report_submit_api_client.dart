@@ -26,6 +26,10 @@ class ReportSubmitApiClient {
   /// [localPath] — absolute path to the local file.
   /// [fileName] — original file name (e.g. "firma_cliente.png").
   /// [contentType] — MIME type (e.g. "image/png", "image/jpeg").
+  /// [capturedLatitude]/[capturedLongitude]/[capturedAt] — GPS position + UTC timestamp taken
+  /// when this file was captured (signatures only). All optional and sent only when non-null:
+  /// GPS must never block capture, so a denied/unavailable position is a normal, unsent case,
+  /// not an error.
   ///
   /// Returns the server-assigned Allegato id on success.
   /// Throws [DioException] on network/server error.
@@ -34,6 +38,9 @@ class ReportSubmitApiClient {
     required String localPath,
     required String fileName,
     required String contentType,
+    double? capturedLatitude,
+    double? capturedLongitude,
+    DateTime? capturedAt,
   }) async {
     final file = File(localPath);
     final formData = FormData.fromMap({
@@ -42,6 +49,9 @@ class ReportSubmitApiClient {
         filename: fileName,
         contentType: DioMediaType.parse(contentType),
       ),
+      if (capturedLatitude != null) 'capturedLatitude': capturedLatitude.toString(),
+      if (capturedLongitude != null) 'capturedLongitude': capturedLongitude.toString(),
+      if (capturedAt != null) 'capturedAt': capturedAt.toUtc().toIso8601String(),
     });
 
     final response = await _dio.post<Map<String, dynamic>>(

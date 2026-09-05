@@ -632,6 +632,17 @@ class ReportAllegati extends Table {
   /// True when this file has not yet been uploaded to the server.
   BoolColumn get isPendingUpload => boolean().withDefault(const Constant(false))();
 
+  /// GPS position captured at the moment this allegato was recorded (signatures only — see
+  /// `ReportEditorNotifier.saveCustomerSignature`/`saveTechnicianSignature`). Null when the
+  /// device denied/lacked location, or for allegati that never carry a position (photos):
+  /// GPS must never block capture, so a missing value here means exactly that, not a bug.
+  RealColumn get capturedLatitude => real().nullable()();
+  RealColumn get capturedLongitude => real().nullable()();
+
+  /// UTC timestamp of capture — set unconditionally alongside the (possibly null) coordinates
+  /// above, so every signature carries a "when" even on the devices/moments GPS is unavailable.
+  DateTimeColumn get capturedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -757,7 +768,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration {
@@ -913,6 +924,16 @@ class AppDatabase extends _$AppDatabase {
           // TicketMateriale rows on the backend would never backfill for a device whose cursor is
           // already past the owning ticket's last change — syncCursorGeneration bumped below.
           await m.createTable(ticketMateriali);
+        }
+        if (from < 25) {
+          // Every signature now carries GPS + a capture timestamp (mobile: this schema bump;
+          // backend: matching `capturedLatitude`/`capturedLongitude`/`capturedAt` upload fields).
+          // Nullable — GPS must never block signature capture — so a denied/unavailable position
+          // stores null rather than failing the save. Client-authored only, never delta-synced:
+          // no syncCursorGeneration bump needed.
+          await m.addColumn(reportAllegati, reportAllegati.capturedLatitude);
+          await m.addColumn(reportAllegati, reportAllegati.capturedLongitude);
+          await m.addColumn(reportAllegati, reportAllegati.capturedAt);
         }
       },
     );

@@ -116,6 +116,12 @@ class SubmissionQueue {
           localPath: allegato.storagePath,
           fileName: allegato.fileName,
           contentType: allegato.contentType,
+          capturedLatitude: allegato.capturedLatitude,
+          capturedLongitude: allegato.capturedLongitude,
+          // Normalize to UTC: drift's default (non-text) DateTime storage round-trips the same
+          // instant but drops the UTC flag (reads back as a local-zone DateTime), which would
+          // otherwise make this value's `==` disagree with the UTC value it started as.
+          capturedAt: allegato.capturedAt?.toUtc(),
         );
 
         // Mark this allegato as uploaded and store the server id.

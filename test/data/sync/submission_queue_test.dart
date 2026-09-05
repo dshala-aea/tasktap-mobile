@@ -305,6 +305,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).thenAnswer(
         (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-1'),
@@ -322,13 +325,17 @@ void main() {
 
       await queue.processAll();
 
-      // Upload was called once
+      // Upload was called once — a plain photo allegato carries no GPS/timestamp, so those
+      // fields reach uploadAttachment as null.
       verify(
         () => mockApiClient.uploadAttachment(
           reportId: 'report-1',
           localPath: '/local/photo.jpg',
           fileName: 'photo.jpg',
           contentType: 'image/jpeg',
+          capturedLatitude: null,
+          capturedLongitude: null,
+          capturedAt: null,
         ),
       ).called(1);
 
@@ -341,6 +348,75 @@ void main() {
       final draft = await repo.getDraft('report-1');
       expect(draft!.submissionState, 'submitted');
     });
+
+    test(
+      'passes capturedLatitude/capturedLongitude/capturedAt through to uploadAttachment '
+      'when the local allegato row carries them (signature captured with a known GPS fix)',
+      () async {
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-gps');
+
+        final capturedAt = DateTime.utc(2026, 9, 5, 12, 30);
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'sig-gps-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                fileName: 'firma_cliente.png',
+                contentType: 'image/png',
+                sizeBytes: 10,
+                storagePath: '/local/sig-gps-1.png',
+                url: '/local/sig-gps-1.png',
+                entityType: 1,
+                entityId: 'report-1',
+                uploadedByUserId: 'user-1',
+                isPendingUpload: const Value(true),
+                capturedLatitude: const Value(45.4642),
+                capturedLongitude: const Value(9.19),
+                capturedAt: Value(capturedAt),
+              ),
+            );
+
+        when(
+          () => mockApiClient.uploadAttachment(
+            reportId: any(named: 'reportId'),
+            localPath: any(named: 'localPath'),
+            fileName: any(named: 'fileName'),
+            contentType: any(named: 'contentType'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        ).thenAnswer(
+          (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-sig-gps-1'),
+        );
+
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+        );
+
+        await queue.processAll();
+
+        verify(
+          () => mockApiClient.uploadAttachment(
+            reportId: 'report-1',
+            localPath: '/local/sig-gps-1.png',
+            fileName: 'firma_cliente.png',
+            contentType: 'image/png',
+            capturedLatitude: 45.4642,
+            capturedLongitude: 9.19,
+            capturedAt: capturedAt,
+          ),
+        ).called(1);
+      },
+    );
 
     test('maps local allegato id → server allegato id in photoAllegatoIds', () async {
       await _insertDraft(
@@ -356,6 +432,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).thenAnswer(
         (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-99'),
@@ -441,6 +520,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).thenThrow(Exception('Storage error'));
 

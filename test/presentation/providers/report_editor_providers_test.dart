@@ -19,6 +19,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -28,6 +29,16 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
+
+/// Fake location service returning a fixed coordinate, never prompting — same shape as
+/// timbra_providers_test.dart's `_FakeLocationService`.
+class _FakeLocationService extends ILocationService {
+  const _FakeLocationService(this._coords);
+  final GpsCoords? _coords;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => _coords;
+}
 
 /// Build an editor notifier backed by an in-memory DB.
 ///
@@ -41,6 +52,7 @@ Future<(ReportEditorNotifier notifier, DraftReportRepository repo)> _makeEditor(
   String reportId = 'draft-1',
   String tenantId = 'tenant-1',
   String userId = 'user-1',
+  ILocationService? locationService,
 }) async {
   final repo = DraftReportRepository(db);
   final state = ReportEditorState(
@@ -49,7 +61,11 @@ Future<(ReportEditorNotifier notifier, DraftReportRepository repo)> _makeEditor(
     insertedUserId: userId,
     createdAt: DateTime.utc(2026, 6, 21, 10),
   );
-  final notifier = ReportEditorNotifier(initialState: state, repo: repo);
+  final notifier = ReportEditorNotifier(
+    initialState: state,
+    repo: repo,
+    locationService: locationService,
+  );
   await notifier.ready;
   return (notifier, repo);
 }
@@ -450,6 +466,85 @@ void main() {
       final draft = await repo.getDraft('draft-1');
       expect(draft?.technicianSignatureAllegatoId, 'sig-tech-1');
     });
+
+    test(
+      'saveCustomerSignature persists the device GPS position and a capture timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        final before = DateTime.now().toUtc();
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-gps',
+          bytes: Uint8List.fromList([0, 1, 2, 3]),
+          localPath: '/tmp/sig-cust-gps.png',
+        );
+        final after = DateTime.now().toUtc();
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-gps');
+        expect(row.capturedLatitude, 45.4642);
+        expect(row.capturedLongitude, 9.19);
+        expect(row.capturedAt, isNotNull);
+        // 1s slack: drift's default DateTime storage has whole-second precision (truncates
+        // toward the epoch), so a capture within the same wall-clock second as `before` can
+        // legitimately round-trip to a value a few hundred ms earlier than `before` itself.
+        expect(row.capturedAt!.isBefore(before.subtract(const Duration(seconds: 1))), isFalse);
+        expect(row.capturedAt!.isAfter(after.add(const Duration(seconds: 1))), isFalse);
+      },
+    );
+
+    test(
+      'saveTechnicianSignature persists the device GPS position and a capture timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-gps',
+          bytes: Uint8List.fromList([10, 20, 30]),
+          localPath: '/tmp/sig-tech-gps.png',
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-tech-gps');
+        expect(row.capturedLatitude, 41.9);
+        expect(row.capturedLongitude, 12.5);
+        expect(row.capturedAt, isNotNull);
+      },
+    );
+
+    test(
+      'saveCustomerSignature saves a null position (never blocks) when GPS is unavailable, '
+      'but still stamps a capture timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(null),
+        );
+
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-no-gps',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-cust-no-gps.png',
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-no-gps');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNotNull);
+      },
+    );
 
     test('clearCustomerSignature removes allegatoId from state', () async {
       await _seedDraft(db, 'draft-1');

@@ -198,6 +198,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).thenAnswer((invocation) async {
         final localPath =
@@ -267,6 +270,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).called(2);
     },
@@ -285,6 +291,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).thenThrow(Exception('Network error'));
 
@@ -307,6 +316,9 @@ void main() {
           localPath: any(named: 'localPath'),
           fileName: any(named: 'fileName'),
           contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
         ),
       ).thenAnswer((inv) async {
         final localPath = inv.namedArguments[#localPath] as String;

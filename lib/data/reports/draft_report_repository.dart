@@ -261,6 +261,9 @@ class DraftReportRepository {
     required Uint8List bytes,
     required String localPath,
     required bool isCustomer,
+    double? capturedLatitude,
+    double? capturedLongitude,
+    DateTime? capturedAt,
   }) async {
     final companion = ReportAllegatiCompanion.insert(
       id: allegatoId,
@@ -275,6 +278,9 @@ class DraftReportRepository {
       entityId: reportId,
       uploadedByUserId: uploadedByUserId,
       isPendingUpload: const Value(true),
+      capturedLatitude: Value(capturedLatitude),
+      capturedLongitude: Value(capturedLongitude),
+      capturedAt: Value(capturedAt),
     );
     await _db.into(_db.reportAllegati).insertOnConflictUpdate(companion);
     return allegatoId;
