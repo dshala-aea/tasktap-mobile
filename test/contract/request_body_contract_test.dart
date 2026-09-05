@@ -905,6 +905,12 @@ void main() {
           'resync — test/contract/openapi.snapshot.json still predates it, so there is no schema '
           'here to compare against yet. Add a contractTest once the snapshot is refreshed from '
           'the backend (see this file\'s header comment for the refresh command).',
+      'POST /api/reports/from-cantiere-worklogs':
+          'ReportsController.CreateFromCantiereWorkLogs shipped on the same cross-repo plan\'s '
+          'backend branch (Task 2) that this mobile-only task (Task 3) consumes — '
+          'test/contract/openapi.snapshot.json still predates it, so there is no schema here to '
+          'compare against yet. Add a contractTest once the snapshot is refreshed from the '
+          'backend (see this file\'s header comment for the refresh command).',
     };
 
     /// Proof that the checks above did something.

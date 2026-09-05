@@ -26,6 +26,10 @@ Future<DraftReport> _insertDraft(
   String id = 'r-1',
   String title = 'Test rapportino',
   String? customerId = 'cust-1',
+  // Defaults to a ticket-linked draft — every test in this file predates the cantiere-only
+  // rapportino flow and was written assuming a ticket (and therefore a customer sign-off step)
+  // is always present. Only the "no ticketId" group below overrides this to null.
+  String? ticketId = 'ticket-1',
   String? customerSignatureAllegatoId = 'sig-cust-1',
   String? technicianSignatureAllegatoId = 'sig-tech-1',
   bool materialiNotRequired = false,
@@ -41,6 +45,7 @@ Future<DraftReport> _insertDraft(
           insertedUserId: 'user-1',
           locationId: 'loc-1',
           customerId: Value(customerId),
+          ticketId: Value(ticketId),
           customerSignatureAllegatoId: Value(customerSignatureAllegatoId),
           technicianSignatureAllegatoId: Value(technicianSignatureAllegatoId),
           materialiNotRequired: Value(materialiNotRequired),
@@ -180,6 +185,42 @@ void main() {
 
       final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
+      expect(result.issues, contains(DraftValidationIssue.missingTechnicianSignature));
+    });
+  });
+
+  // ── ticketId gates the signature requirement (cantiere-only rapportini) ──────
+  //
+  // Mirrors the backend's identical TicketId.HasValue gate: a cantiere worklog-derived report has
+  // no customer-facing sign-off step, so signatures nobody is ever asked to capture must not
+  // strand it in "not ready to submit" forever.
+
+  group('validateDraft — ticketId gates the signature requirement', () {
+    test('does not flag missing signatures when the draft has no ticketId', () async {
+      final draft = await _insertDraft(
+        db,
+        ticketId: null,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: null,
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomerSignature)));
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingTechnicianSignature)));
+    });
+
+    test('still flags missing signatures when the draft has a ticketId', () async {
+      final draft = await _insertDraft(
+        db,
+        ticketId: 'ticket-1',
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: null,
+      );
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
       expect(result.issues, contains(DraftValidationIssue.missingTechnicianSignature));
     });
   });

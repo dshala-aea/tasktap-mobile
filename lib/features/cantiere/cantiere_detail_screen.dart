@@ -14,7 +14,10 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/local/app_database.dart';
+import '../rapportino/create_draft.dart';
 import 'cantiere_providers.dart';
 
 class CantiereDetailScreen extends ConsumerWidget {
@@ -118,6 +121,21 @@ class CantiereDetailScreen extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        // ── Crea rapportino ──────────────────────────────────────────
+                        //
+                        // The office/admin equivalent of this button (admin_cantiere_detail_
+                        // screen.dart) creates a purely local draft with blank hours via
+                        // createLocalDraft. A technician standing on-site has already logged
+                        // hours against this cantiere (Timbra cantiere, above) — this button
+                        // calls the cantiere-only report endpoint instead, so the editor opens
+                        // with those hours (and, if this technician started the batch as squadra
+                        // lead, their whole team's hours) already filled in.
+                        AppButton(
+                          label: 'Crea rapportino',
+                          icon: const Icon(LucideIcons.fileText),
+                          onPressed: () => _createRapportino(context, ref, cantiere),
+                        ),
                         const SizedBox(height: 24),
                         const SectionTitle(title: 'Ticket collegati'),
                         const SizedBox(height: 8),
@@ -170,4 +188,43 @@ class CantiereDetailScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// "Crea rapportino" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
+/// rapportino editor on the resulting draft. See [createCantiereReportDraft] for the full
+/// create-then-hydrate flow and why the local draft reuses the backend-issued report id.
+Future<void> _createRapportino(BuildContext context, WidgetRef ref, CantieriData cantiere) async {
+  final address = [
+    cantiere.address,
+    cantiere.city,
+    cantiere.postalCode,
+  ].where((s) => s != null && s.isNotEmpty).join(', ');
+
+  String? id;
+  try {
+    id = await createCantiereReportDraft(
+      ref,
+      cantiereId: cantiere.id,
+      cantiereName: cantiere.name,
+      customerId: cantiere.customerId,
+      tenantId: cantiere.tenantId,
+      workAddress: address.isEmpty ? null : address,
+    );
+  } catch (e) {
+    if (context.mounted) {
+      showAppToast(
+        context,
+        message: humanErrorMessage(e, azione: 'creare il rapportino'),
+        tone: ToastTone.error,
+      );
+    }
+    return;
+  }
+
+  if (!context.mounted) return;
+  if (id == null) {
+    showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+    return;
+  }
+  context.push(AppRoutes.rapportiniEditor(id));
 }

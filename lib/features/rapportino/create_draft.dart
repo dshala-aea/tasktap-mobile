@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/reports/cantiere_report_api_client.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart'
@@ -233,4 +234,121 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
   }
 
   return id;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Cantiere-only creation — a real backend Report, hydrated into a local editable draft.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Creates a rapportino from a cantiere's own logged hours (`POST
+/// /api/reports/from-cantiere-worklogs`) and hydrates it into a local draft the ordinary editor
+/// (`AppRoutes.rapportiniEditor`) can open, returning the new draft's id. Returns `null` when
+/// creation is refused (same reason as [createLocalDraft]: no signed-in author to attribute it to)
+/// — the backend call is never even attempted in that case.
+///
+/// ## Why this reuses the backend-issued report id for the local draft, unlike every other
+/// creation path in this file
+///
+/// [createLocalDraft] and [createReworkDraft] both generate a fresh client-side GUID and the
+/// report is genuinely new on the server the first time it hears about it (at submit time). Here
+/// the server already created the `Report` row — with real `ReportStaff` rows already populated
+/// from the technician's (and, if they batch-started as squadra lead, their whole team's)
+/// `CantiereWorkLog` entries — before this function ever runs. Reusing that same id, rather than
+/// minting a second one, is what lets `POST /api/reports/submit` find it again later:
+/// `ReportSubmitService.SubmitAsync` already treats a `request.Id` that matches an existing Report
+/// as an update-in-place (`existingReport ?? new Report {...}`) rather than a duplicate create —
+/// the exact same shape it uses for a schedule-started rapportino
+/// (`ReportLifecycleService.StartFromScheduleAsync`, `POST /api/schedules/{id}/start`, not yet
+/// consumed by mobile). So the local `draft_reports` row created here is keyed by the backend's
+/// own id, not a new one — the two are the same report from the very first write.
+///
+/// ## Hours hydration, and the zero-worklogs fallback
+///
+/// The create call's response is just `{ id }` — no staff rows in it (see
+/// `CantiereReportApiClient.createFromCantiereWorklogs`). A follow-up `GET /api/reports/{id}`
+/// reads back what the server actually seeded. If that read fails (e.g. the connection drops
+/// between the two calls), the backend Report still exists — degrading to the zero-worklogs
+/// fallback below rather than rethrowing avoids stranding it with no local draft pointing at it at
+/// all.
+///
+/// When the fetch comes back empty — the caller had zero unconsumed worklogs for this cantiere,
+/// which the backend always allows (see `IReportService.CreateFromCantiereWorkLogsAsync`'s own doc
+/// comment) — this seeds the creating technician as a blank first staff row, exactly like
+/// [createLocalDraft] does for a brand-new manual rapportino: the editor then behaves exactly like
+/// today's manual-entry flow for hours, with no special empty-state of its own.
+Future<String?> createCantiereReportDraft(
+  WidgetRef ref, {
+  required String cantiereId,
+  required String cantiereName,
+  String? customerId,
+  String? tenantId,
+  String? workAddress,
+}) async {
+  final user = ref.read(currentUserProvider);
+  if (user == null) return null;
+
+  final api = ref.read(cantiereReportApiClientProvider);
+  final reportId = await api.createFromCantiereWorklogs(cantiereId);
+
+  List<ReportStaffSeedDto> staffSeeds;
+  try {
+    staffSeeds = await api.fetchReportStaff(reportId);
+  } catch (_) {
+    // Best-effort: see this function's doc comment on why a failure here degrades to the
+    // zero-worklogs fallback instead of losing the backend report that already exists.
+    staffSeeds = const [];
+  }
+
+  final db = ref.read(appDatabaseProvider);
+  final resolvedTenantId = tenantId ?? await resolveDeviceTenantId(db);
+  final repo = ref.read(draftReportRepositoryProvider);
+  final now = DateTime.now().toUtc();
+
+  await repo.createDraft(
+    DraftReportsCompanion.insert(
+      id: reportId,
+      tenantId: resolvedTenantId,
+      createdAt: now,
+      title: 'Rapportino — $cantiereName',
+      insertedUserId: user.id,
+      locationId: '',
+      cantiereId: Value(cantiereId),
+      customerId: Value(customerId),
+      metadataJson: Value(
+        (workAddress?.isNotEmpty ?? false) ? jsonEncode({'workAddress': workAddress}) : null,
+      ),
+      isLocalOnly: const Value(true),
+      stato: const Value('Bozza'),
+    ),
+  );
+
+  if (staffSeeds.isEmpty) {
+    await repo.upsertStaff(
+      ReportStaffTableCompanion.insert(
+        id: _uuid.v4(),
+        tenantId: resolvedTenantId,
+        createdAt: now,
+        reportId: reportId,
+        userId: user.id,
+      ),
+    );
+  } else {
+    for (final s in staffSeeds) {
+      await repo.upsertStaff(
+        ReportStaffTableCompanion.insert(
+          id: _uuid.v4(),
+          tenantId: resolvedTenantId,
+          createdAt: now,
+          reportId: reportId,
+          userId: s.userId,
+          hoursWorked: Value(s.hoursWorked),
+          kmTraveled: Value(s.kmTraveled),
+          startTime: Value(s.startTime),
+          endTime: Value(s.endTime),
+        ),
+      );
+    }
+  }
+
+  return reportId;
 }

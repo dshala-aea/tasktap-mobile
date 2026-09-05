@@ -12,8 +12,14 @@ import '../../data/local/app_database.dart';
 //      OR customerFreeText for free-text)
 //   3. ≥ 1 staff row
 //   4. ≥ 1 materiale row OR materialiNotRequired == true
-//   5. customerSignatureAllegatoId is non-null/non-empty
-//   6. technicianSignatureAllegatoId is non-null/non-empty
+//   5. customerSignatureAllegatoId is non-null/non-empty — only when the draft has a ticketId
+//   6. technicianSignatureAllegatoId is non-null/non-empty — only when the draft has a ticketId
+//
+// Rules 5/6 are gated on `ticketId != null` to mirror the backend's identical
+// `TicketId.HasValue` gate (the cantiere-only rapportino flow has no customer-facing sign-off
+// step at all — a cantiere worklog-derived report is an internal timesheet, not a job a customer
+// signs off on — so requiring signatures nobody is ever asked to capture would strand every such
+// draft in "not ready to submit" forever).
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum DraftValidationIssue {
@@ -88,12 +94,16 @@ DraftValidationResult validateDraft({
     issues.add(DraftValidationIssue.noMateriali);
   }
 
-  if (draft.customerSignatureAllegatoId == null || draft.customerSignatureAllegatoId!.isEmpty) {
-    issues.add(DraftValidationIssue.missingCustomerSignature);
-  }
+  // No ticket → no customer-facing sign-off step (cantiere-only rapportini) → nothing to flag.
+  if (draft.ticketId != null) {
+    if (draft.customerSignatureAllegatoId == null || draft.customerSignatureAllegatoId!.isEmpty) {
+      issues.add(DraftValidationIssue.missingCustomerSignature);
+    }
 
-  if (draft.technicianSignatureAllegatoId == null || draft.technicianSignatureAllegatoId!.isEmpty) {
-    issues.add(DraftValidationIssue.missingTechnicianSignature);
+    if (draft.technicianSignatureAllegatoId == null ||
+        draft.technicianSignatureAllegatoId!.isEmpty) {
+      issues.add(DraftValidationIssue.missingTechnicianSignature);
+    }
   }
 
   return DraftValidationResult(issues: issues);
