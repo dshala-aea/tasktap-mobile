@@ -22,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
@@ -63,6 +64,10 @@ ProviderContainer _buildContainer({
   required AppDatabase db,
   required _RecordingAiApiClient aiClient,
   String details = '',
+  String? ticketId,
+  String? ticketFreeText,
+  String? cantiereId,
+  String? cantiereFreeText,
 }) {
   return ProviderContainer(
     overrides: [
@@ -76,6 +81,10 @@ ProviderContainer _buildContainer({
             insertedUserId: 'user-1',
             scheduleId: 'sched-1',
             details: details,
+            ticketId: ticketId,
+            ticketFreeText: ticketFreeText,
+            cantiereId: cantiereId,
+            cantiereFreeText: cantiereFreeText,
           ),
           repo: DraftReportRepository(db),
         ),
@@ -137,6 +146,51 @@ void main() {
       expect(aiClient.calls, 1);
       expect(aiClient.voiceTranscriptWasPassed, isTrue);
       expect(aiClient.capturedVoiceTranscript, isNull);
+    });
+  });
+
+  group('StepDettagli — Collegamento lookup fields show resolved state', () {
+    // A resolved ticketId/cantiereId not yet in the local mirror still leaves the "Collegamento"
+    // section expanded (linkedTicket/linkedCantiere can't be named), but the field itself must
+    // still mark itself resolved (the check icon) rather than looking like unconfirmed free text.
+    testWidgets('Ticket field shows the resolved check icon when ticketId is set', (
+      tester,
+    ) async {
+      final aiClient = _RecordingAiApiClient();
+      final container = _buildContainer(
+        db: db,
+        aiClient: aiClient,
+        ticketId: 'ticket-not-yet-cached',
+        ticketFreeText: 'TICK-042',
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('TICK-042'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.check), findsOneWidget);
+      expect(find.byIcon(LucideIcons.x), findsNothing);
+    });
+
+    testWidgets('Cantiere field shows the resolved check icon when cantiereId is set', (
+      tester,
+    ) async {
+      final aiClient = _RecordingAiApiClient();
+      final container = _buildContainer(
+        db: db,
+        aiClient: aiClient,
+        cantiereId: 'cantiere-not-yet-cached',
+        cantiereFreeText: 'Cantiere Via Roma',
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cantiere Via Roma'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.check), findsOneWidget);
+      expect(find.byIcon(LucideIcons.x), findsNothing);
     });
   });
 }
