@@ -8,6 +8,7 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
 import '../../../data/entitlements/entitlement_providers.dart';
+import '../../../data/realtime/realtime_event_router.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
@@ -43,6 +44,11 @@ import '../../../data/timbratura/work_log_reconciler.dart';
 ///
 /// Cantiere timbra also gets the personal-timbra offline push treatment: [initTimbraSyncWatcher] /
 /// [initCantiereTimbraSyncWatcher] push locally-queued punches as soon as connectivity allows.
+///
+/// Realtime: [initRealtimeEventWatcher] opens the one persistent SignalR connection for this
+/// shell's lifetime and routes each pushed event to the existing provider(s)/sync it should
+/// trigger — see realtime_event_router.dart. Best-effort: a device that never connects, or loses
+/// the connection, keeps working exactly as it does today via the triggers above.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.navigationShell});
 
@@ -103,6 +109,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
       // Same correction, for the cantiere (worksite) session. See
       // cantiere_work_log_reconciler.dart.
       _reconnectUnsubs.add(initCantiereWorkLogReconcileWatcher(ref));
+      // One persistent SignalR connection for the lifetime of this shell, routing each pushed
+      // event (ticket worklog started/stopped, ticket updated, cantiere status changed,
+      // rapportino submitted) to the existing provider(s) it should refresh — never a new data
+      // path. See realtime_event_router.dart's own doc comment for why this is best-effort and
+      // never blocks anything else here.
+      _reconnectUnsubs.add(initRealtimeEventWatcher(ref));
       // General sync already carries a submitted rapportino's server-side lifecycle back to the
       // device (SyncService's `submittedReports` upsert) — including an office rejection — but
       // until now it only ever ran on first mount and app-foreground resume (below). A
