@@ -536,6 +536,54 @@ void main() {
       expect(local.isLocalOnly, isTrue);
       expect(local.stato, 'Bozza');
     });
+
+    // Regression: createCantiereReportDraft (cantiere-only rapportino creation) reuses the
+    // backend-issued Report id for the local draft row instead of a fresh client GUID. The
+    // mobile sync's own `draftReports` payload is "every Bozza this user authored" — which
+    // includes that same report id from the instant it exists server-side, carrying whatever the
+    // create call itself sent (a blank title) rather than what the technician has since typed and
+    // saved locally. A background sync tick (HomeShell's 60s Timer.periodic) must not silently
+    // revert that local editing — see _upsertDraftReports's own comment for the full story.
+    test('a local isLocalOnly draft survives a same-id sync payload with a blank title '
+        '(the cantiere-report id-reuse collision)', () async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'report-same-id',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 8, 1),
+              title: 'Rapportino — Cantiere Via Roma',
+              details: const Value('Note scritte sul posto'),
+              insertedUserId: 'user-1',
+              cantiereId: const Value('cant-1'),
+              locationId: 'loc-1',
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+            ),
+          );
+
+      // What the mobile sync would return for this same id right after
+      // createCantiereReportDraft's own backend call created it: blank title/details, no
+      // ticketId, as the create-from-worklogs endpoint itself sends none of those.
+      final serverPayload = _draftReportJson(id: 'report-same-id')
+        ..['title'] = ''
+        ..['ticketId'] = null;
+      _stubDioGet(mockDio, _syncPayload(draftReports: [serverPayload]));
+
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows, hasLength(1), reason: 'must not duplicate — same id, upsert semantics');
+      final row = rows.single;
+      expect(
+        row.title,
+        'Rapportino — Cantiere Via Roma',
+        reason: 'the technician\'s own title must survive a background sync tick',
+      );
+      expect(row.details, 'Note scritte sul posto');
+      expect(row.isLocalOnly, isTrue, reason: 'still a local draft in progress, not synced-down');
+    });
   });
 
   // ── Ticket lookup tables ───────────────────────────────────────────────────

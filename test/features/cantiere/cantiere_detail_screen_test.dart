@@ -36,7 +36,8 @@ class _FakeCantiereReportApiClient extends CantiereReportApiClient {
   }
 
   @override
-  Future<List<ReportStaffSeedDto>> fetchReportStaff(String reportId) async => const [];
+  Future<ReportSeedDto> fetchReportSeed(String reportId) async =>
+      const ReportSeedDto(locationId: null, staff: []);
 }
 
 final _testUser = AuthUser(
@@ -91,8 +92,9 @@ GoRouter _makeCreaRapportinoRouter({required String cantiereId}) => GoRouter(
     ),
     GoRoute(
       path: '/altro/rapportini/editor/:id',
-      builder: (_, state) =>
-          Scaffold(body: Center(child: Text('RAPPORTINI-EDITOR-MARKER:${state.pathParameters['id']}'))),
+      builder: (_, state) => Scaffold(
+        body: Center(child: Text('RAPPORTINI-EDITOR-MARKER:${state.pathParameters['id']}')),
+      ),
     ),
   ],
 );

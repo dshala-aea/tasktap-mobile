@@ -11,8 +11,11 @@ import 'package:tasktap_mobile/data/reports/cantiere_report_api_client.dart';
 
 class MockDio extends Mock implements Dio {}
 
-Response<T> _okResponse<T>(T data, String path) =>
-    Response<T>(data: data, statusCode: 201, requestOptions: RequestOptions(path: path));
+Response<T> _okResponse<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 201,
+  requestOptions: RequestOptions(path: path),
+);
 
 void main() {
   late MockDio mockDio;
@@ -85,19 +88,17 @@ void main() {
         ),
       );
 
-      expect(
-        () => client.createFromCantiereWorklogs('cant-1'),
-        throwsA(isA<DioException>()),
-      );
+      expect(() => client.createFromCantiereWorklogs('cant-1'), throwsA(isA<DioException>()));
     });
   });
 
-  group('fetchReportStaff', () {
-    test('GETs /api/reports/{id} and parses the staff array', () async {
+  group('fetchReportSeed', () {
+    test('GETs /api/reports/{id} and parses locationId + the staff array', () async {
       when(() => mockDio.get<Map<String, dynamic>>('/api/reports/report-1')).thenAnswer(
         (_) async => _okResponse({
           'id': 'report-1',
           'title': '',
+          'locationId': 'loc-resolved-1',
           'staff': [
             {
               'userId': 'user-1',
@@ -111,35 +112,38 @@ void main() {
         }, '/api/reports/report-1'),
       );
 
-      final staff = await client.fetchReportStaff('report-1');
+      final seed = await client.fetchReportSeed('report-1');
 
-      expect(staff, hasLength(2));
-      expect(staff[0].userId, 'user-1');
-      expect(staff[0].hoursWorked, 4.5);
-      expect(staff[0].kmTraveled, 0);
-      expect(staff[0].startTime, DateTime.utc(2026, 8, 16, 7));
-      expect(staff[0].endTime, DateTime.utc(2026, 8, 16, 11, 30));
+      expect(seed.locationId, 'loc-resolved-1');
+      expect(seed.staff, hasLength(2));
+      expect(seed.staff[0].userId, 'user-1');
+      expect(seed.staff[0].hoursWorked, 4.5);
+      expect(seed.staff[0].kmTraveled, 0);
+      expect(seed.staff[0].startTime, DateTime.utc(2026, 8, 16, 7));
+      expect(seed.staff[0].endTime, DateTime.utc(2026, 8, 16, 11, 30));
       // A staff row with no hours/times seeded at all — the zero-worklogs-per-user edge case for
       // one member of an otherwise non-empty batch — must not throw parsing a missing field.
-      expect(staff[1].userId, 'user-2');
-      expect(staff[1].hoursWorked, isNull);
-      expect(staff[1].startTime, isNull);
+      expect(seed.staff[1].userId, 'user-2');
+      expect(seed.staff[1].hoursWorked, isNull);
+      expect(seed.staff[1].startTime, isNull);
     });
 
-    test('returns an empty list when the response has no staff key', () async {
-      when(
-        () => mockDio.get<Map<String, dynamic>>('/api/reports/report-1'),
-      ).thenAnswer((_) async => _okResponse({'id': 'report-1'}, '/api/reports/report-1'));
+    test(
+      'returns an empty staff list and null locationId when the response has neither key',
+      () async {
+        when(
+          () => mockDio.get<Map<String, dynamic>>('/api/reports/report-1'),
+        ).thenAnswer((_) async => _okResponse({'id': 'report-1'}, '/api/reports/report-1'));
 
-      final staff = await client.fetchReportStaff('report-1');
+        final seed = await client.fetchReportSeed('report-1');
 
-      expect(staff, isEmpty);
-    });
+        expect(seed.locationId, isNull);
+        expect(seed.staff, isEmpty);
+      },
+    );
 
-    test('returns an empty list on an empty response body', () async {
-      when(
-        () => mockDio.get<Map<String, dynamic>>('/api/reports/report-1'),
-      ).thenAnswer(
+    test('returns an empty seed on an empty response body', () async {
+      when(() => mockDio.get<Map<String, dynamic>>('/api/reports/report-1')).thenAnswer(
         (_) async => Response<Map<String, dynamic>>(
           data: null,
           statusCode: 200,
@@ -147,9 +151,10 @@ void main() {
         ),
       );
 
-      final staff = await client.fetchReportStaff('report-1');
+      final seed = await client.fetchReportSeed('report-1');
 
-      expect(staff, isEmpty);
+      expect(seed.locationId, isNull);
+      expect(seed.staff, isEmpty);
     });
 
     test('propagates DioException on server error', () async {
@@ -164,7 +169,7 @@ void main() {
         ),
       );
 
-      expect(() => client.fetchReportStaff('report-1'), throwsA(isA<DioException>()));
+      expect(() => client.fetchReportSeed('report-1'), throwsA(isA<DioException>()));
     });
   });
 }

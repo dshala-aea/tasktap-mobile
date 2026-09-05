@@ -316,6 +316,29 @@ class SyncService {
 
   Future<void> _upsertDraftReports(List<ReportDto> list) async {
     for (final r in list) {
+      // A local draft the technician is still actively working on is authoritative over whatever
+      // a background sync tick just fetched — the same rule rapportini_list_screen.dart's
+      // _confirmDeleteDraft already states for deletion ("local state is authoritative for a
+      // Bozza the technician is still working on").
+      //
+      // This id space collision became reachable the moment createCantiereReportDraft (cantiere-
+      // only rapportino creation) started reusing the backend-issued Report id for the local
+      // draft row, instead of minting a fresh client GUID like every other creation path. The
+      // mobile sync's own `draftReports`/`submittedReports` payload is "every Bozza this user
+      // authored" (MobileUserSyncService, backend) — which now includes that very report from the
+      // instant it exists server-side, with a blank title/details (the create call passes none)
+      // and isLocalOnly unset. Without this guard, HomeShell's periodic sync (every 60s, plus on
+      // resume/reconnect) would silently overwrite whatever the technician had already typed and
+      // saved locally, and flip isLocalOnly back to false mid-edit — exactly the invariant this
+      // function's own "Synced-down reports are never local-only" comment below assumes never
+      // collides with a row still being edited locally.
+      final local = await (db.select(
+        db.draftReports,
+      )..where((t) => t.id.equals(r.id))).getSingleOrNull();
+      if (local != null && local.isLocalOnly) {
+        continue;
+      }
+
       await db
           .into(db.draftReports)
           .insertOnConflictUpdate(

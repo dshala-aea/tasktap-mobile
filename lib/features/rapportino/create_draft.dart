@@ -1,6 +1,8 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -262,20 +264,26 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
 /// consumed by mobile). So the local `draft_reports` row created here is keyed by the backend's
 /// own id, not a new one — the two are the same report from the very first write.
 ///
-/// ## Hours hydration, and the zero-worklogs fallback
+/// ## Hydration (hours + location), and the zero-worklogs fallback
 ///
-/// The create call's response is just `{ id }` — no staff rows in it (see
-/// `CantiereReportApiClient.createFromCantiereWorklogs`). A follow-up `GET /api/reports/{id}`
-/// reads back what the server actually seeded. If that read fails (e.g. the connection drops
-/// between the two calls), the backend Report still exists — degrading to the zero-worklogs
-/// fallback below rather than rethrowing avoids stranding it with no local draft pointing at it at
-/// all.
+/// The create call's response is just `{ id }` — no staff rows and no resolved location in it
+/// (see `CantiereReportApiClient.createFromCantiereWorklogs`). A follow-up `GET /api/reports/{id}`
+/// reads back what the server actually seeded: the `staff` rows, and the real (non-blank)
+/// `locationId` the backend already resolved
+/// (`ResolveLocationIdForCantiereAutoFillAsync`) — carrying that over matters because
+/// `ReportSubmitService.SubmitAsync` later does `report.LocationId = request.LocationId`
+/// unconditionally, so a blank local `locationId` left un-hydrated would otherwise overwrite the
+/// backend's real value the moment this draft is submitted. If the follow-up read fails (e.g. the
+/// connection drops between the two calls), the backend Report still exists — degrading to the
+/// zero-worklogs fallback below rather than rethrowing avoids stranding it with no local draft
+/// pointing at it at all.
 ///
-/// When the fetch comes back empty — the caller had zero unconsumed worklogs for this cantiere,
-/// which the backend always allows (see `IReportService.CreateFromCantiereWorkLogsAsync`'s own doc
-/// comment) — this seeds the creating technician as a blank first staff row, exactly like
-/// [createLocalDraft] does for a brand-new manual rapportino: the editor then behaves exactly like
-/// today's manual-entry flow for hours, with no special empty-state of its own.
+/// When the fetched staff list comes back empty — the caller had zero unconsumed worklogs for
+/// this cantiere, which the backend always allows (see
+/// `IReportService.CreateFromCantiereWorkLogsAsync`'s own doc comment) — this seeds the creating
+/// technician as a blank first staff row, exactly like [createLocalDraft] does for a brand-new
+/// manual rapportino: the editor then behaves exactly like today's manual-entry flow for hours,
+/// with no special empty-state of its own.
 Future<String?> createCantiereReportDraft(
   WidgetRef ref, {
   required String cantiereId,
@@ -290,14 +298,28 @@ Future<String?> createCantiereReportDraft(
   final api = ref.read(cantiereReportApiClientProvider);
   final reportId = await api.createFromCantiereWorklogs(cantiereId);
 
-  List<ReportStaffSeedDto> staffSeeds;
+  ReportSeedDto seed = const ReportSeedDto(locationId: null, staff: []);
   try {
-    staffSeeds = await api.fetchReportStaff(reportId);
-  } catch (_) {
+    seed = await api.fetchReportSeed(reportId);
+  } catch (e) {
     // Best-effort: see this function's doc comment on why a failure here degrades to the
-    // zero-worklogs fallback instead of losing the backend report that already exists.
-    staffSeeds = const [];
+    // zero-worklogs fallback instead of losing the backend report that already exists. Logged
+    // (not surfaced to the technician — the fallback already keeps the flow usable) so a tenant
+    // whose permission matrix denies RapportiniReportRead to technicians is traceable in device
+    // logs instead of silently looking like "auto-fill just doesn't work". A 401/403 here means
+    // the create call above succeeded under a different permission than this read needs; anything
+    // else is an ordinary transport/network failure.
+    final statusCode = e is DioException ? e.response?.statusCode : null;
+    final isAuthFailure = statusCode == 401 || statusCode == 403;
+    debugPrint(
+      isAuthFailure
+          ? 'createCantiereReportDraft: GET /api/reports/$reportId denied ($statusCode) — check '
+                'RapportiniReportRead for this tenant/role. Falling back to blank hours.'
+          : 'createCantiereReportDraft: fetchReportSeed($reportId) failed ($e) — falling back to '
+                'blank hours.',
+    );
   }
+  final staffSeeds = seed.staff;
 
   final db = ref.read(appDatabaseProvider);
   final resolvedTenantId = tenantId ?? await resolveDeviceTenantId(db);
@@ -311,7 +333,7 @@ Future<String?> createCantiereReportDraft(
       createdAt: now,
       title: 'Rapportino — $cantiereName',
       insertedUserId: user.id,
-      locationId: '',
+      locationId: seed.locationId ?? '',
       cantiereId: Value(cantiereId),
       customerId: Value(customerId),
       metadataJson: Value(

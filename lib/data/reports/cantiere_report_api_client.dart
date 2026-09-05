@@ -7,10 +7,11 @@
 //                                               caller's own (and, if they are the squadra lead,
 //                                               their whole team's) unconsumed CantiereWorkLog
 //                                               entries for one cantiere
-//   GET  /api/reports/{id}                    — used ONLY to read back the `staff` rows the call
-//                                               above just seeded server-side, so the local editor
-//                                               can hydrate a matching draft with real hours
-//                                               instead of opening blank
+//   GET  /api/reports/{id}                    — used ONLY to read back the `staff` rows and the
+//                                               resolved `locationId` the call above just seeded
+//                                               server-side, so the local editor can hydrate a
+//                                               matching draft with real hours (and a real
+//                                               location) instead of opening blank
 //
 // Mirrors the style of CantiereWorklogApiClient / ReportSubmitApiClient — a small class scoped to
 // exactly the calls one feature needs, rather than a do-everything reports client.
@@ -52,6 +53,18 @@ class ReportStaffSeedDto {
   );
 }
 
+/// What `GET /api/reports/{id}` seeded server-side, the pieces the local editor hydrates after
+/// [CantiereReportApiClient.createFromCantiereWorklogs]: the already-resolved `locationId`
+/// (`ResolveLocationIdForCantiereAutoFillAsync`, backend — never blank, unlike the manual-entry
+/// default) and the `staff` rows. Not a general-purpose mirror of the response — every other field
+/// (title, signatures, etc.) is ignored (see this file's own header comment).
+class ReportSeedDto {
+  const ReportSeedDto({required this.locationId, required this.staff});
+
+  final String? locationId;
+  final List<ReportStaffSeedDto> staff;
+}
+
 class CantiereReportApiClient {
   CantiereReportApiClient(this._dio);
 
@@ -76,15 +89,18 @@ class CantiereReportApiClient {
 
   /// GET /api/reports/{id}
   ///
-  /// Only the `staff` array is consumed — every other field on the response (title, location,
-  /// signatures, etc.) is ignored, since this call exists solely to hydrate hours after
-  /// [createFromCantiereWorklogs]. Throws [DioException] on network/server error.
-  Future<List<ReportStaffSeedDto>> fetchReportStaff(String reportId) async {
+  /// Only `locationId` and the `staff` array are consumed — every other field on the response
+  /// (title, signatures, etc.) is ignored, since this call exists solely to hydrate the local
+  /// draft after [createFromCantiereWorklogs]. Throws [DioException] on network/server error.
+  Future<ReportSeedDto> fetchReportSeed(String reportId) async {
     final response = await _dio.get<Map<String, dynamic>>('/api/reports/$reportId');
     final data = response.data;
-    if (data == null) return const [];
+    if (data == null) return const ReportSeedDto(locationId: null, staff: []);
     final raw = data['staff'] as List<dynamic>? ?? [];
-    return raw.cast<Map<String, dynamic>>().map(ReportStaffSeedDto.fromJson).toList();
+    return ReportSeedDto(
+      locationId: data['locationId'] as String?,
+      staff: raw.cast<Map<String, dynamic>>().map(ReportStaffSeedDto.fromJson).toList(),
+    );
   }
 }
 

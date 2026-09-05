@@ -20,7 +20,7 @@ import '../../data/local/app_database.dart';
 import '../rapportino/create_draft.dart';
 import 'cantiere_providers.dart';
 
-class CantiereDetailScreen extends ConsumerWidget {
+class CantiereDetailScreen extends ConsumerStatefulWidget {
   const CantiereDetailScreen({super.key, required this.cantiereId, this.ticketId});
 
   final String cantiereId;
@@ -28,6 +28,19 @@ class CantiereDetailScreen extends ConsumerWidget {
   /// Carried through from a ticket's cantiere chip, when reached that way — see this file's own
   /// header comment. Null when reached from the Cantieri tab directly.
   final String? ticketId;
+
+  @override
+  ConsumerState<CantiereDetailScreen> createState() => _CantiereDetailScreenState();
+}
+
+class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
+  // Guards "Crea rapportino" against a double-tap: the button awaits a real network round-trip
+  // (POST /api/reports/from-cantiere-worklogs), and on a slow connection — which this app is
+  // explicitly built for — a second tap during that window would fire the create call again. The
+  // first call already consumed this cantiere's unconsumed worklogs, so the second would create a
+  // second, empty backend Report (burning a document number), a second local draft, and a double
+  // navigation push. Same pattern as CantiereTimbraScreen's own `_isLoading` guard.
+  bool _isCreatingRapportino = false;
 
   static String _statusLabel(int status) {
     switch (status) {
@@ -43,9 +56,9 @@ class CantiereDetailScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cantiereAsync = ref.watch(cantiereByIdProvider(cantiereId));
-    final ticketsAsync = ref.watch(ticketsForCantiereProvider(cantiereId));
+  Widget build(BuildContext context) {
+    final cantiereAsync = ref.watch(cantiereByIdProvider(widget.cantiereId));
+    final ticketsAsync = ref.watch(ticketsForCantiereProvider(widget.cantiereId));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -117,7 +130,7 @@ class CantiereDetailScreen extends ConsumerWidget {
                           onPressed: () => context.push(
                             AppRoutes.cantiereTimbraPath(
                               cantiereId: cantiere.id,
-                              ticketId: ticketId,
+                              ticketId: widget.ticketId,
                             ),
                           ),
                         ),
@@ -134,7 +147,10 @@ class CantiereDetailScreen extends ConsumerWidget {
                         AppButton(
                           label: 'Crea rapportino',
                           icon: const Icon(LucideIcons.fileText),
-                          onPressed: () => _createRapportino(context, ref, cantiere),
+                          isLoading: _isCreatingRapportino,
+                          onPressed: _isCreatingRapportino
+                              ? null
+                              : () => _handleCreateRapportino(cantiere),
                         ),
                         const SizedBox(height: 24),
                         const SectionTitle(title: 'Ticket collegati'),
@@ -169,8 +185,7 @@ class CantiereDetailScreen extends ConsumerWidget {
                                   return ListRow(
                                     title: t.title,
                                     showDivider: i != tickets.length - 1,
-                                    onTap: () =>
-                                        context.push(AppRoutes.ticketDetailPath(t.id)),
+                                    onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
                                   );
                                 }).toList(),
                               ),
@@ -188,43 +203,49 @@ class CantiereDetailScreen extends ConsumerWidget {
       ),
     );
   }
-}
 
-/// "Crea rapportino" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
-/// rapportino editor on the resulting draft. See [createCantiereReportDraft] for the full
-/// create-then-hydrate flow and why the local draft reuses the backend-issued report id.
-Future<void> _createRapportino(BuildContext context, WidgetRef ref, CantieriData cantiere) async {
-  final address = [
-    cantiere.address,
-    cantiere.city,
-    cantiere.postalCode,
-  ].where((s) => s != null && s.isNotEmpty).join(', ');
+  /// "Crea rapportino" — calls `POST /api/reports/from-cantiere-worklogs` and opens the ordinary
+  /// rapportino editor on the resulting draft. See [createCantiereReportDraft] for the full
+  /// create-then-hydrate flow and why the local draft reuses the backend-issued report id.
+  Future<void> _handleCreateRapportino(CantieriData cantiere) async {
+    if (_isCreatingRapportino) return; // Belt-and-suspenders alongside the disabled button.
+    setState(() => _isCreatingRapportino = true);
 
-  String? id;
-  try {
-    id = await createCantiereReportDraft(
-      ref,
-      cantiereId: cantiere.id,
-      cantiereName: cantiere.name,
-      customerId: cantiere.customerId,
-      tenantId: cantiere.tenantId,
-      workAddress: address.isEmpty ? null : address,
-    );
-  } catch (e) {
-    if (context.mounted) {
-      showAppToast(
-        context,
-        message: humanErrorMessage(e, azione: 'creare il rapportino'),
-        tone: ToastTone.error,
+    final address = [
+      cantiere.address,
+      cantiere.city,
+      cantiere.postalCode,
+    ].where((s) => s != null && s.isNotEmpty).join(', ');
+
+    String? id;
+    try {
+      id = await createCantiereReportDraft(
+        ref,
+        cantiereId: cantiere.id,
+        cantiereName: cantiere.name,
+        customerId: cantiere.customerId,
+        tenantId: cantiere.tenantId,
+        workAddress: address.isEmpty ? null : address,
       );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCreatingRapportino = false);
+        showAppToast(
+          context,
+          message: humanErrorMessage(e, azione: 'creare il rapportino'),
+          tone: ToastTone.error,
+        );
+      }
+      return;
     }
-    return;
-  }
 
-  if (!context.mounted) return;
-  if (id == null) {
-    showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
-    return;
+    if (!mounted) return;
+    setState(() => _isCreatingRapportino = false);
+
+    if (id == null) {
+      showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+      return;
+    }
+    context.push(AppRoutes.rapportiniEditor(id));
   }
-  context.push(AppRoutes.rapportiniEditor(id));
 }

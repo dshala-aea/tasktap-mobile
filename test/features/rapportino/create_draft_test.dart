@@ -27,20 +27,22 @@ import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
-/// Returns [reportIdToReturn] from [createFromCantiereWorklogs] and [staffToReturn] from
-/// [fetchReportStaff] — never touches the network.
+/// Returns [reportIdToReturn] from [createFromCantiereWorklogs] and a [ReportSeedDto] built from
+/// [locationIdToReturn]/[staffToReturn] from [fetchReportSeed] — never touches the network.
 class _FakeCantiereReportApiClient extends CantiereReportApiClient {
   _FakeCantiereReportApiClient({
     this.reportIdToReturn = 'report-1',
+    this.locationIdToReturn,
     this.staffToReturn = const [],
   }) : super(Dio());
 
   final String reportIdToReturn;
+  final String? locationIdToReturn;
   final List<ReportStaffSeedDto> staffToReturn;
 
   String? calledWithCantiereId;
 
-  /// When set, [fetchReportStaff] throws instead of returning [staffToReturn] — used to prove the
+  /// When set, [fetchReportSeed] throws instead of returning the fake seed — used to prove the
   /// zero-worklogs fallback also covers a network drop between the two calls.
   Object? throwsOnFetchStaff;
 
@@ -51,9 +53,9 @@ class _FakeCantiereReportApiClient extends CantiereReportApiClient {
   }
 
   @override
-  Future<List<ReportStaffSeedDto>> fetchReportStaff(String reportId) async {
+  Future<ReportSeedDto> fetchReportSeed(String reportId) async {
     if (throwsOnFetchStaff != null) throw throwsOnFetchStaff!;
-    return staffToReturn;
+    return ReportSeedDto(locationId: locationIdToReturn, staff: staffToReturn);
   }
 }
 
@@ -496,6 +498,39 @@ void main() {
       expect(draft.isLocalOnly, isTrue);
       expect(draft.stato, 'Bozza');
       expect(draft.ticketId, isNull, reason: 'a cantiere-originated draft has no ticket link');
+      expect(
+        draft.locationId,
+        '',
+        reason:
+            'no locationId came back from the fake seed — falls back to blank, same as '
+            'createLocalDraft',
+      );
+    });
+
+    testWidgets('hydrates the real locationId the backend already resolved', (tester) async {
+      final api = _FakeCantiereReportApiClient(
+        reportIdToReturn: 'server-report-loc',
+        locationIdToReturn: 'loc-resolved-1',
+      );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      final draft = await repo.getDraft(id!);
+      expect(
+        draft!.locationId,
+        'loc-resolved-1',
+        reason:
+            'must not overwrite the backend\'s resolved location with a blank one on submit '
+            '(ReportSubmitService.SubmitAsync sets report.LocationId = request.LocationId '
+            'unconditionally)',
+      );
     });
 
     testWidgets('hydrates staff rows with the hours the backend already seeded', (tester) async {
@@ -557,7 +592,7 @@ void main() {
     );
 
     testWidgets(
-      'still creates the local draft with the zero-worklogs fallback when fetching staff fails',
+      'still creates the local draft with the zero-worklogs fallback when the seed fetch fails',
       (tester) async {
         final api = _FakeCantiereReportApiClient(reportIdToReturn: 'server-report-4')
           ..throwsOnFetchStaff = DioException(
@@ -583,6 +618,9 @@ void main() {
         final staff = await repo.getStaff(id!);
         expect(staff, hasLength(1));
         expect(staff.single.userId, _testUser.id);
+
+        final draft = await repo.getDraft(id);
+        expect(draft!.locationId, '', reason: 'no seed to hydrate from — falls back to blank');
       },
     );
 
