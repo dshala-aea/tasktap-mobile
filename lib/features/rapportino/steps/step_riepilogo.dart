@@ -1,5 +1,6 @@
 // dart format width=100
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -482,9 +483,15 @@ class _SignatureBlock extends ConsumerWidget {
   }
 
   Future<void> _captureSig(BuildContext context, WidgetRef ref) async {
+    final mode = await showDialog<_SigMode>(
+      context: context,
+      builder: (_) => const _SigModeDialog(),
+    );
+    if (mode == null || !context.mounted) return;
+
     final bytes = await showDialog<Uint8List?>(
       context: context,
-      builder: (_) => const _SigDialog(),
+      builder: (_) => mode == _SigMode.draw ? const _SigDialog() : const _TypedSigDialog(),
     );
     if (bytes == null || bytes.isEmpty) return;
 
@@ -510,6 +517,177 @@ class _SignatureBlock extends ConsumerWidget {
       await notifier.clearTechnicianSignature();
     }
   }
+}
+
+// ── Signature mode choice ────────────────────────────────────────────────────
+
+enum _SigMode { draw, typed }
+
+/// Asked before either capture flow opens: draw on the pad, or type a name and accept.
+///
+/// A plain `AlertDialog`/`SimpleDialogOption` pair, matching `confirm_delete_dialog.dart`'s own
+/// `showDialog<T>` + stock Material dialog convention rather than inventing a bespoke chooser.
+class _SigModeDialog extends StatelessWidget {
+  const _SigModeDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return SimpleDialog(
+      title: const Text('Come vuoi firmare?'),
+      children: [
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, _SigMode.draw),
+          child: Row(
+            children: [
+              Icon(LucideIcons.penTool, color: context.colors.ink, size: 20),
+              const SizedBox(width: 12),
+              Text('Disegna', style: TextStyle(color: context.colors.ink, fontSize: 15)),
+            ],
+          ),
+        ),
+        SimpleDialogOption(
+          onPressed: () => Navigator.pop(context, _SigMode.typed),
+          child: Row(
+            children: [
+              Icon(LucideIcons.pencil, color: context.colors.ink, size: 20),
+              const SizedBox(width: 12),
+              Text('Digita', style: TextStyle(color: context.colors.ink, fontSize: 15)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Typed signature dialog ───────────────────────────────────────────────────
+
+/// The "Digita" alternative to `_SigDialog`'s drawing pad: a full name plus an explicit
+/// confirmation checkbox, rendered to a PNG that stands in for a drawn stroke.
+///
+/// No backend concept of "typed vs drawn" exists — this renders an image client-side and hands
+/// it back through the exact same `showDialog<Uint8List?>` contract `_SigDialog` uses, so
+/// `_SignatureBlock._captureSig`'s file-write-and-save tail needs zero changes for this mode.
+class _TypedSigDialog extends StatefulWidget {
+  const _TypedSigDialog();
+
+  @override
+  State<_TypedSigDialog> createState() => _TypedSigDialogState();
+}
+
+class _TypedSigDialogState extends State<_TypedSigDialog> {
+  final _nameCtrl = TextEditingController();
+  bool _confirmed = false;
+  bool _rendering = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _canConfirm => _nameCtrl.text.trim().isNotEmpty && _confirmed && !_rendering;
+
+  Future<void> _onConfirm() async {
+    setState(() => _rendering = true);
+    final bytes = await _renderTypedSignature(_nameCtrl.text.trim());
+    if (mounted) Navigator.pop(context, bytes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Firma digitale'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppTextField(
+            label: 'Nome e cognome',
+            hint: 'Mario Rossi',
+            controller: _nameCtrl,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          CheckboxListTile(
+            value: _confirmed,
+            onChanged: (v) => setState(() => _confirmed = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'Confermo l\'accettazione',
+              style: TextStyle(color: context.colors.ink, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _rendering ? null : () => Navigator.pop(context),
+          child: Text('Annulla', style: TextStyle(color: context.colors.inkMuted)),
+        ),
+        TextButton(
+          onPressed: _canConfirm ? _onConfirm : null,
+          child: _rendering
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
+                )
+              : Text(
+                  'Conferma',
+                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Renders `name` + a checkmark + the current timestamp to an offscreen canvas and returns it as
+/// PNG bytes.
+///
+/// 800x400 (2:1) is a deliberate pick, not a measured match: `_SigDialog`'s own PNG dimensions
+/// come from `SignatureController`'s export, which sizes to whatever the drawing widget's runtime
+/// layout happens to be on a full-screen landscape dialog — there's no single fixed constant to
+/// replicate. 2:1 lands in the same ballpark as that landscape aspect ratio, and 800px wide is
+/// comfortably sharp for the ~120px-tall preview `_SignatureBlock` renders it at.
+Future<Uint8List> _renderTypedSignature(String name) async {
+  const width = 800.0;
+  const height = 400.0;
+
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width, height));
+  canvas.drawRect(Rect.fromLTWH(0, 0, width, height), Paint()..color = Colors.white);
+
+  final now = DateTime.now();
+  final timestamp =
+      '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/'
+      '${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+  final painter = TextPainter(
+    text: TextSpan(
+      children: [
+        TextSpan(
+          text: '$name  ✓\n',
+          style: const TextStyle(color: Colors.black, fontSize: 48, fontWeight: FontWeight.w600),
+        ),
+        TextSpan(
+          text: timestamp,
+          style: TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 24),
+        ),
+      ],
+    ),
+    textDirection: TextDirection.ltr,
+  );
+  painter.layout(maxWidth: width - 80);
+  painter.paint(canvas, Offset(40, (height - painter.height) / 2));
+
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width.toInt(), height.toInt());
+  final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+  return byteData!.buffer.asUint8List();
 }
 
 // ── Signature capture dialog (identical to step_firme._SignatureCaptureDialog) ─

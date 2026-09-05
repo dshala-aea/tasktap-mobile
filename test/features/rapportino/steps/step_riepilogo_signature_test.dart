@@ -59,7 +59,9 @@ ProviderContainer _buildContainer(AppDatabase db) {
 Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: StepRiepilogo(reportId: _reportId))),
+    child: const MaterialApp(
+      home: Scaffold(body: StepRiepilogo(reportId: _reportId)),
+    ),
   );
 }
 
@@ -92,6 +94,11 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Acquisisci firma cliente'));
+    await tester.pumpAndSettle();
+
+    // Mode choice ("Disegna"/"Digita") now sits in front of the drawing dialog — pick "Disegna"
+    // to keep exercising the exact drawing path this test is about.
+    await tester.tap(find.text('Disegna'));
     await tester.pumpAndSettle();
 
     expect(find.byType(Signature), findsOneWidget, reason: 'signature dialog should be open');
@@ -222,6 +229,11 @@ void main() {
     await tester.tap(find.text('Acquisisci firma cliente'));
     await tester.pumpAndSettle();
 
+    // Mode choice sits in front of the drawing dialog now — the orientation lock is a
+    // `_SigDialog`-specific side effect, so it only fires once "Disegna" is picked.
+    await tester.tap(find.text('Disegna'));
+    await tester.pumpAndSettle();
+
     expect(orientationCalls, hasLength(1));
     expect(
       orientationCalls.single.map((o) => o.toString()),
@@ -233,6 +245,80 @@ void main() {
 
     expect(orientationCalls, hasLength(2));
     expect(orientationCalls.last, isEmpty, reason: 'releases the lock — every orientation again');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('typed ("Digita") signature requires name + checkbox, then saves like the drawn '
+      'path', (tester) async {
+    container = _buildContainer(db);
+    tester.view.physicalSize = const Size(400, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(_buildStep(container));
+    await tester.pumpAndSettle();
+
+    // Everything from here on — through the final save — has to run inside one real (escaped)
+    // zone: `_SignatureBlock._captureSig` is invoked by this very first tap and, as a single
+    // async function, keeps running in whatever zone was active at that call for its entire
+    // lifetime, including the dart:io file write and the Drift-backed `saveCustomerSignature`
+    // call at the very end of it. A `Future`'s continuation always resumes in the zone captured
+    // where its `await` lives, not the zone that happened to complete it — so wrapping only the
+    // later "Conferma" tap (or only the render step) in `runAsync` leaves this outer function's
+    // tail stuck under the fake clock no matter how long a real delay runs elsewhere. This is a
+    // stricter version of the same gap the second test above works around for its direct,
+    // already-in-hand Drift call — here the real work starts one tap earlier, at `_captureSig`
+    // itself, because it (not the test) owns the dart:ui render call in between.
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Acquisisci firma cliente'));
+      await tester.pump();
+
+      // Choosing "Digita" instead of "Disegna" opens the typed-signature dialog.
+      await tester.tap(find.text('Digita'));
+      await tester.pump();
+
+      expect(find.byType(TextFormField), findsOneWidget, reason: 'name field should be visible');
+      expect(
+        find.byType(Checkbox),
+        findsOneWidget,
+        reason: 'confirmation checkbox should be visible',
+      );
+
+      TextButton confermaButton() =>
+          tester.widget<TextButton>(find.widgetWithText(TextButton, 'Conferma'));
+
+      // Neither a name nor a ticked checkbox alone is enough — Conferma starts disabled.
+      expect(confermaButton().onPressed, isNull, reason: 'empty name, unchecked box');
+
+      await tester.enterText(find.byType(TextFormField), 'Mario Rossi');
+      await tester.pump();
+      expect(confermaButton().onPressed, isNull, reason: 'name alone, still unchecked');
+
+      await tester.tap(find.byType(Checkbox));
+      await tester.pump();
+      expect(confermaButton().onPressed, isNotNull, reason: 'name present and box checked');
+
+      // Confirming renders the typed signature to PNG bytes via real dart:ui image encoding
+      // (PictureRecorder → Image → toByteData), then `_captureSig`'s continuation writes the
+      // file and calls `saveCustomerSignature` — real dart:io + Drift work, same as above.
+      await tester.tap(find.widgetWithText(TextButton, 'Conferma'));
+      await tester.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await tester.pump();
+    });
+
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+
+    // This is the actual assertion that matters: the typed path reaches the exact same
+    // save-and-render tail as the drawn path (same `_captureSig` → `saveCustomerSignature` call),
+    // proven the same way the drawn-path save is proven elsewhere in this file — by the
+    // "Firma acquisita" state appearing once `ReportEditorState.customerSignature*` is populated.
+    expect(find.text('Firma acquisita'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
