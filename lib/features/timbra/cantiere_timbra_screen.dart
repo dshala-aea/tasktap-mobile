@@ -36,6 +36,7 @@ import 'dart:async' show unawaited;
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -148,6 +149,60 @@ final cantiereTodayHoursProvider = Provider.autoDispose.family<Duration, String>
   }
   return total;
 });
+
+/// "Xh Ym" — zero-padded minutes, no seconds. Shared by the check-in body's "OGGI" header and the
+/// active-session body's hero card (previously duplicated as `_ActiveSessionBody._formatElapsed`).
+String formatHoursMinutes(Duration d) {
+  final h = d.inHours;
+  final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  return '${h}h ${m}m';
+}
+
+/// Elapsed time since [startTime], clamped so it never counts time before local midnight — a
+/// session that started yesterday and is still open must only contribute its since-midnight
+/// portion to a "today" reading. Uses the exact same midnight expression as
+/// `CantiereSessionRepository._todayBounds()`.
+Duration clampedElapsedSinceMidnight(DateTime startTime, DateTime now) {
+  final today = DateTime.now();
+  final todayStartUtc = DateTime(today.year, today.month, today.day).toUtc();
+  final effectiveStart = startTime.isAfter(todayStartUtc) ? startTime : todayStartUtc;
+  return now.difference(effectiveStart);
+}
+
+/// Live-ticking elapsed-time text, clamped to today (see [clampedElapsedSinceMidnight]). Same
+/// Ticker-based pattern as `rapportino/step_ore.dart`'s `_RunningTimerBadge`.
+class _CantiereElapsedTicker extends StatefulWidget {
+  const _CantiereElapsedTicker({required this.startTime, required this.style});
+
+  final DateTime startTime;
+  final TextStyle style;
+
+  @override
+  State<_CantiereElapsedTicker> createState() => _CantiereElapsedTickerState();
+}
+
+class _CantiereElapsedTickerState extends State<_CantiereElapsedTicker>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker((_) => setState(() {}));
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = clampedElapsedSinceMidnight(widget.startTime, DateTime.now());
+    return Text(formatHoursMinutes(elapsed), style: widget.style);
+  }
+}
 
 /// The minimal "am I on site" signal the screen needs — offline-durable, derived from the local
 /// event log the same way `timbraStateProvider` derives shift state for personal Timbra.

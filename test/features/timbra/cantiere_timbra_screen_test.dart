@@ -1019,6 +1019,40 @@ void main() {
     );
   });
 
+  group('formatHoursMinutes', () {
+    test('formats whole hours with zero minutes', () {
+      expect(formatHoursMinutes(const Duration(hours: 2)), '2h 00m');
+    });
+
+    test('formats hours and minutes, zero-padded', () {
+      expect(formatHoursMinutes(const Duration(hours: 6, minutes: 5)), '6h 05m');
+    });
+
+    test('formats zero duration', () {
+      expect(formatHoursMinutes(Duration.zero), '0h 00m');
+    });
+  });
+
+  group('clampedElapsedSinceMidnight', () {
+    test('returns the full elapsed time when startTime is already today', () {
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+      final now = start.add(const Duration(hours: 1, minutes: 18));
+
+      expect(clampedElapsedSinceMidnight(start, now), const Duration(hours: 1, minutes: 18));
+    });
+
+    test('clamps to since-midnight when startTime was yesterday', () {
+      final today = DateTime.now();
+      final todayMidnightUtc = DateTime(today.year, today.month, today.day).toUtc();
+      final start = todayMidnightUtc.subtract(const Duration(hours: 5)); // started yesterday
+      final now = todayMidnightUtc.add(const Duration(hours: 2));
+
+      // Only the 2h since midnight counts, not the 5h before it.
+      expect(clampedElapsedSinceMidnight(start, now), const Duration(hours: 2));
+    });
+  });
+
   group('cantiereTodayHoursProvider', () {
     ProviderContainer buildContainer(AppDatabase db) => ProviderContainer(
       overrides: [appDatabaseProvider.overrideWithValue(db)],
