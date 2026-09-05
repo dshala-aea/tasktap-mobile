@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:signature/signature.dart';
@@ -24,10 +25,13 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/users/user_signature_api_client.dart';
 import 'package:tasktap_mobile/features/rapportino/steps/step_riepilogo.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 const _reportId = 'draft-1';
+
+class _MockUserSignatureApiClient extends Mock implements UserSignatureApiClient {}
 
 class _FakePathProviderPlatform extends PathProviderPlatform with MockPlatformInterfaceMixin {
   late final Directory _dir = Directory.systemTemp.createTempSync('sig_test_');
@@ -38,10 +42,31 @@ class _FakePathProviderPlatform extends PathProviderPlatform with MockPlatformIn
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
-ProviderContainer _buildContainer(AppDatabase db) {
+/// Default `userSignatureApiClientProvider` override for every test in this file that isn't
+/// specifically exercising the save-for-reuse/pre-fill paths: `_StepRiepilogoState.initState` now
+/// always calls `fetchSavedSignatureContent()`, so leaving `userSignatureApiClientProvider`
+/// un-overridden would reach the real `dioProvider` (and its `authRepositoryProvider` chain),
+/// which nothing in this file sets up. Returning `null` mirrors "no saved signature" — a no-op for
+/// every test that isn't about pre-fill itself.
+class _StubUserSignatureApiClient implements UserSignatureApiClient {
+  const _StubUserSignatureApiClient();
+
+  @override
+  Future<Uint8List?> fetchSavedSignatureContent() async => null;
+
+  @override
+  Future<UserSignatureUploadResult> uploadSignature(Uint8List bytes) {
+    throw UnimplementedError('not used by this test');
+  }
+}
+
+ProviderContainer _buildContainer(AppDatabase db, {UserSignatureApiClient? signatureClient}) {
   return ProviderContainer(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
+      userSignatureApiClientProvider.overrideWithValue(
+        signatureClient ?? const _StubUserSignatureApiClient(),
+      ),
       reportEditorProvider(_reportId).overrideWith(
         (ref) => ReportEditorNotifier(
           initialState: const ReportEditorState(
@@ -68,6 +93,10 @@ Widget _buildStep(ProviderContainer container) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   PathProviderPlatform.instance = _FakePathProviderPlatform();
+
+  setUpAll(() {
+    registerFallbackValue(Uint8List(0));
+  });
 
   late AppDatabase db;
   late ProviderContainer container;
@@ -323,4 +352,172 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  testWidgets(
+    'drawing a technician signature offers to save it for reuse, and uploads on "Sì"',
+    (tester) async {
+      final mockClient = _MockUserSignatureApiClient();
+      when(() => mockClient.fetchSavedSignatureContent()).thenAnswer((_) async => null);
+      when(() => mockClient.uploadSignature(any())).thenAnswer(
+        (_) async =>
+            const UserSignatureUploadResult(allegatoId: 'sig-saved', contentUrl: 'https://x/y'),
+      );
+
+      container = _buildContainer(db, signatureClient: mockClient);
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      // Same real-zone requirement as the typed-signature test above: `_captureSig`'s tail
+      // (file write, Drift save, then the reuse-prompt dialog) runs in whatever zone this first
+      // tap captures, so it all has to happen inside one `runAsync` block.
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Acquisisci firma tecnico'));
+        await tester.pump();
+
+        await tester.tap(find.text('Disegna'));
+        await tester.pump();
+
+        expect(find.byType(Signature), findsOneWidget, reason: 'signature dialog should be open');
+
+        final canvasCenter = tester.getCenter(find.byType(Signature));
+        final gesture = await tester.startGesture(canvasCenter - const Offset(40, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+        await gesture.moveBy(const Offset(80, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+        await gesture.moveBy(const Offset(0, 30));
+        await tester.pump(const Duration(milliseconds: 16));
+        await gesture.up();
+        await tester.pump();
+
+        await tester.tap(find.text('Conferma'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+
+        // The reuse-save prompt should now be showing.
+        expect(find.text('Salva questa firma per la prossima volta?'), findsOneWidget);
+
+        // Tapping "Sì" is answered by resolving `showDialog<bool>`'s Future, which resumes
+        // `_offerToSaveForReuse`'s continuation — still bound to this same real zone, since that's
+        // where the `await showDialog(...)` was reached. Doing this tap outside this `runAsync`
+        // block left the continuation (and its `uploadSignature` call) unobserved by `verify`
+        // below — same root cause as every other real-zone note in this file.
+        await tester.tap(find.text('Sì'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Firma acquisita'), findsOneWidget);
+
+      final captured =
+          verify(() => mockClient.uploadSignature(captureAny())).captured.single as Uint8List;
+      expect(captured, isNotEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'a typed technician signature does NOT trigger the save-for-reuse prompt',
+    (tester) async {
+      final mockClient = _MockUserSignatureApiClient();
+      when(() => mockClient.fetchSavedSignatureContent()).thenAnswer((_) async => null);
+
+      container = _buildContainer(db, signatureClient: mockClient);
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Acquisisci firma tecnico'));
+        await tester.pump();
+
+        await tester.tap(find.text('Digita'));
+        await tester.pump();
+
+        await tester.enterText(find.byType(TextFormField), 'Mario Rossi');
+        await tester.pump();
+        await tester.tap(find.byType(Checkbox));
+        await tester.pump();
+
+        await tester.tap(find.widgetWithText(TextButton, 'Conferma'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+      });
+
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Firma acquisita'), findsOneWidget);
+
+      // Reuse only makes sense for an actual drawn signature image, per the plan — a typed
+      // signature must not trigger the prompt, and must never call uploadSignature.
+      expect(find.text('Salva questa firma per la prossima volta?'), findsNothing);
+      verifyNever(() => mockClient.uploadSignature(any()));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'opening a new rapportino pre-fills the technician signature from a saved one, without '
+    'drawing',
+    (tester) async {
+      final savedBytes = Uint8List.fromList(List.generate(32, (i) => i));
+      final mockClient = _MockUserSignatureApiClient();
+      when(() => mockClient.fetchSavedSignatureContent()).thenAnswer((_) async => savedBytes);
+
+      container = _buildContainer(db, signatureClient: mockClient);
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      // `_StepRiepilogoState`'s pre-fill kicks off from `initState` itself (before any user
+      // interaction), so the whole pump has to happen inside one real (escaped) zone — same
+      // dart:io-write-then-Drift-save tail as a normal capture, just triggered automatically.
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+      });
+
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      // No draw gesture anywhere in this test — the technician block is captured purely from the
+      // pre-fill fetch.
+      expect(find.text('Firma acquisita'), findsOneWidget);
+
+      final state = container.read(reportEditorProvider(_reportId));
+      expect(state.technicianSignatureAllegatoId, isNotNull);
+      expect(state.technicianSignatureLocalPath, isNotNull);
+
+      final onDisk = await tester.runAsync(
+        () => File(state.technicianSignatureLocalPath!).readAsBytes(),
+      );
+      expect(onDisk, savedBytes);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 }

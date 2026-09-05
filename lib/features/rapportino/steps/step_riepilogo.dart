@@ -1,4 +1,5 @@
 // dart format width=100
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -17,6 +18,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
+import '../../../data/users/user_signature_api_client.dart';
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -51,6 +53,54 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   late final Stream<DraftReport?> _draftStream = ref
       .read(draftReportRepositoryProvider)
       .watchDraft(widget.reportId);
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_maybePrefillTechnicianSignature());
+  }
+
+  /// Pre-fills "Firma tecnico" from the technician's own saved signature (see
+  /// `UserSignatureApiClient`), so a returning technician doesn't have to redraw the same
+  /// signature on every rapportino.
+  ///
+  /// Waits for hydration (`notifier.ready`) before checking: for a *resumed* draft, the initial
+  /// `ReportEditorState` is just a placeholder until hydration loads the real saved signature (if
+  /// any) from Drift, and checking before that would risk overwriting it with a stale
+  /// network fetch racing the local read. For a genuinely new rapportino, hydration is a fast
+  /// no-op (no matching Drift row).
+  ///
+  /// Still just a normal capture once the bytes are in hand — `saveTechnicianSignature` is the
+  /// same call `_SignatureBlock._captureSig` makes, so the result stays re-drawable/clearable via
+  /// the existing "Cancella" button. Never blocks the editor from opening: a fetch failure or a
+  /// missing saved signature both no-op silently (see `UserSignatureApiClient
+  /// .fetchSavedSignatureContent`'s own "never blocks" contract).
+  Future<void> _maybePrefillTechnicianSignature() async {
+    final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
+    await notifier.ready;
+    if (!mounted) return;
+    if (ref.read(reportEditorProvider(widget.reportId)).technicianSignatureAllegatoId != null) {
+      return;
+    }
+
+    final bytes = await ref.read(userSignatureApiClientProvider).fetchSavedSignatureContent();
+    if (bytes == null || !mounted) return;
+    // Re-check after the fetch: a resumed draft's hydration or a manual capture could have
+    // completed while the network call was in flight.
+    if (ref.read(reportEditorProvider(widget.reportId)).technicianSignatureAllegatoId != null) {
+      return;
+    }
+
+    final dir = await getApplicationDocumentsDirectory();
+    final id = 'sig-tecnico-${DateTime.now().millisecondsSinceEpoch}';
+    final file = File('${dir.path}/$id.png');
+    await file.writeAsBytes(bytes);
+    if (!mounted) return;
+
+    await ref
+        .read(reportEditorProvider(widget.reportId).notifier)
+        .saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
+  }
 
   Future<void> _onInvia() async {
     final queue = ref.read(realSubmissionQueueProvider);
@@ -506,6 +556,51 @@ class _SignatureBlock extends ConsumerWidget {
       await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
     } else {
       await notifier.saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
+      // Reuse only makes sense for an actual drawn signature image — a typed one is a rendered
+      // name-and-checkmark stand-in, not a signature worth carrying forward to the next
+      // rapportino.
+      if (mode == _SigMode.draw && context.mounted) {
+        await _offerToSaveForReuse(context, ref, bytes);
+      }
+    }
+  }
+
+  /// Asks whether to save this (drawn) technician signature for reuse on future rapportini, and
+  /// uploads it on "Sì".
+  ///
+  /// The upload itself is fire-and-forget — a slow or failed upload must not hold up this
+  /// rapportino's own editor — but unlike the GPS/pre-fill "never blocks" paths, this is a
+  /// deliberate technician action ("save this for next time"), so a failure is surfaced with a
+  /// SnackBar rather than swallowed silently.
+  Future<void> _offerToSaveForReuse(BuildContext context, WidgetRef ref, Uint8List bytes) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Salva firma'),
+        content: const Text('Salva questa firma per la prossima volta?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sì')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final messenger = context.mounted ? ScaffoldMessenger.maybeOf(context) : null;
+    unawaited(_uploadForReuse(ref, bytes, messenger));
+  }
+
+  Future<void> _uploadForReuse(
+    WidgetRef ref,
+    Uint8List bytes,
+    ScaffoldMessengerState? messenger,
+  ) async {
+    try {
+      await ref.read(userSignatureApiClientProvider).uploadSignature(bytes);
+    } catch (_) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Impossibile salvare la firma per il riutilizzo.')),
+      );
     }
   }
 

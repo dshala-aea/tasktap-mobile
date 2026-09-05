@@ -894,6 +894,8 @@ void main() {
           'multipart FormData, not a JSON body — there is no schema to check it against',
       'POST /api/materiali/{}/image':
           'multipart FormData, not a JSON body — there is no schema to check it against',
+      'POST /api/users/me/signature':
+          'multipart FormData, not a JSON body — there is no schema to check it against',
       'POST /api/devices':
           'sent by NotificationService, which builds its own Dio from Env at call time rather '
           'than taking one, so there is no seam to capture without changing production code',
