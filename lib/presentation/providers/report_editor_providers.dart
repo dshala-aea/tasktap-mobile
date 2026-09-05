@@ -222,6 +222,7 @@ class ReportEditorState {
     this.customerSignatureAllegatoId,
     this.technicianSignatureLocalPath,
     this.technicianSignatureAllegatoId,
+    this.technicianSignaturePrefillSuppressed = false,
     this.allegatoRows = const [],
     this.isSaving = false,
     this.saveError,
@@ -273,6 +274,10 @@ class ReportEditorState {
   final String? technicianSignatureLocalPath;
   final String? technicianSignatureAllegatoId;
 
+  /// See `DraftReports.technicianSignaturePrefillSuppressed`'s doc comment — persisted so it
+  /// survives `StepRiepilogo`/this notifier being recreated on sheet close+reopen.
+  final bool technicianSignaturePrefillSuppressed;
+
   // Step 6 — Allegati (photos)
   final List<AllegatoRow> allegatoRows;
 
@@ -321,6 +326,7 @@ class ReportEditorState {
     documentTemplateId: null,
     customerSignatureAllegatoId: customerSignatureAllegatoId,
     technicianSignatureAllegatoId: technicianSignatureAllegatoId,
+    technicianSignaturePrefillSuppressed: technicianSignaturePrefillSuppressed,
     technicianNotes: null,
     closedAt: null,
     stato: 'Bozza',
@@ -363,6 +369,7 @@ class ReportEditorState {
     String? customerSignatureAllegatoId,
     String? technicianSignatureLocalPath,
     String? technicianSignatureAllegatoId,
+    bool? technicianSignaturePrefillSuppressed,
     List<AllegatoRow>? allegatoRows,
     bool? isSaving,
     String? saveError,
@@ -416,6 +423,8 @@ class ReportEditorState {
       technicianSignatureAllegatoId: clearTechnicianSignature
           ? null
           : (technicianSignatureAllegatoId ?? this.technicianSignatureAllegatoId),
+      technicianSignaturePrefillSuppressed:
+          technicianSignaturePrefillSuppressed ?? this.technicianSignaturePrefillSuppressed,
       allegatoRows: allegatoRows ?? this.allegatoRows,
       isSaving: isSaving ?? this.isSaving,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
@@ -591,6 +600,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       customerSignatureLocalPath: customerSignatureLocalPath,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
       technicianSignatureLocalPath: technicianSignatureLocalPath,
+      technicianSignaturePrefillSuppressed: draft.technicianSignaturePrefillSuppressed,
       tenantId: draft.tenantId,
       insertedUserId: draft.insertedUserId,
       isLoading: false,
@@ -827,12 +837,26 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     }
   }
 
+  /// Saves a customer signature.
+  ///
+  /// [stampCapture] defaults to `true` — the real drawn/typed capture paths (see
+  /// `_SignatureBlock._captureSig`) always want a live GPS position + timestamp, per
+  /// [_captureGpsSilently]'s doc comment. There is currently no customer-side pre-fill (only the
+  /// technician's own signature is reused across rapportini — see
+  /// `StepRiepilogo._maybePrefillTechnicianSignature`), but the parameter exists here too so both
+  /// signature roles share one honest contract if that ever changes.
   Future<void> saveCustomerSignature({
     required String allegatoId,
     required Uint8List bytes,
     required String localPath,
+    bool stampCapture = true,
   }) async {
-    final coords = await _captureGpsSilently();
+    GpsCoords? coords;
+    DateTime? capturedAt;
+    if (stampCapture) {
+      coords = await _captureGpsSilently();
+      capturedAt = DateTime.now().toUtc();
+    }
     await _repo.saveSignature(
       reportId: state.reportId,
       allegatoId: allegatoId,
@@ -843,7 +867,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       isCustomer: true,
       capturedLatitude: coords?.lat,
       capturedLongitude: coords?.lng,
-      capturedAt: DateTime.now().toUtc(),
+      capturedAt: capturedAt,
     );
     state = state.copyWith(
       customerSignatureLocalPath: localPath,
@@ -852,12 +876,32 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _autosave();
   }
 
+  /// Saves a technician signature.
+  ///
+  /// [stampCapture] gates whether this save claims a live GPS position + capture timestamp, per
+  /// [_captureGpsSilently]'s doc comment. The real drawn/typed capture path (`_captureSig`) always
+  /// passes the default `true` — a technician standing in front of the customer actually just
+  /// signed. `StepRiepilogo._maybePrefillTechnicianSignature` is the one caller that passes
+  /// `false`: it silently reuses a *previously* saved signature to pre-fill a brand-new
+  /// rapportino with no signing act at all, so stamping it with "here, right now" GPS + a fresh
+  /// timestamp would misrepresent it as freshly captured. See that method's own doc comment.
+  ///
+  /// Also resets [ReportEditorState.technicianSignaturePrefillSuppressed] to `false` — a real
+  /// signature (drawn or typed) is itself a fresh, deliberate signing act, so any earlier
+  /// Cancella-driven suppression no longer applies to it. See
+  /// `DraftReports.technicianSignaturePrefillSuppressed`'s own doc comment.
   Future<void> saveTechnicianSignature({
     required String allegatoId,
     required Uint8List bytes,
     required String localPath,
+    bool stampCapture = true,
   }) async {
-    final coords = await _captureGpsSilently();
+    GpsCoords? coords;
+    DateTime? capturedAt;
+    if (stampCapture) {
+      coords = await _captureGpsSilently();
+      capturedAt = DateTime.now().toUtc();
+    }
     await _repo.saveSignature(
       reportId: state.reportId,
       allegatoId: allegatoId,
@@ -868,11 +912,12 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       isCustomer: false,
       capturedLatitude: coords?.lat,
       capturedLongitude: coords?.lng,
-      capturedAt: DateTime.now().toUtc(),
+      capturedAt: capturedAt,
     );
     state = state.copyWith(
       technicianSignatureLocalPath: localPath,
       technicianSignatureAllegatoId: allegatoId,
+      technicianSignaturePrefillSuppressed: false,
     );
     await _autosave();
   }
@@ -885,11 +930,24 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _autosave();
   }
 
+  /// Clears the technician signature, and — unlike the customer side — also marks the pre-fill
+  /// suppressed on this draft.
+  ///
+  /// Without this, the field going back to `null` would be indistinguishable from a rapportino
+  /// that never had a technician signature at all: `StepRiepilogo`'s pre-fill logic checks exactly
+  /// that field, and `StepRiepilogo` itself is recreated (fresh `initState`) every time its
+  /// containing bottom sheet is closed and reopened. Closing and reopening after a deliberate
+  /// Cancella would otherwise silently re-fetch and reinstate the exact signature just removed —
+  /// see `DraftReports.technicianSignaturePrefillSuppressed`'s own doc comment for why this needs
+  /// to be a persisted column rather than in-memory state.
   Future<void> clearTechnicianSignature() async {
     if (state.technicianSignatureAllegatoId != null) {
       await _repo.deleteAllegato(state.technicianSignatureAllegatoId!);
     }
-    state = state.copyWith(clearTechnicianSignature: true);
+    state = state.copyWith(
+      clearTechnicianSignature: true,
+      technicianSignaturePrefillSuppressed: true,
+    );
     await _autosave();
   }
 
@@ -969,6 +1027,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       isAiAssisted: Value(state.isAiAssisted),
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
+      technicianSignaturePrefillSuppressed: Value(state.technicianSignaturePrefillSuppressed),
       stato: const Value('Bozza'),
       isLocalOnly: const Value(true),
     );

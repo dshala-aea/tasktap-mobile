@@ -70,26 +70,38 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   /// network fetch racing the local read. For a genuinely new rapportino, hydration is a fast
   /// no-op (no matching Drift row).
   ///
-  /// Still just a normal capture once the bytes are in hand — `saveTechnicianSignature` is the
-  /// same call `_SignatureBlock._captureSig` makes, so the result stays re-drawable/clearable via
-  /// the existing "Cancella" button. Never blocks the editor from opening: a fetch failure or a
-  /// missing saved signature both no-op silently (see `UserSignatureApiClient
-  /// .fetchSavedSignatureContent`'s own "never blocks" contract).
+  /// Two guards, both checked before *and* after the network fetch (a resumed draft's hydration,
+  /// a manual capture, or a deliberate Cancella can all complete while that fetch is in flight):
+  ///   - `technicianSignatureAllegatoId != null` — already captured, nothing to pre-fill.
+  ///   - `technicianSignaturePrefillSuppressed` — the technician explicitly cleared their
+  ///     signature via "Cancella" on *this* draft. `StepRiepilogo` is recreated (fresh
+  ///     `initState`) every time its containing bottom sheet reopens, so without this persisted
+  ///     flag, closing and reopening after a deliberate Cancella would silently re-fetch and
+  ///     reinstate the exact signature just removed. See
+  ///     `DraftReports.technicianSignaturePrefillSuppressed`'s own doc comment.
+  ///
+  /// Reuses `saveTechnicianSignature`'s save/render tail (`_SignatureBlock._captureSig` makes the
+  /// same call), but with `stampCapture: false`: nothing was actually signed here — no draw, no
+  /// tap, no signing act at all — so this deliberately does NOT claim a live GPS position or "just
+  /// captured" timestamp the way a real capture does. Doing so would stamp a pre-filled signature
+  /// as if it had just been signed at the device's current location, undermining the exact
+  /// authenticity purpose GPS + timestamp exist for. See `ReportEditorNotifier
+  /// .saveTechnicianSignature`'s own doc comment on `stampCapture`.
+  ///
+  /// Never blocks the editor from opening: a fetch failure or a missing saved signature both
+  /// no-op silently (see `UserSignatureApiClient.fetchSavedSignatureContent`'s own "never blocks"
+  /// contract).
   Future<void> _maybePrefillTechnicianSignature() async {
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     await notifier.ready;
     if (!mounted) return;
-    if (ref.read(reportEditorProvider(widget.reportId)).technicianSignatureAllegatoId != null) {
-      return;
-    }
+    if (_technicianPrefillBlocked()) return;
 
     final bytes = await ref.read(userSignatureApiClientProvider).fetchSavedSignatureContent();
     if (bytes == null || !mounted) return;
-    // Re-check after the fetch: a resumed draft's hydration or a manual capture could have
-    // completed while the network call was in flight.
-    if (ref.read(reportEditorProvider(widget.reportId)).technicianSignatureAllegatoId != null) {
-      return;
-    }
+    // Re-check after the fetch: a resumed draft's hydration, a manual capture, or a deliberate
+    // Cancella could all have completed while the network call was in flight.
+    if (_technicianPrefillBlocked()) return;
 
     final dir = await getApplicationDocumentsDirectory();
     final id = 'sig-tecnico-${DateTime.now().millisecondsSinceEpoch}';
@@ -99,7 +111,18 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
 
     await ref
         .read(reportEditorProvider(widget.reportId).notifier)
-        .saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
+        .saveTechnicianSignature(
+          allegatoId: id,
+          bytes: bytes,
+          localPath: file.path,
+          stampCapture: false,
+        );
+  }
+
+  bool _technicianPrefillBlocked() {
+    final state = ref.read(reportEditorProvider(widget.reportId));
+    return state.technicianSignatureAllegatoId != null ||
+        state.technicianSignaturePrefillSuppressed;
   }
 
   Future<void> _onInvia() async {
@@ -450,7 +473,7 @@ class _StatusCard extends StatelessWidget {
 
 // ── Signature block ───────────────────────────────────────────────────────────
 
-class _SignatureBlock extends ConsumerWidget {
+class _SignatureBlock extends ConsumerStatefulWidget {
   const _SignatureBlock({
     required this.label,
     required this.allegatoId,
@@ -466,8 +489,25 @@ class _SignatureBlock extends ConsumerWidget {
   final String reportId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final captured = localPath != null && allegatoId != null;
+  ConsumerState<_SignatureBlock> createState() => _SignatureBlockState();
+}
+
+class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
+  /// True from the moment the capture dialog hands back bytes (user tapped Conferma) until the
+  /// notifier's `saveCustomerSignature`/`saveTechnicianSignature` call resolves.
+  ///
+  /// That save includes an up-to-10s GPS fix attempt on a real device with permission already
+  /// granted (`LocationService.getCurrentPosition`'s own `timeLimit`) — before this flag existed,
+  /// the block showed nothing for that whole window: the technician/customer had just signed and
+  /// tapped Conferma, and the screen visibly did not react. Drives the loading UI below (mirrors
+  /// `PunchNotifier`'s `AsyncLoading()` during the same kind of wait) and disables re-tapping
+  /// "Acquisisci firma" mid-capture, so a second capture can't start with a different local
+  /// allegato id before the first save lands.
+  bool _capturing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final captured = widget.localPath != null && widget.allegatoId != null;
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.base),
@@ -479,7 +519,7 @@ class _SignatureBlock extends ConsumerWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.file(
-                File(localPath!),
+                File(widget.localPath!),
                 height: 120,
                 fit: BoxFit.contain,
                 errorBuilder: (ctx, e, _) =>
@@ -498,14 +538,15 @@ class _SignatureBlock extends ConsumerWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => _clearSig(ref),
+                  onPressed: () => _clearSig(),
                   style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
                   child: Text('Cancella', style: TextStyle(color: context.colors.red)),
                 ),
               ],
             ),
           ] else ...[
-            // Dashed empty area
+            // Dashed empty area — shows a spinner in place of the label while a capture's save is
+            // in flight (see `_capturing`'s own doc comment).
             Container(
               height: 120,
               decoration: BoxDecoration(
@@ -514,17 +555,27 @@ class _SignatureBlock extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
-                child: Text(
-                  'Firma $label non acquisita',
-                  style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
-                ),
+                child: _capturing
+                    ? SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(context.colors.inkMuted),
+                        ),
+                      )
+                    : Text(
+                        'Firma ${widget.label} non acquisita',
+                        style: TextStyle(color: context.colors.inkMuted, fontSize: 13),
+                      ),
               ),
             ),
             const SizedBox(height: 10),
             AppButton(
-              label: 'Acquisisci firma $label',
-              icon: const Icon(LucideIcons.penTool),
-              onPressed: () => _captureSig(context, ref),
+              label: _capturing ? 'Acquisizione in corso...' : 'Acquisisci firma ${widget.label}',
+              icon: _capturing ? null : const Icon(LucideIcons.penTool),
+              isLoading: _capturing,
+              onPressed: _capturing ? null : () => _captureSig(context),
             ),
           ],
         ],
@@ -532,7 +583,7 @@ class _SignatureBlock extends ConsumerWidget {
     );
   }
 
-  Future<void> _captureSig(BuildContext context, WidgetRef ref) async {
+  Future<void> _captureSig(BuildContext context) async {
     final mode = await showDialog<_SigMode>(
       context: context,
       builder: (_) => const _SigModeDialog(),
@@ -545,23 +596,36 @@ class _SignatureBlock extends ConsumerWidget {
     );
     if (bytes == null || bytes.isEmpty) return;
 
-    final dir = await getApplicationDocumentsDirectory();
-    final id =
-        '${isCustomer ? 'sig-cliente' : 'sig-tecnico'}-${DateTime.now().millisecondsSinceEpoch}';
-    final file = File('${dir.path}/$id.png');
-    await file.writeAsBytes(bytes);
+    setState(() => _capturing = true);
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final id =
+          '${widget.isCustomer ? 'sig-cliente' : 'sig-tecnico'}-'
+          '${DateTime.now().millisecondsSinceEpoch}';
+      final file = File('${dir.path}/$id.png');
+      await file.writeAsBytes(bytes);
 
-    final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    if (isCustomer) {
-      await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
-    } else {
-      await notifier.saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
-      // Reuse only makes sense for an actual drawn signature image — a typed one is a rendered
-      // name-and-checkmark stand-in, not a signature worth carrying forward to the next
-      // rapportino.
-      if (mode == _SigMode.draw && context.mounted) {
-        await _offerToSaveForReuse(context, ref, bytes);
+      final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
+      if (widget.isCustomer) {
+        await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
+      } else {
+        await notifier.saveTechnicianSignature(
+          allegatoId: id,
+          bytes: bytes,
+          localPath: file.path,
+        );
       }
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+
+    // Reuse only makes sense for an actual drawn technician signature image — a typed one is a
+    // rendered name-and-checkmark stand-in, not a signature worth carrying forward to the next
+    // rapportino. Deliberately outside the `_capturing` window above: the signature is already
+    // saved and rendered as captured at this point, so this optional follow-up prompt must not
+    // hold up that feedback.
+    if (!widget.isCustomer && mode == _SigMode.draw && context.mounted) {
+      await _offerToSaveForReuse(context, bytes);
     }
   }
 
@@ -572,7 +636,7 @@ class _SignatureBlock extends ConsumerWidget {
   /// rapportino's own editor — but unlike the GPS/pre-fill "never blocks" paths, this is a
   /// deliberate technician action ("save this for next time"), so a failure is surfaced with a
   /// SnackBar rather than swallowed silently.
-  Future<void> _offerToSaveForReuse(BuildContext context, WidgetRef ref, Uint8List bytes) async {
+  Future<void> _offerToSaveForReuse(BuildContext context, Uint8List bytes) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -587,14 +651,10 @@ class _SignatureBlock extends ConsumerWidget {
     if (confirm != true) return;
 
     final messenger = context.mounted ? ScaffoldMessenger.maybeOf(context) : null;
-    unawaited(_uploadForReuse(ref, bytes, messenger));
+    unawaited(_uploadForReuse(bytes, messenger));
   }
 
-  Future<void> _uploadForReuse(
-    WidgetRef ref,
-    Uint8List bytes,
-    ScaffoldMessengerState? messenger,
-  ) async {
+  Future<void> _uploadForReuse(Uint8List bytes, ScaffoldMessengerState? messenger) async {
     try {
       await ref.read(userSignatureApiClientProvider).uploadSignature(bytes);
     } catch (_) {
@@ -604,9 +664,9 @@ class _SignatureBlock extends ConsumerWidget {
     }
   }
 
-  Future<void> _clearSig(WidgetRef ref) async {
-    final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    if (isCustomer) {
+  Future<void> _clearSig() async {
+    final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
+    if (widget.isCustomer) {
       await notifier.clearCustomerSignature();
     } else {
       await notifier.clearTechnicianSignature();

@@ -9,6 +9,7 @@
 // No prior test exercised this path at all — `SignatureController`/`_SigDialog` had zero
 // test coverage before this file.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -22,6 +23,8 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:signature/signature.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -32,6 +35,19 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 const _reportId = 'draft-1';
 
 class _MockUserSignatureApiClient extends Mock implements UserSignatureApiClient {}
+
+/// A location service whose `getCurrentPosition()` never resolves until the test explicitly
+/// completes [gps] — stands in for a real device taking close to the full 10s GPS `timeLimit`
+/// (`LocationService.getCurrentPosition`) indoors. Never prompts (default
+/// `willPromptForPermission() => false`), so `_captureGpsSilently` proceeds straight to the real
+/// call instead of short-circuiting.
+class _SlowLocationService extends ILocationService {
+  _SlowLocationService(this.gps);
+  final Completer<GpsCoords?> gps;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() => gps.future;
+}
 
 class _FakePathProviderPlatform extends PathProviderPlatform with MockPlatformInterfaceMixin {
   late final Directory _dir = Directory.systemTemp.createTempSync('sig_test_');
@@ -60,7 +76,11 @@ class _StubUserSignatureApiClient implements UserSignatureApiClient {
   }
 }
 
-ProviderContainer _buildContainer(AppDatabase db, {UserSignatureApiClient? signatureClient}) {
+ProviderContainer _buildContainer(
+  AppDatabase db, {
+  UserSignatureApiClient? signatureClient,
+  ILocationService? locationService,
+}) {
   return ProviderContainer(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
@@ -75,6 +95,7 @@ ProviderContainer _buildContainer(AppDatabase db, {UserSignatureApiClient? signa
             insertedUserId: 'user-1',
           ),
           repo: DraftReportRepository(db),
+          locationService: locationService,
         ),
       ),
     ],
@@ -180,6 +201,90 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  testWidgets(
+    'signature block shows a loading state and disables the button while GPS capture is slow',
+    (tester) async {
+      final gps = Completer<GpsCoords?>();
+      container = _buildContainer(db, locationService: _SlowLocationService(gps));
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Acquisisci firma cliente'));
+        await tester.pump();
+
+        await tester.tap(find.text('Disegna'));
+        await tester.pump();
+
+        final canvasCenter = tester.getCenter(find.byType(Signature));
+        final gesture = await tester.startGesture(canvasCenter - const Offset(40, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+        await gesture.moveBy(const Offset(80, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+        await gesture.moveBy(const Offset(0, 30));
+        await tester.pump(const Duration(milliseconds: 16));
+        await gesture.up();
+        await tester.pump();
+
+        // Conferma hands bytes back and kicks off `_captureSig`'s save tail, which awaits
+        // `saveCustomerSignature` — and, in turn, `_captureGpsSilently()` — before this
+        // Completer is resolved. Nothing about that GPS call finishes on its own here.
+        await tester.tap(find.text('Conferma'));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+
+        // This is the regression check: before the fix, nothing distinguished this in-flight
+        // window from the plain "not yet captured" state — same dashed box, same enabled
+        // button, no feedback that Conferma had done anything at all.
+        expect(
+          find.text('Acquisisci firma cliente'),
+          findsNothing,
+          reason: 'the pre-capture button/label must not still be showing mid-capture',
+        );
+        expect(find.text('Firma acquisita'), findsNothing, reason: 'save has not resolved yet');
+        expect(
+          find.byType(CircularProgressIndicator),
+          findsNWidgets(2),
+          reason: 'one in the dashed placeholder, one inside the disabled AppButton (isLoading)',
+        );
+
+        final loadingButtons = tester
+            .widgetList<AppButton>(find.byWidgetPredicate((w) => w is AppButton && w.isLoading))
+            .toList();
+        expect(loadingButtons, hasLength(1));
+        expect(
+          loadingButtons.single.onPressed,
+          isNull,
+          reason: 'must not be possible to start a second capture mid-flight',
+        );
+
+        // The technician block is untouched by any of this — confirms the loading state is
+        // scoped to the block actually capturing, not a global flag.
+        expect(find.text('Acquisisci firma tecnico'), findsOneWidget);
+
+        // Now let the slow GPS fix land and confirm the loading state clears.
+        gps.complete((lat: 45.0, lng: 9.0, accuracy: 5.0));
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await tester.pump();
+      });
+
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Firma acquisita'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('saving a captured signature updates state and renders "Firma acquisita"', (
     tester,
@@ -483,7 +588,17 @@ void main() {
       final mockClient = _MockUserSignatureApiClient();
       when(() => mockClient.fetchSavedSignatureContent()).thenAnswer((_) async => savedBytes);
 
-      container = _buildContainer(db, signatureClient: mockClient);
+      // A fake that WOULD report a real device position if asked — this is the assertion that
+      // actually proves `stampCapture: false` works, not just that pre-fill still functions:
+      // without the flag, the pre-filled row would carry this exact coordinate as if the
+      // technician had just signed here.
+      final locationService = _SlowLocationService(Completer<GpsCoords?>())
+        ..gps.complete((lat: 45.4642, lng: 9.19, accuracy: 5.0));
+      container = _buildContainer(
+        db,
+        signatureClient: mockClient,
+        locationService: locationService,
+      );
       tester.view.physicalSize = const Size(400, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -515,6 +630,89 @@ void main() {
         () => File(state.technicianSignatureLocalPath!).readAsBytes(),
       );
       expect(onDisk, savedBytes);
+
+      // The actual Finding-2 assertion: a pre-filled signature must not be stamped with a live
+      // GPS position/timestamp as if it had just been captured, even though this device's
+      // location service would happily have returned one.
+      final repo = DraftReportRepository(db);
+      final allegati = await repo.getAllegati(_reportId);
+      final row = allegati.firstWhere((a) => a.id == state.technicianSignatureAllegatoId);
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'reopening the Riepilogo sheet after an explicit Cancella does not resurrect the '
+    'technician signature via pre-fill',
+    (tester) async {
+      final savedBytes = Uint8List.fromList(List.generate(16, (i) => i));
+      final firstMockClient = _MockUserSignatureApiClient();
+      when(() => firstMockClient.fetchSavedSignatureContent()).thenAnswer((_) async => savedBytes);
+
+      // First "open": container #1 pre-fills the technician signature, same as any other new
+      // rapportino, then the technician explicitly clears it via Cancella.
+      final firstContainer = _buildContainer(db, signatureClient: firstMockClient);
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_buildStep(firstContainer));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('Firma acquisita'), findsOneWidget, reason: 'pre-fill should have fired');
+
+      await firstContainer.read(reportEditorProvider(_reportId).notifier).clearTechnicianSignature();
+      await tester.pumpAndSettle();
+      expect(
+        firstContainer.read(reportEditorProvider(_reportId)).technicianSignatureAllegatoId,
+        isNull,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      firstContainer.dispose();
+
+      // Second "open": a brand-new container/notifier against the SAME underlying Drift draft —
+      // mirrors closing and reopening the bottom sheet (a fresh `_StepRiepilogoState` and a fresh
+      // `ReportEditorNotifier` instance for the same reportId, per the plan). A mock that WOULD
+      // return a saved signature if asked is the assertion that actually proves the guard works —
+      // not just that pre-fill still no-ops when there's nothing to fetch.
+      final secondMockClient = _MockUserSignatureApiClient();
+      when(
+        () => secondMockClient.fetchSavedSignatureContent(),
+      ).thenAnswer((_) async => savedBytes);
+
+      container = _buildContainer(db, signatureClient: secondMockClient);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await tester.pump();
+      });
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text('Firma tecnico non acquisita'),
+        findsOneWidget,
+        reason: 'pre-fill must not resurrect a signature the technician explicitly cleared',
+      );
+      expect(
+        container.read(reportEditorProvider(_reportId)).technicianSignatureAllegatoId,
+        isNull,
+      );
+      verifyNever(() => secondMockClient.fetchSavedSignatureContent());
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

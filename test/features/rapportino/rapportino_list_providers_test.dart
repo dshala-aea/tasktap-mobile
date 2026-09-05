@@ -52,6 +52,7 @@ DraftReport _draft({
   submissionState: submissionState,
   idempotencyKey: null,
   submissionError: null,
+  technicianSignaturePrefillSuppressed: false,
 );
 
 void main() {

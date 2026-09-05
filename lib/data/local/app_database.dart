@@ -394,6 +394,20 @@ class DraftReports extends Table {
   /// Human-readable error message from the last failed attempt (null when ok).
   TextColumn get submissionError => text().nullable()();
 
+  /// True once the technician has explicitly cleared their technician signature via the
+  /// "Cancella" button (`ReportEditorNotifier.clearTechnicianSignature`).
+  ///
+  /// `StepRiepilogo` is recreated (fresh `initState`) every time its containing bottom sheet is
+  /// reopened, and its pre-fill logic's only other guard (`technicianSignatureAllegatoId == null`)
+  /// is exactly the state Cancella itself produces — so without this column, closing and
+  /// reopening the sheet after an explicit Cancella would silently re-fetch and reinstate the
+  /// very signature the technician just removed. This flag survives that recreation (it's on the
+  /// persisted draft row, not in memory) and is checked — never auto-reset — by the pre-fill
+  /// logic before it fetches. It resets to false the moment a genuine new technician signature is
+  /// saved (drawn or typed), since that is itself a fresh, deliberate signing act.
+  BoolColumn get technicianSignaturePrefillSuppressed =>
+      boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -768,7 +782,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration {
@@ -934,6 +948,15 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(reportAllegati, reportAllegati.capturedLatitude);
           await m.addColumn(reportAllegati, reportAllegati.capturedLongitude);
           await m.addColumn(reportAllegati, reportAllegati.capturedAt);
+        }
+        if (from < 26) {
+          // See DraftReports.technicianSignaturePrefillSuppressed's own doc comment. Client-
+          // authored only (set locally by Cancella, read locally by the pre-fill guard), never
+          // delta-synced: no syncCursorGeneration bump needed.
+          await m.addColumn(
+            draftReports,
+            draftReports.technicianSignaturePrefillSuppressed,
+          );
         }
       },
     );

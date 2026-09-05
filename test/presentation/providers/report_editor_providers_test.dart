@@ -588,6 +588,60 @@ void main() {
       },
     );
 
+    test(
+      'saveTechnicianSignature with stampCapture:false records no GPS position or capture '
+      'timestamp, even when a real position is available — this is what the technician-signature '
+      'pre-fill uses, since nothing was actually just signed',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-prefill',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-tech-prefill.png',
+          stampCapture: false,
+        );
+
+        expect(notifier.state.technicianSignatureAllegatoId, 'sig-tech-prefill');
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-tech-prefill');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNull);
+      },
+    );
+
+    test(
+      'saveCustomerSignature with stampCapture:false records no GPS position or capture '
+      'timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-prefill',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-cust-prefill.png',
+          stampCapture: false,
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-prefill');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNull);
+      },
+    );
+
     test('clearCustomerSignature removes allegatoId from state', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
@@ -629,6 +683,65 @@ void main() {
         expect(reopenedNotifier.state.customerSignatureLocalPath, '/tmp/sig-cust-1.png');
         expect(reopenedNotifier.state.technicianSignatureAllegatoId, 'sig-tech-1');
         expect(reopenedNotifier.state.technicianSignatureLocalPath, '/tmp/sig-tech-1.png');
+      },
+    );
+
+    test(
+      'clearTechnicianSignature marks technicianSignaturePrefillSuppressed, and it survives '
+      'a fresh notifier instance against the same draft (simulates closing/reopening the '
+      'Riepilogo sheet after an explicit Cancella)',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (firstNotifier, _) = await _makeEditor(db);
+
+        await firstNotifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: Uint8List.fromList([1, 2, 3]),
+          localPath: '/tmp/sig-tech-1.png',
+        );
+        expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isFalse);
+
+        await firstNotifier.clearTechnicianSignature();
+        expect(firstNotifier.state.technicianSignatureAllegatoId, isNull);
+        expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isTrue);
+
+        // Simulates app restart / closing+reopening the bottom sheet: a brand-new notifier
+        // instance hydrating from the same persisted draft, not the same in-memory state —
+        // exactly what `StepRiepilogo`'s pre-fill guard needs to survive.
+        final (reopenedNotifier, _) = await _makeEditor(db);
+
+        expect(reopenedNotifier.state.technicianSignatureAllegatoId, isNull);
+        expect(
+          reopenedNotifier.state.technicianSignaturePrefillSuppressed,
+          isTrue,
+          reason: 'must survive a fresh notifier instance, not just live in memory',
+        );
+      },
+    );
+
+    test(
+      'saveTechnicianSignature resets technicianSignaturePrefillSuppressed after a fresh, '
+      'real signature',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, _) = await _makeEditor(db);
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-tech-1.png',
+        );
+        await notifier.clearTechnicianSignature();
+        expect(notifier.state.technicianSignaturePrefillSuppressed, isTrue);
+
+        // A genuine new signing act (drawn/typed) is itself a deliberate decision that
+        // supersedes any earlier Cancella-driven suppression.
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-2',
+          bytes: Uint8List.fromList([2]),
+          localPath: '/tmp/sig-tech-2.png',
+        );
+        expect(notifier.state.technicianSignaturePrefillSuppressed, isFalse);
       },
     );
   });
