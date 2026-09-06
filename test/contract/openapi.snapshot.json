@@ -9483,6 +9483,366 @@
         }
       }
     },
+    "/api/report-templates/{key}/header-image": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Sets this template\u0027s header image, replacing any previous one. Creates the config\n    row with defaults first if this is the very first customization for this template.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Removes this template\u0027s header image.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/header-image/{allegatoId}/content": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Serves a template\u0027s header image by redirecting to a freshly minted, short-lived\n    storage link. Keyed by allegatoId, not the template key \u2014 see\n    AttachmentService.ContentPath\u0027s ReportTemplateHeaderImage case for why.",
+        "parameters": [
+          {
+            "name": "allegatoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/{key}/footer-image": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Sets this template\u0027s footer image, replacing any previous one. Creates the config\n    row with defaults first if this is the very first customization for this template.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Removes this template\u0027s footer image.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/footer-image/{allegatoId}/content": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Serves a template\u0027s footer image by redirecting to a freshly minted, short-lived\n    storage link. Keyed by allegatoId, not the template key \u2014 see\n    AttachmentService.ContentPath\u0027s ReportTemplateFooterImage case for why.",
+        "parameters": [
+          {
+            "name": "allegatoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/role-permissions/catalogue": {
       "get": {
         "tags": [
@@ -15512,7 +15872,10 @@
           "sections",
           "materiali",
           "signatures",
-          "footerText"
+          "footerText",
+          "headerText",
+          "headerImageAllegatoId",
+          "footerImageAllegatoId"
         ],
         "type": "object",
         "properties": {
@@ -15533,6 +15896,26 @@
               "null",
               "string"
             ]
+          },
+          "headerText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "headerImageAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "footerImageAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "The Classic template\u0027s config, as exposed over the wire (GET response / PUT body)."
@@ -22083,13 +22466,23 @@
       },
       "SectionOptionsDto": {
         "required": [
-          "order"
+          "order",
+          "labels"
         ],
         "type": "object",
         "properties": {
           "order": {
             "type": "array",
             "items": {
+              "type": "string"
+            }
+          },
+          "labels": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
               "type": "string"
             }
           }
@@ -23379,6 +23772,24 @@
         },
         "description": "Which materiali columns print, and in what order, as exposed over the wire."
       },
+      "TemplateImageResponse": {
+        "required": [
+          "allegatoId",
+          "contentUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "allegatoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contentUrl": {
+            "type": "string",
+            "description": "API route serving the bytes \u2014 never a storage key or a signed URL."
+          }
+        },
+        "description": "A template image, as returned by its upload endpoint."
+      },
       "TenantProvisionPayload": {
         "required": [
           "companyName"
@@ -24044,13 +24455,6 @@
               "string"
             ],
             "description": "Font family for documents and the office UI. Empty string reverts to the default."
-          },
-          "reportFooter": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Legal footer printed on customer-facing PDFs. Empty string clears it."
           },
           "faviconUrl": {
             "type": [
@@ -26388,7 +26792,8 @@
           "Draft",
           "Submitted",
           "Approved",
-          "Rejected"
+          "Rejected",
+          "Imported"
         ],
         "description": "Approval workflow state for a WorkLogs entry (\u0060WorkLog\u0060, \u0060CantiereWorkLog\u0060,\n\u0060TicketWorkLog\u0060). Draft (default, freely editable) \u2192 Submitted (raises the\nWorkLogs module\u0027s \u0060WorkLogSubmittedIntegrationEvent\u0060) \u2192 Approved or Rejected.\nOnly Draft\u2192Submitted and Submitted\u2192(Approved|Rejected) are legal transitions; anything\nelse throws \u0060TaskTapAPI.Core.Exceptions.DomainRuleException\u0060."
       },
