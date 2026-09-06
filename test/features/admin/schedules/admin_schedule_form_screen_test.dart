@@ -388,6 +388,49 @@ void main() {
       expect(body['staffIds'], '[]');
       await teardown(tester);
     });
+
+    // Regression: nothing compared start/end time before saving — an end time at or before the
+    // start time was silently accepted, with no client-side feedback either way.
+    testWidgets('blocks save when end time is not after start time', (tester) async {
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              activityDate: DateTime.utc(2026, 6, 21),
+              timeStartMinutes: 600, // 10:00
+              timeEndMinutes: 480, // 08:00 — before start
+              userId: 'tech-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Manutenzione',
+              description: '',
+            ),
+          );
+      when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-2')).thenAnswer(
+        (_) async => _ok({
+          'userId': 'tech-1',
+          'teamLeadId': null,
+          'squadraId': null,
+          'assignees': <dynamic>[],
+        }, '/api/schedules/sched-2'),
+      );
+
+      await openForm(tester, scheduleId: 'sched-2');
+      await tapSubmitButton(tester, 'Salva modifiche');
+
+      verifyNever(
+        () => mockDio.put<dynamic>(
+          any(),
+          queryParameters: any(named: 'queryParameters'),
+          data: any(named: 'data'),
+        ),
+      );
+      expect(find.textContaining('successivo'), findsOneWidget);
+      await teardown(tester);
+    });
   });
 
   group('conflict check', () {

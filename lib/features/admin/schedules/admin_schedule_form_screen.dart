@@ -221,6 +221,14 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       showAppToast(context, message: 'Seleziona una sede', tone: ToastTone.warning);
       return;
     }
+    if (_timeOfDayToMinutes(_endTime) <= _timeOfDayToMinutes(_startTime)) {
+      showAppToast(
+        context,
+        message: "L'orario di fine deve essere successivo all'orario di inizio",
+        tone: ToastTone.warning,
+      );
+      return;
+    }
     if (!ensureOnlineOrWarn(context, ref)) return;
 
     setState(() => _isSaving = true);

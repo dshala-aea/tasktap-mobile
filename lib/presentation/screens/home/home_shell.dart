@@ -24,7 +24,7 @@ import '../../../data/timbratura/work_log_reconciler.dart';
 
 /// The main app shell with the 5-tab floating-pill bottom navigation.
 ///
-/// Hosts: Dashboard / Ticket / Timbra / Calendario / Altro.
+/// Hosts: Dashboard / Ticket / Cantieri / Calendario / Altro.
 /// Uses [StatefulNavigationShell] to preserve each branch's state.
 ///
 /// Sync triggers:
