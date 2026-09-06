@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -41,6 +42,50 @@ class _FakeAdminApiClient extends AdminApiClient {
   Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({
     bool activeOnly = true,
   }) async => _users;
+}
+
+/// Unlike [_FakeAdminApiClient], this fake's `fetchSquadraDetail` result actually changes after
+/// `removeSquadraMember`/`addSquadraMember` succeed — the exact condition needed to prove
+/// `adminSquadraDetailProvider` is genuinely re-fetched, not just left showing whatever the first
+/// fetch returned.
+class _StatefulAdminApiClient extends AdminApiClient {
+  _StatefulAdminApiClient(this._membri) : super(Dio());
+
+  List<Map<String, dynamic>> _membri;
+  int removeCalls = 0;
+  int addCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>?> fetchSquadraDetail(String id) async => {
+    'squadra': {'id': id, 'nome': 'Squadra Nord'},
+    'membri': _membri,
+  };
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({
+    bool activeOnly = true,
+  }) async => const [];
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchTechnicians() async => [
+    {'id': 'u2', 'displayName': 'Luigi Bianchi'},
+  ];
+
+  @override
+  Future<void> removeSquadraMember(String squadraId, String userId) async {
+    removeCalls++;
+    _membri = _membri.where((m) => m['userId'] != userId).toList();
+  }
+
+  @override
+  Future<void> addSquadraMember(
+    String squadraId, {
+    required String userId,
+    int ruolo = SquadraRuolo.membro,
+  }) async {
+    addCalls++;
+    _membri = [..._membri, {'userId': userId, 'ruolo': ruolo}];
+  }
 }
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
@@ -222,6 +267,83 @@ void main() {
 
       expect(find.textContaining('Ultimo accesso'), findsNothing);
       expect(find.text('Membro'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('refresh after mutating actions', () {
+    // Regression: adminSquadraDetailProvider was a plain FutureProvider.autoDispose.family with
+    // no invalidation anywhere in this screen — removing/adding a member succeeded on the server
+    // but the list kept showing the pre-mutation membri until the admin left and re-entered.
+
+    testWidgets('removing a member refreshes the list instead of leaving the stale row', (
+      tester,
+    ) async {
+      final api = _StatefulAdminApiClient([
+        {'userId': 'u1', 'ruolo': 0},
+      ]);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [adminApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            home: AdminSquadraDetailScreen(squadra: {'id': 'sq-1', 'nome': 'Squadra Nord'}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Membro non sincronizzato'), findsOneWidget);
+
+      await tester.tap(find.byIcon(LucideIcons.userMinus));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rimuovi'));
+      await tester.pumpAndSettle();
+
+      expect(api.removeCalls, 1);
+      // If the provider were never invalidated, this would still find the row — the fetch that
+      // populated it was never re-run, so the widget tree would be unchanged.
+      expect(find.text('Membro non sincronizzato'), findsNothing);
+      expect(find.text('Nessun membro'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('adding a member refreshes the list instead of leaving it invisible', (
+      tester,
+    ) async {
+      final api = _StatefulAdminApiClient(const []);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [adminApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            home: AdminSquadraDetailScreen(squadra: {'id': 'sq-1', 'nome': 'Squadra Nord'}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun membro'), findsOneWidget);
+
+      await tester.tap(find.bySemanticsLabel('Aggiungi membro'));
+      await tester.pumpAndSettle();
+      // Open the technician dropdown, then pick the one entry the fake exposes.
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Luigi Bianchi').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aggiungi'));
+      await tester.pumpAndSettle();
+
+      expect(api.addCalls, 1);
+      // If the provider were never invalidated, this would still show the empty state — the new
+      // member would exist server-side but never appear on this screen.
+      expect(find.text('Nessun membro'), findsNothing);
+      expect(find.text('Membro non sincronizzato'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
 import '../admin_api_client.dart';
+import 'admin_report_list_screen.dart' show adminReportsProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -177,9 +178,14 @@ class AdminReportDetailScreen extends ConsumerWidget {
           await api.fatturaReport(reportId);
           break;
       }
+      // Popping alone does not refresh anything — the list screen underneath stays mounted with
+      // its already-fetched data, so it kept showing the pre-transition stato until a manual
+      // pull-to-refresh. Invalidate the whole family: this screen doesn't know which stato filter
+      // the list currently has applied, and the affected report could match any of them (or none,
+      // if the transition just moved it out of the current filter).
+      ref.invalidate(adminReportsProvider);
       if (context.mounted) {
         showAppToast(context, message: 'Stato aggiornato', tone: ToastTone.success);
-        // Pop to refresh list
         Navigator.of(context).pop();
       }
     } catch (e) {

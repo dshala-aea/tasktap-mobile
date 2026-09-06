@@ -133,7 +133,15 @@ class _SquadraDetailBody extends ConsumerWidget {
                 icon: LucideIcons.pencil,
                 label: 'Modifica squadra',
                 glass: true,
-                onTap: () => context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra),
+                // Awaited so a saved edit is reflected the moment the admin pops back here —
+                // without this, the fire-and-forget push left the header/detail card showing
+                // pre-edit values until the admin left and re-entered the screen.
+                onTap: () async {
+                  await context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra);
+                  if (context.mounted) {
+                    ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String));
+                  }
+                },
               ),
             ],
           ),
@@ -237,8 +245,12 @@ class _SquadraDetailBody extends ConsumerWidget {
     );
     if (confirmed == true && context.mounted) {
       try {
-        final api = ProviderScope.containerOf(context).read(adminApiClientProvider);
+        final container = ProviderScope.containerOf(context);
+        final api = container.read(adminApiClientProvider);
         await api.removeSquadraMember(squadra['id'] as String, userId);
+        // Without this, the member list keeps showing the just-removed row until the admin
+        // leaves and re-enters this screen — nothing else refetches adminSquadraDetailProvider.
+        container.invalidate(adminSquadraDetailProvider(squadra['id'] as String));
         if (context.mounted) {
           showAppToast(context, message: 'Membro rimosso', tone: ToastTone.success);
         }
@@ -304,6 +316,11 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
     try {
       await widget.api.addSquadraMember(widget.squadraId, userId: _selectedUserId!, ruolo: _ruolo);
       if (mounted) {
+        // Without this, the new member is invisible on the detail screen behind this sheet
+        // until the admin leaves and re-enters it — nothing else refetches this provider.
+        ProviderScope.containerOf(
+          context,
+        ).invalidate(adminSquadraDetailProvider(widget.squadraId));
         showAppToast(context, message: 'Membro aggiunto', tone: ToastTone.success);
         Navigator.of(context).pop();
       }
