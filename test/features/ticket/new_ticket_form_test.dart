@@ -481,6 +481,39 @@ void main() {
     });
 
     testWidgets(
+      'the default status is the one flagged isDefault, not the first row SQLite happens to '
+      'return',
+      (tester) async {
+        // setUp already inserted status id 1 ("Aperto") with isDefault: false (the schema's own
+        // column default). Insert a second status, flagged isDefault, with a HIGHER id — so it is
+        // NOT the first row a no-ORDER-BY query returns. Before the fix, `_applyDefaultStatus`
+        // picked `statusMap.entries.firstOrNull`, which — for a freshly-inserted table with no
+        // deletes — is SQLite's rowid order, i.e. id 1 ("Aperto"), regardless of which status is
+        // actually flagged as the tenant's default. This proves the fix reads `isDefault` instead.
+        await db
+            .into(db.ticketStatuses)
+            .insert(
+              TicketStatusesCompanion.insert(
+                id: const Value(2),
+                tenantId: 'tenant-1',
+                name: 'Assegnato',
+                isDefault: const Value(true),
+              ),
+            );
+
+        await tester.pumpWidget(buildLauncher(isOnline: false));
+        await tester.pumpAndSettle();
+        await fillWizardAndReachRiepilogo(tester);
+        await tapCreaTicket(tester);
+
+        final rows = await db.select(db.pendingTickets).get();
+        expect(rows.single.statusId, 2);
+
+        await flushSnackBarTimer(tester);
+      },
+    );
+
+    testWidgets(
       'a ticket created offline survives and is sent once the queue is flushed on reconnect',
       (tester) async {
         await tester.pumpWidget(buildLauncher(isOnline: false));

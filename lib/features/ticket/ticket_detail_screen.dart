@@ -1819,6 +1819,11 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
       _report('Elenco stati non disponibile. Attendi la sincronizzazione.');
       return;
     }
+    // Map iteration order is whatever SQLite happens to return, not workflow
+    // order — sort by id so the sheet lists statuses in a stable, predictable
+    // sequence instead of shuffling on every reload.
+    final orderedStatuses = statuses.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
 
     final chosen = await showModalBottomSheet<MapEntry<int, String>>(
       context: context,
@@ -1854,7 +1859,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                 ],
               ),
             ),
-            for (final entry in statuses.entries)
+            for (final entry in orderedStatuses)
               ListRow(
                 title: entry.value,
                 strapped: entry.key == widget.ticket.statusId,

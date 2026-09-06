@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/widgets/widgets.dart';
+import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'steps/step_assegnazione.dart';
@@ -43,7 +44,8 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   NewTicketFormState _formState = const NewTicketFormState();
   bool _isSubmitting = false;
 
-  late final ProviderSubscription<AsyncValue<Map<int, String>>> _statusListener;
+  late final ProviderSubscription<AsyncValue<List<TicketStatuse>>>
+  _statusListener;
 
   int get _stepIndex => _FormStep.values.indexOf(_step);
   bool get _isFirst => _step == _FormStep.clienteSede;
@@ -62,7 +64,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   void initState() {
     super.initState();
     _statusListener = ref.listenManual(
-      ticketStatusMapProvider,
+      ticketStatusesProvider,
       (previous, next) => next.whenData(_applyDefaultStatus),
       fireImmediately: true,
     );
@@ -74,15 +76,21 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
     super.dispose();
   }
 
-  void _applyDefaultStatus(Map<int, String> statusMap) {
+  void _applyDefaultStatus(List<TicketStatuse> statuses) {
     if (_formState.statusId != null) return;
-    // We don't have isDefault in the map, but the first entry from the
-    // query is typically the default. Alternatively, we can read it from a
-    // dedicated provider. For now, pick the first status as default.
-    final defaultEntry = statusMap.entries.firstOrNull;
-    if (defaultEntry == null) return;
+    if (statuses.isEmpty) return;
+    // Pick the status actually flagged as default server-side — not the
+    // first row returned, which is an arbitrary SQLite ordering with no
+    // guarantee of matching the tenant's intended default (could even be a
+    // status flagged isClosed, silently creating a ticket that's already
+    // "closed"). Fall back to the first non-closed status if none is
+    // flagged default, and only then to the first status of any kind.
+    final defaultStatus =
+        statuses.where((s) => s.isDefault).firstOrNull ??
+        statuses.where((s) => !s.isClosed).firstOrNull ??
+        statuses.first;
     setState(() {
-      _formState = _formState.copyWith(statusId: defaultEntry.key);
+      _formState = _formState.copyWith(statusId: defaultStatus.id);
     });
   }
 
