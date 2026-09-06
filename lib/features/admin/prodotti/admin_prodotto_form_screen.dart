@@ -13,6 +13,7 @@ import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
+import 'admin_prodotto_list_screen.dart' show adminProdottiAssistenzaProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -236,6 +237,12 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
       }
 
       unawaited(ref.read(syncProvider.notifier).performSync());
+
+      // Prodotti has no local Drift mirror to sync — performSync above does nothing for this
+      // screen. Without this invalidation, the list kept showing pre-save data until a manual
+      // pull-to-refresh, which could plausibly read as "the save failed" and invite a duplicate
+      // resubmission.
+      ref.invalidate(adminProdottiAssistenzaProvider);
 
       if (mounted) {
         showAppToast(

@@ -55,7 +55,17 @@ class AdminMagazzinoDetailScreen extends ConsumerWidget {
           icon: LucideIcons.pencil,
           tooltip: 'Modifica',
           onPressed: () async {
-            await context.push<bool>('/altro/magazzino/magazzini/${mag.id}/modifica', extra: mag);
+            final saved = await context.push<bool>(
+              '/altro/magazzino/magazzini/${mag.id}/modifica',
+              extra: mag,
+            );
+            // This screen holds a static snapshot passed via `extra`, not a reactive fetch — it
+            // has no way to show the edit it was just used to make. The form already correctly
+            // refreshes the list behind this screen (magazziniProvider), so pop to it rather than
+            // sit here still showing pre-edit values until the admin backs out manually.
+            if (saved == true && context.mounted) {
+              context.pop();
+            }
           },
         ),
       ),

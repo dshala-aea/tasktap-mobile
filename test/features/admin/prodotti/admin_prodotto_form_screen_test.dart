@@ -13,7 +13,7 @@
 //     (no local Drift mirror for contracts, same shape as Squadre/Commesse elsewhere in admin).
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' hide isNull, isNotNull;
+import 'package:drift/drift.dart' hide isNull, isNotNull, Column;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,6 +26,8 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_form_screen.dart';
+import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_list_screen.dart'
+    show adminProdottiAssistenzaProvider;
 
 class MockDio extends Mock implements Dio {}
 
@@ -97,7 +99,11 @@ void main() {
 
   tearDown(() async => db.close());
 
-  Widget buildHarness({Map<String, dynamic>? prodotto}) {
+  Widget buildHarness({
+    Map<String, dynamic>? prodotto,
+    List<Override> extraOverrides = const [],
+    WidgetBuilder? persistentWatcher,
+  }) {
     final router = GoRouter(
       initialLocation: '/',
       routes: [
@@ -124,8 +130,17 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
         isOnlineProvider.overrideWithValue(true),
+        ...extraOverrides,
       ],
-      child: MaterialApp.router(routerConfig: router),
+      child: MaterialApp.router(
+        routerConfig: router,
+        // Mounted above the router's own Navigator, so it survives the push to '/form' — stands
+        // in for a real list screen that stays mounted underneath a pushed detail/form route.
+        builder: persistentWatcher == null
+            ? null
+            : (context, child) =>
+                  Column(children: [persistentWatcher(context), Expanded(child: child!)]),
+      ),
     );
   }
 
@@ -186,6 +201,54 @@ void main() {
       expect(captured['locationId'], 'loc-1');
       expect(captured['codice'], 'PROD-001');
       expect(captured['contrattoId'], 'contr-1');
+      await teardown(tester);
+    });
+
+    // Regression: `_save()` only ever called `performSync()` (the Drift sync trigger — a no-op
+    // for prodotti, which has no local mirror). adminProdottiAssistenzaProvider was never
+    // invalidated, so the list kept showing pre-save data until a manual pull-to-refresh — an
+    // admin could plausibly read that as "the save failed" and resubmit, creating a duplicate.
+    testWidgets('creating a prodotto invalidates the list provider, not just performSync', (
+      tester,
+    ) async {
+      var fetchCalls = 0;
+      await tester.binding.setSurfaceSize(const Size(800, 2400));
+      await tester.pumpWidget(
+        buildHarness(
+          extraOverrides: [
+            adminProdottiAssistenzaProvider.overrideWith((ref) async {
+              fetchCalls++;
+              return const <Map<String, dynamic>>[];
+            }),
+          ],
+          persistentWatcher: (context) => Consumer(
+            builder: (context, ref, _) {
+              ref.watch(adminProdottiAssistenzaProvider);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apri form'));
+      await tester.pumpAndSettle();
+      final fetchesBeforeSave = fetchCalls;
+      expect(fetchesBeforeSave, 1);
+
+      await tester.enterText(find.byType(TextFormField).first, 'Caldaia');
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sede Milano').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crea prodotto'));
+      await tester.pumpAndSettle();
+
+      expect(fetchCalls, greaterThan(fetchesBeforeSave));
       await teardown(tester);
     });
 
