@@ -840,6 +840,15 @@ class AdminApiClient {
     return pagedItems(res.data);
   }
 
+  /// `GET /api/prodottoassistenza/{id}` (`ProdottoAssistenzaController.GetById`) — resolves a
+  /// single prodotto by id regardless of which customer it belongs to, unlike
+  /// [fetchProdottiAssistenza], which requires scoping by customer. Needed wherever only the id
+  /// is in hand (e.g. a contract's `prodottoAssistenzaId`, with no customer context loaded).
+  Future<Map<String, dynamic>?> fetchProdottoAssistenzaById(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza/$id');
+    return res.data;
+  }
+
   /// [code]/[category]/[unitOfMeasure]/[purchasePrice]/[salePrice] are the commercial fields
   /// (W6b Task 6 migration `AddProdottoAssistenzaCommercialFields`, Gap 1 of the feature audit);
   /// [marca]/[modello]/[tipo]/[dataInstallazione]/[ultimaManutenzione]/[prossimaManutenzione]/

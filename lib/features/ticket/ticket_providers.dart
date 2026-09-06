@@ -234,3 +234,17 @@ final commessaByIdProvider = FutureProvider.autoDispose
       final api = ref.watch(adminApiClientProvider);
       return api.fetchCommessaById(commessaId);
     });
+
+/// The prodotto assistenza a contract is tied to — keyed by `prodottoAssistenzaId`, same
+/// by-id/no-local-mirror reasoning as [commessaByIdProvider]/[contractByIdProvider]. The contract
+/// detail screen only has the id (not the customer it belongs to), so this uses
+/// [AdminApiClient.fetchProdottoAssistenzaById] rather than the customer-scoped
+/// `fetchProdottiAssistenza` the contract/prodotto FORM screens use.
+final prodottoAssistenzaByIdProvider = FutureProvider.autoDispose
+    .family<Map<String, dynamic>?, String>((ref, prodottoId) async {
+      if (!ref.watch(isOnlineProvider)) {
+        throw const TicketDetailOfflineException();
+      }
+      final api = ref.watch(adminApiClientProvider);
+      return api.fetchProdottoAssistenzaById(prodottoId);
+    });

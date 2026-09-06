@@ -77,7 +77,7 @@ void main() {
 
   tearDown(() async => db.close());
 
-  Widget buildHarness() {
+  Widget buildHarness({Map<String, dynamic>? contractOverride}) {
     final router = GoRouter(
       initialLocation: '/',
       routes: [
@@ -94,7 +94,8 @@ void main() {
         ),
         GoRoute(
           path: '/detail',
-          builder: (context, state) => const AdminContractDetailScreen(contract: contract),
+          builder: (context, state) =>
+              AdminContractDetailScreen(contract: contractOverride ?? contract),
         ),
       ],
     );
@@ -109,9 +110,9 @@ void main() {
     );
   }
 
-  Future<void> openDetail(WidgetTester tester) async {
+  Future<void> openDetail(WidgetTester tester, {Map<String, dynamic>? contractOverride}) async {
     await tester.binding.setSurfaceSize(const Size(800, 1800));
-    await tester.pumpWidget(buildHarness());
+    await tester.pumpWidget(buildHarness(contractOverride: contractOverride));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Apri dettaglio'));
     await tester.pumpAndSettle();
@@ -136,6 +137,28 @@ void main() {
       expect(find.text('Sì'), findsOneWidget);
       expect(find.text('30 giorni'), findsOneWidget);
       expect(find.text('Pagamento a 30gg'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    // Regression: prodottoAssistenzaId was shown verbatim as a raw GUID — resolved the same way
+    // the cantiere/ticket detail screens resolve commessaId (live fetch, no local mirror exists).
+    testWidgets('resolves prodottoAssistenzaId to the product name, not the raw GUID', (
+      tester,
+    ) async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>('/api/prodottoassistenza/prod-1'),
+      ).thenAnswer(
+        (_) async =>
+            _ok({'id': 'prod-1', 'name': 'Caldaia a condensazione'}, '/api/prodottoassistenza/prod-1'),
+      );
+
+      await openDetail(
+        tester,
+        contractOverride: {...contract, 'prodottoAssistenzaId': 'prod-1'},
+      );
+
+      expect(find.text('Caldaia a condensazione'), findsOneWidget);
+      expect(find.text('prod-1'), findsNothing);
       await teardown(tester);
     });
   });

@@ -13,6 +13,7 @@ import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
+import '../../ticket/ticket_providers.dart' show prodottoAssistenzaByIdProvider;
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -58,6 +59,17 @@ class AdminContractDetailScreen extends ConsumerWidget {
         : 'Nessuna data fine';
     final priceLabel = price != null ? '€${price.toStringAsFixed(2)}' : '—';
     final freqLabel = '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
+
+    // Was showing the raw prodottoAssistenzaId GUID verbatim — resolved the same way the
+    // cantiere/ticket detail screens resolve commessaId: live-fetched, no local mirror exists.
+    final prodottoAsync = prodottoAssistenzaId == null || prodottoAssistenzaId.isEmpty
+        ? null
+        : ref.watch(prodottoAssistenzaByIdProvider(prodottoAssistenzaId));
+    final prodottoLabel = prodottoAsync?.when(
+      data: (p) => p?['name'] as String? ?? '—',
+      loading: () => 'Caricamento…',
+      error: (e, _) => '—',
+    );
     final isActive = contract['isActive'] as bool? ?? true;
 
     return Scaffold(
@@ -126,9 +138,7 @@ class AdminContractDetailScreen extends ConsumerWidget {
                           KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
                           KeyVal(
                             label: 'Prodotto in assistenza',
-                            value: prodottoAssistenzaId != null && prodottoAssistenzaId.isNotEmpty
-                                ? prodottoAssistenzaId
-                                : '—',
+                            value: prodottoLabel ?? '—',
                           ),
                           KeyVal(
                             label: 'Descrizione',
