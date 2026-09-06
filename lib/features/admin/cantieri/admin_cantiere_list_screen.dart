@@ -109,7 +109,7 @@ class _AdminCantiereListBody extends ConsumerWidget {
                 ),
               ),
             )
-          else if (filtered.isEmpty)
+          else if (allCantieri.isEmpty)
             SliverToBoxAdapter(
               child: UnavailableState(
                 icon: LucideIcons.hardHat,
@@ -119,6 +119,16 @@ class _AdminCantiereListBody extends ConsumerWidget {
                     'dispositivo. I cantieri creati con il pulsante + vengono '
                     'salvati sul server ma non compariranno in questa lista '
                     'finché la sincronizzazione non sarà collegata.',
+              ),
+            )
+          else if (filtered.isEmpty)
+            // A search with no matches is not a sync problem — showing the "not synced" message
+            // here sent a technician chasing a nonexistent sync issue over a typo in the search box.
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.hardHat,
+                title: 'Nessun risultato',
+                body: 'Nessun cantiere corrisponde alla ricerca.',
               ),
             )
           else

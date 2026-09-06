@@ -93,12 +93,22 @@ class _ContractListBodyState extends ConsumerState<_ContractListBody> {
               onChanged: (q) => setState(() => _query = q),
             ),
           ),
-          if (filtered.isEmpty)
+          if (widget.contracts.isEmpty)
             SliverToBoxAdapter(
               child: EmptyState(
                 icon: LucideIcons.fileSignature,
                 title: 'Nessun contratto',
                 body: 'Crea un nuovo contratto con il pulsante +.',
+              ),
+            )
+          else if (filtered.isEmpty)
+            // A search with no matches is a different situation from having no contracts at
+            // all — the "create one" prompt above doesn't apply here.
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.fileSignature,
+                title: 'Nessun risultato',
+                body: 'Nessun contratto corrisponde alla ricerca.',
               ),
             )
           else

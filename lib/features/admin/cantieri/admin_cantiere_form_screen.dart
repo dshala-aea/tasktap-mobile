@@ -111,10 +111,14 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
   }
 
   Future<void> _pickEndDate() async {
+    // Constrained to not precede the start date, once one is set — matches
+    // admin_contract_form_screen.dart's own end-date picker, which already does this.
+    final firstDate = _startDate ?? DateTime.now().subtract(const Duration(days: 365));
+    final initialDate = _endDate != null && !_endDate!.isBefore(firstDate) ? _endDate! : firstDate;
     final picked = await showDatePicker(
       context: context,
-      initialDate: _endDate ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      initialDate: initialDate,
+      firstDate: firstDate,
       lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
     );
     if (picked != null) setState(() => _endDate = picked);
