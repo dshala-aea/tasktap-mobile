@@ -1,8 +1,13 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
@@ -22,8 +27,13 @@ AuthUser _fakeUser({String id = 'user-1', String token = 'tok'}) => AuthUser(
   expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
 );
 
-ProviderContainer _makeContainer(MockAuthRepository repo) {
-  return ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repo)]);
+ProviderContainer _makeContainer(MockAuthRepository repo, {AppDatabase? db}) {
+  return ProviderContainer(
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo),
+      if (db != null) appDatabaseProvider.overrideWithValue(db),
+    ],
+  );
 }
 
 void main() {
@@ -31,6 +41,8 @@ void main() {
   late StreamController<AuthUser?> authStreamController;
 
   setUp(() {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    SharedPreferences.setMockInitialValues({});
     repo = MockAuthRepository();
     authStreamController = StreamController<AuthUser?>.broadcast();
     when(() => repo.authStateChanges).thenAnswer((_) => authStreamController.stream);
@@ -183,12 +195,44 @@ void main() {
     test('signOut calls repository signOut', () async {
       when(() => repo.signOut()).thenAnswer((_) async {});
 
-      final container = _makeContainer(repo);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
 
       await container.read(loginProvider.notifier).signOut();
 
       verify(() => repo.signOut()).called(1);
+    });
+
+    // Regression: sign-out used to leave the entire local Drift DB and every SharedPreferences
+    // key in place — on this shared/rotating-device field-service app, the next person to sign in
+    // (possibly a different tenant) would see the previous account's full cached dataset until an
+    // eventual sync happened to overwrite it. Both must be genuinely empty afterward, not just
+    // "not obviously broken."
+    test('signOut wipes the local database and clears SharedPreferences', () async {
+      when(() => repo.signOut()).thenAnswer((_) async {});
+
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.into(db.customers).insert(
+        CustomersCompanion.insert(
+          id: 'cust-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          companyName: 'Acme Srl',
+        ),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('autenticazioneBiometrica', true);
+
+      final container = _makeContainer(repo, db: db);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signOut();
+
+      expect(await db.select(db.customers).get(), isEmpty);
+      expect(prefs.getBool('autenticazioneBiometrica'), isNull);
     });
 
     // Regression: logout used to never unregister this device's FCM token, so a signed-out
@@ -209,7 +253,9 @@ void main() {
         when(() => repo.currentUser).thenReturn(_fakeUser(token: 'real-token'));
         when(() => repo.signOut()).thenAnswer((_) async {});
 
-        final container = _makeContainer(repo);
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        final container = _makeContainer(repo, db: db);
         addTearDown(container.dispose);
 
         await container.read(loginProvider.notifier).signOut();

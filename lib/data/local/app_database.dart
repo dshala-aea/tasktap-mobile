@@ -1012,6 +1012,25 @@ class AppDatabase extends _$AppDatabase {
       );
     });
   }
+
+  /// Deletes every row from every table — the entire synced/offline dataset for whichever
+  /// account was last signed in on this device. Must run on sign-out: this is a shared/rotating-
+  /// device field-service app (van tablets, rotating technicians), and without this the next
+  /// person to sign in — possibly a different tenant entirely — would see the previous account's
+  /// full cached tickets/customers/cantieri/notifications until an eventual sync happened to
+  /// overwrite each row (upsert-based sync never clears rows that no longer exist for the new
+  /// tenant, so some could persist indefinitely).
+  ///
+  /// Deletes rows rather than deleting the underlying sqlite file: this connection stays open and
+  /// usable immediately afterward (e.g. for a subsequent sign-in on the same app session), with no
+  /// risk of racing a file delete against an open native handle.
+  Future<void> wipeAllData() async {
+    await transaction(() async {
+      for (final table in allTables) {
+        await delete(table).go();
+      }
+    });
+  }
 }
 
 // ── Connection factory ────────────────────────────────────────────────────────

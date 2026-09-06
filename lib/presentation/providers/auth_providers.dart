@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
+import '../../data/sync/sync_service.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
@@ -63,9 +65,10 @@ class LoginState {
 
 /// Notifier that drives the login screen's loading + error state.
 class LoginNotifier extends StateNotifier<LoginState> {
-  LoginNotifier(this._repo) : super(const LoginState());
+  LoginNotifier(this._repo, this._ref) : super(const LoginState());
 
   final IAuthRepository _repo;
+  final Ref _ref;
 
   Future<void> signIn() async {
     state = const LoginState(isLoading: true);
@@ -109,6 +112,14 @@ class LoginNotifier extends StateNotifier<LoginState> {
       }
     }
     await _repo.signOut();
+
+    // This is a shared/rotating-device field-service app (van tablets, rotating technicians) —
+    // leaving the local Drift DB and SharedPreferences populated after sign-out would let the
+    // next person to sign in on this device (possibly a different tenant entirely) see the
+    // previous account's full cached tickets/customers/cantieri/notifications and settings.
+    await _ref.read(appDatabaseProvider).wipeAllData();
+    await (await SharedPreferences.getInstance()).clear();
+
     state = const LoginState();
   }
 
@@ -118,5 +129,5 @@ class LoginNotifier extends StateNotifier<LoginState> {
 }
 
 final loginProvider = StateNotifierProvider.autoDispose<LoginNotifier, LoginState>((ref) {
-  return LoginNotifier(ref.watch(authRepositoryProvider));
+  return LoginNotifier(ref.watch(authRepositoryProvider), ref);
 });
