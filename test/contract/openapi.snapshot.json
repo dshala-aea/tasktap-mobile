@@ -18654,13 +18654,19 @@
             "format": "int32"
           },
           "fit": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "align": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "Sizing/fit/alignment for one uploaded image, as exposed over the wire."
+        "description": "Sizing/fit/alignment for one uploaded image, as exposed over the wire. \u0060Fit\u0060/\n    \u0060Align\u0060 are nullable so a partial payload (e.g. just \u0060width\u0060) degrades to the model\u0027s\n    own defaults (Contain/Center) instead of throwing \u2014 see \u0060FromImageStyleDto\u0060."
       },
       "InterventoDettaglioDto": {
         "required": [
@@ -22561,7 +22567,7 @@
               "object"
             ],
             "additionalProperties": {
-              "$ref": "#/components/schemas/SectionStyleOptionsDto"
+              "$ref": "#/components/schemas/SectionStyleOverrideDto"
             }
           }
         },
@@ -22603,7 +22609,57 @@
             "type": "string"
           }
         },
-        "description": "Section-level presentation, as exposed over the wire."
+        "description": "Section-level presentation, as exposed over the wire \u2014 the always-concrete shape used\n    for the global \u0060style\u0060 field. See SectionStyleOverrideDto for the sparse,\n    every-field-nullable shape used for per-section overrides."
+      },
+      "SectionStyleOverrideDto": {
+        "required": [
+          "borderEnabled",
+          "borderColor",
+          "borderWeight",
+          "backgroundColor",
+          "spacing",
+          "divider"
+        ],
+        "type": "object",
+        "properties": {
+          "borderEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "borderColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "borderWeight": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "backgroundColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "spacing": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "divider": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Section-level presentation OVERRIDE, as exposed over the wire. Every field nullable \u2014\n    absent/null means \u0022not overridden, inherit from the global \u0060style\u0060.\u0022 Mirrors\n    SectionStyleOverride at the\n    model layer."
       },
       "SelfRegistrationRequest": {
         "required": [
