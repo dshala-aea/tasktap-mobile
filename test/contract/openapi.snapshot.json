@@ -15875,7 +15875,10 @@
           "footerText",
           "headerText",
           "headerImageAllegatoId",
-          "footerImageAllegatoId"
+          "footerImageAllegatoId",
+          "style",
+          "headerImageStyle",
+          "footerImageStyle"
         ],
         "type": "object",
         "properties": {
@@ -15916,6 +15919,36 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "style": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SectionStyleOptionsDto"
+              }
+            ]
+          },
+          "headerImageStyle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageStyleOptionsDto"
+              }
+            ]
+          },
+          "footerImageStyle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ImageStyleOptionsDto"
+              }
+            ]
           }
         },
         "description": "The Classic template\u0027s config, as exposed over the wire (GET response / PUT body)."
@@ -18593,6 +18626,41 @@
       "IFormFile": {
         "type": "string",
         "format": "binary"
+      },
+      "ImageStyleOptionsDto": {
+        "required": [
+          "width",
+          "height",
+          "fit",
+          "align"
+        ],
+        "type": "object",
+        "properties": {
+          "width": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "height": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fit": {
+            "type": "string"
+          },
+          "align": {
+            "type": "string"
+          }
+        },
+        "description": "Sizing/fit/alignment for one uploaded image, as exposed over the wire."
       },
       "InterventoDettaglioDto": {
         "required": [
@@ -22467,7 +22535,8 @@
       "SectionOptionsDto": {
         "required": [
           "order",
-          "labels"
+          "labels",
+          "styleOverrides"
         ],
         "type": "object",
         "properties": {
@@ -22485,9 +22554,56 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "styleOverrides": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SectionStyleOptionsDto"
+            }
           }
         },
         "description": "Which sections print, and in what order, as exposed over the wire."
+      },
+      "SectionStyleOptionsDto": {
+        "required": [
+          "borderEnabled",
+          "borderColor",
+          "borderWeight",
+          "backgroundColor",
+          "spacing",
+          "divider"
+        ],
+        "type": "object",
+        "properties": {
+          "borderEnabled": {
+            "type": "boolean"
+          },
+          "borderColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "borderWeight": {
+            "type": "string"
+          },
+          "backgroundColor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "spacing": {
+            "type": "string"
+          },
+          "divider": {
+            "type": "string"
+          }
+        },
+        "description": "Section-level presentation, as exposed over the wire."
       },
       "SelfRegistrationRequest": {
         "required": [
