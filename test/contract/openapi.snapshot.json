@@ -11282,7 +11282,7 @@
         "tags": [
           "Tenants"
         ],
-        "summary": "List all tenants (admin only).",
+        "summary": "List all tenants (platform admin only \u2014 a regular tenant_admin only ever manages their\nown tenant, and this lists every tenant on the platform).",
         "parameters": [
           {
             "name": "Page",
