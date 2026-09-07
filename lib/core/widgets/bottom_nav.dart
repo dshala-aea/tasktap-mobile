@@ -129,8 +129,12 @@ class AppBottomNav extends StatelessWidget {
                   final availableWidth = constraints.maxWidth;
                   final inactiveCount = tabs.length - 1;
 
-                  // "Comfortable" is a fixed, generous inactive width, used whenever there's
-                  // space to spare.
+                  // Threshold for the "plenty of room" branch below — NOT a width that gets
+                  // applied. Inactive tabs always split whatever's left after the active tab
+                  // (see `inactiveWidth` below), so the bar fills its full available width in
+                  // every branch, exactly like this widget's original layout — a fixed cap here
+                  // previously left a trailing empty gap on any phone wider than this threshold,
+                  // which is most real phones.
                   const comfortableInactiveWidth = 48.0;
 
                   // Hard floor for an inactive tab under real space pressure (icon 18px + 12px
@@ -151,26 +155,24 @@ class AppBottomNav extends StatelessWidget {
                         );
 
                   double activeWidth;
-                  double inactiveWidth;
 
                   if (tabs.length <= 1) {
                     activeWidth = availableWidth;
-                    inactiveWidth = 0.0;
                   } else {
                     final target = math.max(_preferredActiveWidth, requiredActiveWidth);
                     final roomyTotal = target + inactiveCount * comfortableInactiveWidth;
 
                     if (availableWidth >= roomyTotal) {
-                      // Plenty of room: everyone gets their preferred/comfortable size.
+                      // Plenty of room: active gets its target; inactive tabs split the rest
+                      // below, which on a wide phone is MORE than comfortableInactiveWidth each
+                      // — that's intentional, it's what fills the bar edge to edge.
                       activeWidth = target;
-                      inactiveWidth = comfortableInactiveWidth;
                     } else {
                       // Squeeze: shrink inactive tabs toward their hard floor FIRST, so the
                       // active tab keeps whatever it actually needs to show its full label.
                       final minTotal = requiredActiveWidth + inactiveCount * minInactiveWidth;
                       if (availableWidth >= minTotal) {
                         activeWidth = requiredActiveWidth;
-                        inactiveWidth = (availableWidth - requiredActiveWidth) / inactiveCount;
                       } else {
                         // Mathematically impossible to show the full label without pushing
                         // inactive tabs below their hard floor. This does not happen on any
@@ -186,7 +188,6 @@ class AppBottomNav extends StatelessWidget {
                           );
                           return true;
                         }());
-                        inactiveWidth = minInactiveWidth;
                         activeWidth = math.max(
                           0.0,
                           availableWidth - inactiveCount * minInactiveWidth,
@@ -194,6 +195,12 @@ class AppBottomNav extends StatelessWidget {
                       }
                     }
                   }
+
+                  // Always fills availableWidth exactly: whatever's left after the active tab is
+                  // split evenly among the inactive ones, in every branch above.
+                  final inactiveWidth = inactiveCount > 0
+                      ? (availableWidth - activeWidth) / inactiveCount
+                      : 0.0;
 
                   return Row(
                     children: [
