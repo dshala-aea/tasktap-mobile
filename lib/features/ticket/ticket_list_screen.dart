@@ -156,10 +156,15 @@ class _TicketListBody extends ConsumerWidget {
               child: _PendingTicketsSection(pendingTickets: pendingTickets),
             ),
           SliverToBoxAdapter(
-            child: AppSearchBar(
-              controller: searchCtrl,
-              hint: 'Cerca ticket…',
-              onChanged: onQueryChanged,
+            child: Padding(
+              padding: const EdgeInsets.only(
+                top: AppSpacing.pagePadding,
+              ),
+              child: AppSearchBar(
+                controller: searchCtrl,
+                hint: 'Cerca ticket…',
+                onChanged: onQueryChanged,
+              ),
             ),
           ),
           SliverToBoxAdapter(
