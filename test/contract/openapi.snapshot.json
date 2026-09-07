@@ -15941,7 +15941,9 @@
           "footerImageAllegatoId",
           "style",
           "headerImageStyle",
-          "footerImageStyle"
+          "footerImageStyle",
+          "header",
+          "footer"
         ],
         "type": "object",
         "properties": {
@@ -16010,6 +16012,26 @@
               },
               {
                 "$ref": "#/components/schemas/ImageStyleOptionsDto"
+              }
+            ]
+          },
+          "header": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HeaderFooterOptionsDto"
+              }
+            ]
+          },
+          "footer": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HeaderFooterOptionsDto"
               }
             ]
           }
@@ -18542,6 +18564,25 @@
           }
         },
         "description": "One cross-warehouse stock row. The \u003Ci\u003EsottoScorta\u003C/i\u003E flag is computed server-side."
+      },
+      "HeaderFooterOptionsDto": {
+        "required": [
+          "layout",
+          "lines"
+        ],
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TextLineDto"
+            }
+          }
+        },
+        "description": "A header or footer block, as exposed over the wire."
       },
       "HealthCheckResult": {
         "type": "object",
@@ -24095,6 +24136,55 @@
           }
         },
         "description": "Payload sent by an already-authenticated user to claim a tenant.\nEmail \u002B firstName \u002B lastName are derived server-side from the JWT, not this body."
+      },
+      "TextLineDto": {
+        "required": [
+          "kind",
+          "field",
+          "text",
+          "fontSize",
+          "weight",
+          "italic",
+          "color",
+          "align"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "field": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fontSize": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "string"
+          },
+          "italic": {
+            "type": "boolean"
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "align": {
+            "type": "string"
+          }
+        },
+        "description": "One header/footer line, as exposed over the wire. \u0060Kind\u0060 selects which of\n    \u0060Field\u0060/\u0060Text\u0060 is meaningful \u2014 exactly one must be set, validated in\n    \u0060FromTextLineDto\u0060. Never an expression: \u0060Field\u0060 is one of a fixed 5-value catalogue,\n    \u0060Text\u0060 is a plain string."
       },
       "Ticket": {
         "type": "object",
