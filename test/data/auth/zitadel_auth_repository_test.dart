@@ -297,6 +297,82 @@ void main() {
     });
   });
 
+  group('refreshSession — single-flight (reconnect-burst race regression)', () {
+    // Regression for the reported bug: on reconnect, ~10 independent watchers each fire an API
+    // call simultaneously (see home_shell.dart's onReconnect registrations). If the access token
+    // expired while offline, every one of those requests 401s and each independently called
+    // refreshSession() before this fix — all redeeming the SAME (soon-to-rotate) refresh token
+    // concurrently. Zitadel rotates refresh tokens on use, so only one of those concurrent
+    // redemptions can succeed; the rest come back as an ambiguous failure that _mapError can't
+    // always classify as a clean SessionExpired, leaving the session stuck 401ing forever with no
+    // sign-out and no redirect to /login. Single-flighting refreshSession() means the whole burst
+    // shares ONE token exchange — no concurrent redemption of the same refresh token, no race.
+    test('concurrent callers share a single token exchange, not one each', () async {
+      final repo = ZitadelAuthRepository(appAuth: appAuth, storage: storage, restore: false);
+      store[_refreshTokenKey] = 'rt-shared';
+
+      var tokenCallCount = 0;
+      when(() => appAuth.token(any())).thenAnswer((_) async {
+        tokenCallCount++;
+        // Delay so the concurrent calls below genuinely overlap in time, the way a real reconnect
+        // burst's near-simultaneous 401s would.
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        return TokenResponse(
+          'access-new',
+          'rt-new',
+          DateTime.now().toUtc().add(const Duration(hours: 1)),
+          _fakeIdToken(sub: 'u1', email: 'tech@tasktap.io', name: 'Tecnico'),
+          'Bearer',
+          null,
+          null,
+        );
+      });
+
+      final results = await Future.wait([
+        repo.refreshSession(),
+        repo.refreshSession(),
+        repo.refreshSession(),
+      ]);
+
+      expect(tokenCallCount, 1, reason: 'only one token exchange should occur for the whole burst');
+      for (final result in results) {
+        expect(result.user?.id, 'u1');
+        expect(result.user?.accessToken, 'access-new');
+        expect(result.failure, isNull);
+      }
+      expect(store[_refreshTokenKey], 'rt-new');
+    });
+
+    test('a later, independent call after the first exchange completes triggers a new one', () async {
+      final repo = ZitadelAuthRepository(appAuth: appAuth, storage: storage, restore: false);
+      store[_refreshTokenKey] = 'rt-shared';
+
+      var tokenCallCount = 0;
+      when(() => appAuth.token(any())).thenAnswer((_) async {
+        tokenCallCount++;
+        return TokenResponse(
+          'access-$tokenCallCount',
+          'rt-$tokenCallCount',
+          DateTime.now().toUtc().add(const Duration(hours: 1)),
+          _fakeIdToken(sub: 'u1', email: 'tech@tasktap.io', name: 'Tecnico'),
+          'Bearer',
+          null,
+          null,
+        );
+      });
+
+      await repo.refreshSession();
+      await repo.refreshSession();
+
+      expect(
+        tokenCallCount,
+        2,
+        reason: 'the single-flight guard must clear once a refresh settles, not permanently '
+            'dedupe every future refresh',
+      );
+    });
+  });
+
   group('signIn', () {
     test('persists the refresh token and a cached identity snapshot', () async {
       when(() => appAuth.authorizeAndExchangeCode(any())).thenAnswer(

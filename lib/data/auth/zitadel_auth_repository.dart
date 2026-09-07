@@ -165,8 +165,27 @@ class ZitadelAuthRepository implements IAuthRepository {
     }
   }
 
+  /// The in-flight refresh, if any — shared by every concurrent caller instead of each starting
+  /// its own token exchange. See [refreshSession] for why this matters.
+  Future<({AuthUser? user, AuthFailure? failure})>? _inFlightRefresh;
+
   @override
-  Future<({AuthUser? user, AuthFailure? failure})> refreshSession() async {
+  Future<({AuthUser? user, AuthFailure? failure})> refreshSession() {
+    // Single-flight guard: on reconnect, ~10 independent watchers (home_shell.dart) each fire an
+    // API call at once. If the access token expired while offline, every one of those requests
+    // 401s and — without this guard — each independently called this method, all redeeming the
+    // SAME refresh token concurrently. Zitadel rotates refresh tokens on use, so only one of those
+    // concurrent redemptions can actually succeed; the rest come back as an ambiguous failure that
+    // `_mapError` cannot always classify as a clean `SessionExpired` (see its own doc comment), so
+    // `AuthInterceptor` never signs the user out and the session is left permanently 401ing with no
+    // redirect to `/login`. Coalescing concurrent callers onto ONE exchange removes the race
+    // entirely — there is never more than one redemption of a given refresh token at a time.
+    return _inFlightRefresh ??= _doRefreshSession().whenComplete(() {
+      _inFlightRefresh = null;
+    });
+  }
+
+  Future<({AuthUser? user, AuthFailure? failure})> _doRefreshSession() async {
     final refreshToken = (_current?.refreshToken.isNotEmpty ?? false)
         ? _current!.refreshToken
         : await _storage.read(key: _refreshTokenKey);
