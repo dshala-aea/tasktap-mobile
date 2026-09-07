@@ -3,10 +3,9 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
-
-/// Default tab icons (exposed so screens/tests need not import lucide directly).
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
+/// Default tab icons (exposed so screens/tests need not import lucide directly).
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
   static const IconData ticket = LucideIcons.ticket;
@@ -17,7 +16,10 @@ abstract final class AppBottomNavIcons {
 
 /// A single bottom-navigation tab descriptor.
 class AppBottomNavItem {
-  const AppBottomNavItem({required this.icon, required this.label});
+  const AppBottomNavItem({
+    required this.icon,
+    required this.label,
+  });
 
   final IconData icon;
   final String label;
@@ -28,6 +30,10 @@ class AppBottomNavItem {
 /// one deliberately-saturated accent in the system) marks the active tab as a flat fill — no
 /// blur, no gradient.
 ///
+/// The active tab expands horizontally to reveal its icon + complete label. The expansion is
+/// animated so switching tabs feels like the active pill moves rather than the entire navigation
+/// jumping between layouts.
+///
 /// This used to be Vetro: a frosted `BackdropFilter` bar with a tint→tintStrong gradient on the
 /// active pill. DESIGN.md's Il Documento system bans both (paper, not glass; a flat accent fill,
 /// not a gradient) the same way it does for every other surface in the app.
@@ -36,7 +42,12 @@ class AppBottomNavItem {
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
 /// ```
 class AppBottomNav extends StatelessWidget {
-  const AppBottomNav({super.key, required this.currentIndex, required this.onTap, this.items});
+  const AppBottomNav({
+    super.key,
+    required this.currentIndex,
+    required this.onTap,
+    this.items,
+  });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -45,35 +56,56 @@ class AppBottomNav extends StatelessWidget {
   final List<AppBottomNavItem>? items;
 
   static const List<AppBottomNavItem> defaultItems = [
-    AppBottomNavItem(icon: AppBottomNavIcons.dashboard, label: 'Dashboard'),
-    AppBottomNavItem(icon: AppBottomNavIcons.ticket, label: 'Ticket'),
-    AppBottomNavItem(icon: AppBottomNavIcons.cantieri, label: 'Cantieri'),
-    AppBottomNavItem(icon: AppBottomNavIcons.calendario, label: 'Calendario'),
-    AppBottomNavItem(icon: AppBottomNavIcons.altro, label: 'Altro'),
+    AppBottomNavItem(
+      icon: AppBottomNavIcons.dashboard,
+      label: 'Dashboard',
+    ),
+    AppBottomNavItem(
+      icon: AppBottomNavIcons.ticket,
+      label: 'Ticket',
+    ),
+    AppBottomNavItem(
+      icon: AppBottomNavIcons.cantieri,
+      label: 'Cantieri',
+    ),
+    AppBottomNavItem(
+      icon: AppBottomNavIcons.calendario,
+      label: 'Calendario',
+    ),
+    AppBottomNavItem(
+      icon: AppBottomNavIcons.altro,
+      label: 'Altro',
+    ),
   ];
 
   /// Above this window width (a tablet/expanded window, not a phone in any orientation this app
-  /// otherwise targets) the shell switches to [_buildRail]. [HomeShell] checks the same constant
-  /// to decide whether this widget goes in `Scaffold.bottomNavigationBar` (phone) or a side `Row`
-  /// (wide) — the two must agree, or the shell would place a vertical rail into the bottom slot.
+  /// otherwise targets) the shell switches to [_buildRail].
   static const double wideBreakpoint = 600;
 
   @override
   Widget build(BuildContext context) {
     final tabs = items ?? defaultItems;
     final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
-    return wide ? _buildRail(context, tabs) : _buildBar(context, tabs);
+
+    return wide
+        ? _buildRail(context, tabs)
+        : _buildBar(context, tabs);
   }
 
-  /// Compact width (phone) — pixel-identical to this widget's pre-breakpoint implementation.
-  Widget _buildBar(BuildContext context, List<AppBottomNavItem> tabs) {
+  /// Compact width (phone).
+  ///
+  /// The active item receives substantially more horizontal space so its complete icon + label
+  /// can be displayed. Width changes are animated when the selected tab changes.
+  Widget _buildBar(
+    BuildContext context,
+    List<AppBottomNavItem> tabs,
+  ) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
-        // Shadow lives on this outer box, not the one BackdropFilter blurs — a BoxShadow paints
-        // outside its own bounds, and the ClipRRect around the blur would have silently clipped
-        // it away otherwise.
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
@@ -83,23 +115,52 @@ class AppBottomNav extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               color: context.colors.surface,
-              border: Border.all(color: context.colors.borderLight, width: 1),
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1,
+              ),
             ),
-            child: Builder(
-              builder: (context) {
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth = constraints.maxWidth;
+
+                  // The active tab needs enough room for labels such as "Calendario"
+                  // and "Dashboard" without truncation.
+                  //
+                  // The minimum inactive width keeps the icon comfortably tappable.
+                  const minInactiveWidth = 48.0;
+                  const preferredActiveWidth = 96.0;
+
+                  final inactiveCount = tabs.length - 1;
+
+                  final activeWidth = tabs.length <= 1
+                      ? availableWidth
+                      : availableWidth >=
+                              preferredActiveWidth +
+                                  (inactiveCount * minInactiveWidth)
+                          ? preferredActiveWidth
+                          : (availableWidth -
+                                  (inactiveCount * minInactiveWidth))
+                              .clamp(0.0, preferredActiveWidth);
+
+                  final remainingWidth = availableWidth - activeWidth;
+
+                  final inactiveWidth = inactiveCount > 0
+                      ? remainingWidth / inactiveCount
+                      : 0.0;
+
+                  return Row(
                     children: [
-                      // Flexible, so the bar fits the phone rather than the phone fitting the
-                      // bar. The tabs' natural width is padding + icon + the active label,
-                      // which came to two pixels more than a 5.9" screen has and drew the
-                      // striped overflow bar across the bottom of every screen. Turn the
-                      // system font size up and it is far more than two. Loose fit: a tab
-                      // still takes only what it needs when there is room.
                       for (var i = 0; i < tabs.length; i++)
-                        Flexible(
+                        _AnimatedNavSlot(
+                          width: i == currentIndex
+                              ? activeWidth
+                              : inactiveWidth,
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : AppRack.drawerOut,
                           child: _NavTab(
                             item: tabs[i],
                             active: i == currentIndex,
@@ -107,9 +168,9 @@ class AppBottomNav extends StatelessWidget {
                           ),
                         ),
                     ],
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -118,10 +179,11 @@ class AppBottomNav extends StatelessWidget {
   }
 
   /// ≥[wideBreakpoint] (tablet/expanded window) — same tabs, same flat-fill active-state, laid out
-  /// as a fixed vertical rail along the leading edge instead of a floating horizontal pill. Placed
-  /// by [HomeShell] in a `Row` beside the page content rather than `Scaffold.bottomNavigationBar`,
-  /// which only ever puts a widget at the bottom regardless of what that widget renders internally.
-  Widget _buildRail(BuildContext context, List<AppBottomNavItem> tabs) {
+  /// as a fixed vertical rail along the leading edge.
+  Widget _buildRail(
+    BuildContext context,
+    List<AppBottomNavItem> tabs,
+  ) {
     return SafeArea(
       right: false,
       child: Padding(
@@ -135,33 +197,63 @@ class AppBottomNav extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               color: context.colors.surface,
-              border: Border.all(color: context.colors.borderLight, width: 1),
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1,
+              ),
             ),
-            child: Builder(
-              builder: (context) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (var i = 0; i < tabs.length; i++)
-                        Padding(
-                          padding: EdgeInsets.only(bottom: i == tabs.length - 1 ? 0 : 14),
-                          child: _NavTab(
-                            item: tabs[i],
-                            active: i == currentIndex,
-                            onTap: () => onTap(i),
-                            vertical: true,
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < tabs.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: i == tabs.length - 1 ? 0 : 14,
+                      ),
+                      child: _NavTab(
+                        item: tabs[i],
+                        active: i == currentIndex,
+                        onTap: () => onTap(i),
+                        vertical: true,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Animated horizontal slot used by the phone bottom navigation.
+///
+/// Unlike [Expanded] with a changing `flex`, this animates the actual width continuously.
+class _AnimatedNavSlot extends StatelessWidget {
+  const _AnimatedNavSlot({
+    required this.width,
+    required this.duration,
+    required this.child,
+  });
+
+  final double width;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: duration,
+      curve: AppRack.slideOut,
+      width: width,
+      alignment: Alignment.center,
+      child: child,
     );
   }
 }
@@ -178,9 +270,7 @@ class _NavTab extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
 
-  /// The wide-window rail's orientation — icon-above-label instead of icon-beside-label. Same
-  /// tab, same active-state fill/logic either way; only the [Flex] direction and the padding
-  /// axis it needs change.
+  /// The wide-window rail's orientation — icon-above-label instead of icon-beside-label.
   final bool vertical;
 
   @override
@@ -189,10 +279,12 @@ class _NavTab extends StatelessWidget {
       item.label,
       maxLines: 1,
       softWrap: false,
-      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.visible,
       style: const TextStyle(
         fontFamily: 'Inter',
         fontSize: 12,
+        height: 1.0,
         fontWeight: FontWeight.w600,
         color: Colors.white,
       ),
@@ -202,54 +294,57 @@ class _NavTab extends StatelessWidget {
       button: true,
       selected: active,
       label: item.label,
-      // Stays a GestureDetector, unlike the rest of the app's press targets (see
-      // core/widgets/app_tappable.dart). The pill below animates its colour, padding and label
-      // on every selection change, so a tap is already answered — visibly and immediately, by a
-      // larger movement than a splash. Wrapping it in an AppTappable would hide the ink behind
-      // the AnimatedContainer's own fill anyway, and lose the animation to keep it.
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          // Both platforms require the reduced-motion guard: "Remove animations" on Android and
-          // Reduce Motion on iOS both surface as MediaQuery.disableAnimations, and a nav bar that
-          // keeps sliding through it is the single most noticeable place to ignore the setting.
-          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : AppRack.drawerOut,
           curve: AppRack.slideOut,
-          // 48dp, not 40 — this is the app's single global navigation control, tapped constantly
-          // by a gloved technician one-handed, and 40 sat under both the 44pt (iOS) and 48dp
-          // (Android) touch-target floors.
-          constraints: vertical
-              ? const BoxConstraints(minHeight: 48, minWidth: 48)
-              : const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(
+            minWidth: 48,
+            minHeight: 48,
+          ),
           padding: vertical
-              ? EdgeInsets.symmetric(horizontal: 10, vertical: active ? 10 : 12)
-              : EdgeInsets.symmetric(horizontal: active ? 14 : 12, vertical: 8),
+              ? EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: active ? 8 : 12,
+                )
+              : EdgeInsets.symmetric(
+                  horizontal: active ? 10 : 12,
+                  vertical: active ? 7 : 12,
+                ),
           decoration: BoxDecoration(
             color: active ? AppColors.Y : null,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Flex(
-            direction: vertical ? Axis.vertical : Axis.horizontal,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                item.icon,
-                size: 18,
-                // The active tab sits on its own saturated stamp-red fill regardless of theme, so
-                // its icon stays white either way. Inactive sits directly on the flipping flat
-                // sheet, so it reads `inkMuted` like every other secondary icon in the app.
-                color: active ? Colors.white : context.colors.inkMuted,
-              ),
-              if (active) ...[
-                vertical ? const SizedBox(height: 4) : const SizedBox(width: 8),
-                // The label is what gives when space runs out — an icon nobody can read is
-                // worse than a word that ends in an ellipsis, and the icon is what marks the
-                // tab.
-                vertical ? label : Flexible(child: label),
-              ],
-            ],
-          ),
+          child: active
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      item.icon,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 4),
+
+                    // Scale down only when absolutely necessary. The text itself is
+                    // never ellipsized or cropped, so "Calendario" remains readable.
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
+                      child: label,
+                    ),
+                  ],
+                )
+              : Icon(
+                  item.icon,
+                  size: 18,
+                  color: context.colors.inkMuted,
+                ),
         ),
       ),
     );

@@ -83,41 +83,6 @@ class IdPlateHeroComp extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              // The plate's readout line — a flat card over the accent band, numerals doing the
-              // talking. Was a Vetro glass panel; AppCard gives it the same flat sheet + hairline
-              // every other Documento secondary surface uses, its ink read through `context.colors`
-              // like any other card (the surrounding band, not this card, is the fixed element —
-              // see this file's own header comment).
-              AppCard(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: AppSpacing.base,
-                ),
-                // Scales down rather than overflowing, same treatment as _LiveClock in
-                // timbra_screen.dart: at large accessibility text sizes the two readouts'
-                // 32px numerals no longer fit side by side in the available width.
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _Readout(value: '$todayCount', label: 'JOB OGGI', accent: false),
-                      Container(
-                        width: 1,
-                        height: 32,
-                        margin: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                        color: context.colors.borderLight,
-                      ),
-                      _Readout(
-                        value: '$remaining',
-                        label: remaining == 1 ? 'DA FARE' : 'DA FARE',
-                        accent: remaining > 0,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
               if (child != null) ...[const SizedBox(height: AppSpacing.base), child!],
             ],
           ),
