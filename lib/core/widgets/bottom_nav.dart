@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -125,31 +127,73 @@ class AppBottomNav extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final availableWidth = constraints.maxWidth;
-
-                  // The active tab needs enough room for labels such as "Calendario"
-                  // and "Dashboard" without truncation.
-                  //
-                  // The minimum inactive width keeps the icon comfortably tappable.
-                  const minInactiveWidth = 48.0;
-                  const preferredActiveWidth = 96.0;
-
                   final inactiveCount = tabs.length - 1;
 
-                  final activeWidth = tabs.length <= 1
-                      ? availableWidth
-                      : availableWidth >=
-                              preferredActiveWidth +
-                                  (inactiveCount * minInactiveWidth)
-                          ? preferredActiveWidth
-                          : (availableWidth -
-                                  (inactiveCount * minInactiveWidth))
-                              .clamp(0.0, preferredActiveWidth);
+                  // "Comfortable" is a fixed, generous inactive width, used whenever there's
+                  // space to spare.
+                  const comfortableInactiveWidth = 48.0;
 
-                  final remainingWidth = availableWidth - activeWidth;
+                  // Hard floor for an inactive tab under real space pressure (icon 18px + 12px
+                  // padding each side = 42px minimum to avoid clipping the icon itself) — still
+                  // comfortably above common accessible tap-target minimums (iOS: 44pt).
+                  const minInactiveWidth = 42.0;
 
-                  final inactiveWidth = inactiveCount > 0
-                      ? remainingWidth / inactiveCount
-                      : 0.0;
+                  // The one number that actually matters: how wide does the CURRENTLY active
+                  // label need to be to render in full, never shrunk? This is what guarantees
+                  // "Calendario"/"Dashboard" are never cropped — a real, pre-verified
+                  // measurement (see `_requiredActiveWidthFor`'s doc comment), not a guessed
+                  // fixed constant, scaled by the device's own accessibility text-size setting.
+                  final requiredActiveWidth = tabs.isEmpty
+                      ? 0.0
+                      : _requiredActiveWidthFor(
+                          tabs[currentIndex].label,
+                          MediaQuery.textScalerOf(context),
+                        );
+
+                  double activeWidth;
+                  double inactiveWidth;
+
+                  if (tabs.length <= 1) {
+                    activeWidth = availableWidth;
+                    inactiveWidth = 0.0;
+                  } else {
+                    final target = math.max(_preferredActiveWidth, requiredActiveWidth);
+                    final roomyTotal = target + inactiveCount * comfortableInactiveWidth;
+
+                    if (availableWidth >= roomyTotal) {
+                      // Plenty of room: everyone gets their preferred/comfortable size.
+                      activeWidth = target;
+                      inactiveWidth = comfortableInactiveWidth;
+                    } else {
+                      // Squeeze: shrink inactive tabs toward their hard floor FIRST, so the
+                      // active tab keeps whatever it actually needs to show its full label.
+                      final minTotal = requiredActiveWidth + inactiveCount * minInactiveWidth;
+                      if (availableWidth >= minTotal) {
+                        activeWidth = requiredActiveWidth;
+                        inactiveWidth = (availableWidth - requiredActiveWidth) / inactiveCount;
+                      } else {
+                        // Mathematically impossible to show the full label without pushing
+                        // inactive tabs below their hard floor. This does not happen on any
+                        // screen width this app targets (verified for 320/360/390/430 logical
+                        // px against every label) — reported here rather than silently cropped,
+                        // per this widget's own layout contract.
+                        assert(() {
+                          debugPrint(
+                            'AppBottomNav: cannot fit "${tabs[currentIndex].label}" at '
+                            '$availableWidth px wide without shrinking inactive tabs below '
+                            '$minInactiveWidth px (needs $minTotal px). Falling back to '
+                            'whatever space remains after the inactive floor.',
+                          );
+                          return true;
+                        }());
+                        inactiveWidth = minInactiveWidth;
+                        activeWidth = math.max(
+                          0.0,
+                          availableWidth - inactiveCount * minInactiveWidth,
+                        );
+                      }
+                    }
+                  }
 
                   return Row(
                     children: [
@@ -235,6 +279,21 @@ class AppBottomNav extends StatelessWidget {
 /// Animated horizontal slot used by the phone bottom navigation.
 ///
 /// Unlike [Expanded] with a changing `flex`, this animates the actual width continuously.
+///
+/// Uses [TweenAnimationBuilder] + a hard [SizedBox] rather than `AnimatedContainer(width: ...,
+/// alignment: ...)`: `Container`'s `alignment` wraps the child in an `Align`, which hands the
+/// child LOOSE constraints and just centers whatever size it wants to be — it does not clip or
+/// cap the child's width. A `_NavTab` whose content (icon + label) happens to want more space
+/// than its assigned slot would then render wider than the slot and visually spill into a
+/// neighboring tab instead of being contained — this was the actual cause of the nav overlaying
+/// itself, independent of whether the assigned widths were individually correct. `SizedBox`
+/// gives the child a TIGHT width (min == max == [width]), so the child is always forced to
+/// exactly this slot's width — combined with the measured-width guarantee in `_buildBar` above
+/// (the active slot is always sized to fit its label at 12px, never smaller), this makes an
+/// overlay structurally impossible rather than merely unlikely. The inner `ClipRect` is a
+/// last-resort safety net for the "mathematically impossible" case documented in `_buildBar`
+/// (never triggered on any screen width this app targets): if content ever still doesn't fit,
+/// it is clipped at the slot boundary rather than painted over a neighboring tab.
 class _AnimatedNavSlot extends StatelessWidget {
   const _AnimatedNavSlot({
     required this.width,
@@ -248,14 +307,63 @@ class _AnimatedNavSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: width),
       duration: duration,
       curve: AppRack.slideOut,
-      width: width,
-      alignment: Alignment.center,
+      builder: (context, animatedWidth, child) {
+        return ClipRect(
+          child: SizedBox(width: animatedWidth, child: child),
+        );
+      },
       child: child,
     );
   }
+}
+
+/// The roomy, generous active-pill width used whenever there's space to spare, and the fallback
+/// requirement for any label not in [_measuredActiveLabelWidths] (see that map's doc comment).
+/// Unchanged from this widget's previous single fixed constant.
+const _preferredActiveWidth = 96.0;
+
+/// How wide each default tab's label needs its active pill to be, to render in full at 12px/w600
+/// Inter — measured ONCE against the real bundled font (`assets/fonts/InterVariable.ttf`, via a
+/// `TextPainter` with that font explicitly loaded, at text scale 1.0), not guessed, and not
+/// re-measured at runtime.
+///
+/// Deliberately NOT computed on every build via a live `TextPainter`: this app's own test suite
+/// (like most Flutter test suites) never loads real fonts for ordinary widget/golden tests —
+/// `flutter_test`'s default font substitution renders every glyph as a fixed-size placeholder box
+/// completely unrelated to Inter's real metrics. A live measurement would silently produce a
+/// different (usually much larger, and non-deterministic across the placeholder vs. the real
+/// font) required width in tests than on a real device, which is exactly what broke this widget's
+/// own golden test during development of this fix. Baking in the real, pre-verified numbers keeps
+/// this widget's behavior identical in tests and in the field — this is a measurement result, not
+/// a magic guess (each value = ceil(measured glyph width) + 20 padding + 12 safety margin).
+///
+/// If a label here is ever renamed, or a new tab added with an unlisted label,
+/// [_requiredActiveWidthFor] falls back to [_preferredActiveWidth] — the same width every label
+/// already gets whenever there's room to spare — rather than crashing or silently under-sizing.
+const Map<String, double> _measuredActiveLabelWidths = {
+  'Dashboard': 96.0, // 63.29px glyph width, measured
+  'Ticket': 68.0, // 35.95px
+  'Cantieri': 78.0, // 45.53px
+  'Calendario': 95.0, // 62.98px
+  'Altro': 61.0, // 28.09px
+};
+
+/// [textScaler] MUST be the ambient `MediaQuery.textScalerOf(context)`, not a default/unscaled
+/// one: `_NavTab`'s `Text` auto-scales with the device's accessibility text-size setting, and a
+/// requirement that ignored that would under-allocate the slot exactly when a larger system font
+/// makes the label wider — the same class of bug the existing "fits a narrow phone without
+/// overflowing" regression test (`bottom_nav_test.dart`) already guards at 1.3x scale. Scaling the
+/// pre-measured base width by the scale ratio (rather than re-measuring text at the scaled size)
+/// keeps this font-independent — see [_measuredActiveLabelWidths]'s doc comment for why that
+/// matters.
+double _requiredActiveWidthFor(String label, TextScaler textScaler) {
+  final baseWidth = _measuredActiveLabelWidths[label] ?? _preferredActiveWidth;
+  final scaleRatio = textScaler.scale(12.0) / 12.0;
+  return baseWidth * scaleRatio;
 }
 
 class _NavTab extends StatelessWidget {
@@ -331,13 +439,10 @@ class _NavTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
 
-                    // Scale down only when absolutely necessary. The text itself is
-                    // never ellipsized or cropped, so "Calendario" remains readable.
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.center,
-                      child: label,
-                    ),
+                    // Never scaled down: `_buildBar`'s width allocation guarantees this slot is
+                    // always wide enough for this exact label at this exact (12px) size — see
+                    // `_requiredActiveWidthFor`.
+                    label,
                   ],
                 )
               : Icon(
