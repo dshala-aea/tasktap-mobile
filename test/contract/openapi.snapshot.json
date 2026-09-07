@@ -8752,6 +8752,7 @@
           "Reports"
         ],
         "summary": "Controlla il rapportino (Inviato \u2192 Controllato). Solo ufficio/admin.",
+        "description": "Gated on \u0060RapportiniReportApprove\u0060, not \u0060RapportiniReportWrite\u0060 \u2014 Write is also\ngranted to Technician (they write their own reports), which would let a technician approve\ntheir own work. Approve is Office/Admin-only by default (\u0060DefaultPermissionMatrix\u0060),\nand \u2014 unlike the inline \u0060IsOfficeOrAdminAsync()\u0060 check this replaced \u2014 is resolvable\nfor a \u0060ServicePrincipal\u0060 via \u0060ServicePrincipalGrant\u0060, so an API key explicitly\ngranted this permission can call these endpoints. The old inline check only ever looked up\na human \u0060Users\u0060 row by external id, which no ServicePrincipal has, so it rejected\nevery API key unconditionally regardless of what it was granted.",
         "parameters": [
           {
             "name": "id",
@@ -8776,6 +8777,7 @@
           "Reports"
         ],
         "summary": "Segna il rapportino come fatturato (Controllato \u2192 Fatturato). Solo ufficio/admin.",
+        "description": "See Task\u0026lt;IActionResult\u0026gt; ReportsController.Controlla(Guid id)\u0027s remarks \u2014 same permission-gate correction.",
         "parameters": [
           {
             "name": "id",
@@ -8800,6 +8802,7 @@
           "Reports"
         ],
         "summary": "Respinge il rapportino (Inviato \u2192 Respinto), rimandandolo al tecnico. Solo ufficio/admin.",
+        "description": "See Task\u0026lt;IActionResult\u0026gt; ReportsController.Controlla(Guid id)\u0027s remarks \u2014 same permission-gate correction.",
         "parameters": [
           {
             "name": "id",
@@ -8824,6 +8827,7 @@
           "Reports"
         ],
         "summary": "Annulla il rapportino (Bozza/Inviato/Controllato \u2192 Annullato). Solo ufficio/admin. Un rapportino fatturato non pu\u00F2 essere annullato.",
+        "description": "See Task\u0026lt;IActionResult\u0026gt; ReportsController.Controlla(Guid id)\u0027s remarks \u2014 same permission-gate correction.",
         "parameters": [
           {
             "name": "id",
@@ -13783,6 +13787,50 @@
         }
       }
     },
+    "/api/WorkLog/{id}/admin-close": {
+      "post": {
+        "tags": [
+          "WorkLog"
+        ],
+        "summary": "Admin/supervisor force-close: closes ANY entry by id, regardless of owner. Clock-out is\notherwise entirely self-service (Task\u0026lt;IActionResult\u0026gt; WorkLogController.EndWork(EndWorkLogRequest? request = null) only ever closes the caller\u0027s own\nopen entry) with no server-side timeout or reconciliation \u2014 if a device dies or the app is\nforce-quit before clock-out, an entry stays open indefinitely with no other path to close\nit. Same elevated \u0060manage_settings\u0060-equivalent gate as Task\u0026lt;IActionResult\u0026gt; WorkLogController.Approve(Guid id)/\nTask\u0026lt;IActionResult\u0026gt; WorkLogController.Reject(Guid id).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCloseWorkLogRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCloseWorkLogRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminCloseWorkLogRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/WorkLog/{id}/submit": {
       "post": {
         "tags": [
@@ -14930,7 +14978,11 @@
         "description": "One running tracker."
       },
       "ActiveTrackerKind": {
-        "type": "integer",
+        "enum": [
+          "Attendance",
+          "Cantiere",
+          "Ticket"
+        ],
         "description": "What kind of time this is. The three are not interchangeable: attendance is the working day,\ncantiere is time on a site, ticket is time against a job."
       },
       "AddCantiereCrewAssignmentRequest": {
@@ -15098,6 +15150,17 @@
           }
         },
         "description": "Request body for adding a section to a draft."
+      },
+      "AdminCloseWorkLogRequest": {
+        "type": "object",
+        "properties": {
+          "endTime": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string",
+            "description": "The end-of-shift time-of-day to close the entry at (on its own \u0060WorkDate\u0060)."
+          }
+        },
+        "description": "Request model for an admin/supervisor force-close of another user\u0027s open entry."
       },
       "AiGenerateReportRequest": {
         "type": "object",
