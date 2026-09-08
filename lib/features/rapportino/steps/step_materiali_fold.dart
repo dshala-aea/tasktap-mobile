@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/catalog_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
@@ -209,7 +210,8 @@ class StepMaterialiFold extends ConsumerWidget {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
 
     final qtyCtrl = TextEditingController(text: '1');
-    final uomCtrl = TextEditingController();
+    // Closed vocabulary (catalog_constants.dart), not free text — null means "not set".
+    String? uom;
     String? selectedMaterialeId;
     String freeTextName = '';
     // AppLookupField only reads selectedId/initialText once, in initState — it doesn't watch
@@ -242,7 +244,7 @@ class StepMaterialiFold extends ConsumerWidget {
                       selectedMaterialeId = m.materialeId;
                       freeTextName = m.materialeId == null ? m.nome : '';
                       qtyCtrl.text = m.quantita.toString();
-                      if (m.unitaMisura?.isNotEmpty ?? false) uomCtrl.text = m.unitaMisura!;
+                      if (m.unitaMisura?.isNotEmpty ?? false) uom = m.unitaMisura;
                       lookupFieldGeneration++;
                       setDialogState(() {});
                     },
@@ -268,7 +270,7 @@ class StepMaterialiFold extends ConsumerWidget {
                     freeTextName = '';
                     // The catalogue knows the unit. Asking the technician to type "pz" after
                     // picking a part that is already measured in pieces is a known answer.
-                    if (m.unitOfMeasure?.isNotEmpty ?? false) uomCtrl.text = m.unitOfMeasure!;
+                    if (m.unitOfMeasure?.isNotEmpty ?? false) uom = m.unitOfMeasure;
                     setDialogState(() {});
                   },
                   onFreeText: (v) {
@@ -289,7 +291,7 @@ class StepMaterialiFold extends ConsumerWidget {
                         selectedMaterialeId = match.id;
                         freeTextName = '';
                         if (match.unitOfMeasure?.isNotEmpty ?? false) {
-                          uomCtrl.text = match.unitOfMeasure!;
+                          uom = match.unitOfMeasure;
                         }
                       } else {
                         // Not in the catalog (or its barcode) — the scan wasn't wasted, the raw
@@ -319,9 +321,15 @@ class StepMaterialiFold extends ConsumerWidget {
                     Expanded(
                       child: AppFieldShell(
                         label: 'Unità',
-                        child: TextField(
-                          controller: uomCtrl,
-                          decoration: const InputDecoration(hintText: 'pz'),
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: uom,
+                          hint: const Text('pz'),
+                          items: [
+                            const DropdownMenuItem<String?>(value: null, child: Text('Nessuna')),
+                            for (final u in materialeSelectOptions(kUnitOfMeasureOptions, uom))
+                              DropdownMenuItem<String?>(value: u, child: Text(u)),
+                          ],
+                          onChanged: (v) => setDialogState(() => uom = v),
                         ),
                       ),
                     ),
@@ -372,7 +380,7 @@ class StepMaterialiFold extends ConsumerWidget {
                     // the row records what is actually there.
                     freeTextName: selectedMaterialeId == null && typed.isNotEmpty ? typed : null,
                     quantity: qty,
-                    unitOfMeasure: uomCtrl.text.trim().isEmpty ? null : uomCtrl.text.trim(),
+                    unitOfMeasure: uom,
                     magazzinoId: selectedMagazzinoId,
                   ),
                 );

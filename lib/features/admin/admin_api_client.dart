@@ -826,6 +826,15 @@ class AdminApiClient {
     return res.data;
   }
 
+  /// Distinct, non-empty Marca/Category values already in use across the tenant's active
+  /// catalog — `GET /api/materiali/lookups` (`MaterialiController.GetLookups`). Feeds the
+  /// admin materiale form's Marca/Categoria `AppLookupField`: a convenience list, not a
+  /// constraint — a typed value that isn't here is still a valid save.
+  Future<Map<String, dynamic>?> fetchMaterialiLookups() async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/materiali/lookups');
+    return res.data;
+  }
+
   // ── ProdottoAssistenza ──────────────────────────────────────────────────
 
   /// [customerId], when given, filters server-side via `ProdottoAssistenzaController.GetAll`'s
@@ -846,6 +855,14 @@ class AdminApiClient {
   /// is in hand (e.g. a contract's `prodottoAssistenzaId`, with no customer context loaded).
   Future<Map<String, dynamic>?> fetchProdottoAssistenzaById(String id) async {
     final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza/$id');
+    return res.data;
+  }
+
+  /// Distinct, non-empty Modello values already in use across the tenant's active prodotti —
+  /// `GET /api/prodottoassistenza/lookups` (`ProdottoAssistenzaController.GetLookups`). Feeds
+  /// the admin prodotto form's Modello `AppLookupField`: a convenience list, not a constraint.
+  Future<Map<String, dynamic>?> fetchProdottoAssistenzaLookups() async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza/lookups');
     return res.data;
   }
 

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/constants/catalog_constants.dart';
 import '../../../core/scanner/barcode_scan_sheet.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
@@ -32,13 +33,26 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _descriptionCtrl = TextEditingController();
-  final _unitOfMeasureCtrl = TextEditingController();
-  final _categoryCtrl = TextEditingController();
-  final _marcaCtrl = TextEditingController();
   final _purchasePriceCtrl = TextEditingController();
   final _salePriceCtrl = TextEditingController();
   final _aliquotaIvaCtrl = TextEditingController();
   bool _isSaving = false;
+
+  // ── Unità di misura — closed vocabulary (catalog_constants.dart), not free text. ───
+  String? _unitOfMeasure;
+
+  // ── Marca/Categoria — pick an existing value or type a new one (Group 2: not validated
+  // against the list). AppLookupField owns its own TextEditingController; state here is just
+  // the current string, kept in sync via its onSelected/onFreeText callbacks. Marca/Categoria
+  // have no real "id" distinct from their text — LookupItem(id: v, name: v) below.
+  String _marca = '';
+  String _category = '';
+  List<LookupItem> _marcheItems = [];
+  List<LookupItem> _categorieItems = [];
+  // AppLookupField only reads initialText/selectedId once, in initState (see its own doc
+  // comment) — bumped whenever an async prefill (Drift load) lands so a fresh instance picks
+  // the loaded value up, same trick step_materiali_fold.dart uses for the same reason.
+  var _lookupFieldGeneration = 0;
 
   /// True once an edit-mode load has completed and found nothing in the
   /// local cache. `db.materiali` IS populated by sync (`sync_service.dart`
@@ -73,6 +87,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
   @override
   void initState() {
     super.initState();
+    _loadLookups();
     if (_isEditing) {
       _loadMateriale();
       _loadDetail();
@@ -90,14 +105,36 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
         _codeCtrl.text = mat.code;
         _nameCtrl.text = mat.name;
         _descriptionCtrl.text = mat.description ?? '';
-        _unitOfMeasureCtrl.text = mat.unitOfMeasure ?? '';
-        _categoryCtrl.text = mat.category ?? '';
-        _marcaCtrl.text = mat.marca ?? '';
+        _unitOfMeasure = mat.unitOfMeasure?.isNotEmpty ?? false ? mat.unitOfMeasure : null;
+        _category = mat.category ?? '';
+        _marca = mat.marca ?? '';
         _purchasePriceCtrl.text = mat.purchasePrice?.toStringAsFixed(2) ?? '';
         _salePriceCtrl.text = mat.salePrice?.toStringAsFixed(2) ?? '';
+        _lookupFieldGeneration++;
       });
     } else {
       setState(() => _prefillFailed = true);
+    }
+  }
+
+  /// Distinct Marca/Category values already in use across the tenant — suggestions for the
+  /// Marca/Categoria `AppLookupField`s below. Best-effort like [_loadDetail]: offline just
+  /// leaves the field without suggestions this session, free text still works.
+  Future<void> _loadLookups() async {
+    try {
+      final api = ref.read(adminApiClientProvider);
+      final lookups = await api.fetchMaterialiLookups();
+      if (!mounted || lookups == null) return;
+      setState(() {
+        _marcheItems = ((lookups['marche'] as List<dynamic>? ?? const []))
+            .map((v) => LookupItem(id: v as String, name: v))
+            .toList();
+        _categorieItems = ((lookups['categorie'] as List<dynamic>? ?? const []))
+            .map((v) => LookupItem(id: v as String, name: v))
+            .toList();
+      });
+    } catch (_) {
+      // Offline or transient failure — the fields just behave as plain free text this session.
     }
   }
 
@@ -124,9 +161,6 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
     _codeCtrl.dispose();
     _nameCtrl.dispose();
     _descriptionCtrl.dispose();
-    _unitOfMeasureCtrl.dispose();
-    _categoryCtrl.dispose();
-    _marcaCtrl.dispose();
     _purchasePriceCtrl.dispose();
     _salePriceCtrl.dispose();
     _aliquotaIvaCtrl.dispose();
@@ -150,11 +184,9 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
           description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
-          unitOfMeasure: _unitOfMeasureCtrl.text.trim().isEmpty
-              ? null
-              : _unitOfMeasureCtrl.text.trim(),
-          category: _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim(),
-          marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
+          unitOfMeasure: _unitOfMeasure,
+          category: _category.trim().isEmpty ? null : _category.trim(),
+          marca: _marca.trim().isEmpty ? null : _marca.trim(),
           purchasePrice: purchasePrice,
           salePrice: salePrice,
           aliquotaIva: aliquotaIva,
@@ -165,11 +197,9 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
           code: _codeCtrl.text.trim(),
           name: _nameCtrl.text.trim(),
           description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
-          unitOfMeasure: _unitOfMeasureCtrl.text.trim().isEmpty
-              ? null
-              : _unitOfMeasureCtrl.text.trim(),
-          category: _categoryCtrl.text.trim().isEmpty ? null : _categoryCtrl.text.trim(),
-          marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
+          unitOfMeasure: _unitOfMeasure,
+          category: _category.trim().isEmpty ? null : _category.trim(),
+          marca: _marca.trim().isEmpty ? null : _marca.trim(),
           purchasePrice: purchasePrice,
           salePrice: salePrice,
           aliquotaIva: aliquotaIva,
@@ -223,7 +253,8 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
 
   void _showAddBarcodeDialog() {
     final barcodeCtrl = TextEditingController();
-    final typeCtrl = TextEditingController();
+    // Closed vocabulary (catalog_constants.dart), not free text — null means "not set".
+    String? barcodeType;
     var isPrimary = _barcodes.isEmpty;
 
     showDialog<void>(
@@ -255,9 +286,15 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
               const SizedBox(height: 8),
               AppFieldShell(
                 label: 'Tipo',
-                child: TextField(
-                  controller: typeCtrl,
-                  decoration: const InputDecoration(hintText: 'EAN13, Code128…'),
+                child: DropdownButtonFormField<String?>(
+                  initialValue: barcodeType,
+                  hint: const Text('EAN13, Code128…'),
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('Nessuno')),
+                    for (final t in kBarcodeTypeOptions)
+                      DropdownMenuItem<String?>(value: t, child: Text(t)),
+                  ],
+                  onChanged: (v) => setDialogState(() => barcodeType = v),
                 ),
               ),
               const SizedBox(height: 8),
@@ -278,7 +315,7 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
               onPressed: () async {
                 final barcode = barcodeCtrl.text.trim();
                 if (barcode.isEmpty) return;
-                final type = typeCtrl.text.trim().isEmpty ? null : typeCtrl.text.trim();
+                final type = barcodeType;
                 Navigator.pop(ctx);
                 if (_isEditing) {
                   await _mutateBarcode(
@@ -456,21 +493,43 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
             Row(
               children: [
                 Expanded(
-                  child: AppTextField(
+                  child: AppFieldShell(
                     label: 'Unità di misura',
-                    hint: 'pz, kg, mt…',
-                    controller: _unitOfMeasureCtrl,
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _unitOfMeasure,
+                      hint: const Text('pz, kg, mt…'),
+                      items: [
+                        const DropdownMenuItem<String?>(value: null, child: Text('Nessuna')),
+                        for (final u in materialeSelectOptions(kUnitOfMeasureOptions, _unitOfMeasure))
+                          DropdownMenuItem<String?>(value: u, child: Text(u)),
+                      ],
+                      onChanged: (v) => setState(() => _unitOfMeasure = v),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: AppTextField(label: 'Marca', controller: _marcaCtrl),
+                  child: AppLookupField(
+                    key: ValueKey('marca-$_lookupFieldGeneration'),
+                    label: 'Marca',
+                    items: _marcheItems,
+                    initialText: _marca,
+                    onSelected: (id) => setState(() => _marca = id),
+                    onFreeText: (v) => setState(() => _marca = v),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            AppTextField(label: 'Categoria', controller: _categoryCtrl),
+            AppLookupField(
+              key: ValueKey('categoria-$_lookupFieldGeneration'),
+              label: 'Categoria',
+              items: _categorieItems,
+              initialText: _category,
+              onSelected: (id) => setState(() => _category = id),
+              onFreeText: (v) => setState(() => _category = v),
+            ),
             const SizedBox(height: 16),
 
             Row(

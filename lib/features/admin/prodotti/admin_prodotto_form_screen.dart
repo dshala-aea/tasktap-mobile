@@ -42,7 +42,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
   final _serialNumberCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
   final _marcaCtrl = TextEditingController();
-  final _modelloCtrl = TextEditingController();
   final _tipoCtrl = TextEditingController();
   final _categoriaCtrl = TextEditingController();
   final _umCtrl = TextEditingController();
@@ -53,6 +52,13 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
   String? _selectedCustomerId;
   String? _selectedLocationId;
   String? _selectedContrattoId;
+
+  // ── Modello — pick an existing value or type a new one (Group 2: not validated against the
+  // list). AppLookupField owns its own TextEditingController; this is just the current string,
+  // kept in sync via its onSelected/onFreeText callbacks. Modello has no real "id" distinct
+  // from its text — LookupItem(id: v, name: v) below.
+  String _modello = '';
+  List<LookupItem> _modelliItems = [];
   DateTime? _warrantyExpiryDate;
   DateTime? _dataInstallazione;
   DateTime? _ultimaManutenzione;
@@ -74,6 +80,24 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     super.initState();
     if (_isEditing) _loadProdotto();
     if (_selectedCustomerId != null) _loadContratti(_selectedCustomerId!);
+    _loadModelliLookup();
+  }
+
+  /// Distinct Modello values already in use across the tenant — suggestions for the Modello
+  /// `AppLookupField` below. Best-effort like [_loadContratti]: offline just leaves the field
+  /// without suggestions this session, free text still works.
+  Future<void> _loadModelliLookup() async {
+    try {
+      final lookups = await ref.read(adminApiClientProvider).fetchProdottoAssistenzaLookups();
+      if (!mounted || lookups == null) return;
+      setState(() {
+        _modelliItems = ((lookups['modelli'] as List<dynamic>? ?? const []))
+            .map((v) => LookupItem(id: v as String, name: v))
+            .toList();
+      });
+    } catch (_) {
+      // Offline or transient failure — the field just behaves as plain free text this session.
+    }
   }
 
   void _loadProdotto() {
@@ -84,7 +108,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     _serialNumberCtrl.text = p['serialNumber'] as String? ?? '';
     _notesCtrl.text = p['notes'] as String? ?? '';
     _marcaCtrl.text = p['marchio'] as String? ?? '';
-    _modelloCtrl.text = p['modello'] as String? ?? '';
+    _modello = p['modello'] as String? ?? '';
     _tipoCtrl.text = p['tipo'] as String? ?? '';
     _categoriaCtrl.text = p['categoria'] as String? ?? '';
     _umCtrl.text = p['um'] as String? ?? '';
@@ -144,7 +168,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     _serialNumberCtrl.dispose();
     _notesCtrl.dispose();
     _marcaCtrl.dispose();
-    _modelloCtrl.dispose();
     _tipoCtrl.dispose();
     _categoriaCtrl.dispose();
     _umCtrl.dispose();
@@ -201,7 +224,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
           purchasePrice: purchasePrice,
           salePrice: salePrice,
           marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
-          modello: _modelloCtrl.text.trim().isEmpty ? null : _modelloCtrl.text.trim(),
+          modello: _modello.trim().isEmpty ? null : _modello.trim(),
           tipo: _tipoCtrl.text.trim().isEmpty ? null : _tipoCtrl.text.trim(),
           dataInstallazione: _dataInstallazione,
           ultimaManutenzione: _ultimaManutenzione,
@@ -226,7 +249,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
           purchasePrice: purchasePrice,
           salePrice: salePrice,
           marca: _marcaCtrl.text.trim().isEmpty ? null : _marcaCtrl.text.trim(),
-          modello: _modelloCtrl.text.trim().isEmpty ? null : _modelloCtrl.text.trim(),
+          modello: _modello.trim().isEmpty ? null : _modello.trim(),
           tipo: _tipoCtrl.text.trim().isEmpty ? null : _tipoCtrl.text.trim(),
           dataInstallazione: _dataInstallazione,
           ultimaManutenzione: _ultimaManutenzione,
@@ -367,7 +390,15 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
               children: [
                 Expanded(child: AppTextField(label: 'Marca', controller: _marcaCtrl)),
                 const SizedBox(width: 16),
-                Expanded(child: AppTextField(label: 'Modello', controller: _modelloCtrl)),
+                Expanded(
+                  child: AppLookupField(
+                    label: 'Modello',
+                    items: _modelliItems,
+                    initialText: _modello,
+                    onSelected: (id) => setState(() => _modello = id),
+                    onFreeText: (v) => setState(() => _modello = v),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),

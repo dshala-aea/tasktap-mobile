@@ -6288,6 +6288,36 @@
         }
       }
     },
+    "/api/Materiali/lookups": {
+      "get": {
+        "tags": [
+          "Materiali"
+        ],
+        "summary": "Distinct, non-empty Marca/Category values across the tenant\u0027s active materiali \u2014\nfeeds the web admin form\u0027s create-if-new autocomplete (frontend types a new value\nstraight through; this list is a convenience, not a constraint).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialiLookupsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialiLookupsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterialiLookupsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Materiali/{id}/barcodes": {
       "get": {
         "tags": [
@@ -7478,6 +7508,36 @@
         }
       }
     },
+    "/api/ProdottoAssistenza/lookups": {
+      "get": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "summary": "Distinct, non-empty Modello values across the tenant\u0027s active prodotti \u2014 feeds the web\nadmin form\u0027s create-if-new autocomplete (a typed value that doesn\u0027t match one of these is\nstill accepted verbatim; this list is a convenience, not a constraint). Follows the same\nresponse-shape idiom as MaterialiController.GetLookups.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaLookupsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaLookupsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaLookupsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ProdottoAssistenza/{id}/matricole": {
       "get": {
         "tags": [
@@ -8120,7 +8180,7 @@
           {
             "name": "stato",
             "in": "query",
-            "description": "Filter by stato (0=Bozza, 1=Inviato, 2=Controllato, 3=Fatturato).",
+            "description": "Filter by stato (0=Bozza, 1=Inviato, 2=Controllato, 3=Fatturato, 4=Respinto, 5=Annullato, 6=NonFatturabile).",
             "schema": {
               "$ref": "#/components/schemas/ReportStatoEnum"
             }
@@ -8248,6 +8308,68 @@
         "responses": {
           "200": {
             "description": "Success message."
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Deletes a report outright \u2014 office/admin only, and only while it is still Bozza. A\nreport that has ever left draft carries real history (Inviato/Controllato/Respinto/\nAnnullato/Fatturato/NonFatturabile) that must not be discardable this way; use\nTask\u0026lt;IActionResult\u0026gt; ReportsController.Annulla(Guid id) instead once it has been submitted. Cleans up every child row the\nreport owns (staff, materiali \u2014 reversing any stock they depleted \u2014 control\nobservations, and soft-deleting its allegati) before removing the report itself.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -8777,6 +8899,31 @@
           "Reports"
         ],
         "summary": "Segna il rapportino come fatturato (Controllato \u2192 Fatturato). Solo ufficio/admin.",
+        "description": "See Task\u0026lt;IActionResult\u0026gt; ReportsController.Controlla(Guid id)\u0027s remarks \u2014 same permission-gate correction.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Reports/{id}/non-fatturabile": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Segna il rapportino come non fatturabile (Controllato \u2192 NonFatturabile). Solo ufficio/admin.",
         "description": "See Task\u0026lt;IActionResult\u0026gt; ReportsController.Controlla(Guid id)\u0027s remarks \u2014 same permission-gate correction.",
         "parameters": [
           {
@@ -9843,6 +9990,198 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/report-templates/{key}/acroform-config": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The tenant\u0027s saved AcroForm config for this template, or the template\u0027s own\n    default (unconfigured, no asset) when the tenant never customized it.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Replaces the tenant\u0027s AcroForm config for this template. Every FieldBinding is validated\nagainst the CURRENT asset\u0027s real discovered fields (re-fetched here, not cached from a\nprior discovery call) \u2014 this is what makes a re-uploaded PDF\u0027s now-invalid bindings\nsurface as a 400 rather than silently persisting a mapping to a field that no longer\nexists.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcroFormConfigDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcroFormConfigDto"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AcroFormConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/{key}/acroform-asset": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Uploads this template\u0027s AcroForm PDF asset, replacing any previous one. Creates\n    the config row with defaults first if this is the very first customization.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Removes this template\u0027s AcroForm asset and clears every field mapping \u2014 there is\n    nothing left for a mapping to reference once the asset is gone.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/{key}/acroform-asset/discover": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Discovers the fields in this template\u0027s currently-uploaded AcroForm asset.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/{key}/acroform-controls": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Lists the tenant\u0027s own configured controls, for the binding dropdown\u0027s \u0022Controls\u0022\n    section \u2014 every control this tenant has ever defined, by its stable lineage id and its\n    current label. Not scoped to a specific ticket type or template version: the AcroForm\n    binding is set once at configuration time, not per-report, so this deliberately shows the\n    broadest set an admin might want to bind against.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/{key}/acroform-fields-catalogue": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Every fixed catalogue key the binding dropdown\u0027s \u0022Fields\u0022 section can offer \u2014 the\n    build\u0027s own report-model surface (customer name, address, ...), as opposed to\n    Task\u0026lt;IActionResult\u0026gt; ReportTemplatesController.GetAcroFormControls(string key, CancellationToken ct)\u0027s tenant-defined Controls section. Fixed by the build, not\n    tenant data, so unlike that endpoint this one is not scoped by tenant.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -12017,6 +12356,57 @@
                 }
               }
             }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "Replaces a ticket\u0027s planned materials (fabbisogno) wholesale: every existing row is\nremoved and the submitted list is inserted fresh. There is no per-row server id to\nreconcile against \u2014 this mirrors CreateTicketMaterialeRequest\u0027s shape and\nthe office UI\u0027s \u0060TicketMaterialiEditor\u0060, which manages a local rows array rather\nthan tracking individual row identities. Locked once the ticket is closed, same gate\nTask\u0026lt;IActionResult\u0026gt; TicketsController.SelfAssign(Guid id) already uses.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CreateTicketMaterialeRequest"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CreateTicketMaterialeRequest"
+                }
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CreateTicketMaterialeRequest"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -14921,6 +15311,29 @@
       "AbsenceTypeEnum": {
         "type": "integer",
         "description": "The category of an AbsenceRequest."
+      },
+      "AcroFormConfigDto": {
+        "required": [
+          "assetAllegatoId",
+          "fieldMappings"
+        ],
+        "type": "object",
+        "properties": {
+          "assetAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "fieldMappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldBindingDto"
+            }
+          }
+        },
+        "description": "The AcroForm template\u0027s config, as exposed over the wire (GET response / PUT body)."
       },
       "ActiveTracker": {
         "required": [
@@ -18350,6 +18763,26 @@
         },
         "description": "Simple request shape for Excel export (placeholder until B5)."
       },
+      "FieldBindingDto": {
+        "required": [
+          "targetField",
+          "source",
+          "transform"
+        ],
+        "type": "object",
+        "properties": {
+          "targetField": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "transform": {
+            "type": "string"
+          }
+        },
+        "description": "One binding, as exposed over the wire."
+      },
       "FileContentResult": {
         "type": "object",
         "properties": {
@@ -19759,6 +20192,24 @@
             }
           }
         }
+      },
+      "MaterialiLookupsDto": {
+        "type": "object",
+        "properties": {
+          "marche": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "categorie": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Distinct Marca/Category values in use across the tenant\u0027s active materiali, sorted."
       },
       "Matricola": {
         "type": "object",
@@ -21384,6 +21835,18 @@
           }
         }
       },
+      "ProdottoAssistenzaLookupsDto": {
+        "type": "object",
+        "properties": {
+          "modelli": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Distinct Modello values in use across the tenant\u0027s active prodotti, sorted."
+      },
       "QueueSummaryDto": {
         "required": [
           "count",
@@ -21962,6 +22425,14 @@
               "null",
               "string"
             ],
+            "format": "date-time"
+          },
+          "nonFatturabileAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Set when the report transitions Controllato \u2192 NonFatturabile: an alternative terminal\noutcome to Fatturato for work that was controlled but will not be invoiced. Mirrors\nDateTime? Report.FatturatoAt exactly \u2014 see \u0060ReportStateMachine.CanNonFatturabile\u0060.",
             "format": "date-time"
           },
           "materialiNotRequired": {
