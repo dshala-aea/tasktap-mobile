@@ -24,6 +24,7 @@ import 'package:tasktap_mobile/data/sync/submission_queue.dart';
 import 'package:tasktap_mobile/data/sync/submission_queue_watcher.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -33,6 +34,11 @@ class MockSubmissionQueue extends Mock implements SubmissionQueue {}
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
+
+/// The Ore tile seeds this (when the staff list is still empty) on first open — a fixed test
+/// value so assertions can check exactly who got added, distinct from any AuthUser id in this
+/// file to make it obvious which provider a given assertion is really reading.
+const _testInternalUserId = 'internal-guid-1';
 
 Future<void> _seedDraft(AppDatabase db, String reportId) async {
   await db
@@ -51,11 +57,17 @@ Future<void> _seedDraft(AppDatabase db, String reportId) async {
       );
 }
 
-Widget _buildForm({required AppDatabase db, required String reportId, SubmissionQueue? fakeQueue}) {
+Widget _buildForm({
+  required AppDatabase db,
+  required String reportId,
+  SubmissionQueue? fakeQueue,
+  String? internalUserId = _testInternalUserId,
+}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       if (fakeQueue != null) realSubmissionQueueProvider.overrideWithValue(fakeQueue),
+      internalUserIdProvider.overrideWith((ref) async => internalUserId),
     ],
     child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
   );

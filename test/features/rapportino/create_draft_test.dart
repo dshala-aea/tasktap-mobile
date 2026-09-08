@@ -69,6 +69,12 @@ final _testUser = AuthUser(
   expiresAt: DateTime.utc(2030, 1, 1),
 );
 
+/// The signed-in user's INTERNAL database id, as `internalUserIdProvider` would resolve it —
+/// deliberately a different string from `_testUser.id` (which stands in for the Zitadel OIDC
+/// sub), so a test that accidentally read the wrong provider would fail loudly instead of
+/// happening to match.
+const _testInternalUserId = 'internal-guid-2';
+
 /// Pumps a tiny widget tree, exposing a real WidgetRef via a Consumer (createReworkDraft, like
 /// createLocalDraft, takes a WidgetRef — it is meant to be called from a widget callback).
 Future<String?> _callCreateReworkDraft(
@@ -226,6 +232,9 @@ void main() {
         overrides: [
           appDatabaseProvider.overrideWithValue(db),
           currentUserProvider.overrideWithValue(user),
+          // Mirrors currentUserProvider's null-ness: no signed-in user means no resolved internal
+          // id either, matching the real app's "never fetched /api/Auth/me" state.
+          internalUserIdProvider.overrideWith((ref) async => user != null ? _testInternalUserId : null),
           if (cantiereReportApi != null)
             cantiereReportApiClientProvider.overrideWithValue(cantiereReportApi),
         ],
@@ -294,21 +303,25 @@ void main() {
       expect(draft!.metadataJson, isNull);
     });
 
-    testWidgets('seeds the creating technician as the first staff row', (tester) async {
-      final container = buildContainer(user: _testUser);
-      addTearDown(container.dispose);
+    testWidgets(
+      'does not seed a staff row — the Ore tile does that itself, on first open',
+      (tester) async {
+        final container = buildContainer(user: _testUser);
+        addTearDown(container.dispose);
 
-      final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
+        final id = await _callCreateLocalDraft(tester, container, title: 'Nuovo rapportino');
 
-      final staff = await repo.getStaff(id!);
-      expect(staff, hasLength(1));
-      expect(staff.single.userId, _testUser.id);
-      expect(
-        staff.single.hoursWorked,
-        isNull,
-        reason: 'names who is on the job, but does not guess their hours',
-      );
-    });
+        final staff = await repo.getStaff(id!);
+        expect(
+          staff,
+          isEmpty,
+          reason:
+              'a staff row existing before the technician ever opened Ore used to prefill the '
+              'list with a misleading entry; seeding now happens on Ore\'s first open instead '
+              '(rapportino_form_screen_test.dart), not at draft-creation time',
+        );
+      },
+    );
   });
 
   group('createReworkDraft', () {
@@ -635,8 +648,8 @@ void main() {
     });
 
     testWidgets(
-      'seeds the creating technician as a blank staff row when the backend returns zero — '
-      'same default as manual entry',
+      'leaves the staff list empty when the backend returns zero — the Ore tile seeds it on '
+      'first open, same as a plain manual rapportino',
       (tester) async {
         final api = _FakeCantiereReportApiClient(reportIdToReturn: 'server-report-3');
         final container = buildContainer(user: _testUser, cantiereReportApi: api);
@@ -650,9 +663,7 @@ void main() {
         );
 
         final staff = await repo.getStaff(id!);
-        expect(staff, hasLength(1));
-        expect(staff.single.userId, _testUser.id);
-        expect(staff.single.hoursWorked, isNull);
+        expect(staff, isEmpty);
       },
     );
 
@@ -681,8 +692,7 @@ void main() {
               'not orphan it with no local draft at all',
         );
         final staff = await repo.getStaff(id!);
-        expect(staff, hasLength(1));
-        expect(staff.single.userId, _testUser.id);
+        expect(staff, isEmpty, reason: 'no seed to hydrate from and no auto-seed at creation time');
 
         final draft = await repo.getDraft(id);
         expect(draft!.locationId, '', reason: 'no seed to hydrate from — falls back to blank');

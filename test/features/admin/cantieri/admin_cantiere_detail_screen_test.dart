@@ -162,6 +162,9 @@ Widget _buildScreen({
       // Explicit null (not left unoverridden) so "Crea rapportino" — the only control that reads
       // this — has a deterministic, unauthenticated starting point.
       currentUserProvider.overrideWithValue(null),
+      // Same determinism for the internal id createLocalDraft actually keys its refusal on — left
+      // unoverridden this would hit real SharedPreferences, which is unmocked in this harness.
+      internalUserIdProvider.overrideWith((ref) async => null),
     ],
     child: MaterialApp(home: AdminCantiereDetailScreen(cantiereId: id)),
   );
@@ -234,7 +237,8 @@ void main() {
       final api = _FakeAdminApiClient()
         ..deleteThrowsStatus = 409
         ..deleteThrowsBody = {
-          'message': 'Impossibile eliminare: il cantiere ha interventi, rapportini, ore o altri '
+          'message':
+              'Impossibile eliminare: il cantiere ha interventi, rapportini, ore o altri '
               'record collegati',
         };
       await _pumpScreen(tester, db: db, api: api);
@@ -274,12 +278,7 @@ void main() {
       final api = _FakeAdminApiClient(
         cantiereDetail: {
           'contacts': [
-            {
-              'id': 'contact-1',
-              'name': 'Mario Rossi',
-              'role': 'Titolare',
-              'phone': '333123456',
-            },
+            {'id': 'contact-1', 'name': 'Mario Rossi', 'role': 'Titolare', 'phone': '333123456'},
           ],
           'assignments': [],
         },
@@ -329,7 +328,9 @@ void main() {
       await _seedCantiere(db);
       await db
           .into(db.colleagues)
-          .insert(const ColleaguesCompanion(id: Value('user-1'), displayName: Value('Luigi Bianchi')));
+          .insert(
+            const ColleaguesCompanion(id: Value('user-1'), displayName: Value('Luigi Bianchi')),
+          );
       final api = _FakeAdminApiClient(
         cantiereDetail: {
           'contacts': [],
@@ -345,7 +346,9 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('removing a crew member confirms then calls removeCantiereAssignment', (tester) async {
+    testWidgets('removing a crew member confirms then calls removeCantiereAssignment', (
+      tester,
+    ) async {
       await _seedCantiere(db);
       final api = _FakeAdminApiClient(
         cantiereDetail: {
@@ -414,7 +417,9 @@ void main() {
       await _teardown(tester);
     });
 
-    testWidgets('lists reports from GET /api/reports?cantiereId=, decoding int stato', (tester) async {
+    testWidgets('lists reports from GET /api/reports?cantiereId=, decoding int stato', (
+      tester,
+    ) async {
       await _seedCantiere(db);
       final api = _FakeAdminApiClient(
         reports: [

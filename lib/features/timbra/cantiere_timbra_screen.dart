@@ -372,7 +372,9 @@ final cantiereCrewAssignmentsProvider = FutureProvider.autoDispose
 /// answer to decide which button set to render, and a lead-only affordance has no business
 /// blocking anyone else's — or a temporarily-unreachable lead's — plain single-button clock-in.
 final isLeadForCantiereProvider = Provider.autoDispose.family<bool, String>((ref, cantiereId) {
-  final userId = ref.watch(currentUserProvider)?.id;
+  // The internal database Guid, not currentUserProvider.id (the Zitadel OIDC sub) — assignment
+  // rows' userId is the internal Guid, so comparing against the sub never matched anyone.
+  final userId = ref.watch(internalUserIdProvider).valueOrNull;
   final assignments = ref.watch(cantiereCrewAssignmentsProvider(cantiereId)).valueOrNull;
   if (userId == null || assignments == null) return false;
   return assignments.any((a) => a.userId == userId && a.isLead);

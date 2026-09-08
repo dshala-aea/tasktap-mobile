@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
+import '../../data/entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
 import '../../data/sync/sync_service.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
@@ -41,6 +42,23 @@ final authStateProvider = StreamProvider<AuthUser?>((ref) {
 /// Returns null while loading or when unauthenticated.
 final currentUserProvider = Provider<AuthUser?>((ref) {
   return ref.watch(authStateProvider).valueOrNull;
+});
+
+/// The signed-in user's INTERNAL database Guid (`Users.Id` on the backend) — never the Zitadel
+/// OIDC `sub` claim `currentUserProvider.id` carries. Use this, not `currentUserProvider.id`,
+/// anywhere a value needs to match a row in the local `colleagues`/`users` mirror or a
+/// server-side foreign key expecting the real user Guid (report author/staff rows, cantiere crew
+/// lookups, per-technician resource lookups like the assigned van). `currentUserProvider` is
+/// still the right choice for "is anyone signed in" / route guards / anything reading the OIDC
+/// token itself.
+///
+/// Persisted by `EntitlementService.refresh()` from `/api/Auth/me`'s `user.id` field — see that
+/// method's doc comment for why entitlement refresh, not a dedicated endpoint, is what populates
+/// this. Null before the first successful refresh (fresh install, never online yet) or after
+/// sign-out (`LoginNotifier.signOut` clears all of SharedPreferences, this key included).
+final internalUserIdProvider = FutureProvider<String?>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(internalUserIdPrefsKey);
 });
 
 // ── Login state notifier ───────────────────────────────────────────────────

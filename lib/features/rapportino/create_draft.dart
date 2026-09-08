@@ -38,15 +38,25 @@ const _uuid = Uuid();
 ///
 /// ## Where the real values come from
 ///
-/// The author is the signed-in user. Unauthenticated, this **refuses** rather than inventing a
-/// placeholder: a rapportino is authored by somebody, and a draft attributed to nobody is exactly
-/// the shape of the `user-<timestamp>` bug this codebase already fixed once.
+/// The author is the signed-in user's INTERNAL database id — never `currentUserProvider.id`
+/// (that is the Zitadel OIDC `sub` claim, a numeric string that matches no row in the local
+/// `colleagues`/`users` mirror or any server-side foreign key expecting a real user Guid; see
+/// `internalUserIdProvider`'s doc comment). Unauthenticated, or before the internal id has ever
+/// been resolved (no successful `/api/Auth/me` yet — a brand-new install with no network), this
+/// **refuses** rather than inventing a placeholder: a rapportino is authored by somebody, and a
+/// draft attributed to nobody is exactly the shape of the `user-<timestamp>` bug this codebase
+/// already fixed once.
 ///
 /// The tenant is read from the local mirror, which sync fills and which is single-tenant by
 /// construction — every row on the device belongs to the signed-in user's tenant, so any synced
 /// row answers the question. Before the first sync there is genuinely no answer, and the field is
 /// left empty rather than filled with a plausible-looking constant. Empty reads as unknown; `local`
 /// reads as a tenant that does not exist.
+///
+/// Does NOT seed a staff row for the creating technician — that used to happen here, before the
+/// editor screen (and its "Ore" tile) was ever opened, which pre-populated the staff list with a
+/// misleading entry the technician never chose to add. The Ore tile now seeds it itself, on first
+/// open, only if the staff list is still empty — see `rapportino_form_screen.dart`.
 Future<String?> createLocalDraft(
   WidgetRef ref, {
   required String title,
@@ -58,8 +68,8 @@ Future<String?> createLocalDraft(
   String? tenantId,
   String? workAddress,
 }) async {
-  final user = ref.read(currentUserProvider);
-  if (user == null) return null;
+  final internalUserId = await ref.read(internalUserIdProvider.future);
+  if (internalUserId == null) return null;
 
   // A caller creating the draft against a known entity already holds that entity's tenant, which
   // is better evidence than any row the mirror happens to return.
@@ -79,7 +89,7 @@ Future<String?> createLocalDraft(
       tenantId: resolvedTenantId,
       createdAt: DateTime.now().toUtc(),
       title: title,
-      insertedUserId: user.id,
+      insertedUserId: internalUserId,
       locationId: locationId,
       ticketId: Value(ticketId),
       cantiereId: Value(cantiereId),
@@ -92,20 +102,6 @@ Future<String?> createLocalDraft(
       ),
       isLocalOnly: const Value(true),
       stato: const Value('Bozza'),
-    ),
-  );
-
-  // Seed the creating technician as the first staff row. Almost every rapportino is worked and
-  // filed by the same person — without this, every single draft made the operator manually add
-  // themselves to the staff list before they could enter their own hours. The row is otherwise
-  // empty (no hours yet); it only names who's on the job.
-  await repo.upsertStaff(
-    ReportStaffTableCompanion.insert(
-      id: _uuid.v4(),
-      tenantId: resolvedTenantId,
-      createdAt: DateTime.now().toUtc(),
-      reportId: id,
-      userId: user.id,
     ),
   );
 
@@ -159,8 +155,8 @@ Future<String> resolveDeviceTenantId(AppDatabase db) async {
 /// attest to a specific version of the report the office already rejected, and must be recaptured
 /// for the reworked one.
 Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
-  final user = ref.read(currentUserProvider);
-  if (user == null) return null;
+  final internalUserId = await ref.read(internalUserIdProvider.future);
+  if (internalUserId == null) return null;
 
   final repo = ref.read(draftReportRepositoryProvider);
   final id = _uuid.v4();
@@ -178,7 +174,7 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
       customerId: Value(source.customerId),
       details: Value(source.details),
       metadataJson: Value(source.metadataJson),
-      insertedUserId: user.id,
+      insertedUserId: internalUserId,
       locationId: source.locationId,
       technicianNotes: Value(source.technicianNotes),
       materialiNotRequired: Value(source.materialiNotRequired),
@@ -257,7 +253,7 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
         url: a.storagePath,
         entityType: 1, // Report
         entityId: id,
-        uploadedByUserId: user.id,
+        uploadedByUserId: internalUserId,
         isPendingUpload: const Value(true),
       ),
     );
@@ -308,10 +304,9 @@ Future<String?> createReworkDraft(WidgetRef ref, DraftReport source) async {
 ///
 /// When the fetched staff list comes back empty — the caller had zero unconsumed worklogs for
 /// this cantiere, which the backend always allows (see
-/// `IReportService.CreateFromCantiereWorkLogsAsync`'s own doc comment) — this seeds the creating
-/// technician as a blank first staff row, exactly like [createLocalDraft] does for a brand-new
-/// manual rapportino: the editor then behaves exactly like today's manual-entry flow for hours,
-/// with no special empty-state of its own.
+/// `IReportService.CreateFromCantiereWorkLogsAsync`'s own doc comment) — no staff row is seeded
+/// here either, for the same reason [createLocalDraft] no longer does: the Ore tile seeds the
+/// creating technician itself, on first open, only if the staff list is still empty.
 Future<String?> createCantiereReportDraft(
   WidgetRef ref, {
   required String cantiereId,
@@ -320,8 +315,8 @@ Future<String?> createCantiereReportDraft(
   String? tenantId,
   String? workAddress,
 }) async {
-  final user = ref.read(currentUserProvider);
-  if (user == null) return null;
+  final internalUserId = await ref.read(internalUserIdProvider.future);
+  if (internalUserId == null) return null;
 
   final api = ref.read(cantiereReportApiClientProvider);
   final reportId = await api.createFromCantiereWorklogs(cantiereId);
@@ -360,7 +355,7 @@ Future<String?> createCantiereReportDraft(
       tenantId: resolvedTenantId,
       createdAt: now,
       title: 'Rapportino — $cantiereName',
-      insertedUserId: user.id,
+      insertedUserId: internalUserId,
       locationId: seed.locationId ?? '',
       cantiereId: Value(cantiereId),
       customerId: Value(customerId),
@@ -372,17 +367,7 @@ Future<String?> createCantiereReportDraft(
     ),
   );
 
-  if (staffSeeds.isEmpty) {
-    await repo.upsertStaff(
-      ReportStaffTableCompanion.insert(
-        id: _uuid.v4(),
-        tenantId: resolvedTenantId,
-        createdAt: now,
-        reportId: reportId,
-        userId: user.id,
-      ),
-    );
-  } else {
+  if (staffSeeds.isNotEmpty) {
     for (final s in staffSeeds) {
       await repo.upsertStaff(
         ReportStaffTableCompanion.insert(

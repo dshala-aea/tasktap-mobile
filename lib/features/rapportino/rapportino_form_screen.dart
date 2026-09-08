@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/app_compartment_tile.dart';
+import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -25,21 +26,70 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // it. Reuses the M4/M5 reportEditorProvider backbone unchanged, and each step widget unchanged:
 // the same StepDettagli/StepOre/StepMaterialiFold/StepRiepilogo the stepper rendered inline now
 // render inside a bottom sheet instead.
+//
+// Two entry points are pre-empted rather than left as plain taps, on the same principle: don't
+// make the technician do something the flow already knows the answer to.
+//  - Dettagli opens itself on first arrival at a still-empty draft — there's nothing to decide
+//    before seeing it, so requiring a tap first is pure friction.
+//  - Ore no longer arrives pre-populated with the creating technician's hours row (that used to
+//    happen at draft-creation time, before this screen even opened — a row existing before the
+//    technician had done anything was the "prefilled with a stranger" bug this fixed). Instead the
+//    row is added the moment the technician actually opens Ore, and only if it's still empty —
+//    added on genuine entry into the step, not fabricated ahead of it.
 // ══════════════════════════════════════════════════════════════════════════════
 
-class RapportinoFormScreen extends ConsumerWidget {
+class RapportinoFormScreen extends ConsumerStatefulWidget {
   const RapportinoFormScreen({super.key, required this.reportId});
 
   final String reportId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RapportinoFormScreen> createState() => _RapportinoFormScreenState();
+}
+
+class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
+  bool _hasAutoOpenedDettagli = false;
+
+  Future<void> _openOre(BuildContext context) async {
+    final reportId = widget.reportId;
+    final state = ref.read(reportEditorProvider(reportId));
+
+    if (state.staffRows.isEmpty) {
+      final internalUserId = await ref.read(internalUserIdProvider.future);
+      // Silently skip the seed (never blocks opening Ore) when the internal id hasn't resolved
+      // yet — the technician can still add themselves manually via "Aggiungi tecnico", the same
+      // picker every other staff row already goes through.
+      if (internalUserId != null) {
+        await ref
+            .read(reportEditorProvider(reportId).notifier)
+            .addStaff(StaffRow(id: 'staff-$internalUserId', userId: internalUserId));
+      }
+    }
+
+    if (!context.mounted) return;
+    openCompartmentSheet(context, label: 'Ore', content: StepOre(reportId: reportId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reportId = widget.reportId;
     final editorState = ref.watch(reportEditorProvider(reportId));
     final subtitle = editorState.title.isEmpty ? null : editorState.title;
 
     final dettagliDone = editorState.title.isNotEmpty;
     final oreDone = editorState.staffRows.isNotEmpty;
     final materialiDone = editorState.materialeRows.isNotEmpty || editorState.materialiNotRequired;
+
+    // Once per screen lifetime, after the first frame (a BuildContext for showModalBottomSheet
+    // isn't valid mid-build) — and only for a draft with nothing in Dettagli yet, so reopening an
+    // already-detailed report to check Materiali doesn't get interrupted by an unwanted sheet.
+    if (!_hasAutoOpenedDettagli && !editorState.isLoading && !dettagliDone) {
+      _hasAutoOpenedDettagli = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        openCompartmentSheet(context, label: 'Dettagli', content: StepDettagli(reportId: reportId));
+      });
+    }
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -122,11 +172,7 @@ class RapportinoFormScreen extends ConsumerWidget {
                     icon: LucideIcons.clock,
                     label: 'Ore',
                     done: oreDone,
-                    onTap: () => openCompartmentSheet(
-                      context,
-                      label: 'Ore',
-                      content: StepOre(reportId: reportId),
-                    ),
+                    onTap: () => _openOre(context),
                   ),
                   _StepTile(
                     icon: LucideIcons.package,

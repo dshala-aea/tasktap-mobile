@@ -51,10 +51,12 @@ class StepMaterialiFold extends ConsumerWidget {
     // The technician's assigned van warehouse — watched here (not inside the dialog) so it is
     // fetched once per visit to this step and every "Aggiungi materiale" tap reuses it, rather
     // than re-fetching over the network on a dialog a technician can open a dozen times on one job.
-    final currentUser = ref.watch(currentUserProvider);
-    final furgoneAsync = currentUser == null
+    // The internal database Guid, not currentUserProvider.id (the Zitadel OIDC sub) — the
+    // furgone-lookup endpoint is keyed by the internal Guid, so the sub never matched anyone.
+    final internalUserId = ref.watch(internalUserIdProvider).valueOrNull;
+    final furgoneAsync = internalUserId == null
         ? const AsyncValue<MagazzinoDto?>.data(null)
-        : ref.watch(furgoneDiUserProvider(currentUser.id));
+        : ref.watch(furgoneDiUserProvider(internalUserId));
 
     // A Column, not a ListView: this sits inside the compartment sheet's own ambient
     // SingleChildScrollView now, not a screen-height-bounded Expanded body — an inner scrollable

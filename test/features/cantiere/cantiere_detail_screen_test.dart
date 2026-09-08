@@ -223,6 +223,7 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             currentUserProvider.overrideWithValue(null),
+            internalUserIdProvider.overrideWith((ref) async => null),
           ],
           child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
         ),
@@ -259,6 +260,7 @@ void main() {
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               currentUserProvider.overrideWithValue(_testUser),
+              internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
               cantiereReportApiClientProvider.overrideWithValue(fakeApi),
             ],
             child: MaterialApp.router(routerConfig: router),
@@ -298,6 +300,7 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             currentUserProvider.overrideWithValue(null),
+            internalUserIdProvider.overrideWith((ref) async => null),
             cantiereReportApiClientProvider.overrideWithValue(fakeApi),
           ],
           child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
@@ -340,6 +343,7 @@ void main() {
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
             currentUserProvider.overrideWithValue(_testUser),
+            internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
             cantiereReportApiClientProvider.overrideWithValue(fakeApi),
           ],
           child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
