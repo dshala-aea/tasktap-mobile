@@ -207,9 +207,6 @@ class StepMaterialiFold extends ConsumerWidget {
     String? ticketId,
   ) {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
-    final materialiAsync = ref.read(allMaterialiProvider);
-
-    final catalogo = materialiAsync.valueOrNull ?? const <MaterialiData>[];
 
     final qtyCtrl = TextEditingController(text: '1');
     final uomCtrl = TextEditingController();
@@ -253,26 +250,25 @@ class StepMaterialiFold extends ConsumerWidget {
                 // Same single field as the rest of the wizard. This dialog is opened once per
                 // material — often a dozen times on one job — so the catalogo/testo-libero mode
                 // switch was being paid over and over on the same rapportino.
-                AppLookupField(
+                //
+                // A ConsumerWidget of its own, watching allMaterialiProvider live, rather than a
+                // `catalogo` list captured once via `ref.read` when the dialog opened. That read
+                // used to hit the provider cold: allMaterialiProvider is StreamProvider.autoDispose
+                // and nothing else in this screen keeps it warm, so the very first open (the common
+                // case — a technician adds several materiali per job, but the provider is torn down
+                // between dialogs once nothing is left watching it) read it before the underlying
+                // Drift stream had delivered its first emission and got back AsyncLoading, i.e. an
+                // empty catalogo. The search box was never broken; it had nothing to search yet.
+                _MaterialeLookupField(
                   key: ValueKey(lookupFieldGeneration),
-                  label: 'Materiale',
-                  hint: 'Cerca a catalogo o scrivi il nome',
                   selectedId: selectedMaterialeId,
                   initialText: freeTextName,
-                  items: [
-                    for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code),
-                  ],
-                  onSelected: (id) {
-                    selectedMaterialeId = id;
+                  onMaterialeSelected: (m) {
+                    selectedMaterialeId = m.id;
                     freeTextName = '';
                     // The catalogue knows the unit. Asking the technician to type "pz" after
-                    // picking a part that is already measured in pieces is a question with a
-                    // known answer.
-                    for (final m in catalogo) {
-                      if (m.id == id && (m.unitOfMeasure?.isNotEmpty ?? false)) {
-                        uomCtrl.text = m.unitOfMeasure!;
-                      }
-                    }
+                    // picking a part that is already measured in pieces is a known answer.
+                    if (m.unitOfMeasure?.isNotEmpty ?? false) uomCtrl.text = m.unitOfMeasure!;
                     setDialogState(() {});
                   },
                   onFreeText: (v) {
@@ -508,6 +504,61 @@ class _FabbisognoSuggestions extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Materiale catalog lookup ────────────────────────────────────────────────
+//
+// A ConsumerWidget rather than a `catalogo` list read once when the dialog opens. The dialog
+// itself (`_showAddMaterialeDialog`) is a plain function, not part of the widget tree, so a
+// one-time `ref.read(allMaterialiProvider)` there froze the catalog at whatever the provider
+// happened to already hold — usually nothing, since `allMaterialiProvider` is a
+// `StreamProvider.autoDispose` with no other watcher on this screen: it starts in `AsyncLoading`,
+// the Drift stream's first emission lands a frame later, and by then that one-time read had
+// already happened and returned an empty list. Watching it here, live, exactly like
+// `_FabbisognoSuggestions` above watches `ticketMaterialiProvider`, means the field's suggestions
+// fill in the moment the stream actually delivers data — including mid-dialog, on a cold start
+// before the first sync has finished.
+class _MaterialeLookupField extends ConsumerWidget {
+  const _MaterialeLookupField({
+    super.key,
+    required this.selectedId,
+    required this.initialText,
+    required this.onMaterialeSelected,
+    required this.onFreeText,
+  });
+
+  final String? selectedId;
+  final String initialText;
+  final ValueChanged<MaterialiData> onMaterialeSelected;
+  final ValueChanged<String> onFreeText;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final materialiAsync = ref.watch(allMaterialiProvider);
+    final catalogo = materialiAsync.valueOrNull ?? const <MaterialiData>[];
+
+    return AppLookupField(
+      label: 'Materiale',
+      hint: 'Cerca a catalogo o scrivi il nome',
+      selectedId: selectedId,
+      initialText: initialText,
+      items: [for (final m in catalogo) LookupItem(id: m.id, name: m.name, subtitle: m.code)],
+      // Distinguishes "still syncing" from "genuinely nothing at catalog" — silence either way
+      // used to read as the field being broken rather than as a sync state.
+      emptyCacheHint: materialiAsync.isLoading
+          ? 'Catalogo in caricamento…'
+          : 'Nessun materiale a catalogo: scrivi il nome per registrarlo comunque.',
+      onSelected: (id) {
+        for (final m in catalogo) {
+          if (m.id == id) {
+            onMaterialeSelected(m);
+            return;
+          }
+        }
+      },
+      onFreeText: onFreeText,
     );
   }
 }

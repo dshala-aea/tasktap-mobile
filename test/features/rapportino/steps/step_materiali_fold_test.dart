@@ -526,5 +526,53 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    // Regression test for the actual root cause behind "nothing searches through the actual
+    // materials/articles" — allMaterialiProvider (StreamProvider.autoDispose) used to be read
+    // once via `ref.read` at the moment the dialog opened. Nothing else on this screen watches
+    // that provider, so the very first open hit it cold: the underlying Drift `.watch()` stream
+    // had not delivered its first emission yet, `ref.read` got back AsyncLoading, and the
+    // catalog list the dialog captured was permanently empty for that dialog instance — the
+    // search box had nothing to search, and no amount of typing would ever surface a match. The
+    // fix (_MaterialeLookupField) watches the provider live instead, the same way
+    // _FabbisognoSuggestions already watches ticketMaterialiProvider.
+    testWidgets(
+      'catalog search surfaces a materiale that is not part of the ticket fabbisogno '
+      '(the "extra materiale" case)',
+      (tester) async {
+        await db
+            .into(db.materiali)
+            .insert(
+              MaterialiCompanion.insert(
+                id: 'mat-catalog-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                code: 'ART-500',
+                name: 'Vite autofilettante',
+                unitOfMeasure: const Value('pz'),
+              ),
+            );
+
+        // No ticket linked — and so no fabbisogno — to isolate that this suggestion comes from
+        // the full catalog search, not from the (separately tested) fabbisogno chips.
+        final container = _buildContainer(db: db, ticketId: null);
+        addTearDown(container.dispose);
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Aggiungi materiale'));
+        await tester.pumpAndSettle();
+
+        // Focusing the field with nothing typed shows the whole (unfiltered) catalog — proving
+        // the stream actually reached the dialog, not just that a typed query happens to match.
+        await tester.tap(find.byType(TextFormField));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Vite autofilettante'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
   });
 }
