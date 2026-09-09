@@ -1181,6 +1181,36 @@
         }
       }
     },
+    "/api/billing/seats/holders": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Which active users currently hold each seat type \u2014 a pure read over the same filter\nTask\u0026lt;IActionResult\u0026gt; BillingController.Seats(SeatRequest request, CancellationToken ct) already uses to compute active counts, just returning the rows.\nNo new state: a seat is not \u0022assigned\u0022 here, this is a live derivation from \u0060Users\u0060.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeatHoldersResponseDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeatHoldersResponseDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeatHoldersResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Branding": {
       "get": {
         "tags": [
@@ -23088,6 +23118,53 @@
           }
         },
         "description": "One stock item below its minimum \u2014 the sotto-minimo flag is computed server-side\n(spec \u00A74.3 / \u00A77.1: presentation computation, never shipped as raw quantities for the browser to decide)."
+      },
+      "SeatHolderDto": {
+        "required": [
+          "userId",
+          "fullName",
+          "email",
+          "seatType"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "seatType": {
+            "$ref": "#/components/schemas/SeatTypeEnum"
+          }
+        },
+        "description": "One active user holding a seat."
+      },
+      "SeatHoldersResponseDto": {
+        "required": [
+          "office",
+          "field"
+        ],
+        "type": "object",
+        "properties": {
+          "office": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeatHolderDto"
+            }
+          },
+          "field": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeatHolderDto"
+            }
+          }
+        },
+        "description": "Active seat holders, grouped by type \u2014 a pure read, not an assignment record."
       },
       "SeatRequest": {
         "type": "object",
