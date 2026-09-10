@@ -169,6 +169,39 @@ void main() {
 
       expect(report.statoLabel, 'Controllato');
     });
+
+    test('parses stato whether the backend sends an ordinal or the enum name', () {
+      // GET /api/Reports serializes the real Report entity, and Report.Stato carries
+      // [JsonConverter(JsonStringEnumConverter)] (added for the mobile sync payload) — so this
+      // arrives as "Inviato", not 1. Must not throw, and must resolve the same label either way.
+      final byOrdinal = TicketReportSummary.fromJson({
+        'id': 'r1',
+        'title': 'Intervento',
+        'stato': 1,
+        'createdAt': '2026-07-01T10:00:00Z',
+      });
+      final byName = TicketReportSummary.fromJson({
+        'id': 'r1',
+        'title': 'Intervento',
+        'stato': 'Inviato',
+        'createdAt': '2026-07-01T10:00:00Z',
+      });
+
+      expect(byOrdinal.statoLabel, 'Inviato');
+      expect(byName.statoLabel, 'Inviato');
+      expect(byOrdinal.stato, byName.stato);
+    });
+
+    test('falls back to Bozza for an unrecognized stato shape rather than throwing', () {
+      final report = TicketReportSummary.fromJson({
+        'id': 'r1',
+        'title': 'Intervento',
+        'stato': null,
+        'createdAt': '2026-07-01T10:00:00Z',
+      });
+
+      expect(report.statoLabel, 'Bozza');
+    });
   });
 
   group('TicketMaterialeDto.fromJson', () {

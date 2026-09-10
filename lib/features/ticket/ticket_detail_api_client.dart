@@ -147,8 +147,12 @@ class TicketReportSummary {
   final String id;
   final String title;
 
-  /// Raw ReportStatoEnum ordinal (0=Bozza … 5=Annullato) — the backend
-  /// serializes it as an int, not the string StatusPill expects.
+  /// ReportStatoEnum ordinal (0=Bozza … 6=NonFatturabile), normalized from whichever shape the
+  /// backend sends: `GET /api/Reports` serializes the real `Report` entity, and `Report.Stato`
+  /// carries `[JsonConverter(JsonStringEnumConverter)]` (added for the mobile sync payload — see
+  /// that property's own doc comment), so this arrives as the enum's NAME ("Inviato"), not its
+  /// ordinal — unlike other endpoints whose hand-rolled anonymous projections don't inherit that
+  /// attribute and still send a raw int. Tolerate both rather than assume one.
   final int stato;
   final DateTime createdAt;
 
@@ -159,7 +163,24 @@ class TicketReportSummary {
     3: 'Fatturato',
     4: 'Respinto',
     5: 'Annullato',
+    6: 'NonFatturabile',
   };
+
+  static const _statoOrdinals = {
+    'Bozza': 0,
+    'Inviato': 1,
+    'Controllato': 2,
+    'Fatturato': 3,
+    'Respinto': 4,
+    'Annullato': 5,
+    'NonFatturabile': 6,
+  };
+
+  static int _parseStato(dynamic raw) {
+    if (raw is int) return raw;
+    if (raw is String) return _statoOrdinals[raw] ?? 0;
+    return 0;
+  }
 
   String get statoLabel => _statoLabels[stato] ?? 'Bozza';
 
@@ -167,7 +188,7 @@ class TicketReportSummary {
     return TicketReportSummary(
       id: json['id'] as String,
       title: json['title'] as String? ?? '',
-      stato: json['stato'] as int? ?? 0,
+      stato: _parseStato(json['stato']),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
