@@ -1019,8 +1019,8 @@
         "tags": [
           "Billing"
         ],
-        "summary": "The tiers and add-ons that can be bought, so a client need not hardcode them.",
-        "description": "     This is the same list Task\u0026lt;IActionResult\u0026gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct) validates against \u2014 read from the catalog\n     constants rather than restated \u2014 because the alternative was a UI carrying its own copy of\n     \u0022starter, pro, fatturazione, cantieri, contratti, ai\u0022 and going stale independently of the\n     two that already exist here.\n\n     No prices. They live in Stripe, keyed by the lookup keys below, and a copy here\nwould be a third place for them to disagree \u2014 the one that shows a customer a number\nbefore they reach Checkout. A client that needs to display prices should read them from\nStripe with these keys, so what is quoted and what is charged come from one source.",
+        "summary": "The tiers that can be bought, so a client need not hardcode them.",
+        "description": "     This is the same list Task\u0026lt;IActionResult\u0026gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct) validates against \u2014 read from the catalog\n     constants rather than restated \u2014 because the alternative was a UI carrying its own copy of\n     \u0022starter, pro, business\u0022 and going stale independently of the one that already exists here.\n\n     No prices. They live in Stripe, keyed by the lookup keys below, and a copy here\nwould be a third place for them to disagree \u2014 the one that shows a customer a number\nbefore they reach Checkout. A client that needs to display prices should read them from\nStripe with these keys, so what is quoted and what is charged come from one source.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1141,6 +1141,19 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/billing/ai-credits/purchase": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "A one-time Stripe Checkout session for a 500-credit AI top-up. Available regardless of\nsubscription state \u2014 unlike Task\u0026lt;IActionResult\u0026gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct), this deliberately does not reject a\ntenant that is already subscribed (or mid-checkout), since AI is available at every tier.",
         "responses": {
           "200": {
             "description": "OK"
@@ -4817,6 +4830,71 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/admin/kiosk-devices": {
+      "get": {
+        "tags": [
+          "KioskDevices"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "KioskDevices"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterKioskDeviceRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterKioskDeviceRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterKioskDeviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/kiosk-devices/{id}/revoke": {
+      "post": {
+        "tags": [
+          "KioskDevices"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -14745,7 +14823,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s).\nThe device shows this as a QR; the technician scans it with their phone.",
+        "summary": "Generates a time-based HMAC token for the kiosk QR code (expires in 60 s). The device\nshows this as a QR; the technician scans it with their phone.",
         "responses": {
           "200": {
             "description": "OK"
@@ -14758,7 +14836,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "Processes a kiosk QR scan (technician scanned the device QR).\nValidates the HMAC token and clock-in / clock-out the user.",
+        "summary": "Processes a kiosk QR scan (technician scanned the device QR). Validates the HMAC\ntoken and clock-in / clock-out the user.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -16337,15 +16415,6 @@
               "null",
               "string"
             ]
-          },
-          "addOns": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "type": "string"
-            }
           },
           "officeSeats": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -21620,19 +21689,12 @@
       "PlanCatalogueDto": {
         "required": [
           "tiers",
-          "addOns",
           "officeSeat",
           "fieldSeat"
         ],
         "type": "object",
         "properties": {
           "tiers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PlanOptionDto"
-            }
-          },
-          "addOns": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PlanOptionDto"
@@ -22309,6 +22371,25 @@
           }
         },
         "description": "Request to register a new device for push notifications."
+      },
+      "RegisterKioskDeviceRequest": {
+        "required": [
+          "name",
+          "cantiereId"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
       },
       "ReorderExtensionFieldsRequest": {
         "type": "object",
@@ -27816,6 +27897,9 @@
     },
     {
       "name": "Invoices"
+    },
+    {
+      "name": "KioskDevices"
     },
     {
       "name": "Locations"
