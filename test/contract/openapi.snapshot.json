@@ -17006,13 +17006,6 @@
             ],
             "format": "uuid"
           },
-          "prodottoAssistenzaId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "startDate": {
             "type": "string",
             "format": "date-time"
@@ -18123,13 +18116,6 @@
               "string"
             ],
             "format": "date-time"
-          },
-          "contrattoId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
           },
           "externalId": {
             "type": [
@@ -22056,14 +22042,6 @@
             ],
             "format": "date-time"
           },
-          "contrattoId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Back-link to the (single) contract covering this asset. Wire name is \u0022contrattoId\u0022.\nNOTE: Guid? Contract.ProdottoAssistenzaId is the other direction of this\nrelationship and is itself single-valued even though a contract can genuinely cover\nmultiple assets \u2014 a real multi-asset join table is explicitly out of scope for W6b\n(plan \u00A75 / findings \u00A71 cardinality). This property is a back-link, not that fix.\nTenant-guarded via IReferentialIntegrityService.EnsureExistsAsync\u0026lt;Contract\u0026gt;\non every write path that accepts it (ProdottoAssistenzaController Create/Update).",
-            "format": "uuid"
-          },
           "externalId": {
             "type": [
               "null",
@@ -25125,14 +25103,6 @@
             "description": "Reference to the contract (for Assistenza tickets).",
             "format": "uuid"
           },
-          "prodottoAssistenzaId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Reference to the product (ProdottoAssistenza).",
-            "format": "uuid"
-          },
           "commessaId": {
             "type": [
               "null",
@@ -26490,13 +26460,6 @@
               "string"
             ],
             "format": "date-time"
-          },
-          "contrattoId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
           },
           "externalId": {
             "type": [
