@@ -93,54 +93,57 @@ void main() {
   group('Controlli checklist — data', () {
     testWidgets('renders the real checklist items with type-driven inputs', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse([
-          {
-            'id': 'grp-1',
-            'name': 'Sezione A',
-            'description': null,
-            'sortOrder': 0,
-            'subgroups': <dynamic>[],
-            'controls': [
-              {
-                'id': 'tc-1',
-                'templateControlId': 'tpl-1',
-                'controlLineageId': 'lin-1',
-                'label': 'Pressione OK',
-                'description': null,
-                'type': 0, // Checkbox
-                'isRequired': true,
-                'options': null,
-                'valoreLimite': null,
-                'sortOrder': 0,
-                'status': 'Pending',
-                'stringValue': null,
-                'boolValue': null,
-                'dateValue': null,
-                'completedByReportId': null,
-                'completedAt': null,
-              },
-              {
-                'id': 'tc-2',
-                'templateControlId': 'tpl-2',
-                'controlLineageId': 'lin-2',
-                'label': 'Note aggiuntive',
-                'description': null,
-                'type': 1, // FreeText
-                'isRequired': false,
-                'options': null,
-                'valoreLimite': null,
-                'sortOrder': 1,
-                'status': 'Pending',
-                'stringValue': null,
-                'boolValue': null,
-                'dateValue': null,
-                'completedByReportId': null,
-                'completedAt': null,
-              },
-            ],
-          },
-        ], '/api/tickets/$_ticketId/controls'),
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
+            {
+              'id': 'grp-1',
+              'name': 'Sezione A',
+              'description': null,
+              'sortOrder': 0,
+              'subgroups': <dynamic>[],
+              'controls': [
+                {
+                  'id': 'tc-1',
+                  'templateControlId': 'tpl-1',
+                  'controlLineageId': 'lin-1',
+                  'label': 'Pressione OK',
+                  'description': null,
+                  'type': 0, // Checkbox
+                  'isRequired': true,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 0,
+                  'status': 'Pending',
+                  'stringValue': null,
+                  'boolValue': null,
+                  'dateValue': null,
+                  'completedByReportId': null,
+                  'completedAt': null,
+                },
+                {
+                  'id': 'tc-2',
+                  'templateControlId': 'tpl-2',
+                  'controlLineageId': 'lin-2',
+                  'label': 'Note aggiuntive',
+                  'description': null,
+                  'type': 1, // FreeText
+                  'isRequired': false,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 1,
+                  'status': 'Pending',
+                  'stringValue': null,
+                  'boolValue': null,
+                  'dateValue': null,
+                  'completedByReportId': null,
+                  'completedAt': null,
+                },
+              ],
+            },
+          ],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
@@ -163,36 +166,39 @@ void main() {
 
     testWidgets('ticking a checkbox control writes the answer to editor state', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse([
-          {
-            'id': 'grp-1',
-            'name': 'Sezione A',
-            'description': null,
-            'sortOrder': 0,
-            'subgroups': <dynamic>[],
-            'controls': [
-              {
-                'id': 'tc-1',
-                'templateControlId': 'tpl-1',
-                'controlLineageId': 'lin-1',
-                'label': 'Pressione OK',
-                'description': null,
-                'type': 0,
-                'isRequired': true,
-                'options': null,
-                'valoreLimite': null,
-                'sortOrder': 0,
-                'status': 'Pending',
-                'stringValue': null,
-                'boolValue': null,
-                'dateValue': null,
-                'completedByReportId': null,
-                'completedAt': null,
-              },
-            ],
-          },
-        ], '/api/tickets/$_ticketId/controls'),
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
+            {
+              'id': 'grp-1',
+              'name': 'Sezione A',
+              'description': null,
+              'sortOrder': 0,
+              'subgroups': <dynamic>[],
+              'controls': [
+                {
+                  'id': 'tc-1',
+                  'templateControlId': 'tpl-1',
+                  'controlLineageId': 'lin-1',
+                  'label': 'Pressione OK',
+                  'description': null,
+                  'type': 0,
+                  'isRequired': true,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 0,
+                  'status': 'Pending',
+                  'stringValue': null,
+                  'boolValue': null,
+                  'dateValue': null,
+                  'completedByReportId': null,
+                  'completedAt': null,
+                },
+              ],
+            },
+          ],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
@@ -215,36 +221,39 @@ void main() {
 
     testWidgets('typing into a free-text control writes the answer', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse([
-          {
-            'id': 'grp-1',
-            'name': 'Sezione A',
-            'description': null,
-            'sortOrder': 0,
-            'subgroups': <dynamic>[],
-            'controls': [
-              {
-                'id': 'tc-2',
-                'templateControlId': 'tpl-2',
-                'controlLineageId': 'lin-2',
-                'label': 'Note aggiuntive',
-                'description': null,
-                'type': 1,
-                'isRequired': false,
-                'options': null,
-                'valoreLimite': null,
-                'sortOrder': 0,
-                'status': 'Pending',
-                'stringValue': null,
-                'boolValue': null,
-                'dateValue': null,
-                'completedByReportId': null,
-                'completedAt': null,
-              },
-            ],
-          },
-        ], '/api/tickets/$_ticketId/controls'),
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
+            {
+              'id': 'grp-1',
+              'name': 'Sezione A',
+              'description': null,
+              'sortOrder': 0,
+              'subgroups': <dynamic>[],
+              'controls': [
+                {
+                  'id': 'tc-2',
+                  'templateControlId': 'tpl-2',
+                  'controlLineageId': 'lin-2',
+                  'label': 'Note aggiuntive',
+                  'description': null,
+                  'type': 1,
+                  'isRequired': false,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 0,
+                  'status': 'Pending',
+                  'stringValue': null,
+                  'boolValue': null,
+                  'dateValue': null,
+                  'completedByReportId': null,
+                  'completedAt': null,
+                },
+              ],
+            },
+          ],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
@@ -266,8 +275,13 @@ void main() {
     testWidgets('says honestly that no controls are planned for this ticket', (tester) async {
       final dio = MockDio();
       when(
-        () => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls'),
-      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/tickets/$_ticketId/controls'));
+        () => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'groups': <dynamic>[],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
+      );
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
@@ -348,9 +362,12 @@ void main() {
 
     testWidgets('a successful online fetch caches the checklist locally', (tester) async {
       final dio = MockDio();
-      when(
-        () => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls'),
-      ).thenAnswer((_) async => _okResponse([controlsPayload()], '/api/tickets/$_ticketId/controls'));
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [controlsPayload()],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
+      );
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);

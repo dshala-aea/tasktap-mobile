@@ -849,8 +849,13 @@ void main() {
       await seedBase(db);
       final dio = MockDio();
       when(
-        () => dio.get<List<dynamic>>('/api/tickets/ticket-1/controls'),
-      ).thenAnswer((_) async => _okResponse(controlsJson, '/api/tickets/ticket-1/controls'));
+        () => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1/controls'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'groups': controlsJson,
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/ticket-1/controls'),
+      );
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Controllo');
@@ -864,8 +869,13 @@ void main() {
       await seedBase(db);
       final dio = MockDio();
       when(
-        () => dio.get<List<dynamic>>('/api/tickets/ticket-1/controls'),
-      ).thenAnswer((_) async => _okResponse(<dynamic>[], '/api/tickets/ticket-1/controls'));
+        () => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1/controls'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'groups': <dynamic>[],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/ticket-1/controls'),
+      );
 
       await pump(tester, dio: dio, isOnline: true);
       await tapTab(tester, 'Controllo');

@@ -50,9 +50,14 @@ class TicketDetailApiClient {
   /// The ticket's checklist, resolved from the maintenance-template version it
   /// materialised at creation (ADR-0012). An empty list means no version
   /// resolved — a legitimate state, not a loading failure.
+  ///
+  /// The endpoint's response is `{groups, assetProgress}` (backend commit
+  /// 001be48) — this only reads `groups`; `assetProgress` (per-asset
+  /// Controllato/Note) has no UI here yet, tracked as separate follow-up work.
   Future<List<TicketControlGroupDto>> fetchControls(String ticketId) async {
-    final response = await _dio.get<List<dynamic>>('/api/tickets/$ticketId/controls');
-    return (response.data ?? const [])
+    final response = await _dio.get<Map<String, dynamic>>('/api/tickets/$ticketId/controls');
+    final groups = response.data?['groups'] as List<dynamic>?;
+    return (groups ?? const [])
         .cast<Map<String, dynamic>>()
         .map(TicketControlGroupDto.fromJson)
         .toList();
