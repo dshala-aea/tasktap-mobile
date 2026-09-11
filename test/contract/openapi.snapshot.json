@@ -7418,6 +7418,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "librettoId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -7601,6 +7609,117 @@
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ProdottoAssistenza/{id}/children": {
+      "get": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ProdottoAssistenza/{id}/libretti/{childId}": {
+      "post": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "childId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "childId",
             "in": "path",
             "required": true,
             "schema": {
@@ -11952,7 +12071,7 @@
         "tags": [
           "TicketControls"
         ],
-        "summary": "The checklist, grouped and ordered as the template version defines it, with each item\u0027s\ncurrent state.",
+        "summary": "The checklist, grouped and ordered as the template version defines it, with each item\u0027s\ncurrent state, plus each covered asset\u0027s tracked progress.",
         "parameters": [
           {
             "name": "ticketId",
@@ -11964,6 +12083,60 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tickets/{ticketId}/asset-progress/{prodottoAssistenzaId}": {
+      "put": {
+        "tags": [
+          "TicketControls"
+        ],
+        "summary": "Records one covered asset\u0027s inspection progress for this ticket. Scoped to\n(TicketId, ProdottoAssistenzaId) \u2014 see bool TicketProdottoAssistenza.Controllato.",
+        "description": "Routed with an absolute override because this controller\u0027s base route ends in\n\u0060/controls\u0060 (see the class-level \u0060[Route]\u0060), and this endpoint\u0027s path does not\nlive under that segment \u2014 there is no relative path from \u0060/controls\u0060 that reaches\n\u0060/tickets/{ticketId}/asset-progress/...\u0060. No sibling controller in this codebase uses\na relative \u0022escape\u0022 convention (e.g. \u0022../\u0022) for this situation, so an absolute\n\u0060~/\u0060 route is used instead of inventing one.",
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "prodottoAssistenzaId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetProgressRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetProgressRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssetProgressRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -16048,6 +16221,12 @@
             ],
             "description": "Human-readable per-tenant, per-year display number (e.g. \u0060\u00222026-00042\u0022\u0060), allocated\nby \u003Csee cref=\u0022!:TaskTapAPI.Application.Numbering.IDocumentNumberService\u0022 /\u003E on create\n(migration 046, W7 Task 2). Nullable: existing rows created before W7 stay\n\u0060null\u0060 \u2014 there is no retro-numbering backfill (see the migration\u0027s\nheader comment). The frontend renders \u0060numero ?? \u0027\u2014\u0027\u0060."
           },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -16773,6 +16952,12 @@
             "description": "Contract value in EUR.",
             "format": "double"
           },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -16935,6 +17120,12 @@
             ],
             "description": "A specific version of Guid? Contract.MaintenanceTemplateId this contract is fixed to. Null \u2014\nthe normal case \u2014 means it follows the latest published version.",
             "format": "uuid"
+          },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "tenantId": {
             "type": "string",
@@ -17303,12 +17494,16 @@
             ],
             "format": "uuid"
           },
-          "prodottoAssistenzaId": {
+          "prodottoAssistenzaIds": {
             "type": [
               "null",
-              "string"
+              "array"
             ],
-            "format": "uuid"
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Assets this contract covers. Unlike the ticket path, not expanded from parent to\nchildren \u2014 this is a coverage record, not an inspection checklist."
           },
           "startDate": {
             "type": "string",
@@ -17774,7 +17969,7 @@
             "description": "Per-article VAT rate override, percent (e.g. 22.00). Null = tenant default.",
             "format": "double"
           },
-          "extensionProperties": {
+          "extensionValues": {
             "type": [
               "null",
               "string"
@@ -18391,12 +18586,16 @@
             ],
             "format": "uuid"
           },
-          "prodottoAssistenzaId": {
+          "prodottoAssistenzaIds": {
             "type": [
               "null",
-              "string"
+              "array"
             ],
-            "format": "uuid"
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Assets this ticket covers. A parent asset with children expands to all its current\nchildren server-side (see \u0060TicketCommandService.CreateAsync\u0060). Omitted or null means\nno specific asset \u2014 the pre-existing, unchanged behavior."
           },
           "commessaId": {
             "type": [
@@ -18699,6 +18898,12 @@
             ],
             "description": "Business/legacy customer code. Unlike string Commessa.Codice this is\n\u003Cb\u003Enullable\u003C/b\u003E \u2014 existing customers have no code and there is no backfill \u2014 so\nuniqueness is enforced with a PARTIAL unique index on \u0060(TenantId, Codice)\u0060\u0060WHERE \u0022Codice\u0022 IS NOT NULL\u0060 (the same pattern W1 used for\n\u0060OutboxMessages.IdempotencyKey\u0060), not a plain unique index, which would either\ncollide on multiple NULLs or forbid leaving the field unset."
           },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -18878,9 +19083,15 @@
           },
           "transform": {
             "type": "string"
+          },
+          "expectedValue": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "One binding, as exposed over the wire."
+        "description": "One binding, as exposed over the wire. ExpectedValue is only meaningful (and\n    required) when Transform is \u0022ValueEqualsToChecked\u0022 \u2014 see FieldBinding.ExpectedValue."
       },
       "FileContentResult": {
         "type": "object",
@@ -20045,12 +20256,11 @@
             "description": "Per-article VAT rate override, as a percent (e.g. \u006010.00\u0060, \u006022.00\u0060).\nFollows the same fallback idiom as decimal? ReportMateriale.UnitPrice: when null,\nthe tenant-wide default (\u0060FatturaOptions.VATRate\u0060 / \u0060Invoice.VATRate\u0060, today a\nsingle 22% for the whole tenant) is used for billing. A single tenant-wide rate cannot\nexpress mixed-rate trades (edilizia legitimately mixes 10%/4% alongside 22%), which is\nwhat this field exists to fix. \u00600.00\u0060 is a real Italian VAT rate (reverse-charge,\nVAT-exempt supplies) and MUST be distinguished from \u0022unset\u0022 \u2014 see\nVatRateResolver, the single authority for\nresolving this field.\nInvoice generation is NOT rewired to use this yet (deferred by explicit decision, W6b\nplan \u00A75) \u2014 this is the field, the DTO, and the resolver only.",
             "format": "double"
           },
-          "extensionProperties": {
+          "extensionValues": {
             "type": [
               "null",
               "string"
-            ],
-            "description": "Arbitrary JSON bag for ERP or third-party integration fields.\nStored as JSONB in PostgreSQL."
+            ]
           },
           "isActive": {
             "type": "boolean",
@@ -20264,7 +20474,7 @@
             ],
             "description": "API route serving the article\u0027s image, or null when it has none. Never a storage key or a\nsigned URL \u2014 those stay server-side (ADR-0010\u0027s attachment contract)."
           },
-          "extensionProperties": {
+          "extensionValues": {
             "type": [
               "null",
               "string"
@@ -21902,6 +22112,12 @@
             "description": "Customer-facing sale price in EUR. Wire name \u0022prezzoVendita\u0022.",
             "format": "double"
           },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -22615,6 +22831,12 @@
           },
           "isCompleted": {
             "type": "boolean"
+          },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "tenantId": {
             "type": "string",
@@ -24983,6 +25205,12 @@
             "type": "boolean",
             "description": "Checks if the ticket is closed."
           },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -25379,6 +25607,20 @@
           }
         }
       },
+      "UpdateAssetProgressRequest": {
+        "type": "object",
+        "properties": {
+          "controllato": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "UpdateBrandingRequest": {
         "type": "object",
         "properties": {
@@ -25595,12 +25837,16 @@
             ],
             "format": "uuid"
           },
-          "prodottoAssistenzaId": {
+          "prodottoAssistenzaIds": {
             "type": [
               "null",
-              "string"
+              "array"
             ],
-            "format": "uuid"
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Assets to add to this contract\u0027s coverage. Add-only: an id already on the contract is a\nno-op, and an omitted id already on the contract is left alone \u2014 never removed (see the\n\u0060Update\u0060 action for why removal is out of scope here)."
           },
           "startDate": {
             "type": [
