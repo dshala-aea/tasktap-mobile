@@ -140,27 +140,6 @@ void main() {
       await teardown(tester);
     });
 
-    // Regression: prodottoAssistenzaId was shown verbatim as a raw GUID — resolved the same way
-    // the cantiere/ticket detail screens resolve commessaId (live fetch, no local mirror exists).
-    testWidgets('resolves prodottoAssistenzaId to the product name, not the raw GUID', (
-      tester,
-    ) async {
-      when(
-        () => mockDio.get<Map<String, dynamic>>('/api/prodottoassistenza/prod-1'),
-      ).thenAnswer(
-        (_) async =>
-            _ok({'id': 'prod-1', 'name': 'Caldaia a condensazione'}, '/api/prodottoassistenza/prod-1'),
-      );
-
-      await openDetail(
-        tester,
-        contractOverride: {...contract, 'prodottoAssistenzaId': 'prod-1'},
-      );
-
-      expect(find.text('Caldaia a condensazione'), findsOneWidget);
-      expect(find.text('prod-1'), findsNothing);
-      await teardown(tester);
-    });
   });
 
   group('delete contract (Gap B)', () {

@@ -13,7 +13,6 @@ import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../ticket/steps/step_assegnazione.dart' show techniciansProvider;
-import '../../ticket/ticket_providers.dart' show prodottoAssistenzaByIdProvider;
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -21,7 +20,7 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Admin contract detail — read-only with edit FAB.
 ///
 /// Feature audit module #11: Gap A's new fields (numero, codice, tipo, externalId, autoRenewal,
-/// scadenzaGiorni, condizioni, prodottoAssistenzaId) are now shown; Gap B adds a delete action
+/// scadenzaGiorni, condizioni) are now shown; Gap B adds a delete action
 /// behind a confirm dialog; Gap C adds a "Genera pianificazione" trigger for
 /// `POST /contracts/{id}/genera-schedule`, previously entirely unreachable from mobile.
 class AdminContractDetailScreen extends ConsumerWidget {
@@ -37,7 +36,6 @@ class AdminContractDetailScreen extends ConsumerWidget {
     final codice = contract['codice'] as String? ?? '';
     final tipo = contract['tipo'] as String? ?? '';
     final externalId = contract['externalId'] as String? ?? '';
-    final prodottoAssistenzaId = contract['prodottoAssistenzaId'] as String?;
     final condizioni = contract['condizioni'] as String? ?? '';
     final description = contract['description'] as String? ?? '';
     final notes = contract['notes'] as String? ?? '';
@@ -59,17 +57,6 @@ class AdminContractDetailScreen extends ConsumerWidget {
         : 'Nessuna data fine';
     final priceLabel = price != null ? '€${price.toStringAsFixed(2)}' : '—';
     final freqLabel = '$frequencyValue ${_frequencyUnitLabel(frequencyUnit)}';
-
-    // Was showing the raw prodottoAssistenzaId GUID verbatim — resolved the same way the
-    // cantiere/ticket detail screens resolve commessaId: live-fetched, no local mirror exists.
-    final prodottoAsync = prodottoAssistenzaId == null || prodottoAssistenzaId.isEmpty
-        ? null
-        : ref.watch(prodottoAssistenzaByIdProvider(prodottoAssistenzaId));
-    final prodottoLabel = prodottoAsync?.when(
-      data: (p) => p?['name'] as String? ?? '—',
-      loading: () => 'Caricamento…',
-      error: (e, _) => '—',
-    );
     final isActive = contract['isActive'] as bool? ?? true;
 
     return Scaffold(
@@ -136,10 +123,6 @@ class AdminContractDetailScreen extends ConsumerWidget {
                           ),
                           KeyVal(label: 'Codice', value: codice.isNotEmpty ? codice : '—'),
                           KeyVal(label: 'Tipo', value: tipo.isNotEmpty ? tipo : '—'),
-                          KeyVal(
-                            label: 'Prodotto in assistenza',
-                            value: prodottoLabel ?? '—',
-                          ),
                           KeyVal(
                             label: 'Descrizione',
                             value: description.isNotEmpty ? description : '—',

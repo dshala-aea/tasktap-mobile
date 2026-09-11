@@ -683,7 +683,6 @@ void main() {
           dataInstallazione: DateTime.utc(2024, 1, 15),
           ultimaManutenzione: DateTime.utc(2025, 6, 1),
           prossimaManutenzione: DateTime.utc(2026, 6, 1),
-          contrattoId: _id(37),
           externalId: 'EXT-42',
         ),
       );
@@ -704,7 +703,6 @@ void main() {
           marca: 'Baxi',
           modello: 'ECO5',
           tipo: 'Caldaia',
-          contrattoId: _id(38),
           externalId: 'EXT-42',
         ),
       );
@@ -730,7 +728,6 @@ void main() {
           startDate: DateTime.utc(2026, 1, 1),
           description: 'full service',
           locationId: _id(32),
-          prodottoAssistenzaId: _id(58),
           endDate: DateTime.utc(2026, 12, 31),
           frequencyUnit: 'Years',
           numero: 'CTR-2026-001',

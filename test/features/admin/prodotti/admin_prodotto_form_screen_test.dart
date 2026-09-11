@@ -4,13 +4,11 @@
 // Feature audit module #10 (Prodotti/Servizi), Gaps 1/2/7: the original scaffold form only ever
 // collected name/customerId/locationId/description/serialNumber/warrantyExpiryDate/notes. This
 // covers the new commercial (codice/categoria/um/prezzoAcquisto/prezzoVendita) and lifecycle
-// (marca/modello/tipo/dataInstallazione/ultimaManutenzione/prossimaManutenzione/contrattoId)
-// fields, plus externalId:
+// (marca/modello/tipo/dataInstallazione/ultimaManutenzione/prossimaManutenzione) fields, plus
+// externalId:
 //   - creating with the new fields filled in sends them under their Italian wire names;
 //   - editing prefills every new field, including reading `marchio` (not `marca`) back off the
-//     prodotto map for the Marca field — the one field whose Dart param name and wire name differ;
-//   - the Contratto picker is fed by a live GET /api/contracts scoped to the selected customer
-//     (no local Drift mirror for contracts, same shape as Squadre/Commesse elsewhere in admin).
+//     prodotto map for the Marca field — the one field whose Dart param name and wire name differ.
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull, Column;
@@ -181,12 +179,6 @@ void main() {
       // Codice — the second TextFormField on the form (after Nome).
       await tester.enterText(find.byType(TextFormField).at(1), 'PROD-001');
 
-      // Contratto — scoped to the now-selected cliente.
-      await tester.tap(find.byType(DropdownButtonFormField<String?>).last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Manutenzione annuale').last);
-      await tester.pumpAndSettle();
-
       await tester.tap(find.text('Crea prodotto'));
       await tester.pumpAndSettle();
 
@@ -200,7 +192,6 @@ void main() {
       expect(captured['customerId'], 'cust-1');
       expect(captured['locationId'], 'loc-1');
       expect(captured['codice'], 'PROD-001');
-      expect(captured['contrattoId'], 'contr-1');
       await teardown(tester);
     });
 
@@ -274,7 +265,7 @@ void main() {
           data: captureAny(named: 'data'),
         ),
       ).captured.single as Map;
-      for (final key in ['codice', 'marchio', 'categoria', 'contrattoId']) {
+      for (final key in ['codice', 'marchio', 'categoria']) {
         expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
       }
       await teardown(tester);

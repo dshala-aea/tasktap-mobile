@@ -51,7 +51,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
 
   String? _selectedCustomerId;
   String? _selectedLocationId;
-  String? _selectedContrattoId;
 
   // ── Modello — pick an existing value or type a new one (Group 2: not validated against the
   // list). AppLookupField owns its own TextEditingController; this is just the current string,
@@ -66,20 +65,12 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
   bool _isActive = true;
   bool _isSaving = false;
 
-  // Contratti are fetched live, scoped to the selected customer — same pattern as
-  // ProdottoEditSheet.tsx's `loadContractOptionsByCustomer`, and the same "no local Drift mirror"
-  // shape this file already uses for customers/locations vs. commesse/squadre elsewhere in this
-  // app. Re-fetched whenever the customer changes.
-  List<Map<String, dynamic>> _contratti = [];
-  bool _isLoadingContratti = false;
-
   bool get _isEditing => widget.prodotto != null;
 
   @override
   void initState() {
     super.initState();
     if (_isEditing) _loadProdotto();
-    if (_selectedCustomerId != null) _loadContratti(_selectedCustomerId!);
     _loadModelliLookup();
   }
 
@@ -119,7 +110,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     _externalIdCtrl.text = p['externalId'] as String? ?? '';
     _selectedCustomerId = p['customerId'] as String?;
     _selectedLocationId = p['locationId'] as String?;
-    _selectedContrattoId = p['contrattoId'] as String?;
     _isActive = p['isActive'] as bool? ?? true;
     if (p['warrantyExpiryDate'] != null) {
       _warrantyExpiryDate = DateTime.tryParse(p['warrantyExpiryDate'] as String);
@@ -135,29 +125,10 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     }
   }
 
-  Future<void> _loadContratti(String customerId) async {
-    setState(() => _isLoadingContratti = true);
-    try {
-      final contratti = await ref.read(adminApiClientProvider).fetchContracts(customerId: customerId);
-      if (!mounted) return;
-      setState(() {
-        _contratti = contratti;
-        _isLoadingContratti = false;
-      });
-    } catch (_) {
-      // Best-effort, offline or transient failure — contratto picker just stays empty this
-      // session, mirroring _loadDetail's convention in the materiale form.
-      if (mounted) setState(() => _isLoadingContratti = false);
-    }
-  }
-
   void _onCustomerChanged(String? customerId) {
     setState(() {
       _selectedCustomerId = customerId;
-      _selectedContrattoId = null;
-      _contratti = [];
     });
-    if (customerId != null) _loadContratti(customerId);
   }
 
   @override
@@ -229,7 +200,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
           dataInstallazione: _dataInstallazione,
           ultimaManutenzione: _ultimaManutenzione,
           prossimaManutenzione: _prossimaManutenzione,
-          contrattoId: _selectedContrattoId,
           externalId: _externalIdCtrl.text.trim().isEmpty ? null : _externalIdCtrl.text.trim(),
         );
       } else {
@@ -254,7 +224,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
           dataInstallazione: _dataInstallazione,
           ultimaManutenzione: _ultimaManutenzione,
           prossimaManutenzione: _prossimaManutenzione,
-          contrattoId: _selectedContrattoId,
           externalId: _externalIdCtrl.text.trim().isEmpty ? null : _externalIdCtrl.text.trim(),
         );
       }
@@ -344,44 +313,6 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
                     .toList(),
                 onChanged: (v) => setState(() => _selectedLocationId = v),
                 validator: (v) => v == null ? 'Campo obbligatorio' : null,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AppFieldShell(
-              label: 'Contratto',
-              enabled: _selectedCustomerId != null,
-              // If the prefilled contrattoId hasn't shown up in the live fetch yet (still
-              // loading, or scoped to a customer the fetch hasn't resolved for), a bare fallback
-              // item keeps `initialValue` matching exactly one item — same `missingCommessaId`
-              // defensive shape admin_cantiere_form_screen.dart's own Commessa picker uses,
-              // otherwise DropdownButtonFormField asserts.
-              child: DropdownButtonFormField<String?>(
-                initialValue: _selectedContrattoId,
-                items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Nessun contratto')),
-                  if (_selectedContrattoId != null &&
-                      !_contratti.any((c) => c['id'] == _selectedContrattoId))
-                    DropdownMenuItem<String?>(
-                      value: _selectedContrattoId,
-                      child: Text(_selectedContrattoId!),
-                    ),
-                  for (final c in _contratti)
-                    DropdownMenuItem<String?>(
-                      value: c['id'] as String,
-                      child: Text(c['name'] as String? ?? '—'),
-                    ),
-                ],
-                onChanged: _selectedCustomerId == null
-                    ? null
-                    : (v) => setState(() => _selectedContrattoId = v),
-                hint: Text(
-                  _selectedCustomerId == null
-                      ? 'Seleziona prima un cliente'
-                      : _isLoadingContratti
-                      ? 'Caricamento…'
-                      : 'Nessun contratto',
-                ),
               ),
             ),
             const SizedBox(height: 16),

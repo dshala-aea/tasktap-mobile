@@ -22,10 +22,10 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Feature audit module #11, Gap A: the original scaffold only ever collected name/customerId/
 /// locationId/description/startDate/endDate/frequencyValue/frequencyUnit/price/notes. This now
 /// covers the full field set web's `ContrattoCreateSheet.tsx`/`ContrattoEditSheet.tsx` expose —
-/// numero, codice, tipo, externalId, autoRenewal, scadenzaGiorni, condizioni and a
-/// prodottoAssistenzaId picker — through the same single create/edit screen rather than web's
-/// split create-sheet/edit-sheet, matching this app's own established one-screen-for-both
-/// convention (see `admin_prodotto_form_screen.dart`), not web's. Maintenance-template
+/// numero, codice, tipo, externalId, autoRenewal, scadenzaGiorni, condizioni — through the same
+/// single create/edit screen rather than web's split create-sheet/edit-sheet, matching this
+/// app's own established one-screen-for-both convention (see `admin_prodotto_form_screen.dart`),
+/// not web's. Maintenance-template
 /// pinning fields are deliberately not here — out of scope for this pass, matching the
 /// Extension Fields precedent from an earlier module.
 class AdminContractFormScreen extends ConsumerStatefulWidget {
@@ -55,7 +55,6 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   final _notesCtrl = TextEditingController();
   String? _selectedCustomerId;
   String? _selectedLocationId;
-  String? _selectedProdottoId;
   String? _selectedTipo;
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
@@ -67,20 +66,12 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   bool _autoRenewal = false;
   bool _isSaving = false;
 
-  // Prodotti in assistenza are fetched live, scoped to the selected customer — the same
-  // "pick a related entity scoped by customer" shape admin_prodotto_form_screen.dart's own
-  // Contratto picker uses, mirrored in reverse (that form picks a Contratto scoped by customer;
-  // this one picks a ProdottoAssistenza scoped by customer).
-  List<Map<String, dynamic>> _prodotti = [];
-  bool _isLoadingProdotti = false;
-
   bool get _isEditing => widget.contract != null;
 
   @override
   void initState() {
     super.initState();
     if (_isEditing) _loadContract();
-    if (_selectedCustomerId != null) _loadProdotti(_selectedCustomerId!);
   }
 
   void _loadContract() {
@@ -97,7 +88,6 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
     _notesCtrl.text = c['notes'] as String? ?? '';
     _selectedCustomerId = c['customerId'] as String?;
     _selectedLocationId = c['locationId'] as String?;
-    _selectedProdottoId = c['prodottoAssistenzaId'] as String?;
     final tipo = c['tipo'] as String?;
     _selectedTipo = _tipoOptions.contains(tipo) ? tipo : null;
     if (c['startDate'] != null) {
@@ -115,31 +105,10 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
     _autoRenewal = c['autoRenewal'] as bool? ?? false;
   }
 
-  Future<void> _loadProdotti(String customerId) async {
-    setState(() => _isLoadingProdotti = true);
-    try {
-      final prodotti = await ref
-          .read(adminApiClientProvider)
-          .fetchProdottiAssistenza(customerId: customerId);
-      if (!mounted) return;
-      setState(() {
-        _prodotti = prodotti;
-        _isLoadingProdotti = false;
-      });
-    } catch (_) {
-      // Best-effort, offline or transient failure — prodotto picker just stays empty this
-      // session, mirroring admin_prodotto_form_screen.dart's own `_loadContratti` convention.
-      if (mounted) setState(() => _isLoadingProdotti = false);
-    }
-  }
-
   void _onCustomerChanged(String? customerId) {
     setState(() {
       _selectedCustomerId = customerId;
-      _selectedProdottoId = null;
-      _prodotti = [];
     });
-    if (customerId != null) _loadProdotti(customerId);
   }
 
   @override
@@ -198,7 +167,6 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
           startDate: _startDate,
           description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           locationId: _selectedLocationId,
-          prodottoAssistenzaId: _selectedProdottoId,
           endDate: _endDate,
           price: price,
           frequencyValue: _frequencyValue,
@@ -223,7 +191,6 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
           startDate: _startDate,
           description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
           locationId: _selectedLocationId,
-          prodottoAssistenzaId: _selectedProdottoId,
           endDate: _endDate,
           price: price,
           frequencyValue: _frequencyValue,
@@ -338,43 +305,6 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
                   ...locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))),
                 ],
                 onChanged: (v) => setState(() => _selectedLocationId = v),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AppFieldShell(
-              label: 'Prodotto in assistenza',
-              enabled: _selectedCustomerId != null,
-              // If the prefilled prodottoAssistenzaId hasn't shown up in the live fetch yet
-              // (still loading, or scoped to a customer the fetch hasn't resolved for), a bare
-              // fallback item keeps `initialValue` matching exactly one item — same defensive
-              // shape admin_prodotto_form_screen.dart's own Contratto picker uses.
-              child: DropdownButtonFormField<String?>(
-                initialValue: _selectedProdottoId,
-                items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('Nessun prodotto')),
-                  if (_selectedProdottoId != null &&
-                      !_prodotti.any((p) => p['id'] == _selectedProdottoId))
-                    DropdownMenuItem<String?>(
-                      value: _selectedProdottoId,
-                      child: Text(_selectedProdottoId!),
-                    ),
-                  for (final p in _prodotti)
-                    DropdownMenuItem<String?>(
-                      value: p['id'] as String,
-                      child: Text(p['name'] as String? ?? '—'),
-                    ),
-                ],
-                onChanged: _selectedCustomerId == null
-                    ? null
-                    : (v) => setState(() => _selectedProdottoId = v),
-                hint: Text(
-                  _selectedCustomerId == null
-                      ? 'Seleziona prima un cliente'
-                      : _isLoadingProdotti
-                      ? 'Caricamento…'
-                      : 'Nessun prodotto',
-                ),
               ),
             ),
             const SizedBox(height: 16),

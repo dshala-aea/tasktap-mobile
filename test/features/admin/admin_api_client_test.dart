@@ -796,7 +796,7 @@ void main() {
   // names via [JsonPropertyName] that don't match their Dart param names — `marca` → "marchio",
   // `code` → "codice", `category` → "categoria", `unitOfMeasure` → "um", `purchasePrice` →
   // "prezzoAcquisto", `salePrice` → "prezzoVendita" — everything else (modello/tipo/
-  // dataInstallazione/ultimaManutenzione/prossimaManutenzione/contrattoId/externalId) is already
+  // dataInstallazione/ultimaManutenzione/prossimaManutenzione/externalId) is already
   // camelCase-identical between Dart and wire. See ProdottoAssistenza.cs:23-89 and
   // ProdottoAssistenzaController.cs:318-391 (Create/UpdateProdottoAssistenzaRequest).
   group('ProdottoAssistenza commercial + lifecycle fields (Gaps 1/2/7)', () {
@@ -823,7 +823,6 @@ void main() {
         dataInstallazione: DateTime(2024, 1, 15),
         ultimaManutenzione: DateTime(2025, 6, 1),
         prossimaManutenzione: DateTime(2026, 6, 1),
-        contrattoId: 'contr-1',
         externalId: 'EXT-42',
       );
 
@@ -844,7 +843,6 @@ void main() {
       expect(captured['dataInstallazione'], DateTime(2024, 1, 15).toIso8601String());
       expect(captured['ultimaManutenzione'], DateTime(2025, 6, 1).toIso8601String());
       expect(captured['prossimaManutenzione'], DateTime(2026, 6, 1).toIso8601String());
-      expect(captured['contrattoId'], 'contr-1');
       expect(captured['externalId'], 'EXT-42');
       // Never "marca" — that's the wire name for Materiale's brand field, not this entity's.
       expect(captured.containsKey('marca'), isFalse);
@@ -878,7 +876,6 @@ void main() {
         'dataInstallazione',
         'ultimaManutenzione',
         'prossimaManutenzione',
-        'contrattoId',
         'externalId',
       ]) {
         expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
@@ -901,7 +898,6 @@ void main() {
         marca: 'Baxi',
         modello: 'ECO5',
         tipo: 'Caldaia',
-        contrattoId: 'contr-1',
         externalId: 'EXT-42',
       );
 
@@ -917,7 +913,6 @@ void main() {
       expect(captured['marchio'], 'Baxi');
       expect(captured['modello'], 'ECO5');
       expect(captured['tipo'], 'Caldaia');
-      expect(captured['contrattoId'], 'contr-1');
       expect(captured['externalId'], 'EXT-42');
     });
   });
@@ -1025,7 +1020,6 @@ void main() {
         name: 'Manutenzione annuale',
         customerId: 'cust-1',
         startDate: DateTime(2026, 1, 1),
-        prodottoAssistenzaId: 'prod-1',
         frequencyUnit: 'Years',
         numero: 'CTR-2026-001',
         autoRenewal: true,
@@ -1039,7 +1033,6 @@ void main() {
       final captured = verify(
         () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: captureAny(named: 'data')),
       ).captured.single as Map;
-      expect(captured['prodottoAssistenzaId'], 'prod-1');
       expect(captured['frequencyUnit'], 'Years');
       expect(captured['frequencyUnit'], isA<String>());
       expect(captured['numero'], 'CTR-2026-001');

@@ -868,9 +868,9 @@ class AdminApiClient {
 
   /// [code]/[category]/[unitOfMeasure]/[purchasePrice]/[salePrice] are the commercial fields
   /// (W6b Task 6 migration `AddProdottoAssistenzaCommercialFields`, Gap 1 of the feature audit);
-  /// [marca]/[modello]/[tipo]/[dataInstallazione]/[ultimaManutenzione]/[prossimaManutenzione]/
-  /// [contrattoId] are the lifecycle fields (W6b Task 6, Gap 2); [externalId] is the legacy
-  /// gestionale id (W6b Task 8, Gap 7). Dart param names follow this file's existing English
+  /// [marca]/[modello]/[tipo]/[dataInstallazione]/[ultimaManutenzione]/[prossimaManutenzione]
+  /// are the lifecycle fields (W6b Task 6, Gap 2); [externalId] is the legacy gestionale id
+  /// (W6b Task 8, Gap 7). Dart param names follow this file's existing English
   /// convention (matching [createMateriale]'s `code`/`category`/`unitOfMeasure`/`purchasePrice`/
   /// `salePrice`), but the wire names are Italian per `ProdottoAssistenza.cs`'s
   /// `[JsonPropertyName]` overrides — most notably [marca] → `"marchio"` on the wire, NOT
@@ -895,7 +895,6 @@ class AdminApiClient {
     DateTime? dataInstallazione,
     DateTime? ultimaManutenzione,
     DateTime? prossimaManutenzione,
-    String? contrattoId,
     String? externalId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
@@ -925,7 +924,6 @@ class AdminApiClient {
           'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
         if (prossimaManutenzione != null)
           'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
-        'contrattoId': ?contrattoId,
         if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
       },
     );
@@ -960,7 +958,6 @@ class AdminApiClient {
     DateTime? dataInstallazione,
     DateTime? ultimaManutenzione,
     DateTime? prossimaManutenzione,
-    String? contrattoId,
     String? externalId,
   }) async {
     await _dio.put(
@@ -989,7 +986,6 @@ class AdminApiClient {
           'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
         if (prossimaManutenzione != null)
           'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
-        'contrattoId': ?contrattoId,
         'externalId': ?externalId,
       },
     );
@@ -1060,15 +1056,13 @@ class AdminApiClient {
   ///
   /// [numero]/[autoRenewal]/[scadenzaGiorni]/[condizioni]/[tipo]/[externalId]/[codice] are the
   /// feature audit module #11 Gap A fields — `CreateContractRequest`'s full W6b Task 6/8 field
-  /// set, previously entirely uncollected on mobile. `prodottoAssistenzaId` was already a
-  /// parameter here before Gap A; only the form never exposed a picker for it.
+  /// set, previously entirely uncollected on mobile.
   Future<String> createContract({
     required String name,
     required String customerId,
     required DateTime startDate,
     String? description,
     String? locationId,
-    String? prodottoAssistenzaId,
     DateTime? endDate,
     double? price,
     int frequencyValue = 1,
@@ -1091,7 +1085,6 @@ class AdminApiClient {
         if (description != null && description.isNotEmpty)
           'description': description,
         'locationId': ?locationId,
-        'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'price': ?price,
         'frequencyValue': frequencyValue,
@@ -1118,9 +1111,9 @@ class AdminApiClient {
   /// empty, never round-tripping a blank string back — `Contract.Codice` carries a partial
   /// UNIQUE index and a second contract cleared to `""` in the same tenant would 500 on it (see
   /// `ContrattoEditSheet.tsx`'s own header comment on the web side of this exact trap).
-  /// `locationId`/`prodottoAssistenzaId`/`endDate`/`price`/`scadenzaGiorni`/`tipo` can never be
-  /// cleared through this endpoint once set (`.HasValue`-gated server-side) — callers pass `null`
-  /// for "leave untouched", same as before Gap A.
+  /// `locationId`/`endDate`/`price`/`scadenzaGiorni`/`tipo` can never be cleared through this
+  /// endpoint once set (`.HasValue`-gated server-side) — callers pass `null` for "leave
+  /// untouched", same as before Gap A.
   Future<void> updateContract(
     String id, {
     String? name,
@@ -1128,7 +1121,6 @@ class AdminApiClient {
     DateTime? startDate,
     String? description,
     String? locationId,
-    String? prodottoAssistenzaId,
     DateTime? endDate,
     double? price,
     int? frequencyValue,
@@ -1151,7 +1143,6 @@ class AdminApiClient {
         if (startDate != null) 'startDate': startDate.toIso8601String(),
         'description': ?description,
         'locationId': ?locationId,
-        'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'price': ?price,
         'frequencyValue': ?frequencyValue,

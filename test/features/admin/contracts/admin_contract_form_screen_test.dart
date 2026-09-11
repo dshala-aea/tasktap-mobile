@@ -4,9 +4,8 @@
 // Feature audit module #11 (Fatturazione/Contratti), Gap A: the original scaffold form only ever
 // collected name/customerId/locationId/description/startDate/endDate/frequencyValue/
 // frequencyUnit/price/notes. This covers the new numero/codice/tipo/externalId/autoRenewal/
-// scadenzaGiorni/condizioni fields and the prodottoAssistenzaId picker (scoped by customer,
-// mirroring admin_prodotto_form_screen.dart's own Contratto picker in reverse), plus the
-// frequencyUnit fix: the backend's ContractFrequencyUnit carries its own
+// scadenzaGiorni/condizioni fields, plus the frequencyUnit fix: the backend's
+// ContractFrequencyUnit carries its own
 // [JsonConverter(typeof(JsonStringEnumConverter))] (Contract.cs), so the wire shape is the
 // string "Days"/"Months"/"Years", not the ordinal int this form used to send.
 
@@ -156,14 +155,8 @@ void main() {
       await tester.tap(find.text('Acme Srl').last);
       await tester.pumpAndSettle();
 
-      // Prodotto in assistenza — first `<String?>` dropdown, scoped to the now-selected cliente.
+      // Tipo — first `<String?>` dropdown.
       await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Caldaia').last);
-      await tester.pumpAndSettle();
-
-      // Tipo — second `<String?>` dropdown.
-      await tester.tap(find.byType(DropdownButtonFormField<String?>).at(1));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Manutenzione').last);
       await tester.pumpAndSettle();
@@ -178,7 +171,6 @@ void main() {
       expect(captured['numero'], 'CTR-2026-001');
       expect(captured['codice'], 'C-001');
       expect(captured['customerId'], 'cust-1');
-      expect(captured['prodottoAssistenzaId'], 'prod-1');
       expect(captured['tipo'], 'Manutenzione');
       expect(captured['frequencyUnit'], 'Months');
       expect(captured['frequencyUnit'], isA<String>());
@@ -208,7 +200,6 @@ void main() {
         'externalId',
         'scadenzaGiorni',
         'condizioni',
-        'prodottoAssistenzaId',
       ]) {
         expect(captured.containsKey(key), isFalse, reason: '"$key" should be omitted');
       }

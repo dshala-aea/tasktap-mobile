@@ -39,7 +39,6 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
     final categoria = prodotto['categoria'] as String? ?? '';
     final um = prodotto['um'] as String? ?? '';
     final externalId = prodotto['externalId'] as String? ?? '';
-    final contrattoId = prodotto['contrattoId'] as String?;
 
     String dateLabel(String? key) {
       final raw = prodotto[key] as String?;
@@ -175,27 +174,6 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
-
-            // ── Contratto collegato ────────────────────────────────────────
-            if (contrattoId != null && contrattoId.isNotEmpty) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: 12)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-                  child: AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SectionTitle(title: 'Contratto collegato'),
-                        const SizedBox(height: 4),
-                        KeyVal(label: 'Contratto', value: contrattoId, showDivider: false),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
 
             // ── Matricole (Gap 3) ────────────────────────────────────────────
             if (id.isNotEmpty) ...[
