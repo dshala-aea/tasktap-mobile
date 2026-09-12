@@ -18289,6 +18289,10 @@
               "string"
             ],
             "description": "Acceptance text chosen/typed by the customer at signing time. Mobile-only before\nentity-coverage audit finding #1."
+          },
+          "isAiAssisted": {
+            "type": "boolean",
+            "description": "Whether an AI-generated draft was used anywhere in this report (ADR-0016). Web-only\nbefore this: mobile\u0027s offline submit path (bool SubmitReportRequest.AiAssisted)\nwas the sole writer of bool Report.IsAiAssisted, so a report drafted-and-kept in\nthe office editor left no durable record AI touched it. Defaults to false \u2014 the honest\nanswer for a report that never used the feature."
           }
         },
         "description": "Request model for creating a report. Relocated from \u0060ReportsController\u0060\n(W3 Task 2 thinning) per \u0060docs/patterns/service-layer.md\u0060 \u2014 write-request DTOs\nlive in the Application namespace with the owning service."
@@ -26405,6 +26409,13 @@
             ],
             "description": "Weekly working hours.",
             "format": "double"
+          },
+          "analyticsDigestOptOut": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "When true, this user stops receiving the Analytics weekly digest email even when their\ntenant has it enabled by default."
           }
         },
         "description": "Request model for updating user preferences."
@@ -26711,6 +26722,13 @@
               "string"
             ],
             "description": "Acceptance text chosen/typed by the customer at signing time. Null = not provided,\nleaves the existing value untouched (same convention as string? UpdateReportRequest.Details)."
+          },
+          "isAiAssisted": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Whether an AI-generated draft was used anywhere in this report (ADR-0016). Only ever\nturns the flag ON, never off \u2014 same OR-only semantic\nReportSubmitService\u0027s mobile path already applies\n(\u0060report.IsAiAssisted = report.IsAiAssisted || request.AiAssisted\u0060): once true, a\nlater edit that never touched the AI feature must not silently erase the record that an\nearlier one did. \u0060null\u0060/\u0060false\u0060 both leave the existing\nvalue untouched."
           }
         },
         "description": "Request model for updating a report. Only non-null properties are applied.\nRelocated from \u0060ReportsController\u0060 (W3 Task 2 thinning)."
@@ -27039,6 +27057,13 @@
               "boolean"
             ],
             "description": "When false, TicketWorkLog/CantiereWorkLog entries auto-approve on close. When true, they\nkeep the manual Draft -\u0026gt; Submitted -\u0026gt; Approved/Rejected workflow."
+          },
+          "analyticsDigestEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Tenant-wide default for the Analytics weekly digest email. Individual admins can still\nopt themselves out via PUT /api/users/me/preferences even when this is true."
           }
         },
         "description": "Request model for updating a tenant."
@@ -27673,6 +27698,10 @@
           "isPartTime": {
             "type": "boolean",
             "description": "Whether the user works part-time."
+          },
+          "analyticsDigestOptOut": {
+            "type": "boolean",
+            "description": "When true, this user does not receive the Analytics weekly digest email even when\ntheir tenant has bool Tenant.AnalyticsDigestEnabled on. Self-service via\nPUT /api/users/me/preferences. Has no effect on the in-app/push alerts\nAnalyticsNotificationHandler sends \u2014 those are per-event, not this digest."
           },
           "weeklyHours": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
