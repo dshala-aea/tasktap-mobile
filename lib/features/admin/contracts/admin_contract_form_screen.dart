@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
+import 'prodotto_multi_picker_sheet.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -60,6 +62,12 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   DateTime? _endDate;
   int _frequencyValue = 1;
 
+  /// Assets this contract covers. Always resent in full on save (never omitted) — see
+  /// [_save]'s own comment.
+  List<String> _selectedProdottoIds = [];
+  List<Map<String, dynamic>> _prodotti = [];
+  bool _isLoadingProdotti = false;
+
   /// `ContractFrequencyUnit`'s own wire spelling — see [AdminApiClient.createContract]'s doc
   /// comment for why this is a string, not the ordinal int the form used to send.
   String _frequencyUnit = 'Months';
@@ -71,7 +79,57 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   @override
   void initState() {
     super.initState();
-    if (_isEditing) _loadContract();
+    if (_isEditing) {
+      _loadContract();
+      unawaited(_refreshContractAssetIds());
+    }
+    if (_selectedCustomerId != null) {
+      unawaited(_loadProdottiForCustomer(_selectedCustomerId));
+    }
+  }
+
+  /// `widget.contract` is whatever the list screen last fetched (`extra`-passed on navigation),
+  /// which never carries `prodottoAssistenzaIds` — only `ContractsController.GetById`
+  /// ([AdminApiClient.fetchContractById]) populates it. Best-effort: if this fails, the picker
+  /// just starts empty rather than blocking the form.
+  Future<void> _refreshContractAssetIds() async {
+    try {
+      final api = ref.read(adminApiClientProvider);
+      final fresh = await api.fetchContractById(widget.contract!['id'] as String);
+      final ids = (fresh?['prodottoAssistenzaIds'] as List<dynamic>?)?.cast<String>() ?? [];
+      if (mounted) setState(() => _selectedProdottoIds = ids);
+    } catch (_) {
+      // Best-effort, see doc comment above.
+    }
+  }
+
+  /// Assets are scoped to a customer (same reasoning as Sede) — reloads the candidate list
+  /// whenever the customer changes. Does NOT touch `_selectedProdottoIds` itself: the initial
+  /// edit-mode load calls this directly (leaving the ids [_refreshContractAssetIds] just set
+  /// alone), while a genuine user-driven customer change goes through [_onCustomerChanged],
+  /// which clears them first.
+  Future<void> _loadProdottiForCustomer(String? customerId) async {
+    if (customerId == null) {
+      setState(() => _prodotti = []);
+      return;
+    }
+    setState(() => _isLoadingProdotti = true);
+    try {
+      final api = ref.read(adminApiClientProvider);
+      final items = await api.fetchProdottiAssistenza(customerId: customerId);
+      if (mounted) setState(() => _prodotti = items);
+    } finally {
+      if (mounted) setState(() => _isLoadingProdotti = false);
+    }
+  }
+
+  Future<void> _openAssetPicker() async {
+    final result = await openProdottoMultiPickerSheet(
+      context,
+      prodotti: _prodotti,
+      initialIds: _selectedProdottoIds,
+    );
+    if (result != null) setState(() => _selectedProdottoIds = result);
   }
 
   void _loadContract() {
@@ -108,7 +166,11 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   void _onCustomerChanged(String? customerId) {
     setState(() {
       _selectedCustomerId = customerId;
+      // Covered assets belong to a customer too — a switch must not leave a cross-customer
+      // selection behind, same reasoning as Sede.
+      _selectedProdottoIds = [];
     });
+    unawaited(_loadProdottiForCustomer(customerId));
   }
 
   @override
@@ -183,6 +245,9 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
           // Never "" — see AdminApiClient.updateContract's doc comment on the partial unique
           // index trap.
           codice: _codiceCtrl.text.trim().isEmpty ? null : _codiceCtrl.text.trim(),
+          // Always resent as the current full selection, never omitted — a non-null list is a
+          // full replace server-side, and the picker always holds a real (possibly empty) list.
+          prodottoAssistenzaIds: _selectedProdottoIds,
         );
       } else {
         await api.createContract(
@@ -203,6 +268,7 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
           tipo: _selectedTipo,
           externalId: _externalIdCtrl.text.trim().isEmpty ? null : _externalIdCtrl.text.trim(),
           codice: _codiceCtrl.text.trim().isEmpty ? null : _codiceCtrl.text.trim(),
+          prodottoAssistenzaIds: _selectedProdottoIds,
         );
       }
 
@@ -306,6 +372,18 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
                 ],
                 onChanged: (v) => setState(() => _selectedLocationId = v),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            AdminDateField(
+              label: 'Asset coperti',
+              value: _isLoadingProdotti
+                  ? 'Caricamento…'
+                  : _selectedProdottoIds.isEmpty
+                  ? 'Nessun asset selezionato'
+                  : '${_selectedProdottoIds.length} asset selezionati',
+              onTap: _selectedCustomerId == null ? () {} : _openAssetPicker,
+              icon: LucideIcons.package,
             ),
             const SizedBox(height: 16),
 

@@ -27,8 +27,11 @@ import 'package:tasktap_mobile/features/admin/contracts/admin_contract_form_scre
 
 class MockDio extends Mock implements Dio {}
 
-Response<T> _ok<T>(T data, String path) =>
-    Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
+Response<T> _ok<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 void main() {
   setUpAll(() {
@@ -83,7 +86,10 @@ void main() {
     ).thenAnswer((_) async => _ok({'id': 'new-contr'}, '/api/contracts'));
 
     when(
-      () => mockDio.put<dynamic>(any(that: contains('/api/contracts/')), data: any(named: 'data')),
+      () => mockDio.put<dynamic>(
+        any(that: contains('/api/contracts/')),
+        data: any(named: 'data'),
+      ),
     ).thenAnswer((_) async => _ok(null, '/api/contracts/contr-1'));
   });
 
@@ -164,9 +170,14 @@ void main() {
       await tester.tap(find.text('Crea contratto'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: captureAny(named: 'data')),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/contracts',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       expect(captured['name'], 'Manutenzione annuale');
       expect(captured['numero'], 'CTR-2026-001');
       expect(captured['codice'], 'C-001');
@@ -190,9 +201,14 @@ void main() {
       await tester.tap(find.text('Crea contratto'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: captureAny(named: 'data')),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/contracts',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       for (final key in [
         'numero',
         'codice',
@@ -221,9 +237,14 @@ void main() {
       await tester.tap(find.text('Crea contratto'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>('/api/contracts', data: captureAny(named: 'data')),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/contracts',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       expect(captured['autoRenewal'], true);
       await teardown(tester);
     });
@@ -255,9 +276,12 @@ void main() {
       await tester.tap(find.text('Salva modifiche'));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.put<dynamic>('/api/contracts/contr-1', data: captureAny(named: 'data')),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () =>
+                    mockDio.put<dynamic>('/api/contracts/contr-1', data: captureAny(named: 'data')),
+              ).captured.single
+              as Map;
       expect(captured['frequencyUnit'], 'Years');
       expect(captured['numero'], 'CTR-2026-001');
       expect(captured['codice'], 'C-001');
@@ -265,9 +289,7 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('falls back to Mesi when frequencyUnit is missing or unrecognized', (
-      tester,
-    ) async {
+    testWidgets('falls back to Mesi when frequencyUnit is missing or unrecognized', (tester) async {
       await openForm(
         tester,
         contract: {
@@ -279,6 +301,153 @@ void main() {
       );
 
       expect(find.text('Mesi'), findsOneWidget);
+      await teardown(tester);
+    });
+  });
+
+  group('asset coverage picker (multi-select, replaces the old single-value picker)', () {
+    testWidgets('sends the picked assets on create', (tester) async {
+      await openForm(tester);
+
+      await tester.enterText(find.byType(TextFormField).first, 'Manutenzione annuale');
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Nessun asset selezionato'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Caldaia'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Conferma (1)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 asset selezionati'), findsOneWidget);
+
+      await tester.tap(find.text('Crea contratto'));
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/contracts',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
+      expect(captured['prodottoAssistenzaIds'], ['prod-1']);
+      await teardown(tester);
+    });
+
+    testWidgets('sends an empty list when no asset is picked, never omitting the field', (
+      tester,
+    ) async {
+      await openForm(tester);
+
+      await tester.enterText(find.byType(TextFormField).first, 'Manutenzione annuale');
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crea contratto'));
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/contracts',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
+      expect(captured['prodottoAssistenzaIds'], <String>[]);
+      await teardown(tester);
+    });
+
+    testWidgets('prefills from a fresh GetById fetch (the list-passed contract never carries it)', (
+      tester,
+    ) async {
+      when(() => mockDio.get<Map<String, dynamic>>('/api/contracts/contr-1')).thenAnswer(
+        (_) async => _ok({
+          'id': 'contr-1',
+          'prodottoAssistenzaIds': ['prod-1'],
+        }, '/api/contracts/contr-1'),
+      );
+
+      await openForm(
+        tester,
+        contract: {
+          'id': 'contr-1',
+          'name': 'Manutenzione annuale',
+          'customerId': 'cust-1',
+          'startDate': '2026-01-01T00:00:00Z',
+          // The map handed to the form via `extra` — proven here to have NO prodottoAssistenzaIds
+          // of its own (only GetById's fresh fetch, mocked above, carries them).
+        },
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.text('1 asset selezionati'), findsOneWidget);
+
+      await tester.tap(find.text('Salva modifiche'));
+      await tester.pumpAndSettle();
+
+      final captured =
+          verify(
+                () =>
+                    mockDio.put<dynamic>('/api/contracts/contr-1', data: captureAny(named: 'data')),
+              ).captured.single
+              as Map;
+      expect(captured['prodottoAssistenzaIds'], ['prod-1']);
+      await teardown(tester);
+    });
+
+    testWidgets('switching Cliente clears the previously-picked assets', (tester) async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/customers',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _ok({
+          'items': [
+            {'id': 'cust-1', 'companyName': 'Acme Srl'},
+            {'id': 'cust-2', 'companyName': 'Beta Spa'},
+          ],
+        }, '/api/customers'),
+      );
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              companyName: 'Beta Spa',
+            ),
+          );
+
+      await openForm(tester);
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Nessun asset selezionato'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Caldaia'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Conferma (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('1 asset selezionati'), findsOneWidget);
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Beta Spa').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun asset selezionato'), findsOneWidget);
       await teardown(tester);
     });
   });

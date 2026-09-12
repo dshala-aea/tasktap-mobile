@@ -1075,6 +1075,8 @@ class AdminApiClient {
     String? tipo,
     String? externalId,
     String? codice,
+    /// Assets this contract covers. Omitted/empty means none — the pre-existing behavior.
+    List<String>? prodottoAssistenzaIds,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/contracts',
@@ -1097,6 +1099,7 @@ class AdminApiClient {
         if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
         if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
         if (codice != null && codice.isNotEmpty) 'codice': codice,
+        if (prodottoAssistenzaIds != null) 'prodottoAssistenzaIds': prodottoAssistenzaIds,
       },
     );
     return res.data!['id'] as String;
@@ -1134,6 +1137,11 @@ class AdminApiClient {
     String? tipo,
     String? externalId,
     String? codice,
+    /// Null (the default) leaves the contract's covered assets untouched. A non-null list —
+    /// including an empty one — fully replaces them (`ContractsController.Update`'s own
+    /// comment): whatever the picker currently shows must always be sent here, never omitted,
+    /// or a removed asset silently stays linked.
+    List<String>? prodottoAssistenzaIds,
   }) async {
     await _dio.put(
       '/api/contracts/$id',
@@ -1157,6 +1165,7 @@ class AdminApiClient {
         'externalId': ?externalId,
         // Never "" — see the doc comment above.
         'codice': ?codice,
+        'prodottoAssistenzaIds': ?prodottoAssistenzaIds,
       },
     );
   }

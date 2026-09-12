@@ -17120,6 +17120,14 @@
               "string"
             ]
           },
+          "prodottoAssistenzaIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Assets this contract covers, from \u0060ContractProdottoAssistenza\u0060. NOT persisted on this\nentity (excluded via \u0060entity.Ignore\u0060 in \u0060ContractConfiguration\u0060) \u2014 the join table\nis the source of truth. \u003Csee cref=\u0022!:ContractsController.GetById\u0022 /\u003E populates this after\nloading the contract, purely so a single read gives the client both the contract and its\ncovered-asset ids for edit-mode prefill. Always empty on an instance built any other way."
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -25181,6 +25189,14 @@
               "string"
             ]
           },
+          "prodottoAssistenzaIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Assets this ticket covers, from \u0060TicketProdottoAssistenza\u0060. NOT persisted on this\nentity (excluded via \u0060entity.Ignore\u0060 in \u0060TicketConfiguration\u0060) \u2014 the join table\nis the source of truth. \u003Csee cref=\u0022!:TicketsController.GetById\u0022 /\u003E populates this after\nloading the ticket, purely so a single read gives the client both the ticket and its\ncovered-asset ids for edit-mode prefill. Always empty on an instance built any other way."
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -27143,6 +27159,17 @@
               "string"
             ],
             "description": "Legacy gestionale id (W6b Task 8). Default camelCase \u2014 no override needed."
+          },
+          "prodottoAssistenzaIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Assets this ticket covers. Null (the default \u2014 omitted or explicit JSON null) leaves\ncoverage untouched; a non-null list, including an empty one, fully replaces it. See\nIReadOnlyList\u0026lt;Guid\u0026gt;? UpdateTicketCommand.ProdottoAssistenzaIds."
           }
         }
       },
