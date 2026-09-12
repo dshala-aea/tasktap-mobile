@@ -189,12 +189,14 @@ class SubmitReportControlloDto {
     this.stringValue,
     this.boolValue,
     this.dateValue,
+    this.numberValue,
   });
 
   final String ticketControlId;
   final String? stringValue;
   final bool? boolValue;
   final DateTime? dateValue;
+  final double? numberValue;
 
   Map<String, dynamic> toJson() => {
     // 'ticketControlId', not 'controlId'. The server's field is a non-nullable Guid, so the
@@ -205,6 +207,7 @@ class SubmitReportControlloDto {
     if (stringValue != null) 'stringValue': stringValue,
     if (boolValue != null) 'boolValue': boolValue,
     if (dateValue != null) 'dateValue': dateValue!.toUtc().toIso8601String(),
+    if (numberValue != null) 'numberValue': numberValue,
   };
 }
 

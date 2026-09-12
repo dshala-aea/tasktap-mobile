@@ -17225,8 +17225,15 @@
         "description": "One active contract expiring within the home expiry window. int ContrattoInScadenzaDto.DaysLeft is computed\nagainst the Europe/Rome today (spec \u00A76) \u2014 the exact \u0060ContractStatoResolver\u0060 defect site\nfrom W6b: a contract expiring at Rome midnight must not count as active for the first 1\u20132\nhours of the day."
       },
       "ControlTypeEnum": {
-        "type": "integer",
-        "description": "Defines how a Control renders its input and stores its value in a ReportControlValue."
+        "enum": [
+          "Text",
+          "Number",
+          "DateTime",
+          "Checkbox",
+          "TrueFalse",
+          "Options"
+        ],
+        "description": "Defines how a Control renders its input and stores its value in a TicketControl/\nReportControlObservation row."
       },
       "CreateAbsenceRequestBody": {
         "type": "object",
@@ -22904,6 +22911,15 @@
             ],
             "format": "date-time"
           },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -24152,6 +24168,15 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         },
         "description": "One inspection control answer."
@@ -27449,6 +27474,15 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
           }
         },
         "description": "Request model for one control-value answer in a bulk upsert. Relocated from\n\u0060ReportControlValuesController\u0060 (W3 Task 3 thinning)."

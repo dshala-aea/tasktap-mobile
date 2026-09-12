@@ -252,6 +252,7 @@ class SubmissionQueue {
               stringValue: c.stringValue,
               boolValue: c.boolValue,
               dateValue: c.dateValue,
+              numberValue: c.numberValue,
             ),
           )
           .toList(),

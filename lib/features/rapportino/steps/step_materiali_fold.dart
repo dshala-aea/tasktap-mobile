@@ -864,6 +864,7 @@ class _ControlloInputCard extends ConsumerStatefulWidget {
 
 class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   late final TextEditingController _textCtrl;
+  late final TextEditingController _numberCtrl;
 
   String get _rowId => 'ctrl-${widget.reportId}-${widget.flat.control.id}';
 
@@ -882,15 +883,18 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
     _textCtrl = TextEditingController(
       text: existing?.stringValue ?? widget.flat.control.stringValue ?? '',
     );
+    final numberValue = existing?.numberValue ?? widget.flat.control.numberValue;
+    _numberCtrl = TextEditingController(text: numberValue != null ? '$numberValue' : '');
   }
 
   @override
   void dispose() {
     _textCtrl.dispose();
+    _numberCtrl.dispose();
     super.dispose();
   }
 
-  void _save({String? stringValue, bool? boolValue, DateTime? dateValue}) {
+  void _save({String? stringValue, bool? boolValue, DateTime? dateValue, double? numberValue}) {
     final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
     notifier.upsertControllo(
       ControlloRow(
@@ -900,6 +904,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
         stringValue: stringValue,
         boolValue: boolValue,
         dateValue: dateValue,
+        numberValue: numberValue,
       ),
     );
   }
@@ -962,7 +967,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   Widget _buildInput(TicketControlDto c, ControlloRow? existing) {
     switch (c.type) {
       case ControlType.checkbox:
-      case ControlType.radioOnOff:
+      case ControlType.trueFalse:
         final value = existing?.boolValue ?? c.boolValue ?? false;
         return Row(
           children: [
@@ -976,7 +981,14 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
             Text('Sì', style: TextStyle(color: context.colors.inkMuted, fontSize: 12)),
           ],
         );
-      case ControlType.date:
+      case ControlType.number:
+        return TextField(
+          controller: _numberCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(hintText: 'Valore', isDense: true),
+          onChanged: (v) => _save(numberValue: v.trim().isEmpty ? null : double.tryParse(v.trim())),
+        );
+      case ControlType.dateTime:
         final value = existing?.dateValue ?? c.dateValue;
         return OutlinedButton.icon(
           onPressed: () async {
@@ -997,7 +1009,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
             alignment: Alignment.centerLeft,
           ),
         );
-      case ControlType.singleChoice:
+      case ControlType.options:
         final options = c.choiceOptions;
         if (options.isEmpty) {
           // No choice list published for this item — degrade to free text
@@ -1014,7 +1026,7 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
             if (v != null) _save(stringValue: v);
           },
         );
-      case ControlType.freeText:
+      case ControlType.text:
       case ControlType.unknown:
         return _freeTextField();
     }

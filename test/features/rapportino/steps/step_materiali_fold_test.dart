@@ -109,7 +109,7 @@ void main() {
                   'controlLineageId': 'lin-1',
                   'label': 'Pressione OK',
                   'description': null,
-                  'type': 0, // Checkbox
+                  'type': 'Checkbox',
                   'isRequired': true,
                   'options': null,
                   'valoreLimite': null,
@@ -127,7 +127,7 @@ void main() {
                   'controlLineageId': 'lin-2',
                   'label': 'Note aggiuntive',
                   'description': null,
-                  'type': 1, // FreeText
+                  'type': 'Text',
                   'isRequired': false,
                   'options': null,
                   'valoreLimite': null,
@@ -182,7 +182,7 @@ void main() {
                   'controlLineageId': 'lin-1',
                   'label': 'Pressione OK',
                   'description': null,
-                  'type': 0,
+                  'type': 'Checkbox',
                   'isRequired': true,
                   'options': null,
                   'valoreLimite': null,
@@ -237,7 +237,7 @@ void main() {
                   'controlLineageId': 'lin-2',
                   'label': 'Note aggiuntive',
                   'description': null,
-                  'type': 1,
+                  'type': 'Text',
                   'isRequired': false,
                   'options': null,
                   'valoreLimite': null,
@@ -268,6 +268,61 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.single.controlId, 'tc-2');
       expect(rows.single.stringValue, 'Tutto regolare');
+    });
+
+    testWidgets('typing into a Number control writes numberValue, not stringValue', (
+      tester,
+    ) async {
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
+            {
+              'id': 'grp-1',
+              'name': 'Sezione A',
+              'description': null,
+              'sortOrder': 0,
+              'subgroups': <dynamic>[],
+              'controls': [
+                {
+                  'id': 'tc-3',
+                  'templateControlId': 'tpl-3',
+                  'controlLineageId': 'lin-3',
+                  'label': 'Temperatura mandata',
+                  'description': null,
+                  'type': 'Number',
+                  'isRequired': false,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 0,
+                  'status': 'Pending',
+                  'stringValue': null,
+                  'boolValue': null,
+                  'dateValue': null,
+                  'numberValue': null,
+                  'completedByReportId': null,
+                  'completedAt': null,
+                },
+              ],
+            },
+          ],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
+      );
+
+      final container = _buildContainer(db: db, dio: dio);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '62.5');
+      await tester.pumpAndSettle();
+
+      final rows = container.read(reportEditorProvider(_reportId)).controlloRows;
+      expect(rows, hasLength(1));
+      expect(rows.single.controlId, 'tc-3');
+      expect(rows.single.numberValue, 62.5);
+      expect(rows.single.stringValue, isNull);
     });
   });
 
@@ -345,7 +400,7 @@ void main() {
           'controlLineageId': 'lin-1',
           'label': 'Pressione OK',
           'description': null,
-          'type': 0, // Checkbox
+          'type': 'Checkbox',
           'isRequired': true,
           'options': null,
           'valoreLimite': null,

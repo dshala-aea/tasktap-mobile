@@ -470,6 +470,9 @@ class ReportControlli extends Table {
   BoolColumn get boolValue => boolean().nullable()();
   DateTimeColumn get dateValue => dateTime().nullable()();
 
+  /// The answer for a Number-type control (backend's ControlTypeEnum.Number, migration 27).
+  RealColumn get numberValue => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -782,7 +785,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration {
@@ -957,6 +960,13 @@ class AppDatabase extends _$AppDatabase {
             draftReports,
             draftReports.technicianSignaturePrefillSuppressed,
           );
+        }
+        if (from < 27) {
+          // Backend's ControlTypeEnum gained a Number type (was only Checkbox/Text/DateTime/
+          // TrueFalse/Options) — see ReportControlli.numberValue's own doc comment. Additive and
+          // nullable, so a draft saved before this column existed just reads null for it, same
+          // as every other addColumn migration above.
+          await m.addColumn(reportControlli, reportControlli.numberValue);
         }
       },
     );

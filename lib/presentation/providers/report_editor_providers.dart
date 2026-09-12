@@ -164,6 +164,7 @@ class ControlloRow {
     this.stringValue,
     this.boolValue,
     this.dateValue,
+    this.numberValue,
   });
 
   final String id;
@@ -172,8 +173,14 @@ class ControlloRow {
   final String? stringValue;
   final bool? boolValue;
   final DateTime? dateValue;
+  final double? numberValue;
 
-  ControlloRow copyWith({String? stringValue, bool? boolValue, DateTime? dateValue}) {
+  ControlloRow copyWith({
+    String? stringValue,
+    bool? boolValue,
+    DateTime? dateValue,
+    double? numberValue,
+  }) {
     return ControlloRow(
       id: id,
       reportId: reportId,
@@ -181,6 +188,7 @@ class ControlloRow {
       stringValue: stringValue ?? this.stringValue,
       boolValue: boolValue ?? this.boolValue,
       dateValue: dateValue ?? this.dateValue,
+      numberValue: numberValue ?? this.numberValue,
     );
   }
 }
@@ -592,6 +600,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
             stringValue: c.stringValue,
             boolValue: c.boolValue,
             dateValue: c.dateValue,
+            numberValue: c.numberValue,
           ),
       ],
       allegatoRows: [
@@ -1128,6 +1137,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       stringValue: Value(row.stringValue),
       boolValue: Value(row.boolValue),
       dateValue: Value(row.dateValue),
+      numberValue: Value(row.numberValue),
     );
   }
 }

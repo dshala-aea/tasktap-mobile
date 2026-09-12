@@ -77,10 +77,10 @@ class TicketControlsCacheRepository {
     'templateControlId': c.templateControlId,
     'label': c.label,
     'description': c.description,
-    // TicketControlDto.fromJson maps this int back through `_controlTypeFromInt`, whose ordering
-    // matches ControlType's declaration order — round-tripping `.index` is safe as long as that
-    // stays true, same as every other backend-mirrored enum in this app.
-    'type': c.type.index,
+    // TicketControlDto.fromJson maps this back through `_controlTypeFromWire`, which matches the
+    // backend's own wire names (JsonStringEnumConverter) — write the same names here, not the
+    // enum's `.index`, or a cached-then-reloaded control always comes back `unknown`.
+    'type': _controlTypeToWire(c.type),
     'isRequired': c.isRequired,
     'options': c.options,
     'valoreLimite': c.valoreLimite,
@@ -89,6 +89,17 @@ class TicketControlsCacheRepository {
     'stringValue': c.stringValue,
     'boolValue': c.boolValue,
     'dateValue': c.dateValue?.toIso8601String(),
+    'numberValue': c.numberValue,
+  };
+
+  static String _controlTypeToWire(ControlType type) => switch (type) {
+    ControlType.text => 'Text',
+    ControlType.number => 'Number',
+    ControlType.dateTime => 'DateTime',
+    ControlType.checkbox => 'Checkbox',
+    ControlType.trueFalse => 'TrueFalse',
+    ControlType.options => 'Options',
+    ControlType.unknown => 'Unknown',
   };
 }
 

@@ -45,7 +45,7 @@ List<TicketControlGroupDto> _sampleGroups() => [
         id: 'tc-2',
         templateControlId: 'tpl-2',
         label: 'Note aggiuntive',
-        type: ControlType.freeText,
+        type: ControlType.text,
         isRequired: false,
         sortOrder: 1,
         status: 'Pending',
@@ -77,7 +77,7 @@ void main() {
       expect(cached.single.controls[0].label, 'Pressione OK');
       expect(cached.single.controls[0].type, ControlType.checkbox);
       expect(cached.single.controls[0].boolValue, isTrue);
-      expect(cached.single.controls[1].type, ControlType.freeText);
+      expect(cached.single.controls[1].type, ControlType.text);
       expect(cached.single.controls[1].stringValue, 'Tutto regolare');
     });
 

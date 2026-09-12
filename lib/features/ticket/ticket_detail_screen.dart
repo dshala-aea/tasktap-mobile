@@ -983,14 +983,16 @@ class _TicketControlStatusCard extends StatelessWidget {
   String? _valueLabel(TicketControlDto c) {
     switch (c.type) {
       case ControlType.checkbox:
-      case ControlType.radioOnOff:
+      case ControlType.trueFalse:
         if (c.boolValue == null) return null;
         return c.boolValue! ? 'Sì' : 'No';
-      case ControlType.date:
+      case ControlType.dateTime:
         if (c.dateValue == null) return null;
         return DateFormat('dd/MM/yyyy', 'it').format(c.dateValue!.toLocal());
-      case ControlType.freeText:
-      case ControlType.singleChoice:
+      case ControlType.number:
+        return c.numberValue?.toString();
+      case ControlType.text:
+      case ControlType.options:
       case ControlType.unknown:
         return c.stringValue;
     }

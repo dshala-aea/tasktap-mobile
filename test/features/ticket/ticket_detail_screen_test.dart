@@ -829,7 +829,7 @@ void main() {
             'controlLineageId': 'lin-1',
             'label': 'Pressione OK',
             'description': null,
-            'type': 0, // Checkbox
+            'type': 'Checkbox',
             'isRequired': true,
             'options': null,
             'valoreLimite': null,

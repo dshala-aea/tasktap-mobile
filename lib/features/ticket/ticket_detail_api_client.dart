@@ -283,17 +283,21 @@ class TicketMaterialeDto {
   }
 }
 
-/// How a control renders its input and stores its value — mirrors the
-/// backend's ControlTypeEnum (serialized as a plain int, no string converter).
-enum ControlType { checkbox, freeText, radioOnOff, date, singleChoice, unknown }
+/// How a control renders its input and stores its value — mirrors the backend's
+/// ControlTypeEnum, now a string wire shape (JsonStringEnumConverter) instead of a plain int.
+/// Renamed from the old checkbox/freeText/radioOnOff/date/singleChoice set to
+/// checkbox/text/trueFalse/dateTime/singleChoice + a new [number] — by MEANING, not by the old
+/// int ordinal (which was fully reordered server-side, see backend's ControlTypeEnum.cs).
+enum ControlType { text, number, dateTime, checkbox, trueFalse, options, unknown }
 
-ControlType _controlTypeFromInt(int? value) {
+ControlType _controlTypeFromWire(String? value) {
   return switch (value) {
-    0 => ControlType.checkbox,
-    1 => ControlType.freeText,
-    2 => ControlType.radioOnOff,
-    3 => ControlType.date,
-    4 => ControlType.singleChoice,
+    'Text' => ControlType.text,
+    'Number' => ControlType.number,
+    'DateTime' => ControlType.dateTime,
+    'Checkbox' => ControlType.checkbox,
+    'TrueFalse' => ControlType.trueFalse,
+    'Options' => ControlType.options,
     _ => ControlType.unknown,
   };
 }
@@ -352,6 +356,7 @@ class TicketControlDto {
     this.stringValue,
     this.boolValue,
     this.dateValue,
+    this.numberValue,
   });
 
   final String id;
@@ -361,7 +366,7 @@ class TicketControlDto {
   final ControlType type;
   final bool isRequired;
 
-  /// Serialized choice list (JSON array of strings) for [ControlType.singleChoice].
+  /// Serialized choice list (JSON array of strings) for [ControlType.options].
   final String? options;
   final double? valoreLimite;
   final int sortOrder;
@@ -373,6 +378,7 @@ class TicketControlDto {
   final String? stringValue;
   final bool? boolValue;
   final DateTime? dateValue;
+  final double? numberValue;
 
   /// [options] parsed as a choice list, or empty when absent/unparseable.
   List<String> get choiceOptions {
@@ -395,7 +401,7 @@ class TicketControlDto {
       templateControlId: json['templateControlId'] as String? ?? '',
       label: json['label'] as String? ?? '',
       description: json['description'] as String?,
-      type: _controlTypeFromInt(json['type'] as int?),
+      type: _controlTypeFromWire(json['type'] as String?),
       isRequired: json['isRequired'] as bool? ?? false,
       options: json['options'] as String?,
       valoreLimite: _asDouble(json['valoreLimite']),
@@ -404,6 +410,7 @@ class TicketControlDto {
       stringValue: json['stringValue'] as String?,
       boolValue: json['boolValue'] as bool?,
       dateValue: json['dateValue'] != null ? DateTime.tryParse(json['dateValue'] as String) : null,
+      numberValue: _asDouble(json['numberValue']),
     );
   }
 }

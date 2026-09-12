@@ -13,12 +13,12 @@ import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
 
 void main() {
   group('TicketControlDto.fromJson', () {
-    test('parses ControlTypeEnum as an int, not a string', () {
+    test('parses ControlTypeEnum as a string (JsonStringEnumConverter), not an int', () {
       final dto = TicketControlDto.fromJson({
         'id': 'tc-1',
         'templateControlId': 'tpl-1',
         'label': 'Pressione OK',
-        'type': 0,
+        'type': 'Checkbox',
         'isRequired': true,
         'sortOrder': 0,
         'status': 'Pending',
@@ -27,22 +27,51 @@ void main() {
       expect(dto.type, ControlType.checkbox);
     });
 
-    test('maps all five ControlTypeEnum ordinals', () {
-      ControlType typeFor(int ordinal) => TicketControlDto.fromJson({
+    test('maps every ControlTypeEnum wire name', () {
+      ControlType typeFor(String wireName) => TicketControlDto.fromJson({
         'id': 'tc-1',
         'templateControlId': 'tpl-1',
         'label': 'x',
-        'type': ordinal,
+        'type': wireName,
         'isRequired': false,
         'sortOrder': 0,
         'status': 'Pending',
       }).type;
 
-      expect(typeFor(0), ControlType.checkbox);
-      expect(typeFor(1), ControlType.freeText);
-      expect(typeFor(2), ControlType.radioOnOff);
-      expect(typeFor(3), ControlType.date);
-      expect(typeFor(4), ControlType.singleChoice);
+      expect(typeFor('Text'), ControlType.text);
+      expect(typeFor('Number'), ControlType.number);
+      expect(typeFor('DateTime'), ControlType.dateTime);
+      expect(typeFor('Checkbox'), ControlType.checkbox);
+      expect(typeFor('TrueFalse'), ControlType.trueFalse);
+      expect(typeFor('Options'), ControlType.options);
+    });
+
+    test('falls back to unknown for an unrecognized or missing type', () {
+      final dto = TicketControlDto.fromJson({
+        'id': 'tc-1',
+        'templateControlId': 'tpl-1',
+        'label': 'x',
+        'isRequired': false,
+        'sortOrder': 0,
+        'status': 'Pending',
+      });
+
+      expect(dto.type, ControlType.unknown);
+    });
+
+    test('parses numberValue', () {
+      final dto = TicketControlDto.fromJson({
+        'id': 'tc-1',
+        'templateControlId': 'tpl-1',
+        'label': 'Temperatura',
+        'type': 'Number',
+        'isRequired': false,
+        'sortOrder': 0,
+        'status': 'Pending',
+        'numberValue': 62.5,
+      });
+
+      expect(dto.numberValue, 62.5);
     });
 
     test('keeps TicketControlStatus as the raw string the backend sends', () {
@@ -50,7 +79,7 @@ void main() {
         'id': 'tc-1',
         'templateControlId': 'tpl-1',
         'label': 'x',
-        'type': 0,
+        'type': 'Checkbox',
         'isRequired': false,
         'sortOrder': 0,
         'status': 'Completed',
@@ -64,7 +93,7 @@ void main() {
         'id': 'tc-1',
         'templateControlId': 'tpl-1',
         'label': 'x',
-        'type': 4,
+        'type': 'Options',
         'isRequired': false,
         'sortOrder': 0,
         'status': 'Pending',
@@ -79,7 +108,7 @@ void main() {
         'id': 'tc-1',
         'templateControlId': 'tpl-1',
         'label': 'x',
-        'type': 4,
+        'type': 'Options',
         'isRequired': false,
         'sortOrder': 0,
         'status': 'Pending',
@@ -94,7 +123,7 @@ void main() {
         'id': 'tc-1',
         'templateControlId': 'tpl-1',
         'label': 'x',
-        'type': 1,
+        'type': 'Text',
         'isRequired': false,
         'sortOrder': 0,
         'status': 'Pending',
@@ -116,7 +145,7 @@ void main() {
               'id': 'c1',
               'templateControlId': 't1',
               'label': 'Item 1',
-              'type': 1,
+              'type': 'Text',
               'isRequired': false,
               'sortOrder': 0,
               'status': 'Pending',
@@ -132,7 +161,7 @@ void main() {
                   'id': 'c2',
                   'templateControlId': 't2',
                   'label': 'Item 2',
-                  'type': 1,
+                  'type': 'Text',
                   'isRequired': false,
                   'sortOrder': 0,
                   'status': 'Pending',
