@@ -13,7 +13,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// New-request form. Create-only — AbsenceRequestsController has no update endpoint, only
-/// create/approve/reject/cancel, so unlike AgendaFormScreen this never edits an existing row.
+/// create/approve/reject/cancel, so this never edits an existing row.
 class FeriePermessiFormScreen extends ConsumerStatefulWidget {
   const FeriePermessiFormScreen({super.key});
 

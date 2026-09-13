@@ -48,9 +48,6 @@ import '../../features/admin/squadre/admin_squadra_detail_screen.dart';
 import '../../features/admin/squadre/admin_squadra_form_screen.dart';
 import '../../features/admin/reports/admin_report_list_screen.dart';
 import '../../features/admin/reports/admin_report_detail_screen.dart';
-import '../../features/agenda/agenda_form_screen.dart';
-import '../../features/agenda/agenda_list_screen.dart';
-import '../../data/agenda/agenda_api_client.dart';
 import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
@@ -116,10 +113,6 @@ abstract final class AppRoutes {
         ? cantiereTimbra
         : '$cantiereTimbra?${params.join('&')}';
   }
-
-  /// Personal to-do list against `/api/agenda` — a technician's own quick tasks, separate from
-  /// Schedule (`calendario/`, dispatcher-assigned work).
-  static const String altroAgenda = '/altro/agenda';
 
   /// Self-service ferie/permessi against `/api/absence-requests` — already complete and tested
   /// server-side (docs/superpowers/specs/2026-08-30-ferie-permessi-design.md). No approval
@@ -332,26 +325,6 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'i-miei-dati',
                     builder: (context, state) => const IMieiDatiScreen(),
-                  ),
-                  GoRoute(
-                    path: 'agenda',
-                    builder: (context, state) => const AgendaListScreen(),
-                    routes: [
-                      GoRoute(
-                        path: 'nuovo',
-                        parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const AgendaFormScreen(),
-                      ),
-                      GoRoute(
-                        path: ':id/modifica',
-                        parentNavigatorKey: rootNavigatorKey,
-                        // AgendaController has no GET-by-id route — the item travels as `extra`
-                        // from the list row that pushed this route (see AgendaFormScreen's doc).
-                        builder: (context, state) => AgendaFormScreen(
-                          item: state.extra as AgendaItemDto?,
-                        ),
-                      ),
-                    ],
                   ),
                   GoRoute(
                     path: 'ferie',

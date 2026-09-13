@@ -7,8 +7,8 @@ import '../api/dio_client.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 // AbsenceRequestApiClient — self-service ferie/permessi against
 // AbsenceRequestsController (/api/absence-requests), already complete and tested server-side.
-// Online-only, mirroring AgendaApiClient's own justification exactly: this is data typed by the
-// same person who reads it back, not a field-capture write that must survive a dead signal.
+// Online-only: this is data typed by the same person who reads it back, not a field-capture
+// write that must survive a dead signal.
 //
 // AbsenceTypeEnum (Ferie=0/Permesso=1/Malattia=2) and AbsenceRequestStatusEnum
 // (Pending=0/Approved=1/Rejected=2/Cancelled=3) are bare ints on the wire — no

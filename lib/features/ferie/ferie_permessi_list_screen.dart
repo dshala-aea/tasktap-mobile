@@ -13,8 +13,8 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 const Set<int> _kCancellable = {0, 1}; // Pending, Approved
 
-/// Self-service AbsenceRequest history. Mirrors agenda_list_screen.dart's online-only,
-/// no-Drift-cache architecture exactly (see AbsenceRequestApiClient's own file doc).
+/// Self-service AbsenceRequest history. Online-only, no-Drift-cache architecture (see
+/// AbsenceRequestApiClient's own file doc).
 class FeriePermessiListScreen extends ConsumerWidget {
   const FeriePermessiListScreen({super.key});
 

@@ -167,6 +167,17 @@ void main() {
     await drain(tester);
   });
 
+  testWidgets('does not render an Agenda tile — the feature was removed', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user, entitlement: _fullyEntitled());
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pump();
+
+    expect(find.text('Agenda'), findsNothing);
+    await drain(tester);
+  });
+
   // ── 3b. Gating ─────────────────────────────────────────────────────────────
   //
   // The hub drew all ten tiles for everybody. Cantieri, Contratti, Prodotti and Magazzino are

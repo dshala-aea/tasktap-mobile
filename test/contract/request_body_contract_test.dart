@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tasktap_mobile/data/agenda/agenda_api_client.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
@@ -436,42 +435,6 @@ void main() {
           voiceTranscript: 'sostituita la pompa di circolazione',
         ),
       );
-    });
-  });
-
-  group('agenda', () {
-    contractTest('creating an item matches the server', () {
-      final client = AgendaApiClient(dio);
-      return capture(
-        () => client.createAgendaItem(
-          date: DateTime.utc(2026, 8, 17),
-          timeStart: '09:00:00',
-          timeEnd: '10:00:00',
-          title: 'Richiamare il fornitore',
-          description: 'per il pezzo mancante',
-          priority: 2,
-        ),
-      );
-    });
-
-    contractTest('updating an item matches the server', () {
-      final client = AgendaApiClient(dio);
-      return capture(
-        () => client.updateAgendaItem(
-          _id(20),
-          date: DateTime.utc(2026, 8, 17),
-          timeStart: '09:00:00',
-          timeEnd: '10:00:00',
-          title: 'Richiamare il fornitore',
-          description: 'per il pezzo mancante',
-          priority: 2,
-        ),
-      );
-    });
-
-    contractTest('completing an item matches the server', () {
-      final client = AgendaApiClient(dio);
-      return capture(() => client.completeAgendaItem(_id(21)));
     });
   });
 

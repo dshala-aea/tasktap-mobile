@@ -4,9 +4,9 @@ import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 
 // This file only tests pure Dart JSON parsing (no Dio/network mocking needed — AbsenceRequestDto
 // is a plain fromJson factory). Any real HTTP-call-level assertions belong in Task 7/8's widget
-// tests via a fake AbsenceRequestApiClient subclass, exactly like agenda_list_screen_test.dart's
-// `_FakeAgendaApiClient` pattern — do not add a Dio-mocking dependency for this file; re-grep
-// mobile/pubspec.yaml first if a future task genuinely needs one, none is added by this plan.
+// tests via a fake AbsenceRequestApiClient subclass — do not add a Dio-mocking dependency for
+// this file; re-grep mobile/pubspec.yaml first if a future task genuinely needs one, none is
+// added by this plan.
 
 void main() {
   test('AbsenceRequestDto.fromJson parses the full wire shape', () {

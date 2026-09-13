@@ -175,15 +175,6 @@ class AltroHubScreen extends ConsumerWidget {
             module: 'pianificazione',
             onTap: () => context.push('/altro/pianificazioni'),
           ),
-          // A technician's own quick-task list — a different aggregate from Pianificazioni
-          // (dispatcher-assigned Schedule rows). Same module gate: `AgendaController`'s
-          // `PianificazioneAgendaRead`/`Write` permissions both key off ModuleKeys.Pianificazione.
-          (
-            icon: LucideIcons.calendarCheck,
-            label: 'Agenda',
-            module: 'pianificazione',
-            onTap: () => context.push(AppRoutes.altroAgenda),
-          ),
           (
             icon: LucideIcons.calendarX,
             label: 'Ferie e Permessi',
