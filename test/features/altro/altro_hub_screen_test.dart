@@ -156,6 +156,17 @@ void main() {
     await drain(tester);
   });
 
+  testWidgets('renders the Ferie e Permessi tile for a tenant with the presenze module', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user, entitlement: _fullyEntitled());
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -300));
+    await tester.pump();
+
+    expect(find.text('Ferie e Permessi'), findsOneWidget);
+    await drain(tester);
+  });
+
   // ── 3b. Gating ─────────────────────────────────────────────────────────────
   //
   // The hub drew all ten tiles for everybody. Cantieri, Contratti, Prodotti and Magazzino are

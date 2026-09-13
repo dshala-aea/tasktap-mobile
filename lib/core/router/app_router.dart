@@ -51,6 +51,8 @@ import '../../features/admin/reports/admin_report_detail_screen.dart';
 import '../../features/agenda/agenda_form_screen.dart';
 import '../../features/agenda/agenda_list_screen.dart';
 import '../../data/agenda/agenda_api_client.dart';
+import '../../features/ferie/ferie_permessi_form_screen.dart';
+import '../../features/ferie/ferie_permessi_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
@@ -118,6 +120,11 @@ abstract final class AppRoutes {
   /// Personal to-do list against `/api/agenda` — a technician's own quick tasks, separate from
   /// Schedule (`calendario/`, dispatcher-assigned work).
   static const String altroAgenda = '/altro/agenda';
+
+  /// Self-service ferie/permessi against `/api/absence-requests` — already complete and tested
+  /// server-side (docs/superpowers/specs/2026-08-30-ferie-permessi-design.md). No approval
+  /// queue on mobile; that lives only on web, gated behind PresenzeAbsenceApprove.
+  static const String altroFerie = '/altro/ferie';
 
   static const String altroClienti = '/altro/clienti';
   static const String altroClientiDetail = '/altro/clienti/:id';
@@ -343,6 +350,17 @@ GoRouter buildRouter(WidgetRef ref) {
                         builder: (context, state) => AgendaFormScreen(
                           item: state.extra as AgendaItemDto?,
                         ),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'ferie',
+                    builder: (context, state) => const FeriePermessiListScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'nuovo',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) => const FeriePermessiFormScreen(),
                       ),
                     ],
                   ),

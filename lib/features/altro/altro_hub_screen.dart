@@ -184,6 +184,12 @@ class AltroHubScreen extends ConsumerWidget {
             module: 'pianificazione',
             onTap: () => context.push(AppRoutes.altroAgenda),
           ),
+          (
+            icon: LucideIcons.calendarX,
+            label: 'Ferie e Permessi',
+            module: 'presenze',
+            onTap: () => context.push(AppRoutes.altroFerie),
+          ),
         ];
 
     return [
