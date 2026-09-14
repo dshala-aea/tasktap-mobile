@@ -863,6 +863,66 @@
         }
       }
     },
+    "/api/billing/cancel": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Schedules self-service cancellation: the subscription keeps running through\nDateTime? Tenant.SubscriptionCurrentPeriodEnd and then lapses on its own, rather than\ncancelling immediately. bool Tenant.CancelAtPeriodEnd is set here optimistically\nso the UI reflects the click without waiting on a webhook round-trip \u2014 the\ncustomer.subscription.updated webhook re-confirms (or corrects) it from Stripe afterwards.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/resume": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Reverses a scheduled cancellation. No-op-safe: calling it when the tenant was never\nscheduled for cancellation is not an error, it just confirms the (already) false state.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionStateDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/billing/checkout": {
       "post": {
         "tags": [
@@ -24746,7 +24806,8 @@
           "fieldSeats",
           "moduli",
           "hasSubscription",
-          "lastSyncedAt"
+          "lastSyncedAt",
+          "cancelAtPeriodEnd"
         ],
         "type": "object",
         "properties": {
@@ -24818,6 +24879,9 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "cancelAtPeriodEnd": {
+            "type": "boolean"
           }
         },
         "description": "The tenant\u0027s subscription as it stands."
