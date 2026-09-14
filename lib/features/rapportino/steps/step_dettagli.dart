@@ -219,6 +219,12 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
 
           const SizedBox(height: 16),
           _GpsCapture(reportId: widget.reportId),
+
+          // Tenant-configured custom fields (web-only admin config) — the draft already has a
+          // real reportId by the time this step can open (create_draft.dart creates it before
+          // RapportinoFormScreen ever mounts), so unlike the ticket create wizard this needs no
+          // "does the entity exist yet" gate.
+          ExtensionFieldsSection(entityType: 'report', entityId: widget.reportId),
         ],
       ),
     );
