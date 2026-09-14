@@ -217,6 +217,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                         state: s,
                         onChanged: _onFormChanged,
                         showPriority: false,
+                        ticketId: widget.ticketId,
                       ),
                     },
                   ),

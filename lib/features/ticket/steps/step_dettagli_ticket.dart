@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_text_field.dart';
+import '../../../core/widgets/extension_fields_section.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -20,6 +21,7 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
     required this.state,
     required this.onChanged,
     this.showPriority = true,
+    this.ticketId,
   });
 
   final NewTicketFormState state;
@@ -30,6 +32,12 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
   /// so there is no current value to pre-fill here. Showing the picker anyway would default to
   /// "Media" regardless of the ticket's real priority and silently reset it on save.
   final bool showPriority;
+
+  /// The ticket being edited, or null while creating a new one. Gates [ExtensionFieldsSection]:
+  /// tenant-defined custom fields save through `PUT /extension-fields/ticket/{id}/values`, which
+  /// needs a real ticket id — the create wizard has none until the ticket is actually submitted,
+  /// so the section only appears once EditTicketScreen hands this in.
+  final String? ticketId;
 
   @override
   ConsumerState<StepDettagliTicket> createState() => _StepDettagliTicketState();
@@ -135,6 +143,9 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
                 p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
           ),
         ],
+
+        if (widget.ticketId != null)
+          ExtensionFieldsSection(entityType: 'ticket', entityId: widget.ticketId!),
       ],
     );
   }
