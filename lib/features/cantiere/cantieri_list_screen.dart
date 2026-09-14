@@ -26,7 +26,8 @@ import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/sync/sync_service.dart';
-import '../timbra/cantiere_timbra_screen.dart' show cantieriProvider;
+import '../timbra/cantiere_timbra_screen.dart'
+    show cantiereActiveSessionProvider, cantiereTodayHoursProvider, cantieriProvider;
 
 class CantieriListScreen extends ConsumerWidget {
   const CantieriListScreen({super.key});
@@ -35,6 +36,9 @@ class CantieriListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cantieriAsync = ref.watch(cantieriProvider);
     final cantieri = cantieriAsync.valueOrNull ?? const [];
+    // For the "Timbrato oggi" per-row indicator below — the currently-active cantiere (if any)
+    // counts as "timbrato oggi" even before it has a closed interval of its own yet.
+    final activeCantiereId = ref.watch(cantiereActiveSessionProvider)?.cantiereId;
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -83,12 +87,30 @@ class CantieriListScreen extends ConsumerWidget {
                 SliverList(
                   delegate: SliverChildBuilderDelegate((context, i) {
                     final c = cantieri[i];
-                    return ListRow(
-                      leading: Icon(LucideIcons.hardHat, color: context.colors.inkMuted),
-                      title: c.name,
-                      subtitle: c.address,
-                      showDivider: i != cantieri.length - 1,
-                      onTap: () => context.push(AppRoutes.cantieriDetailPath(c.id)),
+                    return Consumer(
+                      // Scoped so a `cantiereTodayHoursProvider(c.id)` update only rebuilds this
+                      // one row, not the whole list — same reasoning as the batch-failures
+                      // dialog's own per-row Consumer in cantiere_timbra_screen.dart.
+                      builder: (context, ref, _) {
+                        final todayHours = ref.watch(cantiereTodayHoursProvider(c.id));
+                        final timbratoOggi = todayHours > Duration.zero || activeCantiereId == c.id;
+
+                        return ListRow(
+                          leading: Icon(LucideIcons.hardHat, color: context.colors.inkMuted),
+                          title: c.name,
+                          subtitle: c.address,
+                          meta: timbratoOggi
+                              ? AppBadge(
+                                  label: 'Timbrato oggi',
+                                  small: true,
+                                  bgColor: context.colors.green.withAlpha(31),
+                                  fgColor: context.colors.green,
+                                )
+                              : null,
+                          showDivider: i != cantieri.length - 1,
+                          onTap: () => context.push(AppRoutes.cantieriDetailPath(c.id)),
+                        );
+                      },
                     );
                   }, childCount: cantieri.length),
                 ),

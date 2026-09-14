@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,6 +94,90 @@ void main() {
       tester.getTopLeft(alfaFinder).dy,
       lessThan(tester.getTopLeft(zetaFinder).dy),
     );
+
+    await db.close();
+  });
+
+  // ── "Timbrato oggi" per-row indicator ───────────────────────────────────
+  //
+  // Reuses cantiereTodayHoursProvider/cantiereActiveSessionProvider — the same "did I log any
+  // cantiere worklog today for this cantiere" signal cantiere_timbra_screen.dart's own OGGI
+  // header already reads — rather than a new query (see this screen's own header comment).
+
+  testWidgets('shows a "Timbrato oggi" badge for a cantiere with a closed interval today', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db
+        .into(db.cantieri)
+        .insert(
+          CantieriCompanion.insert(
+            id: 'c1',
+            tenantId: 'tenant1',
+            createdAt: DateTime.utc(2026, 8, 31),
+            name: 'Alfa Cantiere',
+          ),
+        );
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+    await db
+        .into(db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: 'e1',
+            eventTime: start,
+            eventType: 'ingresso',
+            cantiereId: const Value('c1'),
+          ),
+        );
+    await db
+        .into(db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: 'e2',
+            eventTime: start.add(const Duration(hours: 1)),
+            eventType: 'uscita',
+          ),
+        );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        child: const MaterialApp(home: CantieriListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Timbrato oggi'), findsOneWidget);
+
+    await db.close();
+  });
+
+  testWidgets('shows no "Timbrato oggi" badge for a cantiere with no punches today', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db
+        .into(db.cantieri)
+        .insert(
+          CantieriCompanion.insert(
+            id: 'c1',
+            tenantId: 'tenant1',
+            createdAt: DateTime.utc(2026, 8, 31),
+            name: 'Alfa Cantiere',
+          ),
+        );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        child: const MaterialApp(home: CantieriListScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alfa Cantiere'), findsOneWidget);
+    expect(find.text('Timbrato oggi'), findsNothing);
 
     await db.close();
   });
