@@ -466,6 +466,7 @@
           "Ai"
         ],
         "summary": "Generates a rapportino draft from a schedule \u002B linked context.\nReturns the draft for the frontend to pre-fill the report form.\nNothing is persisted here \u2014 the technician saves it explicitly.",
+        "description": "Gated on \u0060RapportiniReportWrite\u0060 \u2014 the same permission ReportsController\u0027s\ncreate/update actions require. Without it, any authenticated tenant user could pull a full\ndrafted report (Schedule \u002B linked Ticket/Location/Customer context) for an in-tenant\n\u0060ScheduleId\u0060 they have no other way to see, which is strictly more than\n\u0060SchedulesController.GetById\u0060 or ReportsController allow that same user.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -536,6 +537,7 @@
           "Ai"
         ],
         "summary": "Transcribes an audio file to Italian text using Whisper.\nReturns the transcript for the frontend to include in a draft request.",
+        "description": "Gated on \u0060RapportiniReportWrite\u0060, same as Task\u0026lt;IActionResult\u0026gt; AiController.GenerateReportDraft(AiGenerateReportRequest request, CancellationToken ct): it feeds\ndirectly into that same draft workflow and consumes the same shared tenant AI quota, so a\nuser who cannot write a rapportino has no legitimate use for it. Mirrors\nTask\u0026lt;IActionResult\u0026gt; ReportsController.UploadAttachment(Guid id, IFormFile file, decimal? capturedLatitude = null, decimal? capturedLongitude = null, DateTime? capturedAt = null), a supporting/pre-processing action for the\nsame report-write workflow, which is gated on the identical permission rather than something\nlighter.",
         "requestBody": {
           "content": {
             "multipart/form-data": {
