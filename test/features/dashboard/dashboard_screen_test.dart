@@ -56,6 +56,11 @@ GoRouter _makeQuickActionRouter() => GoRouter(
       builder: (_, _) =>
           const Scaffold(body: Center(child: Text('CANTIERE-TIMBRA-SCREEN-MARKER'))),
     ),
+    GoRoute(
+      path: AppRoutes.selezionaCantiere,
+      builder: (_, _) =>
+          const Scaffold(body: Center(child: Text('SELEZIONA-CANTIERE-SCREEN-MARKER'))),
+    ),
   ],
 );
 
@@ -210,6 +215,37 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('TIMBRA-SCREEN-MARKER'), findsOneWidget);
+        expect(find.text('CANTIERE-TIMBRA-SCREEN-MARKER'), findsNothing);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets(
+      'tapping Timbra cantiere pushes the seleziona-cantiere picker, not CantiereTimbraScreen '
+      'directly',
+      (tester) async {
+        // The generic dashboard entry point has no cantiere context yet — it now lands on the
+        // picker (SelezionaCantiereScreen), which resolves a cantiereId before handing off to
+        // CantiereTimbraScreen. Only CantiereDetailScreen's own "Timbra cantiere" button (which
+        // already knows the cantiere) still goes straight to CantiereTimbraScreen.
+        final router = _makeQuickActionRouter();
+        await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        final tile = find.text('Timbra\ncantiere', skipOffstage: false);
+        expect(tile, findsOneWidget);
+
+        await tester.ensureVisible(tile);
+        await tester.pumpAndSettle();
+
+        await tester.tap(tile);
+        await tester.pumpAndSettle();
+
+        expect(find.text('SELEZIONA-CANTIERE-SCREEN-MARKER'), findsOneWidget);
         expect(find.text('CANTIERE-TIMBRA-SCREEN-MARKER'), findsNothing);
 
         await tester.pumpWidget(const SizedBox.shrink());

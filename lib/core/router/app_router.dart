@@ -16,6 +16,7 @@ import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
 import '../../features/calendario/calendario_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
+import '../../features/timbra/seleziona_cantiere_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
 import '../../features/admin/customers/admin_customer_detail_screen.dart';
 import '../../features/admin/customers/admin_customer_form_screen.dart';
@@ -96,7 +97,10 @@ abstract final class AppRoutes {
   /// screen can state a real reason instead of a "coming soon" promise.
   static const String altroNonDisponibile = '/altro/non-disponibile';
 
-  /// Path for the cantiere clock-in/out screen.
+  /// Path for the cantiere clock-in/out screen. Every real navigation now supplies `cantiereId` —
+  /// see CantiereTimbraScreen's own header comment — but the query param stays optional here
+  /// (rather than a required path segment) to avoid a route-shape change; the screen itself
+  /// treats a missing id the same as a cantiere that failed to resolve.
   static const String cantiereTimbra = '/cantiere-timbra';
 
   /// Build the cantiere timbra path with optional query params.
@@ -112,6 +116,21 @@ abstract final class AppRoutes {
     return params.isEmpty
         ? cantiereTimbra
         : '$cantiereTimbra?${params.join('&')}';
+  }
+
+  /// Path for the full-screen cantiere picker — the dashboard's generic "Timbra cantiere" quick
+  /// action (no cantiere context yet) now lands here instead of on CantiereTimbraScreen's
+  /// now-removed inline picker. See SelezionaCantiereScreen's own header comment.
+  static const String selezionaCantiere = '/seleziona-cantiere';
+
+  /// Build the seleziona-cantiere path with optional query params (ticket context, when present).
+  static String selezionaCantierePath({String? ticketId, String? customerId}) {
+    final params = <String>[];
+    if (ticketId != null) params.add('ticketId=$ticketId');
+    if (customerId != null) params.add('customerId=$customerId');
+    return params.isEmpty
+        ? selezionaCantiere
+        : '$selezionaCantiere?${params.join('&')}';
   }
 
   /// Self-service ferie/permessi against `/api/absence-requests` — already complete and tested
@@ -184,7 +203,7 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) => const LoginScreen(),
       ),
 
-      // ── Cantiere timbra (pushed from ticket detail) ──────────────────────
+      // ── Cantiere timbra (pushed from cantiere detail, or from the picker below) ──
       GoRoute(
         path: AppRoutes.cantiereTimbra,
         builder: (context, state) {
@@ -196,6 +215,16 @@ GoRouter buildRouter(WidgetRef ref) {
             customerId: customerId,
             cantiereId: cantiereId,
           );
+        },
+      ),
+
+      // ── Seleziona cantiere (pushed from the dashboard's generic "Timbra cantiere" action) ──
+      GoRoute(
+        path: AppRoutes.selezionaCantiere,
+        builder: (context, state) {
+          final ticketId = state.uri.queryParameters['ticketId'];
+          final customerId = state.uri.queryParameters['customerId'];
+          return SelezionaCantiereScreen(ticketId: ticketId, customerId: customerId);
         },
       ),
 

@@ -157,7 +157,11 @@ class DashboardScreen extends ConsumerWidget {
                       child: QuickAction(
                         icon: LucideIcons.clock,
                         label: 'Timbra\ncantiere',
-                        onTap: () => context.push(AppRoutes.cantiereTimbra),
+                        // No cantiere context from here — the generic dashboard entry point, as
+                        // opposed to CantiereDetailScreen's own "Timbra cantiere" button, which
+                        // already knows which cantiere and goes straight to CantiereTimbraScreen.
+                        // Lands on the picker; it resolves a cantiereId and hands off from there.
+                        onTap: () => context.push(AppRoutes.selezionaCantiere),
                       ),
                     ),
                     Expanded(
