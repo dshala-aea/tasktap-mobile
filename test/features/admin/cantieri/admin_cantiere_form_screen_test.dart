@@ -44,8 +44,15 @@ void main() {
     db = AppDatabase(NativeDatabase.memory());
     mockDio = MockDio();
 
-    // GET /api/commesse → the picker's live source (no local Drift mirror).
-    when(() => mockDio.get<Map<String, dynamic>>('/api/commesse')).thenAnswer(
+    // GET /api/commesse → the picker's live source (no local Drift mirror). Always called with a
+    // queryParameters map now (item 2 of the admin-form audit: fetchCommesse sends `customerId`
+    // when a client is selected), so the stub must match on any queryParameters value.
+    when(
+      () => mockDio.get<Map<String, dynamic>>(
+        '/api/commesse',
+        queryParameters: any(named: 'queryParameters'),
+      ),
+    ).thenAnswer(
       (_) async => _ok({
         'items': [
           {'id': 'commessa-1', 'codice': 'COM-001', 'descrizione': 'Manutenzione annuale'},
@@ -126,7 +133,10 @@ void main() {
     testWidgets('lists commesse from the live GET /api/commesse fetch', (tester) async {
       await openForm(tester);
 
-      await tester.tap(find.byType(DropdownButtonFormField<String?>).last);
+      // AppLookupField (item 1 of the admin-form audit replaced the plain dropdown with the same
+      // searchable field the ticket-creation flow uses) shows its suggestions once focused — same
+      // tap-to-focus-then-read convention new_ticket_form_test.dart uses for its own AppLookupFields.
+      await tester.tap(find.byKey(const ValueKey('commessa-null')));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('COM-001'), findsWidgets);
@@ -142,9 +152,9 @@ void main() {
       // match it; mirrors admin_magazzino_screens_test.dart's own `.first` convention.
       await tester.enterText(find.byType(TextFormField).first, 'Cantiere Centro');
 
-      await tester.tap(find.byType(DropdownButtonFormField<String?>).last);
+      await tester.tap(find.byKey(const ValueKey('commessa-null')));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('COM-001').last);
+      await tester.tap(find.text('COM-001').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Crea cantiere'));
@@ -197,6 +207,41 @@ void main() {
         () => mockDio.put<dynamic>('/api/cantieri/cant-1', data: captureAny(named: 'data')),
       ).captured.single as Map;
       expect(captured['commessaId'], 'commessa-2');
+      await teardown(tester);
+    });
+  });
+
+  // Item 2 of the admin-form audit: fetchCommesse now accepts a `customerId` filter and the form
+  // threads the selected client through, instead of listing every commessa across every customer.
+  group('Client-scoped Commessa fetch (item 2)', () {
+    setUp(() async {
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              companyName: 'Acme Srl',
+            ),
+          );
+    });
+
+    testWidgets('selecting a client sends its id as customerId to fetchCommesse', (tester) async {
+      await openForm(tester);
+
+      await tester.tap(find.byKey(const ValueKey('cliente-null')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.last as Map;
+      expect(captured['customerId'], 'cust-1');
       await teardown(tester);
     });
   });

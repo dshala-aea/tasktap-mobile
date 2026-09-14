@@ -700,7 +700,10 @@ void main() {
 
     test('fetchCommesse GETs /api/commesse and reads the paginated envelope', () async {
       when(
-        () => mockDio.get<Map<String, dynamic>>('/api/commesse'),
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: any(named: 'queryParameters'),
+        ),
       ).thenAnswer(
         (_) async => _okResponse({
           'items': [
@@ -713,6 +716,47 @@ void main() {
 
       expect(commesse, hasLength(1));
       expect(commesse.single['codice'], 'COM-001');
+    });
+
+    // Item 2 of the admin-form audit: the cantiere form's Commessa picker showed every commessa
+    // across every customer regardless of the selected client — CommesseController.GetAll already
+    // accepts a `customerId` query param server-side, mobile just never sent it.
+    test('fetchCommesse sends customerId as a query param when given', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <dynamic>[]}, '/api/commesse'));
+
+      await client.fetchCommesse(customerId: 'cust-1');
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured['customerId'], 'cust-1');
+    });
+
+    test('fetchCommesse omits customerId when not given', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <dynamic>[]}, '/api/commesse'));
+
+      await client.fetchCommesse();
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/commesse',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.single as Map;
+      expect(captured.containsKey('customerId'), isFalse);
     });
   });
 

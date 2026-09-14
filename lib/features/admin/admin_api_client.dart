@@ -406,8 +406,14 @@ class AdminApiClient {
   // No local Drift mirror — like Squadre/ProdottoAssistenza, fetched live wherever a picker needs
   // the list (here: the cantiere form's Commessa field, Gap 5 of the feature audit).
 
-  Future<List<Map<String, dynamic>>> fetchCommesse() async {
-    final res = await _dio.get<Map<String, dynamic>>('/api/commesse');
+  /// [customerId], when given, filters server-side via `CommesseController.GetAll`'s own
+  /// `customerId` query param — the admin cantiere form's Commessa picker needs this scoped to
+  /// the currently-selected client instead of listing every commessa across every customer.
+  Future<List<Map<String, dynamic>>> fetchCommesse({String? customerId}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/commesse',
+      queryParameters: {'customerId': ?customerId},
+    );
     return pagedItems(res.data);
   }
 

@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
@@ -20,8 +21,15 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// ProdottoAssistenza elsewhere in admin). Gap 5 of the feature audit: `Cantiere.CommessaId`
 /// existed on the entity, but `CreateCantiereRequest`/`UpdateCantiereRequest` didn't accept it
 /// until af9039c on the backend — this picker was left unbuilt until then.
-final adminCommesseProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  return ref.watch(adminApiClientProvider).fetchCommesse();
+///
+/// Keyed by the selected client id (item 2 of the admin-form audit): refetches, server-filtered
+/// via `fetchCommesse`'s own `customerId` param, whenever the client picker changes, instead of
+/// showing every commessa across every customer.
+final adminCommesseProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>((
+  ref,
+  customerId,
+) {
+  return ref.watch(adminApiClientProvider).fetchCommesse(customerId: customerId);
 });
 
 /// Admin cantiere form — create or edit.
@@ -45,6 +53,12 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
   DateTime? _endDate;
   String? _selectedCustomerId;
   String? _selectedCommessaId;
+  // AppLookupField only reads initialText once, in initState (see its own doc comment on
+  // didUpdateWidget) — the address fields loaded asynchronously in _loadCantiere (edit mode) land
+  // after that first build, so this is bumped once the load completes to force a fresh instance
+  // that picks the loaded value up. Same pattern step_materiali_fold.dart's own lookupFieldGeneration
+  // uses for the same reason.
+  int _indirizzoGeneration = 0;
   // CantiereStatusEnum (WorkEnums.cs): Active=0, Completed=1, Cancelled=2. New cantieri default to
   // Active; edits prefill from the cached row in _loadCantiere.
   int _status = 0;
@@ -84,6 +98,7 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
         _selectedCustomerId = cantiere.customerId;
         _selectedCommessaId = cantiere.commessaId;
         _status = cantiere.status;
+        _indirizzoGeneration++;
       });
     } else {
       setState(() => _prefillFailed = true);
@@ -200,16 +215,31 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
 
     final customersAsync = ref.watch(allCustomersProvider);
     final customers = customersAsync.valueOrNull ?? [];
-    final commesseAsync = ref.watch(adminCommesseProvider);
+    // Server-filtered by the selected client (item 2 of the admin-form audit) — refetches
+    // whenever _selectedCustomerId changes, since adminCommesseProvider is keyed by it.
+    final commesseAsync = ref.watch(adminCommesseProvider(_selectedCustomerId));
     final commesse = commesseAsync.valueOrNull ?? [];
-    // If the cached value isn't in the fetched (first-page) list — e.g. an inactive or
-    // otherwise-filtered commessa — keep it selectable rather than silently blanking the field on
-    // open, which would let an unrelated save clear a real link.
+    // If the cached value isn't in the fetched (client-scoped) list — e.g. it belongs to a
+    // different client than the one currently selected, or is inactive — keep it selectable
+    // rather than silently blanking the field on open, which would let an unrelated save clear a
+    // real link.
     final commessaCodici = {
       for (final c in commesse) c['id'] as String: c['codice'] as String? ?? '',
     };
     final missingCommessaId =
         _selectedCommessaId != null && !commessaCodici.containsKey(_selectedCommessaId);
+
+    // Existing sedi (Locations) for the selected client — offered as quick-fill suggestions for
+    // the cantiere's own address fields (item 10 of the admin-form audit). A cantiere has no
+    // Location FK — plain address/city/postalCode strings live directly on the Cantiere entity
+    // (see Cantiere.cs) — so picking one here copies its address into these fields rather than
+    // linking it, and typing something new (or nothing matching) just sets the address text
+    // directly, same "type and it stands on its own" behavior AppLookupField uses everywhere else.
+    final allLocationsAsync = ref.watch(allLocationsProvider);
+    final allLocations = allLocationsAsync.valueOrNull ?? [];
+    final clientLocations = _selectedCustomerId != null
+        ? allLocations.where((l) => l.customerId == _selectedCustomerId).toList()
+        : const <Location>[];
 
     final startLabel = _startDate != null
         ? DateFormat('dd/MM/yyyy').format(_startDate!)
@@ -245,47 +275,93 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                 ),
                 const SizedBox(height: 16),
 
-                AppFieldShell(
+                // Searchable, same AppLookupField the ticket-creation flow's client/location step
+                // (step_cliente_sede.dart) already uses — item 1 of the admin-form audit: a plain
+                // dropdown doesn't scale once the client list is more than a handful of rows.
+                AppLookupField(
+                  key: ValueKey('cliente-$_selectedCustomerId'),
                   label: 'Cliente',
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _selectedCustomerId,
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('Nessun cliente')),
-                      ...customers.map(
-                        (c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() => _selectedCustomerId = v),
-                  ),
+                  hint: 'Cerca cliente…',
+                  items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
+                  selectedId: _selectedCustomerId,
+                  onSelected: (id) => setState(() {
+                    _selectedCustomerId = id;
+                    // Commesse (and the sede suggestions below) are scoped to the selected client
+                    // — a previously-picked commessa from a different client no longer applies.
+                    _selectedCommessaId = null;
+                  }),
+                  onFreeText: (text) {
+                    if (text.isEmpty) {
+                      setState(() {
+                        _selectedCustomerId = null;
+                        _selectedCommessaId = null;
+                      });
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
 
-                AppFieldShell(
+                AppLookupField(
+                  key: ValueKey('commessa-$_selectedCommessaId'),
                   label: 'Commessa',
-                  child: DropdownButtonFormField<String?>(
-                    initialValue: _selectedCommessaId,
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('Nessuna commessa')),
-                      if (missingCommessaId)
-                        DropdownMenuItem(
-                          value: _selectedCommessaId,
-                          child: Text(_selectedCommessaId!),
-                        ),
-                      ...commesse.map((c) {
-                        final codice = c['codice'] as String? ?? '';
-                        final descrizione = c['descrizione'] as String?;
-                        final label = descrizione != null && descrizione.isNotEmpty
-                            ? '$codice ($descrizione)'
-                            : codice;
-                        return DropdownMenuItem(value: c['id'] as String, child: Text(label));
-                      }),
-                    ],
-                    onChanged: (v) => setState(() => _selectedCommessaId = v),
-                  ),
+                  hint: 'Cerca commessa…',
+                  items: [
+                    for (final c in commesse)
+                      LookupItem(
+                        id: c['id'] as String,
+                        name: c['codice'] as String? ?? '',
+                        subtitle: c['descrizione'] as String?,
+                      ),
+                    // Same "keep it selectable" reasoning as missingCommessaId above.
+                    if (missingCommessaId)
+                      LookupItem(id: _selectedCommessaId!, name: _selectedCommessaId!),
+                  ],
+                  selectedId: _selectedCommessaId,
+                  emptyCacheHint: commesseAsync.isLoading
+                      ? 'Commesse in caricamento…'
+                      : 'Nessuna commessa trovata.',
+                  onSelected: (id) => setState(() => _selectedCommessaId = id),
+                  onFreeText: (text) {
+                    if (text.isEmpty) setState(() => _selectedCommessaId = null);
+                  },
                 ),
                 const SizedBox(height: 16),
 
-                AppTextField(label: 'Indirizzo', controller: _addressCtrl),
+                AppLookupField(
+                  key: ValueKey('indirizzo-$_indirizzoGeneration'),
+                  label: 'Indirizzo',
+                  hint: _selectedCustomerId != null
+                      ? 'Cerca una sede esistente o scrivi un nuovo indirizzo…'
+                      : 'Scrivi un indirizzo (seleziona un cliente per cercare le sedi esistenti)',
+                  initialText: _addressCtrl.text,
+                  items: [
+                    for (final l in clientLocations)
+                      LookupItem(
+                        id: l.id,
+                        name: (l.address != null && l.address!.isNotEmpty) ? l.address! : l.name,
+                        subtitle: l.city,
+                      ),
+                  ],
+                  emptyCacheHint: _selectedCustomerId == null
+                      ? null
+                      : 'Nessuna sede esistente per questo cliente: scrivi per inserirne un nuovo indirizzo.',
+                  // Picking a suggestion copies that sede's address into these fields — see the
+                  // clientLocations doc comment above for why this isn't a real link.
+                  onSelected: (id) {
+                    final loc = clientLocations.where((l) => l.id == id).firstOrNull;
+                    if (loc == null) return;
+                    _addressCtrl.text = (loc.address != null && loc.address!.isNotEmpty)
+                        ? loc.address!
+                        : loc.name;
+                    _cityCtrl.text = loc.city ?? '';
+                    _postalCodeCtrl.text = loc.postalCode ?? '';
+                  },
+                  // A brand new address, typed rather than picked — stands on its own, same as
+                  // every other AppLookupField in the app. Nothing to persist as a Location here:
+                  // unlike a ticket's Sede (a real FK), the cantiere's address is just its own
+                  // text fields.
+                  onFreeText: (text) => _addressCtrl.text = text,
+                ),
                 const SizedBox(height: 16),
 
                 Row(
