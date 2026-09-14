@@ -1,14 +1,20 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/offline_guard.dart';
 import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/lookup_field.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../admin/admin_api_client.dart';
 import '../new_ticket_form_state.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -30,6 +36,69 @@ class StepClienteSede extends ConsumerStatefulWidget {
 }
 
 class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
+  // Debounces the "create a new sede" call (item 11 of the admin-form audit) so a genuinely new
+  // address is only persisted once the technician pauses typing, not on every keystroke —
+  // onFreeText fires per character, and calling POST /api/locations that often would spam the
+  // backend with an id-per-keystroke and (with a slow connection) resolve them out of order.
+  Timer? _createLocationDebounce;
+  bool _creatingLocation = false;
+  // The name the just-created sede was saved under (same string typed into the field — see
+  // _createNewLocation). Passed as the Sede field's initialText: the rekey below (locationId
+  // changes from null to the new id) forces a fresh AppLookupField instance whose _initialLabel()
+  // otherwise finds nothing — allLocationsProvider's local Drift mirror doesn't have the new row
+  // until the sync above actually lands — and would show blank text despite a real selection.
+  String? _pendingSedeName;
+
+  @override
+  void dispose() {
+    _createLocationDebounce?.cancel();
+    super.dispose();
+  }
+
+  /// Creates a real Location for the given client from typed free text and selects it —
+  /// previously onFreeText only cleared the field on empty text and silently did nothing for a
+  /// genuinely new address, leaving the step permanently unable to validate (NewTicketFormState.
+  /// isValid requires a resolved locationId, there is no free-text fallback for Sede).
+  Future<void> _createNewLocation(String customerId, String name) async {
+    if (!mounted) return;
+    if (!ensureOnlineOrWarn(context, ref)) return;
+
+    setState(() => _creatingLocation = true);
+    final String id;
+    try {
+      id = await ref.read(adminApiClientProvider).createLocation(customerId: customerId, name: name);
+    } catch (e) {
+      // The one failure worth surfacing here: the sede was never actually persisted.
+      if (mounted) {
+        showAppToast(
+          context,
+          message: 'Impossibile creare la nuova sede. Riprova.',
+          tone: ToastTone.error,
+        );
+        setState(() => _creatingLocation = false);
+      }
+      return;
+    }
+
+    // Best-effort, not allowed to fail the create above: pulls the new sede down immediately so
+    // the lookup field's own cache (allLocationsProvider, sourced from the local Drift mirror) can
+    // resolve its name right away — same "sync right after a write" convention
+    // admin_cantiere_form_screen._save() uses, just awaited (rather than fire-and-forget) so the
+    // rekey below has a real name to show instead of flashing blank until the next ordinary sync.
+    // If this fails (offline blip, slow connection) the sede still exists server-side regardless —
+    // selecting it below is correct either way, and an ordinary sync will pick the name up later.
+    try {
+      await ref.read(syncProvider.notifier).performSync();
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _pendingSedeName = name;
+      _creatingLocation = false;
+    });
+    widget.onChanged(widget.state.copyWith(locationId: id));
+  }
+
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
@@ -110,19 +179,58 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           // onFreeText reset locationId externally, so this must be rekeyed to pick up the reset.
           key: ValueKey('sede-${widget.state.locationId}'),
           label: 'Sede *',
-          hint: widget.state.customerId != null ? 'Cerca sede…' : 'Prima seleziona un cliente',
+          hint: widget.state.customerId != null
+              ? 'Cerca sede o scrivi un nuovo indirizzo…'
+              : 'Prima seleziona un cliente',
           items: [for (final l in locations) LookupItem(id: l.id, name: l.name)],
           selectedId: widget.state.locationId,
-          emptyCacheHint: widget.state.customerId == null ? 'Seleziona prima un cliente.' : null,
-          onSelected: (id) => widget.onChanged(widget.state.copyWith(locationId: id)),
-          // No free-text fallback for the same reason as Cliente above — locationId is a plain FK.
-          // Same "only clear on empty" reasoning as Cliente's own onFreeText too.
+          initialText: _pendingSedeName,
+          emptyCacheHint: widget.state.customerId == null
+              ? 'Seleziona prima un cliente.'
+              : 'Nessuna sede a catalogo: scrivi un indirizzo per crearne una nuova.',
+          onSelected: (id) {
+            _createLocationDebounce?.cancel();
+            widget.onChanged(widget.state.copyWith(locationId: id));
+          },
+          // locationId is a plain FK (no free-text fallback field on NewTicketFormState), but
+          // unlike Cliente above there is somewhere for genuinely new text to go: a real sede,
+          // created for the selected client and then selected here — see _createNewLocation.
           onFreeText: (text) {
-            if (text.isEmpty) {
+            _createLocationDebounce?.cancel();
+            final trimmed = text.trim();
+            if (trimmed.isEmpty) {
               widget.onChanged(widget.state.copyWith(clearLocationId: true));
+              return;
             }
+            final customerId = widget.state.customerId;
+            // No client chosen yet — nothing to attach the new sede to. The hint above already
+            // tells the technician to pick a client first; typing here just stands as plain text
+            // until they do (same "not switched, nothing lost" behavior as everywhere else).
+            if (customerId == null) return;
+            _createLocationDebounce = Timer(
+              const Duration(milliseconds: 900),
+              () => _createNewLocation(customerId, trimmed),
+            );
           },
         ),
+        if (_creatingLocation)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Creazione nuova sede…',
+                  style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                ),
+              ],
+            ),
+          ),
 
         const SizedBox(height: 12),
         if (selectedLocation != null)

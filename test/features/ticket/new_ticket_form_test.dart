@@ -297,6 +297,71 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    // Item 11 of the admin-form audit: onFreeText on the Sede field used to only clear the field
+    // on empty text and otherwise do nothing — typing a genuinely new address silently went
+    // nowhere, permanently blocking the wizard (locationId is a plain FK with no free-text
+    // fallback). Now it creates a real Location for the selected client and selects it.
+    testWidgets('typing a new address for Sede creates and selects a real Location', (
+      tester,
+    ) async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/locations', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => Response<Map<String, dynamic>>(
+          data: {'id': 'loc-new'},
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/api/locations'),
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            dioProvider.overrideWithValue(mockDio),
+            isOnlineProvider.overrideWithValue(true),
+          ],
+          child: const MaterialApp(home: NewTicketFormScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Choose the client first — createLocation needs a customerId to attach the new sede to.
+      await tester.tap(find.byKey(const ValueKey('cliente-null')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+
+      // Type a brand new address into Sede instead of picking 'Sede Milano' from the suggestions.
+      await tester.enterText(
+        find.descendant(
+          of: find.byKey(const ValueKey('sede-null')),
+          matching: find.byType(TextFormField),
+        ),
+        'Via Nuova 5',
+      );
+      // Debounced 900ms (step_cliente_sede.dart) so a create isn't fired per keystroke — advance
+      // the fake clock past it, then let the create + best-effort sync chain settle.
+      await tester.pump(const Duration(milliseconds: 950));
+      await tester.pumpAndSettle();
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/locations',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured.single as Map;
+      expect(captured['customerId'], 'cust-1');
+      expect(captured['name'], 'Via Nuova 5');
+
+      // The wizard only unblocks once a real locationId is selected — proves the new sede was
+      // actually selected, not just posted.
+      expect(avantiButton(tester).onPressed, isNotNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
