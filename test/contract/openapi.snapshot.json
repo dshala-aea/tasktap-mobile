@@ -1965,6 +1965,56 @@
       }
     },
     "/api/cantieri/{id}/assignments/{assignmentId}": {
+      "put": {
+        "tags": [
+          "Cantieri"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCantiereAssignmentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCantiereAssignmentRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCantiereAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
       "delete": {
         "tags": [
           "Cantieri"
@@ -5561,6 +5611,30 @@
         }
       }
     },
+    "/api/maintenance-templates/{templateId}": {
+      "delete": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Deletes a tenant-owned template entirely \u2014 every version, and every group and control\nbelonging to any of them \u2014 once nothing references it. Tenant-only, like\nTask\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.DeleteGroup(Guid groupId, CancellationToken ct = default(CancellationToken)) and Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.DeleteControl(Guid controlId, CancellationToken ct = default(CancellationToken)): a curated System template is\nwithdrawn via Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.Retire(Guid versionId, CancellationToken ct = default(CancellationToken)), never deleted, and that asymmetry (retiring vs. deleting)\nis the same one ADR-0012 already draws for any published version, so there is no symmetric\nSystem-delete need to fill here.",
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/maintenance-templates/versions/{versionId}/groups": {
       "post": {
         "tags": [
@@ -5774,6 +5848,59 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance-templates/{templateId}/controls/by-lineage/{controlLineageId}": {
+      "put": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Edits a control by its lineage id, in whatever draft is currently open for the template \u2014\nopening one first (from the latest published version) if none is open yet. A convenience\nover the plain Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControl(Guid controlId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken)) route, which requires the caller to have already\ncalled Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.CreateDraft(Guid templateId, CancellationToken ct = default(CancellationToken)) and to know the copy\u0027s new control id; this route accepts\nthe same identity \u2014 \u0060ControlLineageId\u0060 \u2014 the caller already has from the last time it\nread this control, published or not.",
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "controlLineageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateControlRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateControlRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTemplateControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "OK"
@@ -25461,6 +25588,32 @@
           }
         },
         "description": "Request model for updating tenant branding. Null fields are ignored (not cleared)."
+      },
+      "UpdateCantiereAssignmentRequest": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "Request body for updating an existing assignment\u0027s role/date range. UserId is not\n    editable here \u2014 reassigning to a different person is a delete \u002B re-add, same as today."
       },
       "UpdateCantiereRequest": {
         "type": "object",
