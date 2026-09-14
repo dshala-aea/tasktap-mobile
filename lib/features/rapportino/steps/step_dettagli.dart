@@ -107,6 +107,21 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
             onDraft: _generateAiDraft,
           ),
 
+          // Item 14: a cantiere-originated draft (createCantiereReportDraft, create_draft.dart)
+          // has a cantiereId but no ticketId/scheduleId — the AI card above renders nothing
+          // (_AiDraftButton hides itself with no scheduleId) and every label below this point was
+          // still written for a ticket-based report, with nothing telling the technician why the
+          // AI button they may remember from other rapportini just isn't here this time.
+          if ((state.cantiereId?.isNotEmpty ?? false) && !(state.ticketId?.isNotEmpty ?? false))
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Text(
+                'Rapportino da cantiere: non è collegato a un ticket, quindi la bozza '
+                'automatica AI non è disponibile per questo rapportino.',
+                style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+              ),
+            ),
+
           // No section headings above these. Every one of them restated the label of the single
           // field beneath it — "Titolo e descrizione" over a field called "Titolo", "Cliente *"
           // over a field called "Cliente". Saying it twice is not emphasis, it is one more line

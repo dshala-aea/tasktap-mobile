@@ -193,4 +193,51 @@ void main() {
       expect(find.byIcon(LucideIcons.x), findsNothing);
     });
   });
+
+  // Item 14: createCantiereReportDraft (create_draft.dart) seeds a cantiereId but never a
+  // ticketId/scheduleId — the AI card above is silently absent (it needs scheduleId) and every
+  // label on this step still reads as ticket-oriented, with nothing telling the technician why.
+  group('StepDettagli — cantiere-only note (item 14)', () {
+    const noteText =
+        'Rapportino da cantiere: non è collegato a un ticket, quindi la bozza '
+        'automatica AI non è disponibile per questo rapportino.';
+
+    testWidgets('shown when the draft has a cantiereId but no ticketId', (tester) async {
+      final aiClient = _RecordingAiApiClient();
+      final container = _buildContainer(db: db, aiClient: aiClient, cantiereId: 'cantiere-1');
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text(noteText), findsOneWidget);
+    });
+
+    testWidgets('hidden when the draft is also linked to a ticket', (tester) async {
+      final aiClient = _RecordingAiApiClient();
+      final container = _buildContainer(
+        db: db,
+        aiClient: aiClient,
+        cantiereId: 'cantiere-1',
+        ticketId: 'ticket-1',
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text(noteText), findsNothing);
+    });
+
+    testWidgets('hidden when the draft has neither a cantiereId nor a ticketId', (tester) async {
+      final aiClient = _RecordingAiApiClient();
+      final container = _buildContainer(db: db, aiClient: aiClient);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text(noteText), findsNothing);
+    });
+  });
 }
