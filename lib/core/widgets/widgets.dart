@@ -16,6 +16,7 @@ export 'compartment_sheet.dart';
 export 'confirm_delete_dialog.dart';
 export 'empty_state.dart';
 export 'error_state.dart';
+export 'extension_fields_section.dart';
 export 'key_val.dart';
 export 'list_row.dart';
 export 'live_dot.dart';
