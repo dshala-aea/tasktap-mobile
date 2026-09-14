@@ -191,3 +191,20 @@ bool rapportinoIsInFlight(DraftReport draft) {
 /// needs a rework affordance rather than a plain read-only view. See `createReworkDraft`
 /// (create_draft.dart) and RapportinoViewScreen's rejection banner.
 bool rapportinoIsRejected(DraftReport draft) => draft.stato == 'Respinto';
+
+/// Mirrors the backend's own guard — `ReportStateMachine.CanEditOrDelete`
+/// (TaskTapAPI.Application/Services/Reports/ReportStateMachine.cs) — which now allows edit/delete
+/// through Bozza, Inviato and Respinto, and blocks from Controllato onward (and for Annullato/
+/// NonFatturabile): "before the office review/approval step", not "still a draft". Previously
+/// mobile gated the list's edit/delete actions to `stato == 'Bozza'` only, which under-matched
+/// what the server actually allows once a report has been sent but not yet reviewed.
+bool rapportinoCanEditOrDelete(DraftReport draft) {
+  switch (draft.stato) {
+    case 'Bozza':
+    case 'Inviato':
+    case 'Respinto':
+      return true;
+    default:
+      return false;
+  }
+}

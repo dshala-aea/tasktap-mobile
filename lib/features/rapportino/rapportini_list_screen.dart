@@ -251,6 +251,9 @@ class _RapportinoRow extends ConsumerWidget {
 
     final statusLabel = rapportinoStatusLabel(draft);
     final isSubmitted = rapportinoIsSubmitted(draft);
+    // Item 13: edit/delete now follow the backend's own "before office review" boundary
+    // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
+    final canEditOrDelete = rapportinoCanEditOrDelete(draft);
     final hasBothSigs =
         draft.customerSignatureAllegatoId != null && draft.technicianSignatureAllegatoId != null;
 
@@ -274,10 +277,10 @@ class _RapportinoRow extends ConsumerWidget {
 
     final row = InkWell(
       onTap: () {
-        if (isSubmitted) {
-          context.push(AppRoutes.rapportiniView(draft.id));
-        } else {
+        if (canEditOrDelete) {
           context.push(AppRoutes.rapportiniEditor(draft.id));
+        } else {
+          context.push(AppRoutes.rapportiniView(draft.id));
         }
       },
       child: Container(
@@ -362,10 +365,10 @@ class _RapportinoRow extends ConsumerWidget {
               // A swipe is the only way a mouse/keyboard/TalkBack/VoiceOver user cannot perform —
               // this button reaches the exact same delete path (_confirmDeleteDraft) so both ways
               // to delete a draft agree on what "delete" does, not just on how you trigger it.
-              if (statusLabel == 'Bozza')
+              if (canEditOrDelete)
                 IconButton(
                   icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.inkMuted),
-                  tooltip: 'Elimina bozza',
+                  tooltip: 'Elimina',
                   onPressed: () => _confirmDeleteDraft(context, ref, draft),
                 ),
               const SizedBox(width: 6),
@@ -376,9 +379,10 @@ class _RapportinoRow extends ConsumerWidget {
       ),
     );
 
-    // Only a still-editable draft can be deleted — a submitted report goes through the office
-    // Annulla workflow instead (ReportsController.Delete rejects anything past Bozza too).
-    if (statusLabel != 'Bozza') return row;
+    // Only a report still before office review can be deleted here — one already reviewed goes
+    // through the office Annulla workflow instead (ReportsController.Delete/ReportStateMachine.
+    // CanEditOrDelete reject anything Controllato onward, or Annullato/NonFatturabile).
+    if (!canEditOrDelete) return row;
 
     return Dismissible(
       key: ValueKey('rapportino-${draft.id}'),

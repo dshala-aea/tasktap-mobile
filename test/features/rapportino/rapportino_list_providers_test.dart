@@ -147,6 +147,23 @@ void main() {
     });
   });
 
+  // Item 13 of the admin-form audit: mirrors the backend's own guard —
+  // ReportStateMachine.CanEditOrDelete (Bozza/Inviato/Respinto allowed, Controllato onward and
+  // Annullato/NonFatturabile blocked) — "before office review", not draft-only.
+  group('rapportinoCanEditOrDelete', () {
+    test('true for Bozza, Inviato and Respinto', () {
+      for (final stato in ['Bozza', 'Inviato', 'Respinto']) {
+        expect(rapportinoCanEditOrDelete(_draft(stato: stato)), isTrue, reason: stato);
+      }
+    });
+
+    test('false for Controllato, Fatturato, Annullato and NonFatturabile', () {
+      for (final stato in ['Controllato', 'Fatturato', 'Annullato', 'NonFatturabile']) {
+        expect(rapportinoCanEditOrDelete(_draft(stato: stato)), isFalse, reason: stato);
+      }
+    });
+  });
+
   group('totalOreMinutes', () {
     ReportStaffTableData row({
       double? hoursWorked,

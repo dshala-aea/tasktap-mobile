@@ -210,7 +210,9 @@ void main() {
     });
   });
 
-  group('RapportiniListScreen — delete a draft (swipe, Bozza only)', () {
+  // Item 13: edit/delete now follow the backend's own "before office review" boundary
+  // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
+  group('RapportiniListScreen — delete a draft (swipe, before office review)', () {
     late MockDio mockDio;
 
     setUp(() {
@@ -267,8 +269,51 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('a submitted report has no swipe-to-delete affordance', (tester) async {
-      await _seedDraft(db, id: 'draft-1', title: 'Già inviato', submissionState: 'submitted');
+    testWidgets('a report sent but not yet reviewed by the office (Inviato) can still be swiped', (
+      tester,
+    ) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'In attesa di revisione',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+      );
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dismissible), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a rejected report (Respinto) can still be swiped', (tester) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Respinto dall\'ufficio',
+        stato: 'Respinto',
+        submissionState: 'submitted',
+      );
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dismissible), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a report already reviewed by the office (Controllato) has no swipe-to-delete '
+        'affordance', (tester) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Già controllato',
+        stato: 'Controllato',
+        submissionState: 'submitted',
+      );
       await tester.pumpWidget(buildWithDio(db: db));
       await tester.pumpAndSettle();
 
