@@ -1476,6 +1476,15 @@
                 "format": "uuid"
               }
             }
+          },
+          {
+            "name": "cantiereId",
+            "in": "query",
+            "description": "Optional: restrict the export to a single cantiere. Omitted (the default) keeps the prior\ntenant-wide-for-the-month behavior for existing callers.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -22252,7 +22261,10 @@
           "tecnicoId",
           "tecnicoNome",
           "ore",
-          "straordinario"
+          "straordinario",
+          "kmTraveled",
+          "vehicle",
+          "costPerKm"
         ],
         "type": "object",
         "properties": {
@@ -22284,6 +22296,32 @@
               "number",
               "string"
             ],
+            "format": "double"
+          },
+          "kmTraveled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Trasferta (travel) km, captured on input but previously dropped before\n            display \u2014 see \u0060ReportStaff.KmTraveled\u0060.",
+            "format": "double"
+          },
+          "vehicle": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Trasferta vehicle used, same gap as decimal RapportinoStaffDto.KmTraveled."
+          },
+          "costPerKm": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Trasferta cost-per-km, same gap as decimal RapportinoStaffDto.KmTraveled.",
             "format": "double"
           }
         },
