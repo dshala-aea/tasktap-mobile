@@ -188,6 +188,14 @@ class Cantieri extends Table {
   TextColumn get customerId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
+  /// Client-side geocode cache for [address]/[city]/[postalCode] — there is no lat/lng anywhere
+  /// on the backend `Cantiere` entity to sync instead. Populated lazily by
+  /// `cantiereGeocodedLocationProvider` (cantiere_providers.dart) the first time this cantiere's
+  /// detail screen is opened and geocoding succeeds; null forever for a cantiere with no address
+  /// or one Nominatim couldn't resolve. Both null or both set — never written independently.
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -336,6 +344,7 @@ class DraftReports extends Table {
   TextColumn get scheduleId => text().nullable()();
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
+
   /// The cantiere this rapportino is about, when it was created from a Cantiere rather than a
   /// Ticket. Was tracked only in `ReportEditorState.cantiereId` — never a DB column — so it
   /// never survived an autosave: `_buildHeaderCompanion()` had no column to put it in, and
@@ -785,7 +794,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration {
@@ -956,10 +965,7 @@ class AppDatabase extends _$AppDatabase {
           // See DraftReports.technicianSignaturePrefillSuppressed's own doc comment. Client-
           // authored only (set locally by Cancella, read locally by the pre-fill guard), never
           // delta-synced: no syncCursorGeneration bump needed.
-          await m.addColumn(
-            draftReports,
-            draftReports.technicianSignaturePrefillSuppressed,
-          );
+          await m.addColumn(draftReports, draftReports.technicianSignaturePrefillSuppressed);
         }
         if (from < 27) {
           // Backend's ControlTypeEnum gained a Number type (was only Checkbox/Text/DateTime/
@@ -967,6 +973,14 @@ class AppDatabase extends _$AppDatabase {
           // nullable, so a draft saved before this column existed just reads null for it, same
           // as every other addColumn migration above.
           await m.addColumn(reportControlli, reportControlli.numberValue);
+        }
+        if (from < 28) {
+          // Client-side geocode cache for the cantiere detail screen's embedded map — see
+          // Cantieri.latitude/longitude's own doc comment. Client-authored only (never sent by
+          // the backend, which has no lat/lng on Cantiere at all): no syncCursorGeneration bump
+          // needed, same reasoning as schema 21/25/26's own client-authored columns.
+          await m.addColumn(cantieri, cantieri.latitude);
+          await m.addColumn(cantieri, cantieri.longitude);
         }
       },
     );
@@ -1005,9 +1019,7 @@ class AppDatabase extends _$AppDatabase {
   static const String _cursorId = 'default:$syncCursorGeneration';
 
   Future<DateTime?> getLastSync() async {
-    final row = await (select(syncMeta)
-          ..where((t) => t.id.equals(_cursorId)))
-        .getSingleOrNull();
+    final row = await (select(syncMeta)..where((t) => t.id.equals(_cursorId))).getSingleOrNull();
     return row?.lastSync;
   }
 

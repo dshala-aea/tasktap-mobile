@@ -56,6 +56,12 @@ dependencies:
   # Opens the device's own maps app for turn-by-turn directions — no in-app map SDK, no API key.
   url_launcher: ^6.3.1
 
+  # Embedded OpenStreetMap preview on cantiere detail (see CantiereMapCard) — a real map widget,
+  # not just the pin-and-external-link AppMapCard fallback. No API key: OSM's public tile server
+  # + Nominatim geocoding, both usage-policy-compliant (see geocoding_service.dart).
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+
   # Barcode/QR scanning (materiali lookup) — camera + on-device ML Kit, no cloud call per scan.
   mobile_scanner: ^6.0.2
 
