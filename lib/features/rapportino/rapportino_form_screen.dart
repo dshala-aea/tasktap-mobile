@@ -9,6 +9,7 @@ import '../../core/theme/app_rack.dart';
 import '../../core/widgets/app_compartment_tile.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import 'ai_draft_action.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
 import 'steps/step_ore.dart';
@@ -148,6 +149,10 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                 child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Primary AI-assist action first, then the manual checklist below it — natural
+              // reading order for a technician who just opened the report. Always visible (no
+              // tile tap required), unlike the old buried-in-Dettagli button it replaces.
+              AiDraftAction(reportId: reportId),
               GridView.count(
                 // Wider than a phone (tablet, foldable unfolded) gets a fourth column instead of
                 // stretching the same three tiles across the extra width.

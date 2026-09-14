@@ -1,20 +1,13 @@
 // dart format width=100
 // test/features/rapportino/steps/step_dettagli_test.dart
 //
-// Widget tests for StepDettagli's "Bozza automatica" (AI draft) button.
+// Widget tests for StepDettagli's remaining Dettagli-form behavior.
 //
-// The gap: AiApiClient.generateDraft accepts a `voiceTranscript` parameter, and the backend's
-// ReportContextBuilder folds it into the AI prompt ("Nota Vocale Tecnico"), but the button never
-// passed it. On-device dictation (DictateButton) writes into the same `details` field the AI
-// draft is meant to replace/augment — it is the only place dictated text is ever held in editor
-// state (DictateButton has no separate transcript output — see dictate_button.dart) — so the
-// fix is to forward whatever is currently in `details` as `voiceTranscript` before it is
-// overwritten by the generated draft.
-//
-// Verifies:
-//   - a populated `details` field (simulating dictated notes) is passed through as
-//     voiceTranscript when "Genera" is pressed.
-//   - an empty `details` field results in no voiceTranscript being sent (null, not '').
+// The AI-draft "Genera con AI" button and its `_generateAiDraft` logic moved out of this file and
+// into `lib/features/rapportino/ai_draft_action.dart` (see ai_draft_action_test.dart) — StepDettagli
+// no longer renders a "Genera" button or the cantiere-no-ticket explanatory note, both of which used
+// to live here. What's left below are the tests for what StepDettagli still owns: the ticket/cantiere
+// Collegamento lookup fields.
 
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
@@ -23,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
@@ -32,37 +26,18 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 
 const _reportId = 'draft-1';
 
-/// Records the arguments `generateDraft` was called with, instead of hitting the network.
-class _RecordingAiApiClient extends AiApiClient {
-  _RecordingAiApiClient() : super(Dio());
-
-  String? capturedVoiceTranscript;
-  int calls = 0;
-  bool voiceTranscriptWasPassed = false;
-
-  @override
-  Future<AiReportDraftDto> generateDraft({
-    required String scheduleId,
-    String? ticketId,
-    String? voiceTranscript,
-  }) async {
-    calls++;
-    capturedVoiceTranscript = voiceTranscript;
-    voiceTranscriptWasPassed = true;
-    return const AiReportDraftDto(title: 'Titolo AI', details: 'Descrizione AI', modelUsed: 'test-model');
-  }
-
-  @override
-  Future<AiQuotaDto> getQuota() async {
-    return const AiQuotaDto(monthlyLimit: 10, used: 1, remaining: 9);
-  }
+/// A no-op AiApiClient — StepDettagli no longer calls it directly, but reportEditorProvider's
+/// container still needs an override so nothing in the widget tree that reads `aiApiClientProvider`
+/// (there is none left in StepDettagli itself, but overriding keeps this container shape aligned
+/// with ai_draft_action_test.dart's).
+class _FakeAiApiClient extends AiApiClient {
+  _FakeAiApiClient() : super(Dio());
 }
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
 ProviderContainer _buildContainer({
   required AppDatabase db,
-  required _RecordingAiApiClient aiClient,
   String details = '',
   String? ticketId,
   String? ticketFreeText,
@@ -72,7 +47,10 @@ ProviderContainer _buildContainer({
   return ProviderContainer(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
-      aiApiClientProvider.overrideWithValue(aiClient),
+      aiApiClientProvider.overrideWithValue(_FakeAiApiClient()),
+      // No location capture in these tests — the auto-GPS-on-entry behavior (report_editor_providers'
+      // captureGpsSilently) is exercised in ai_draft_action_test.dart / gps auto-capture tests instead.
+      gpsPreferenceProvider.overrideWithValue(false),
       reportEditorProvider(_reportId).overrideWith(
         (ref) => ReportEditorNotifier(
           initialState: ReportEditorState(
@@ -108,44 +86,16 @@ void main() {
   setUp(() => db = _makeDb());
   tearDown(() async => db.close());
 
-  group('StepDettagli — AI draft voiceTranscript wiring', () {
-    testWidgets('a populated details field (dictated notes) is passed as voiceTranscript', (
-      tester,
-    ) async {
-      final aiClient = _RecordingAiApiClient();
-      final container = _buildContainer(db: db, aiClient: aiClient, details: 'Nota dettata a voce');
+  group('StepDettagli — no longer renders the AI draft action', () {
+    testWidgets('no "Genera" button appears on this step', (tester) async {
+      final container = _buildContainer(db: db);
       addTearDown(container.dispose);
 
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Genera'));
-      await tester.pumpAndSettle();
-
-      // details already has text, so the overwrite-confirmation dialog appears first.
-      expect(find.text('Sostituire il testo?'), findsOneWidget);
-      await tester.tap(find.text('Sostituisci'));
-      await tester.pumpAndSettle();
-
-      expect(aiClient.calls, 1);
-      expect(aiClient.capturedVoiceTranscript, 'Nota dettata a voce');
-    });
-
-    testWidgets('an empty details field passes no voiceTranscript', (tester) async {
-      final aiClient = _RecordingAiApiClient();
-      final container = _buildContainer(db: db, aiClient: aiClient, details: '');
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(_buildStep(container));
-      await tester.pumpAndSettle();
-
-      // Nothing typed yet, so "Genera" applies immediately with no overwrite prompt.
-      await tester.tap(find.text('Genera'));
-      await tester.pumpAndSettle();
-
-      expect(aiClient.calls, 1);
-      expect(aiClient.voiceTranscriptWasPassed, isTrue);
-      expect(aiClient.capturedVoiceTranscript, isNull);
+      expect(find.text('Genera'), findsNothing);
+      expect(find.text('Bozza automatica'), findsNothing);
     });
   });
 
@@ -156,10 +106,8 @@ void main() {
     testWidgets('Ticket field shows the resolved check icon when ticketId is set', (
       tester,
     ) async {
-      final aiClient = _RecordingAiApiClient();
       final container = _buildContainer(
         db: db,
-        aiClient: aiClient,
         ticketId: 'ticket-not-yet-cached',
         ticketFreeText: 'TICK-042',
       );
@@ -176,10 +124,8 @@ void main() {
     testWidgets('Cantiere field shows the resolved check icon when cantiereId is set', (
       tester,
     ) async {
-      final aiClient = _RecordingAiApiClient();
       final container = _buildContainer(
         db: db,
-        aiClient: aiClient,
         cantiereId: 'cantiere-not-yet-cached',
         cantiereFreeText: 'Cantiere Via Roma',
       );
@@ -191,53 +137,6 @@ void main() {
       expect(find.text('Cantiere Via Roma'), findsOneWidget);
       expect(find.byIcon(LucideIcons.check), findsOneWidget);
       expect(find.byIcon(LucideIcons.x), findsNothing);
-    });
-  });
-
-  // Item 14: createCantiereReportDraft (create_draft.dart) seeds a cantiereId but never a
-  // ticketId/scheduleId — the AI card above is silently absent (it needs scheduleId) and every
-  // label on this step still reads as ticket-oriented, with nothing telling the technician why.
-  group('StepDettagli — cantiere-only note (item 14)', () {
-    const noteText =
-        'Rapportino da cantiere: non è collegato a un ticket, quindi la bozza '
-        'automatica AI non è disponibile per questo rapportino.';
-
-    testWidgets('shown when the draft has a cantiereId but no ticketId', (tester) async {
-      final aiClient = _RecordingAiApiClient();
-      final container = _buildContainer(db: db, aiClient: aiClient, cantiereId: 'cantiere-1');
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(_buildStep(container));
-      await tester.pumpAndSettle();
-
-      expect(find.text(noteText), findsOneWidget);
-    });
-
-    testWidgets('hidden when the draft is also linked to a ticket', (tester) async {
-      final aiClient = _RecordingAiApiClient();
-      final container = _buildContainer(
-        db: db,
-        aiClient: aiClient,
-        cantiereId: 'cantiere-1',
-        ticketId: 'ticket-1',
-      );
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(_buildStep(container));
-      await tester.pumpAndSettle();
-
-      expect(find.text(noteText), findsNothing);
-    });
-
-    testWidgets('hidden when the draft has neither a cantiereId nor a ticketId', (tester) async {
-      final aiClient = _RecordingAiApiClient();
-      final container = _buildContainer(db: db, aiClient: aiClient);
-      addTearDown(container.dispose);
-
-      await tester.pumpWidget(_buildStep(container));
-      await tester.pumpAndSettle();
-
-      expect(find.text(noteText), findsNothing);
     });
   });
 }

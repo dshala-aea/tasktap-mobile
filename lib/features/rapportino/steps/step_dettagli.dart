@@ -1,12 +1,12 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/dictation/dictate_button.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/widgets/widgets.dart';
-import '../../../data/ai/ai_api_client.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
 // Uses StepLabel (the padding-free sibling of SectionTitle) — these headings sit inside cards
@@ -39,8 +39,6 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   late final TextEditingController _detailsCtrl;
   late final TextEditingController _workAddressCtrl;
 
-  bool _aiBusy = false;
-
   /// Whether the optional ticket/cantiere link is expanded.
   ///
   /// Starts closed. A rapportino is almost always opened from the thing it is about, so the link
@@ -57,6 +55,16 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     _workAddressCtrl = TextEditingController(text: s.workAddress ?? '');
     _showCollegamento =
         (s.ticketFreeText?.isNotEmpty ?? false) || (s.cantiereFreeText?.isNotEmpty ?? false);
+
+    // Auto-acquire GPS on first entry when permission is already granted — no manual tap needed
+    // for the common case (returning technician, permission already decided). The manual button
+    // in _GpsCapture below stays the only way to (a) grant permission for the first time, where
+    // the purpose dialog must show before any OS prompt, and (b) manually refresh afterward.
+    // Fire-and-forget: captureGpsSilently() already swallows errors and never prompts, so this
+    // can't crash or block the form.
+    if (ref.read(gpsPreferenceProvider) && s.gpsLatitude == null) {
+      unawaited(ref.read(reportEditorProvider(widget.reportId).notifier).captureGpsSilently());
+    }
   }
 
   @override
@@ -99,28 +107,6 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
             ),
             const SizedBox(height: 16),
           ],
-
-          _AiDraftButton(
-            scheduleId: state.scheduleId,
-            ticketId: state.ticketId,
-            busy: _aiBusy,
-            onDraft: _generateAiDraft,
-          ),
-
-          // Item 14: a cantiere-originated draft (createCantiereReportDraft, create_draft.dart)
-          // has a cantiereId but no ticketId/scheduleId — the AI card above renders nothing
-          // (_AiDraftButton hides itself with no scheduleId) and every label below this point was
-          // still written for a ticket-based report, with nothing telling the technician why the
-          // AI button they may remember from other rapportini just isn't here this time.
-          if ((state.cantiereId?.isNotEmpty ?? false) && !(state.ticketId?.isNotEmpty ?? false))
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: Text(
-                'Rapportino da cantiere: non è collegato a un ticket, quindi la bozza '
-                'automatica AI non è disponibile per questo rapportino.',
-                style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
-              ),
-            ),
 
           // No section headings above these. Every one of them restated the label of the single
           // field beneath it — "Titolo e descrizione" over a field called "Titolo", "Cliente *"
@@ -241,97 +227,6 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     return null;
   }
 
-  /// Ask the server for a drafted title and description for this intervento.
-  ///
-  /// Applies to the two fields the editor can actually hold. `technicianNotes` comes back from the
-  /// model too, but `ReportEditorState` hardcodes it to null and exposes no setter, so applying it
-  /// would mean inventing storage for it here — a change to the draft model, not to this button.
-  ///
-  /// Never overwrites silently. Anything the technician has already typed is what they observed on
-  /// site; a model's guess must not replace it without being asked.
-  Future<void> _generateAiDraft(String scheduleId, String? ticketId) async {
-    if (_aiBusy) return;
-
-    final editor = ref.read(reportEditorProvider(widget.reportId));
-
-    // Whatever is already in `details` when the draft is requested — typed or dictated via
-    // DictateButton above (the only field on this step wired to it). DictateButton has no
-    // separate transcript output of its own; it writes straight into this controller/field (see
-    // dictate_button.dart), so this is the one place a technician's spoken notes are held before
-    // the AI draft would otherwise overwrite them. Captured before the overwrite-confirmation
-    // dialog and the draft response replace it, so the backend's "Nota Vocale Tecnico" prompt
-    // section actually receives what was said on site instead of nothing.
-    final voiceTranscript = editor.details.trim();
-
-    final hasTyped = editor.title.trim().isNotEmpty || editor.details.trim().isNotEmpty;
-    if (hasTyped) {
-      final overwrite = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Sostituire il testo?'),
-          content: const Text(
-            'Titolo e descrizione contengono già del testo. '
-            'La bozza AI lo sostituirà.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Sostituisci'),
-            ),
-          ],
-        ),
-      );
-      if (overwrite != true) return;
-    }
-
-    setState(() => _aiBusy = true);
-    try {
-      final draft = await ref
-          .read(aiApiClientProvider)
-          .generateDraft(
-            scheduleId: scheduleId,
-            ticketId: ticketId,
-            voiceTranscript: voiceTranscript.isEmpty ? null : voiceTranscript,
-          );
-
-      final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
-      _titleCtrl.text = draft.title;
-      _detailsCtrl.text = draft.details;
-      await notifier.setTitle(draft.title);
-      await notifier.setDetails(draft.details);
-      // The rapportino now carries text a model wrote. Recorded here, at the one place the
-      // generated text actually enters the record, rather than at the point the button is
-      // pressed — a draft that is generated and then discarded is not AI assistance.
-      await notifier.markAiAssisted();
-
-      // The allowance is the whole company's, so it can move without this technician doing
-      // anything. Re-read it rather than decrementing a local copy.
-      ref.invalidate(aiQuotaProvider);
-
-      if (!mounted) return;
-      showAppToast(
-        context,
-        message: 'Bozza generata (${draft.modelUsed}). Rileggila prima di inviare.',
-        tone: ToastTone.success,
-      );
-    } on AiQuotaExhaustedException catch (e) {
-      if (!mounted) return;
-      final when = e.resetsAt == null
-          ? 'il primo del mese'
-          : DateFormat('d MMMM', 'it').format(e.resetsAt!.toLocal());
-      showAppToast(
-        context,
-        message: 'Quota AI della tua azienda esaurita. Si azzera $when.',
-        tone: ToastTone.warning,
-      );
-    } on AiFailure catch (e) {
-      if (!mounted) return;
-      showAppToast(context, message: e.message, tone: ToastTone.error);
-    } finally {
-      if (mounted) setState(() => _aiBusy = false);
-    }
-  }
 }
 
 // ── GPS capture widget ────────────────────────────────────────────────────────
@@ -476,87 +371,3 @@ class _LinkedChip extends StatelessWidget {
 }
 
 // ── Inline section label (no built-in padding — avoids double-pad) ─────────────
-
-/// Offers an AI draft, and says what it costs before it is pressed.
-///
-/// Hidden entirely when the report has no `scheduleId`: the endpoint requires one — the server
-/// draws the intervento's context from the schedule — so with no schedule there is nothing to
-/// draft from and a disabled button would only raise a question it cannot answer.
-class _AiDraftButton extends ConsumerWidget {
-  const _AiDraftButton({
-    required this.scheduleId,
-    required this.ticketId,
-    required this.busy,
-    required this.onDraft,
-  });
-
-  final String? scheduleId;
-  final String? ticketId;
-  final bool busy;
-  final Future<void> Function(String scheduleId, String? ticketId) onDraft;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final id = scheduleId;
-    if (id == null) return const SizedBox.shrink();
-
-    final c = context.colors;
-    final quota = ref.watch(aiQuotaProvider);
-    final exhausted = quota.valueOrNull?.exhausted ?? false;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-      child: AppCard(
-        child: Row(
-          children: [
-            Icon(LucideIcons.penTool, size: 18, color: exhausted ? c.inkDisabled : c.ink),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Bozza automatica',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: exhausted ? c.inkMuted : c.ink,
-                    ),
-                  ),
-                  Text(
-                    // The count is the company's, not this technician's, and it is spent whether
-                    // or not the result is kept. Both belong on the button, not in a help page.
-                    switch (quota) {
-                      AsyncData(:final value) when value.exhausted =>
-                        'Quota aziendale esaurita per questo mese',
-                      AsyncData(:final value) =>
-                        '${value.remaining} generazioni rimaste all\'azienda questo mese',
-                      AsyncError() => 'Quota non verificabile ora',
-                      _ => 'Verifica quota…',
-                    },
-                    style: TextStyle(fontSize: 11, color: c.inkMuted),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (busy)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              AppButton(
-                label: 'Genera',
-                size: AppButtonSize.sm,
-                fullWidth: false,
-                onPressed: exhausted ? null : () => onDraft(id, ticketId),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

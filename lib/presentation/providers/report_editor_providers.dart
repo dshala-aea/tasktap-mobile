@@ -857,6 +857,16 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     }
   }
 
+  /// Best-effort, no-prompt GPS capture for the report itself — same silent-only-if-already-decided
+  /// contract as [_captureGpsSilently] (never surfaces the OS permission dialog, never throws), but
+  /// also applies a successful fix to the draft via [setGps] so callers don't have to unpack coords
+  /// themselves. Used for automatic acquisition on entering Dettagli — see `StepDettagli.initState`.
+  Future<GpsCoords?> captureGpsSilently() async {
+    final coords = await _captureGpsSilently();
+    if (coords != null) setGps(coords.lat, coords.lng);
+    return coords;
+  }
+
   /// Saves a customer signature.
   ///
   /// [stampCapture] defaults to `true` — the real drawn/typed capture paths (see

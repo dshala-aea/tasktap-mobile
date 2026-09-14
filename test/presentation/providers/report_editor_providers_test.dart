@@ -465,6 +465,57 @@ void main() {
 
   // ── Signatures ────────────────────────────────────────────────────────────
 
+  group('captureGpsSilently — automatic GPS acquisition', () {
+    // Backs StepDettagli's auto-acquire-on-entry behavior (step_dettagli.dart's initState):
+    // unlike the button-driven `_GpsCapture._captureGps`, this path must never prompt and must
+    // apply a successful fix straight to the draft via setGps, so the caller doesn't have to.
+    test('applies a successful fix to state via setGps', () async {
+      await _seedDraft(db, 'draft-1');
+      const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(coords),
+      );
+
+      final result = await notifier.captureGpsSilently();
+
+      expect(result, coords);
+      expect(notifier.state.gpsLatitude, 45.4642);
+      expect(notifier.state.gpsLongitude, 9.19);
+
+      final draft = await repo.getDraft('draft-1');
+      expect(draft?.metadataJson, contains('gpsLatitude'));
+    });
+
+    test('leaves gps unset in state when no position is available', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(db, locationService: const _FakeLocationService(null));
+
+      final result = await notifier.captureGpsSilently();
+
+      expect(result, isNull);
+      expect(notifier.state.gpsLatitude, isNull);
+      expect(notifier.state.gpsLongitude, isNull);
+    });
+
+    test('never prompts for location permission — short-circuits instead of calling '
+        'getCurrentPosition', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(
+        db,
+        locationService: const _WouldPromptLocationService(),
+      );
+
+      // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching past
+      // this call without throwing is the assertion that captureGpsSilently short-circuited on
+      // willPromptForPermission() instead of prompting.
+      final result = await notifier.captureGpsSilently();
+
+      expect(result, isNull);
+      expect(notifier.state.gpsLatitude, isNull);
+    });
+  });
+
   group('signature attachment', () {
     test('saveCustomerSignature sets customerSignatureAllegatoId in state', () async {
       await _seedDraft(db, 'draft-1');
