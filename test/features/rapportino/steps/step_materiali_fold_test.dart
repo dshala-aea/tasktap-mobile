@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/app_text_field.dart';
 import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -646,5 +647,45 @@ void main() {
         await tester.pumpAndSettle();
       },
     );
+  });
+
+  // Item 7 of the admin-form audit: image_picker alone (Galleria/Fotocamera) can never return a
+  // PDF — this covers that a document-picking affordance now sits alongside them.
+  group('Foto / Allegati — Documento picker (item 7)', () {
+    testWidgets('offers a Documento (PDF) option next to Galleria/Fotocamera', (tester) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Galleria'), findsOneWidget);
+      expect(find.text('Fotocamera'), findsOneWidget);
+      expect(find.text('Documento (PDF)'), findsOneWidget);
+    });
+
+    testWidgets('a non-image allegato renders a document tile, not a broken image', (
+      tester,
+    ) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await container
+          .read(reportEditorProvider(_reportId).notifier)
+          .addAllegato(
+            const AllegatoRow(
+              id: 'doc-1',
+              localPath: '/tmp/scheda-tecnica.pdf',
+              fileName: 'scheda-tecnica.pdf',
+              contentType: 'application/pdf',
+              sizeBytes: 1024,
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.text('scheda-tecnica.pdf'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.fileText), findsWidgets);
+    });
   });
 }

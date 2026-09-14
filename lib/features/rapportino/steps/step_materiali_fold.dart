@@ -6,6 +6,7 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -195,6 +196,20 @@ class StepMaterialiFold extends ConsumerWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          // Item 7: image_picker only ever offers camera/gallery, so a PDF (a datasheet, a signed
+          // delivery note, a manufacturer certificate) could never be attached from here at all —
+          // separate from any backend-side content-type restriction, which a backend agent is
+          // relaxing concurrently. Goes through the same addAllegato path images already use.
+          OutlinedButton.icon(
+            onPressed: () => _pickDocument(context, ref),
+            icon: const Icon(LucideIcons.fileText),
+            label: const Text('Documento (PDF)'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
           ),
         ],
       ),
@@ -468,6 +483,43 @@ class StepMaterialiFold extends ConsumerWidget {
       }
     }
   }
+
+  /// Item 7: a document (PDF) alongside the camera/gallery photo pickers above. Goes through the
+  /// same `addAllegato` path — same local row shape, same pending-upload flag, same eventual
+  /// upload — images already use; only the source and the resulting `contentType` differ.
+  Future<void> _pickDocument(BuildContext context, WidgetRef ref) async {
+    final notifier = ref.read(reportEditorProvider(reportId).notifier);
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
+      final files = result?.files ?? const <PlatformFile>[];
+      if (files.isEmpty) return;
+      final picked = files.first;
+      // Path-based, like image_picker's XFile above — this app ships mobile-only (no web/
+      // target), where FilePicker always returns a real file path.
+      if (picked.path == null) return;
+      final file = File(picked.path!);
+      final bytes = await file.readAsBytes();
+      final id = 'doc-${DateTime.now().millisecondsSinceEpoch}';
+      await notifier.addAllegato(
+        AllegatoRow(
+          id: id,
+          localPath: picked.path!,
+          fileName: picked.name,
+          contentType: 'application/pdf',
+          sizeBytes: bytes.length,
+        ),
+      );
+    } catch (e) {
+      // Same reasoning as _pickImage's own catch above — local pick + file read, no server call.
+      if (context.mounted) {
+        showAppToast(
+          context,
+          message: 'Documento non salvato. Riprova, e controlla lo spazio libero sul telefono.',
+          tone: ToastTone.error,
+        );
+      }
+    }
+  }
 }
 
 // ── Fabbisogno suggestions ──────────────────────────────────────────────────
@@ -719,21 +771,44 @@ class _PhotoThumb extends StatelessWidget {
     final tileWidth =
         (MediaQuery.sizeOf(context).width - AppSpacing.pagePadding * 2 - 8 * 2) / 3;
     final cachePx = (tileWidth * MediaQuery.devicePixelRatioOf(context)).round();
+    // Item 7: a PDF attachment lands in this same grid (addAllegato doesn't distinguish photos
+    // from documents) but isn't decodable as an image — Image.file's errorBuilder would already
+    // catch that, just as a generic "broken image" rather than naming what the tile actually is.
+    final isImage = row.contentType.startsWith('image/');
     return Stack(
       fit: StackFit.expand,
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(row.localPath),
-            fit: BoxFit.cover,
-            cacheWidth: cachePx,
-            cacheHeight: cachePx,
-            errorBuilder: (ctx, e, _) => Container(
-              color: context.colors.bg3,
-              child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),
-            ),
-          ),
+          child: isImage
+              ? Image.file(
+                  File(row.localPath),
+                  fit: BoxFit.cover,
+                  cacheWidth: cachePx,
+                  cacheHeight: cachePx,
+                  errorBuilder: (ctx, e, _) => Container(
+                    color: context.colors.bg3,
+                    child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),
+                  ),
+                )
+              : Container(
+                  color: context.colors.bg3,
+                  padding: const EdgeInsets.all(4),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(LucideIcons.fileText, color: context.colors.inkMuted),
+                      const SizedBox(height: 2),
+                      Text(
+                        row.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 9, color: context.colors.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
         ),
         Positioned(
           top: 4,
