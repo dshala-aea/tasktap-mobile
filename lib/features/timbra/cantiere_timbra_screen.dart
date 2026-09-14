@@ -53,6 +53,8 @@ import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../cantiere/cantiere_providers.dart';
+import 'chiudi_turno_screen.dart';
+import 'gps_status_indicator.dart';
 import 'teammate_picker_sheet.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
@@ -419,7 +421,6 @@ class CantiereTimbraScreen extends ConsumerStatefulWidget {
 }
 
 class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
-  CantieriData? _selectedCantiere;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -431,9 +432,15 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   int? _teamSize;
   String? _weatherConditions;
 
-  // Check-out side — mirrors EndCantiereRequest's optional fields.
-  String? _closingDescription;
-  String? _safetyNotes;
+  // ── Lead "chi timbra" choice — always-visible three-way pick, lead-only (see isLead). ──
+  _ChiTimbra _chiTimbra = _ChiTimbra.io;
+
+  /// Who "Seleziona squadra" resolved to — null before the lead has picked anyone (including
+  /// right after choosing that mode, before the picker sheet resolves), non-null and non-empty
+  /// once confirmed. Never empty-but-non-null: the picker sheet's own "Conferma" stays disabled
+  /// until at least one person is checked (see teammate_picker_sheet.dart), and a dismiss without
+  /// confirming resolves to null, not `[]`.
+  List<String>? _squadraSelection;
 
   bool get _hasCheckInDetails =>
       [
@@ -444,28 +451,41 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       ].any((v) => v != null && v.isNotEmpty) ||
       _teamSize != null;
 
-  bool get _hasClosingDetails =>
-      [_closingDescription, _safetyNotes].any((v) => v != null && v.isNotEmpty);
-
-  /// The cantiere this screen currently intends to act on — the fixed cantiere when in
-  /// direct-entry mode (`widget.cantiereId` set), else whatever the picker has selected.
+  /// The cantiere this screen currently intends to act on.
   ///
   /// Read by both `build()` (for display) and `_handleStartCantiere` (for the actual clock-in)
-  /// so the two can never disagree. Originally `build()` alone computed an `effectiveSelected`
-  /// local while `_handleStartCantiere` still read the picker-only `_selectedCantiere` field
-  /// directly — so a direct-entry clock-in tap always fell through to "Seleziona un cantiere
-  /// prima di timbrare.", even though the fixed-cantiere card was correctly showing the resolved
-  /// cantiere. `ref.read`, not `ref.watch`: `build()` already watches `cantiereByIdProvider` for
-  /// itself below, and this getter only needs the cached value, not a subscription of its own —
-  /// including when called imperatively from `_handleStartCantiere`, which must not create a new
-  /// watch mid-callback.
-  CantieriData? get _effectiveCantiere => widget.cantiereId != null
-      ? ref.read(cantiereByIdProvider(widget.cantiereId!)).valueOrNull
-      : _selectedCantiere;
+  /// so the two can never disagree. `ref.read`, not `ref.watch`: `build()` already watches
+  /// `cantiereByIdProvider` for itself below, and this getter only needs the cached value, not a
+  /// subscription of its own — including when called imperatively from `_handleStartCantiere`,
+  /// which must not create a new watch mid-callback. Null when `widget.cantiereId` itself is null
+  /// — unreachable through any real navigation today (every caller resolves a cantiereId first;
+  /// see this file's own header comment) but kept honest rather than force-unwrapped, so a
+  /// malformed deep link reads as "cantiere not found" instead of crashing.
+  CantieriData? get _effectiveCantiere => widget.cantiereId == null
+      ? null
+      : ref.read(cantiereByIdProvider(widget.cantiereId!)).valueOrNull;
 
   @override
   Widget build(BuildContext context) {
-    final cantieriAsync = ref.watch(cantieriProvider);
+    // A session that ended elsewhere (ChiudiTurnoScreen, pushed from _ActiveSessionBody's end
+    // button below) leaves this screen mounted underneath — it never navigates away on its own,
+    // matching the old in-place end flow's own behaviour. So the transition back to "no active
+    // session" is the one moment to clear this screen's own leftover check-in state, rather than
+    // an `_onEndedSuccessfully`-style callback this screen no longer runs itself.
+    ref.listen(cantiereActiveSessionProvider, (previous, next) {
+      if (previous != null && next == null) {
+        setState(() {
+          _description = null;
+          _workOrderNumber = null;
+          _equipmentUsed = null;
+          _teamSize = null;
+          _weatherConditions = null;
+          _chiTimbra = _ChiTimbra.io;
+          _squadraSelection = null;
+        });
+      }
+    });
+
     final localEventsAsync = ref.watch(todayCantiereEventsProvider);
     final active = ref.watch(cantiereActiveSessionProvider);
     final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
@@ -473,14 +493,16 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
 
     // Watched here (not just read via `_effectiveCantiere`) so the screen rebuilds once this
     // resolves — the fixed-cantiere card below also needs its loading/error/not-found states,
-    // which the plain `CantieriData?` value alone can't distinguish.
+    // which the plain `CantieriData?` value alone can't distinguish. `AsyncData(null)` when
+    // `widget.cantiereId` itself is null (see `_effectiveCantiere`'s own doc comment) — the
+    // check-in body then renders the same "not found" card a real not-yet-synced id would.
     final fixedCantiereAsync = widget.cantiereId != null
         ? ref.watch(cantiereByIdProvider(widget.cantiereId!))
-        : null;
+        : const AsyncData<CantieriData?>(null);
 
-    // Only meaningful once a cantiere is resolved (picker selection or direct-entry) — before
-    // then there is nothing to be lead *of*, so this reads as "not lead" like any other
-    // loading/error case (see isLeadForCantiereProvider's own doc comment).
+    // Only meaningful once a cantiere is resolved — before then there is nothing to be lead *of*,
+    // so this reads as "not lead" like any other loading/error case (see
+    // isLeadForCantiereProvider's own doc comment).
     final effectiveCantiereId = _effectiveCantiere?.id;
     final isLead = effectiveCantiereId != null
         ? ref.watch(isLeadForCantiereProvider(effectiveCantiereId))
@@ -506,28 +528,20 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                       local: active,
                       serverLog: serverLog,
                       hasPendingSync: hasPendingSync,
-                      hasClosingDetails: _hasClosingDetails,
-                      isLoading: _isLoading,
-                      errorMessage: _errorMessage,
-                      onEnd: _handleEndCantiere,
-                      onOpenClosingDetails: _openClosingDetailsSheet,
+                      onEnd: () => _navigateToChiudiTurno(active, serverLog?.ticketId),
                     )
                   : _CheckInBody(
-                      customerId: widget.customerId,
                       ticketId: widget.ticketId,
-                      cantieriAsync: cantieriAsync,
-                      selectedCantiere: _effectiveCantiere,
                       cantiereId: effectiveCantiereId,
-                      showPicker: widget.cantiereId == null,
                       fixedCantiereAsync: fixedCantiereAsync,
                       isLoading: _isLoading,
                       errorMessage: _errorMessage,
                       hasDetails: _hasCheckInDetails,
                       isLead: isLead,
-                      onCantiereSelected: (c) => setState(() => _selectedCantiere = c),
-                      onStart: _handleStartCantiere,
-                      onSelectSquadra: _handleSelectSquadra,
-                      onTuttaLaSquadra: _handleTuttaLaSquadra,
+                      chiTimbra: _chiTimbra,
+                      squadraSelectionCount: _squadraSelection?.length ?? 0,
+                      onChiTimbraChanged: _handleChiTimbraChanged,
+                      onStart: _primaryStartAction(fixedCantiereAsync),
                       onOpenDetails: _openDetailsSheet,
                     ),
             ),
@@ -535,6 +549,23 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         ),
       ),
     );
+  }
+
+  /// The primary "Inizia timbratura" button's action for the currently chosen [_chiTimbra] mode —
+  /// null (disabled) while loading, while the cantiere hasn't resolved, or while "Seleziona
+  /// squadra" is chosen but nobody's been picked yet.
+  VoidCallback? _primaryStartAction(AsyncValue<CantieriData?> fixedCantiereAsync) {
+    if (_isLoading || fixedCantiereAsync.valueOrNull == null) return null;
+    switch (_chiTimbra) {
+      case _ChiTimbra.io:
+        return _handleStartCantiere;
+      case _ChiTimbra.squadra:
+        final selection = _squadraSelection;
+        if (selection == null || selection.isEmpty) return null;
+        return () => _handleBatchStart(selection);
+      case _ChiTimbra.tutta:
+        return _handleTuttaLaSquadra;
+    }
   }
 
   // ── Progressive disclosure sheets ─────────────────────────────────────────────
@@ -558,20 +589,27 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     );
   }
 
-  void _openClosingDetailsSheet() {
-    openCompartmentSheet(
-      context,
-      label: 'Note di chiusura',
-      content: _CantiereClosingDetailsForm(
-        description: _closingDescription,
-        safetyNotes: _safetyNotes,
-        onDescriptionChanged: (v) => setState(() => _closingDescription = v),
-        onSafetyNotesChanged: (v) => setState(() => _safetyNotes = v),
-      ),
-    );
-  }
-
   // ── Actions ────────────────────────────────────────────────────────────────
+
+  /// Handles a tap on any of the three "chi timbra" pills. Choosing "Seleziona squadra" opens the
+  /// crew picker right away — same continuation a tap naturally invites — but the pill itself
+  /// stays the persistent record of the chosen mode: a dismiss without confirming leaves the mode
+  /// selected with nobody picked yet, which `_primaryStartAction` reads as "disabled" rather than
+  /// silently falling back to solo.
+  Future<void> _handleChiTimbraChanged(_ChiTimbra mode) async {
+    setState(() {
+      _chiTimbra = mode;
+      if (mode != _ChiTimbra.squadra) _squadraSelection = null;
+    });
+    if (mode != _ChiTimbra.squadra) return;
+
+    final cantiere = _effectiveCantiere;
+    if (cantiere == null) return;
+    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
+    final selected = await openTeammatePickerSheet(context, assignments: assignments);
+    if (!mounted) return;
+    setState(() => _squadraSelection = selected);
+  }
 
   Future<void> _handleStartCantiere() async {
     final cantiere = _effectiveCantiere;
@@ -582,7 +620,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     // Asked before the spinner goes up, not underneath it: a system dialog appearing over a
     // half-started clock-in reads as the app malfunctioning, and the technician cannot tell whether
     // their timbratura went through while they decide.
-    if (!await _confirmGpsPurpose()) return;
+    if (!await confirmGpsPurpose(context, ref)) return;
 
     setState(() {
       _isLoading = true;
@@ -617,7 +655,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         setState(() => _isLoading = false);
       }
     } on DioException catch (e) {
-      if (_isOfflineFailure(e)) {
+      if (isOfflineFailure(e)) {
         // Not reachable — queue locally instead of failing the punch outright. The batch upsert
         // this syncs through only carries description among the rich fields (see
         // cantiere_worklog_api_client.dart); the rest are captured for the online path only.
@@ -639,7 +677,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       } else if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = _networkErrorMessage(e);
+          _errorMessage = cantiereNetworkErrorMessage(e);
         });
       }
     } catch (_) {
@@ -650,20 +688,6 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         });
       }
     }
-  }
-
-  /// "Seleziona squadra" — opens the checkbox picker over this cantiere's crew assignments, then
-  /// batch-starts whichever subset the lead confirms. A null/empty result (dismissed without
-  /// confirming) is silently a no-op — the picker's own "Conferma" button is disabled until at
-  /// least one person is checked, so an empty confirm is unreachable; null just means "changed
-  /// their mind."
-  Future<void> _handleSelectSquadra() async {
-    final cantiere = _effectiveCantiere;
-    if (cantiere == null) return;
-    final assignments = ref.read(cantiereCrewAssignmentsProvider(cantiere.id)).valueOrNull ?? [];
-    final selected = await openTeammatePickerSheet(context, assignments: assignments);
-    if (!mounted || selected == null || selected.isEmpty) return;
-    await _handleBatchStart(selected);
   }
 
   /// "Tutta la squadra" — batch-starts every person this cantiere has an assignment row for
@@ -686,7 +710,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       setState(() => _errorMessage = 'Seleziona un cantiere prima di timbrare.');
       return;
     }
-    if (!await _confirmGpsPurpose()) return;
+    if (!await confirmGpsPurpose(context, ref)) return;
 
     setState(() {
       _isLoading = true;
@@ -733,7 +757,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = _networkErrorMessage(e);
+          _errorMessage = cantiereNetworkErrorMessage(e);
         });
       }
     } catch (_) {
@@ -789,213 +813,163 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
     );
   }
 
-  Future<void> _handleEndCantiere() async {
-    if (!await _confirmGpsPurpose()) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final location = await ref.read(locationServiceProvider).getCurrentPosition();
-      final client = ref.read(cantiereWorklogApiClientProvider);
-      await client.endCantiere(
-        EndCantiereRequest(
-          description: _closingDescription,
-          departureLatitude: location?.lat,
-          departureLongitude: location?.lng,
-          safetyNotes: _safetyNotes,
+  /// Pushes ChiudiTurnoScreen — the end-of-session summary/closing-notes/confirm flow that
+  /// replaced this button calling `_handleEndCantiere` directly in place. A plain
+  /// `Navigator.push`, not a go_router route: this screen is reachable only from an active
+  /// cantiere session (never deep-linked to on its own), the same reasoning
+  /// `attachment_viewer.dart`'s fullscreen image viewer already uses for the same kind of
+  /// in-flow-only screen. `active`/`ticketId` are captured at the moment of the tap (from this
+  /// screen's own already-watched `cantiereActiveSessionProvider`/`activeCantiereLogProvider`),
+  /// so ChiudiTurnoScreen doesn't need to re-derive "am I on site" for itself — it just acts on
+  /// the session it was handed.
+  void _navigateToChiudiTurno(CantiereActiveSession active, String? ticketId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChiudiTurnoScreen(
+          cantiereId: active.cantiereId,
+          ticketId: ticketId,
+          startTime: active.startTime,
         ),
-      );
-      _onEndedSuccessfully(offline: false);
-    } on DioException catch (e) {
-      if (_isOfflineFailure(e)) {
-        await ref
-            .read(cantiereSessionRepositoryProvider)
-            .addEvent(
-              id: _uuid.v4(),
-              eventTime: DateTime.now().toUtc(),
-              eventType: 'uscita',
-              description: _closingDescription,
-            );
-        unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
-        _onEndedSuccessfully(offline: true);
-      } else if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = _networkErrorMessage(e);
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'Errore imprevisto. Riprova.';
-        });
-      }
-    }
-  }
-
-  void _onEndedSuccessfully({required bool offline}) {
-    if (!mounted) return;
-    // The stale server-cached "active" answer must not resurface a session this device just
-    // recorded the end of — see cantiereActiveSessionProvider's own doc comment on why local
-    // takes priority only when it has something open.
-    ref.read(activeCantiereLogProvider.notifier).clearActive();
-    setState(() {
-      _isLoading = false;
-      _selectedCantiere = null;
-      _closingDescription = null;
-      _safetyNotes = null;
-      // Check-in side too — this screen doesn't navigate away on end (picker mode returns
-      // straight to the picker), so a leftover value here would silently resend into the next
-      // check-in's StartCantiereRequest/BatchStartCantiereRequest.
-      _description = null;
-      _workOrderNumber = null;
-      _equipmentUsed = null;
-      _teamSize = null;
-      _weatherConditions = null;
-    });
-    showAppToast(
-      context,
-      message: offline
-          ? 'Uscita registrata offline: verrà inviata al ritorno della connessione.'
-          : 'Uscita cantiere registrata con successo.',
-      tone: offline ? ToastTone.warning : ToastTone.success,
+      ),
     );
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  /// States what the coordinates are for, before the OS asks for them.
-  ///
-  /// Returns false only when the technician declines the *explanation*. Declining here cancels the
-  /// timbratura rather than clocking in without a position, because on a cantiere the arrival and
-  /// departure coordinates are the point: a site presence record with no location is not the same
-  /// record, and silently downgrading it would hide that from both the technician and the office.
-  ///
-  /// Returns true when no dialog would appear at all — permission already held, already refused
-  /// permanently, or the setting turned off. In those cases the existing null-position path is the
-  /// honest one and there is nothing to explain.
-  Future<bool> _confirmGpsPurpose() async {
-    if (!await ref.read(locationServiceProvider).willPromptForPermission()) return true;
-    if (!mounted) return false;
-
-    return askPermissionPurpose(
-      context,
-      icon: LucideIcons.mapPin,
-      titolo: 'Timbratura di cantiere',
-      motivo:
-          'Registriamo dove sei quando entri e quando esci dal cantiere. Serve a dimostrare la '
-          'tua presenza in cantiere, per la sicurezza e per le ore. Due punti, non un percorso.',
-      senzaDiEsso:
-          'Senza posizione la timbratura di cantiere non viene registrata. La timbratura normale '
-          'della giornata, nella scheda Timbra, funziona senza GPS.',
-      cta: 'Consenti la posizione',
-    );
-  }
-
-  /// A network error the device cannot reach the server to answer — as opposed to one the server
-  /// answered (a conflict, a lock), which must surface rather than fall back to a local queue.
-  bool _isOfflineFailure(DioException e) {
-    final status = e.response?.statusCode;
-    return status == null ||
-        e.type == DioExceptionType.connectionTimeout ||
-        e.type == DioExceptionType.receiveTimeout ||
-        e.type == DioExceptionType.connectionError;
-  }
-
-  String _networkErrorMessage(DioException e) {
-    final status = e.response?.statusCode;
-    if (status == 400) {
-      return 'Esiste già una sessione cantiere attiva. Chiudila prima.';
-    }
-    if (status == 404) {
-      return 'Nessuna sessione cantiere attiva trovata.';
-    }
-    // A 403 the backend tagged specifically "NotAssigned" (same error-code field/value the
-    // batch-start response uses for the analogous per-person check — see BatchStartResult.error)
-    // reads to a technician as "you lack a permission", but the actual fact is narrower and more
-    // useful: they're just not on this cantiere's crew. Anything else still falls through to the
-    // shared humaniser's generic permission-denied copy below.
-    if (status == 403 && _errorCode(e) == 'NotAssigned') {
-      return 'Non risulti assegnato a questo cantiere. Chiedi in ufficio.';
-    }
-    // Everything else goes through the shared humaniser. This used to end in
-    // `Errore server ($status)` — a number the technician cannot use, in the one line telling
-    // them their presence on site was not recorded.
-    return humanErrorMessage(e);
-  }
-
-  /// The backend's own error code from a JSON error body, when present — e.g. `"NotAssigned"`.
-  String? _errorCode(DioException e) {
-    final data = e.response?.data;
-    return data is Map ? data['error'] as String? : null;
   }
 }
+
+// ── Shared check-in/check-out helpers ────────────────────────────────────────
+//
+// Used by both this screen's check-in side and ChiudiTurnoScreen's own end-of-session flow —
+// pulled out of _CantiereTimbraScreenState (where they used to be private instance methods) so
+// neither screen has to reimplement the GPS-purpose gating, offline-fallback detection, or error
+// humanising the check-in side already had right.
+
+/// States what the coordinates are for, before the OS asks for them.
+///
+/// Returns false only when the technician declines the *explanation*. Declining here cancels the
+/// timbratura rather than clocking in without a position, because on a cantiere the arrival and
+/// departure coordinates are the point: a site presence record with no location is not the same
+/// record, and silently downgrading it would hide that from both the technician and the office.
+///
+/// Returns true when no dialog would appear at all — permission already held, already refused
+/// permanently, or the setting turned off. In those cases the existing null-position path is the
+/// honest one and there is nothing to explain.
+Future<bool> confirmGpsPurpose(BuildContext context, WidgetRef ref) async {
+  if (!await ref.read(locationServiceProvider).willPromptForPermission()) return true;
+  if (!context.mounted) return false;
+
+  return askPermissionPurpose(
+    context,
+    icon: LucideIcons.mapPin,
+    titolo: 'Timbratura di cantiere',
+    motivo:
+        'Registriamo dove sei quando entri e quando esci dal cantiere. Serve a dimostrare la '
+        'tua presenza in cantiere, per la sicurezza e per le ore. Due punti, non un percorso.',
+    senzaDiEsso:
+        'Senza posizione la timbratura di cantiere non viene registrata. La timbratura normale '
+        'della giornata, nella scheda Timbra, funziona senza GPS.',
+    cta: 'Consenti la posizione',
+  );
+}
+
+/// A network error the device cannot reach the server to answer — as opposed to one the server
+/// answered (a conflict, a lock), which must surface rather than fall back to a local queue.
+bool isOfflineFailure(DioException e) {
+  final status = e.response?.statusCode;
+  return status == null ||
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.connectionError;
+}
+
+String cantiereNetworkErrorMessage(DioException e) {
+  final status = e.response?.statusCode;
+  if (status == 400) {
+    return 'Esiste già una sessione cantiere attiva. Chiudila prima.';
+  }
+  if (status == 404) {
+    return 'Nessuna sessione cantiere attiva trovata.';
+  }
+  // A 403 the backend tagged specifically "NotAssigned" (same error-code field/value the
+  // batch-start response uses for the analogous per-person check — see BatchStartResult.error)
+  // reads to a technician as "you lack a permission", but the actual fact is narrower and more
+  // useful: they're just not on this cantiere's crew. Anything else still falls through to the
+  // shared humaniser's generic permission-denied copy below.
+  if (status == 403 && cantiereErrorCode(e) == 'NotAssigned') {
+    return 'Non risulti assegnato a questo cantiere. Chiedi in ufficio.';
+  }
+  // Everything else goes through the shared humaniser. This used to end in
+  // `Errore server ($status)` — a number the technician cannot use, in the one line telling
+  // them their presence on site was not recorded.
+  return humanErrorMessage(e);
+}
+
+/// The backend's own error code from a JSON error body, when present — e.g. `"NotAssigned"`.
+String? cantiereErrorCode(DioException e) {
+  final data = e.response?.data;
+  return data is Map ? data['error'] as String? : null;
+}
+
+/// The lead's "who am I timbrando for" choice — an always-visible three-way pick (see
+/// _CheckInBody's own segmented-pill UI), replacing the old "Per: Me ▾" popup menu.
+enum _ChiTimbra { io, squadra, tutta }
 
 // ── _CheckInBody ──────────────────────────────────────────────────────────────
 
 class _CheckInBody extends ConsumerWidget {
   const _CheckInBody({
-    required this.customerId,
     required this.ticketId,
-    required this.cantieriAsync,
-    required this.selectedCantiere,
     required this.cantiereId,
-    required this.showPicker,
-    this.fixedCantiereAsync,
+    required this.fixedCantiereAsync,
     required this.isLoading,
     required this.errorMessage,
     required this.hasDetails,
     required this.isLead,
-    required this.onCantiereSelected,
+    required this.chiTimbra,
+    required this.squadraSelectionCount,
+    required this.onChiTimbraChanged,
     required this.onStart,
-    required this.onSelectSquadra,
-    required this.onTuttaLaSquadra,
     required this.onOpenDetails,
   });
 
-  final String? customerId;
   final String? ticketId;
-  final AsyncValue<List<CantieriData>> cantieriAsync;
-  final CantieriData? selectedCantiere;
 
-  /// The resolved cantiere's id, or null before one is picked (picker mode, nothing tapped yet).
-  /// Feeds the "OGGI" header's `cantiereTodayHoursProvider` watch — null shows a static "0h 00m"
-  /// with no provider call, since there is nothing to scope hours to yet.
+  /// The resolved cantiere's id, or null when `widget.cantiereId` itself is null (see
+  /// `_effectiveCantiere`'s own doc comment). Feeds the "OGGI" header's
+  /// `cantiereTodayHoursProvider` watch — null shows a static "0h 00m" with no provider call.
   final String? cantiereId;
 
-  /// When false, the cantiere picker (section header + selectable list) is skipped in favour of a
-  /// compact fixed-cantiere card — the direct-entry path (`CantiereTimbraScreen.cantiereId` set).
-  final bool showPicker;
-
-  /// The fixed cantiere's own load state (direct-entry mode only — null when `showPicker` is
-  /// true). Carried separately from `selectedCantiere` because a plain `CantieriData?` can't tell
-  /// "still loading" apart from "resolved to nothing found" — the fixed-cantiere card below needs
-  /// that distinction so a not-found cantiere doesn't read as a permanent spinner.
-  final AsyncValue<CantieriData?>? fixedCantiereAsync;
+  /// The fixed cantiere's own load state. Every real entry into this screen resolves a cantiereId
+  /// before arriving (see this file's own header comment) — this is `AsyncData(null)` rather than
+  /// a nullable `AsyncValue?` precisely so that invariant needs no separate "was there ever a
+  /// cantiere to look up" branch here: a missing/not-yet-synced cantiere and a not-yet-resolved
+  /// one render through the exact same "not found" card below.
+  final AsyncValue<CantieriData?> fixedCantiereAsync;
   final bool isLoading;
   final String? errorMessage;
   final bool hasDetails;
 
-  /// Whether the current user is the lead on the resolved cantiere — gates the "Per: Me ▾" menu
+  /// Whether the current user is the lead on the resolved cantiere — gates the "chi timbra" pills
   /// below the main button. False while no cantiere is resolved yet, on fetch error, or offline
   /// (see isLeadForCantiereProvider) — the explicit fallback to the plain single-button flow.
   final bool isLead;
-  final ValueChanged<CantieriData?> onCantiereSelected;
-  final VoidCallback onStart;
-  final VoidCallback onSelectSquadra;
-  final VoidCallback onTuttaLaSquadra;
+
+  /// The lead's currently chosen "chi timbra" mode (meaningless, and not rendered, when
+  /// `!isLead`).
+  final _ChiTimbra chiTimbra;
+
+  /// How many teammates "Seleziona squadra" currently resolves to — 0 both before anyone's been
+  /// picked and right after choosing the mode (see `_handleChiTimbraChanged`'s own doc comment).
+  /// Drives the inline "nobody selected" hint; the primary button's own disablement is computed
+  /// by the parent (see `onStart` being null already covering it).
+  final int squadraSelectionCount;
+  final ValueChanged<_ChiTimbra> onChiTimbraChanged;
+
+  /// Null disables the primary button — already accounts for `isLoading`, an unresolved cantiere,
+  /// and (in `_ChiTimbra.squadra` mode) nobody picked yet. See `_primaryStartAction`.
+  final VoidCallback? onStart;
   final VoidCallback onOpenDetails;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cantieriValue = cantieriAsync.valueOrNull;
-    final noCantieriAvailable = showPicker && cantieriValue != null && cantieriValue.isEmpty;
-    final noFixedCantiere = !showPicker && selectedCantiere == null;
-
     final todayHours = cantiereId != null
         ? ref.watch(cantiereTodayHoursProvider(cantiereId!))
         : Duration.zero;
@@ -1067,184 +1041,59 @@ class _CheckInBody extends ConsumerWidget {
             const SizedBox(height: 16),
           ],
 
-          if (showPicker) ...[
-            Text(
-              'Cantiere',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: context.colors.inkMuted,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            cantieriAsync.when(
+          AppCard(
+            child: fixedCantiereAsync.when(
               loading: () => const Center(
                 child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.xl),
+                  padding: EdgeInsets.all(AppSpacing.base),
                   child: CircularProgressIndicator(),
                 ),
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
                 child: Text(
-                  'Impossibile caricare i cantieri.',
+                  'Impossibile caricare il cantiere.',
                   style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.red),
                 ),
               ),
-              data: (cantieri) {
-                // Prefer cantieri matching the ticket's customerId.
-                final preferred = customerId != null
-                    ? cantieri.where((c) => c.customerId == customerId).toList()
-                    : <CantieriData>[];
-                final others = cantieri.where((c) => !preferred.contains(c)).toList();
-                final ordered = [...preferred, ...others];
-
-                if (ordered.isEmpty) {
-                  return const UnavailableState(
-                    icon: LucideIcons.hardHat,
-                    titolo: 'Nessun cantiere disponibile',
-                    motivo:
-                        'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
-                        'è stato creato uno di recente, apri una qualsiasi scheda e trascina in '
-                        'basso per aggiornare, oppure riprova tra poco.',
-                  );
-                }
-
-                return AppCard(
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: ordered.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final c = entry.value;
-                      final isSelected = selectedCantiere?.id == c.id;
-                      final isLast = i == ordered.length - 1;
-
-                      return InkWell(
-                        onTap: () => onCantiereSelected(c),
-                        borderRadius: i == 0
-                            ? const BorderRadius.vertical(top: Radius.circular(20))
-                            : (isLast
-                                  ? const BorderRadius.vertical(bottom: Radius.circular(20))
-                                  : BorderRadius.zero),
-                        child: Container(
-                          constraints: const BoxConstraints(minHeight: 56),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.base,
-                            vertical: AppSpacing.md,
-                          ),
-                          decoration: BoxDecoration(
-                            // The brand accent for "selected", not AppColors.YSoft — the tint at
-                            // low alpha reads as the same "strapped/active" idea Cassetta's YSoft
-                            // signalled, in the new system's own colour.
-                            color: isSelected ? AppColors.Y.withAlpha(31) : Colors.transparent,
-                            border: isLast
-                                ? null
-                                : Border(bottom: BorderSide(color: context.colors.borderLight)),
-                          ),
-                          child: Row(
-                            children: [
-                              const RowIconTile(icon: LucideIcons.hardHat),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      c.name,
-                                      style: TextStyle(
-                                        fontFamily: 'Inter',
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: context.colors.ink,
-                                      ),
-                                    ),
-                                    if (c.city != null && c.city!.isNotEmpty)
-                                      Text(
-                                        c.city!,
-                                        style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 12,
-                                          color: context.colors.inkMuted,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              if (isSelected)
-                                Icon(LucideIcons.checkCircle2, size: 18, color: AppColors.Y),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                );
-              },
-            ),
-          ] else
-            AppCard(
-              child:
-                  fixedCantiereAsync?.when(
-                    loading: () => const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(AppSpacing.base),
-                        child: CircularProgressIndicator(),
-                      ),
-                    ),
-                    error: (e, _) => Padding(
+              data: (c) => c == null
+                  ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
                       child: Text(
-                        'Impossibile caricare il cantiere.',
+                        'Cantiere non trovato su questo dispositivo.',
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 13,
                           color: context.colors.red,
                         ),
                       ),
-                    ),
-                    data: (c) => c == null
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
-                            child: Text(
-                              'Cantiere non trovato su questo dispositivo.',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 13,
-                                color: context.colors.red,
-                              ),
-                            ),
-                          )
-                        : Row(
-                            children: [
-                              Icon(LucideIcons.hardHat, size: 18, color: context.colors.ink),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  c.name,
-                                  style: TextStyle(
-                                    fontFamily: 'Inter',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: context.colors.ink,
-                                  ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(LucideIcons.hardHat, size: 18, color: context.colors.ink),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                c.name,
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colors.ink,
                                 ),
                               ),
-                            ],
-                          ),
-                  ) ??
-                  // Unreachable in practice — showPicker == false implies the caller set
-                  // cantiereId, which implies fixedCantiereAsync was watched — but a defensive
-                  // fallback beats a null-check crash if that invariant is ever violated.
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.base),
-                      child: CircularProgressIndicator(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const GpsStatusIndicator(),
+                      ],
                     ),
-                  ),
             ),
+          ),
 
           const SizedBox(height: 16),
 
@@ -1253,50 +1102,66 @@ class _CheckInBody extends ConsumerWidget {
             const SizedBox(height: 16),
           ],
 
+          if (isLead) ...[
+            Text(
+              'Per chi registri l\'ingresso?',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.colors.inkMuted,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _ChiTimbraPill(
+                  label: 'Solo io',
+                  selected: chiTimbra == _ChiTimbra.io,
+                  onTap: isLoading ? null : () => onChiTimbraChanged(_ChiTimbra.io),
+                ),
+                const SizedBox(width: 8),
+                _ChiTimbraPill(
+                  label: 'Seleziona squadra',
+                  selected: chiTimbra == _ChiTimbra.squadra,
+                  onTap: isLoading ? null : () => onChiTimbraChanged(_ChiTimbra.squadra),
+                ),
+                const SizedBox(width: 8),
+                _ChiTimbraPill(
+                  label: 'Tutta la squadra',
+                  selected: chiTimbra == _ChiTimbra.tutta,
+                  onTap: isLoading ? null : () => onChiTimbraChanged(_ChiTimbra.tutta),
+                ),
+              ],
+            ),
+            if (chiTimbra == _ChiTimbra.squadra && squadraSelectionCount == 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Scegli almeno una persona per avviare la timbratura.',
+                style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.amber),
+              ),
+            ] else if (chiTimbra == _ChiTimbra.squadra) ...[
+              const SizedBox(height: 6),
+              Text(
+                squadraSelectionCount == 1
+                    ? '1 persona selezionata'
+                    : '$squadraSelectionCount persone selezionate',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 12,
+                  color: context.colors.inkMuted,
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
+
           AppButton(
             label: 'Inizia timbratura',
             icon: const Icon(LucideIcons.mapPin),
             isLoading: isLoading,
-            onPressed: (isLoading || noCantieriAvailable || noFixedCantiere) ? null : onStart,
+            onPressed: onStart,
           ),
-
-          if (isLead) ...[
-            const SizedBox(height: 8),
-            Center(
-              // A 48dp floor, not padding alone — same reasoning as the "Altri dettagli" affordance
-              // below: the visible content (13px text + 16px icon) is much smaller than Android's
-              // touch-target minimum, and this is now a lead's only path to batch-starting the crew.
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
-                child: PopupMenuButton<VoidCallback>(
-                  enabled: !(isLoading || noCantieriAvailable || noFixedCantiere),
-                  onSelected: (handler) => handler(),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(value: onSelectSquadra, child: const Text('Squadra')),
-                    PopupMenuItem(value: onTuttaLaSquadra, child: const Text('Me e squadra')),
-                  ],
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Per: Me',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: context.colors.inkMuted,
-                          ),
-                        ),
-                        Icon(LucideIcons.chevronDown, size: 16, color: context.colors.inkMuted),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
 
           const SizedBox(height: 16),
 
@@ -1334,6 +1199,41 @@ class _CheckInBody extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One pill of the lead's "chi timbra" three-way choice — replaces the old "Per: Me ▾" popup
+/// menu with an always-visible pick, matching this screen's existing selected-row visual language
+/// (the brand accent at low alpha — see the old cantiere picker row / teammate picker row this
+/// screen and `teammate_picker_sheet.dart` already used the same treatment for).
+class _ChiTimbraPill extends StatelessWidget {
+  const _ChiTimbraPill({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: AppTappable(
+        onTap: onTap,
+        color: selected ? AppColors.Y.withAlpha(31) : Colors.transparent,
+        border: Border.all(color: selected ? AppColors.Y : context.colors.borderLight),
+        borderRadius: AppRack.insetShape,
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.xs),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? AppColors.Y : context.colors.inkMuted,
+          ),
+        ),
       ),
     );
   }
@@ -1442,93 +1342,29 @@ class _CantiereCheckInDetailsFormState extends State<_CantiereCheckInDetailsForm
   }
 }
 
-/// The rich, occasional closing fields — EndCantiereRequest's optional set beyond the
-/// auto-captured departure GPS.
-class _CantiereClosingDetailsForm extends StatefulWidget {
-  const _CantiereClosingDetailsForm({
-    required this.description,
-    required this.safetyNotes,
-    required this.onDescriptionChanged,
-    required this.onSafetyNotesChanged,
-  });
-
-  final String? description;
-  final String? safetyNotes;
-  final ValueChanged<String?> onDescriptionChanged;
-  final ValueChanged<String?> onSafetyNotesChanged;
-
-  @override
-  State<_CantiereClosingDetailsForm> createState() => _CantiereClosingDetailsFormState();
-}
-
-class _CantiereClosingDetailsFormState extends State<_CantiereClosingDetailsForm> {
-  late final _descriptionCtrl = TextEditingController(text: widget.description);
-  late final _safetyNotesCtrl = TextEditingController(text: widget.safetyNotes);
-
-  @override
-  void dispose() {
-    _descriptionCtrl.dispose();
-    _safetyNotesCtrl.dispose();
-    super.dispose();
-  }
-
-  String? _blankToNull(String v) => v.trim().isEmpty ? null : v.trim();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.pagePadding,
-        AppSpacing.base,
-        AppSpacing.pagePadding,
-        AppSpacing.xl,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AppTextField.multiline(
-            label: 'Lavoro svolto',
-            hint: 'Cosa hai fatto in cantiere…',
-            controller: _descriptionCtrl,
-            maxLines: 3,
-            onChanged: (v) => widget.onDescriptionChanged(_blankToNull(v)),
-          ),
-          const SizedBox(height: AppSpacing.base),
-          AppTextField.multiline(
-            label: 'Note di sicurezza',
-            hint: 'Eventuali anomalie o incidenti…',
-            controller: _safetyNotesCtrl,
-            maxLines: 3,
-            onChanged: (v) => widget.onSafetyNotesChanged(_blankToNull(v)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ── _ActiveSessionBody ────────────────────────────────────────────────────────
+//
+// The closing fields (Lavoro svolto / Note di sicurezza) used to live here as
+// `_CantiereClosingDetailsForm`, reached via a small "Note di chiusura" text-link affordance and
+// a bottom sheet. They now live directly on ChiudiTurnoScreen instead — always visible, not
+// hidden behind a secondary link — which this body's own end button navigates to. See
+// ChiudiTurnoScreen's own header comment.
 
 class _ActiveSessionBody extends ConsumerWidget {
   const _ActiveSessionBody({
     required this.local,
     required this.serverLog,
     required this.hasPendingSync,
-    required this.hasClosingDetails,
-    required this.isLoading,
-    required this.errorMessage,
     required this.onEnd,
-    required this.onOpenClosingDetails,
   });
 
   final CantiereActiveSession local;
   final CantiereWorkLogDto? serverLog;
   final bool hasPendingSync;
-  final bool hasClosingDetails;
-  final bool isLoading;
-  final String? errorMessage;
+
+  /// Pushes ChiudiTurnoScreen — a plain navigation, not the end-of-session call itself (see
+  /// ChiudiTurnoScreen's own header comment), so there is no loading/error state to show here.
   final VoidCallback onEnd;
-  final VoidCallback onOpenClosingDetails;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1629,52 +1465,10 @@ class _ActiveSessionBody extends ConsumerWidget {
 
           const SizedBox(height: 16),
 
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48),
-              child: AppTappable(
-                onTap: onOpenClosingDetails,
-                borderRadius: AppRack.insetShape,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.base,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      hasClosingDetails ? LucideIcons.checkCircle2 : LucideIcons.plus,
-                      size: 14,
-                      color: hasClosingDetails ? context.colors.green : context.colors.inkMuted,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      hasClosingDetails ? 'Note di chiusura aggiunte' : 'Note di chiusura',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: hasClosingDetails ? context.colors.green : context.colors.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          if (errorMessage != null) ...[
-            _ErrorBanner(message: errorMessage!),
-            const SizedBox(height: 16),
-          ],
-
           AppButton.danger(
             label: 'Timbra uscita cantiere',
             icon: const Icon(LucideIcons.logOut),
-            isLoading: isLoading,
-            onPressed: isLoading ? null : onEnd,
+            onPressed: onEnd,
           ),
         ],
       ),
