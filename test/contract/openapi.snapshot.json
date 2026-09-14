@@ -2046,6 +2046,68 @@
         }
       }
     },
+    "/api/cantieri/{id}/assignments/batch-by-squadra": {
+      "post": {
+        "tags": [
+          "Cantieri"
+        ],
+        "summary": "Assigns every current member of a squadra to this cantiere in one call, expanding the\nsquadra to its members at assignment time \u2014 NOT a live link. Each created row carries\nGuid? CantiereAssignment.SquadraId so the UI can later label it (\u0022assigned via\nSquadra X\u0022) and bulk-remove by it, but if the squadra\u0027s membership changes afterwards\nthese rows do not change retroactively, matching how every other field on this table\nalready behaves for individually-added rows.",
+        "description": "Per-member, not all-or-nothing: a member who already has an assignment to this cantiere\n(individual or from an earlier squadra batch \u2014 the check is on CantiereId/UserId, not\nSquadraId) is named as skipped in the response rather than either silently dropped or\nfailing the whole batch \u2014 same \u0022name every offender\u0022 pattern as\nTask\u0026lt;IActionResult\u0026gt; CantiereWorkLogController.BatchStart(BatchStartCantiereWorkLogRequest request, CancellationToken ct).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAssignSquadraRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAssignSquadraRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAssignSquadraRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchAssignSquadraResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchAssignSquadraResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchAssignSquadraResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cantieri/{id}/assegnazioni": {
       "get": {
         "tags": [
@@ -9028,6 +9090,30 @@
         }
       }
     },
+    "/api/Reports/{id}/fattura-xml": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Generates a FatturaPA-shaped XML document for this report\u0027s billable materials and\nreturns it as a file download. XML generation only \u2014 this does NOT submit to SDI and\ndoes NOT digitally sign anything; see ReportFatturaXmlService\u0027s header\ncomment for the full scope caveat (best-effort structural adaptation, not reviewed for\nreal SDI compliance). Gated on the same permission as Task\u0026lt;IActionResult\u0026gt; ReportsController.Fattura(Guid id) for\nconsistency \u2014 both are \u0022produce the billing document for this report\u0022 actions.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Reports/{id}/non-fatturabile": {
       "post": {
         "tags": [
@@ -15841,6 +15927,87 @@
         },
         "description": "Basic primary key response for created/updated entities."
       },
+      "BatchAssignSquadraRequest": {
+        "type": "object",
+        "properties": {
+          "squadraId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; CantieriController.BatchAssignSquadra(Guid id, BatchAssignSquadraRequest request, CancellationToken ct)."
+      },
+      "BatchAssignSquadraResponse": {
+        "required": [
+          "results"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BatchAssignSquadraResultItem"
+            }
+          }
+        },
+        "description": "Names every skipped member rather than silently dropping them or failing the whole batch \u2014\nmirrors BatchStartResponse\u0027s response shape."
+      },
+      "BatchAssignSquadraResultItem": {
+        "required": [
+          "userId",
+          "success",
+          "assignmentId",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "The squadra member this result is for.",
+            "format": "uuid"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether a CantiereAssignment row was created for this member."
+          },
+          "assignmentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The created row\u0027s id, when Success is true.",
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Machine-readable skip reason when Success is false: currently only\n\u0060\u0022AlreadyAssigned\u0022\u0060 (this member already has an assignment \u2014 individual or from an\nearlier squadra batch \u2014 to this cantiere)."
+          }
+        },
+        "description": "One squadra member\u0027s outcome from a Task\u0026lt;IActionResult\u0026gt; CantieriController.BatchAssignSquadra(Guid id, BatchAssignSquadraRequest request, CancellationToken ct) call."
+      },
       "BatchStartCantiereWorkLogRequest": {
         "type": "object",
         "properties": {
@@ -16165,6 +16332,14 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "            Set when this row was created by expanding a Squadra\u0027s members at assignment time\n            (\u003Csee cref=\u0022!:TaskTapAPI.Api.Controllers.CantieriController.BatchAssignSquadra\u0022 /\u003E) rather\n            than by assigning an individual directly. Null for individually-added rows.\n            A snapshot, not a live link: this is the squadra the member belonged to at the moment\nof assignment, recorded so the UI can label the row (\u0022assigned via Squadra X\u0022) and\nbulk-remove by it. If the squadra\u0027s membership changes later, existing assignments do\nnot retroactively change \u2014 same as every other field on this row, which has always\ncaptured a point-in-time fact rather than tracking a live relationship.",
+            "format": "uuid"
           },
           "tenantId": {
             "type": "string",
