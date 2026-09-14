@@ -416,6 +416,15 @@ class _AdminCantiereFormScreenState extends ConsumerState<AdminCantiereFormScree
                     onChanged: (v) => setState(() => _status = v ?? 0),
                   ),
                 ),
+
+                // Tenant-configured custom fields (web-only admin config, see
+                // ExtensionFieldsSection's own doc comment) — only once the cantiere actually
+                // exists: PUT /extension-fields/cantiere/{id}/values needs a real id, which a
+                // brand-new cantiere doesn't have until this screen's own "Crea cantiere" call
+                // returns one.
+                if (_isEditing)
+                  ExtensionFieldsSection(entityType: 'cantiere', entityId: widget.cantiereId!),
+
                 const SizedBox(height: 32),
 
                 AppButton(
