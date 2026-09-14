@@ -6,15 +6,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/cantiere_report_api_client.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_detail_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
+
+/// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
+/// this, so a cantiere with an address exercises `CantiereMapCard`'s fallback path
+/// (`AppMapCard`, unchanged) deterministically instead of racing a real Nominatim request.
+class _NullGeocodingService extends GeocodingService {
+  _NullGeocodingService() : super(dio: null);
+
+  @override
+  Future<GeocodedPoint?> geocode(String address) async => null;
+}
+
+/// No crew assigned, no network call — every test in this file overrides
+/// `cantiereWorklogApiClientProvider` with this so the new "Squadra assegnata" section (which
+/// this screen now renders unconditionally, same as every other cantiere detail screen section)
+/// never races a real `GET /api/cantieri/{id}/assegnazioni` call.
+class _FakeCantiereWorklogApiClient extends CantiereWorklogApiClient {
+  _FakeCantiereWorklogApiClient() : super(Dio());
+
+  @override
+  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async => const [];
+}
 
 /// Records the cantiereId it was called with, and returns a fixed report id with no staff rows
 /// (the zero-worklogs case — hours hydration itself is covered by create_draft_test.dart's
@@ -116,14 +139,22 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+          cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+        ],
         child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
       ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('Cantiere Alpha'), findsOneWidget);
-    expect(find.text('Via Roma 1'), findsOneWidget);
+    // Twice: the info card's own address line, plus CantiereMapCard's fallback AppMapCard (the
+    // geocoder above never resolves, so the map falls back to the same pin-and-address panel
+    // admin_cantiere_detail_screen.dart's own map section already shows alongside its own
+    // address row — this screen now matches that same accepted duplication).
+    expect(find.text('Via Roma 1'), findsNWidgets(2));
     expect(find.text('Timbra cantiere'), findsOneWidget);
     expect(find.text('Nessun ticket collegato'), findsOneWidget);
 
@@ -160,7 +191,11 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+          cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+        ],
         child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
       ),
     );
@@ -189,7 +224,11 @@ void main() {
       final router = _makeTimbraForwardingRouter(cantiereId: 'c1', ticketId: 'ticket-9');
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [appDatabaseProvider.overrideWithValue(db)],
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
+          ],
           child: MaterialApp.router(routerConfig: router),
         ),
       );
@@ -222,6 +261,8 @@ void main() {
         ProviderScope(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
             currentUserProvider.overrideWithValue(null),
             internalUserIdProvider.overrideWith((ref) async => null),
           ],
@@ -259,6 +300,8 @@ void main() {
           ProviderScope(
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
+              geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+              cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
               currentUserProvider.overrideWithValue(_testUser),
               internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
               cantiereReportApiClientProvider.overrideWithValue(fakeApi),
@@ -299,6 +342,8 @@ void main() {
         ProviderScope(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
             currentUserProvider.overrideWithValue(null),
             internalUserIdProvider.overrideWith((ref) async => null),
             cantiereReportApiClientProvider.overrideWithValue(fakeApi),
@@ -342,6 +387,8 @@ void main() {
         ProviderScope(
           overrides: [
             appDatabaseProvider.overrideWithValue(db),
+            geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+            cantiereWorklogApiClientProvider.overrideWithValue(_FakeCantiereWorklogApiClient()),
             currentUserProvider.overrideWithValue(_testUser),
             internalUserIdProvider.overrideWith((ref) async => 'internal-user-1'),
             cantiereReportApiClientProvider.overrideWithValue(fakeApi),

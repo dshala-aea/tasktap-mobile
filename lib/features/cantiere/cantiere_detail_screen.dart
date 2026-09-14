@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
@@ -17,7 +18,11 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../presentation/providers/schedule_providers.dart';
 import '../rapportino/create_draft.dart';
+import '../ticket/ticket_providers.dart' show commessaByIdProvider;
+import '../timbra/cantiere_timbra_screen.dart' show cantiereCrewAssignmentsProvider;
+import 'cantiere_map_card.dart';
 import 'cantiere_providers.dart';
 
 class CantiereDetailScreen extends ConsumerStatefulWidget {
@@ -123,7 +128,30 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
+
+                        // ── Map ────────────────────────────────────────────────────
+                        //
+                        // Only when there's an address worth plotting — same gate
+                        // admin_cantiere_detail_screen.dart's own map section uses.
+                        if (cantiere.address != null && cantiere.address!.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          CantiereMapCard(
+                            cantiereId: cantiere.id,
+                            address: [
+                              cantiere.address,
+                              cantiere.city,
+                              cantiere.postalCode,
+                            ].where((s) => s != null && s.isNotEmpty).join(', '),
+                          ),
+                        ],
+
+                        // ── Dettagli ───────────────────────────────────────────────
+                        _DettagliSection(cantiere: cantiere),
+
+                        // ── Squadra assegnata ─────────────────────────────────────
+                        _SquadraSection(cantiereId: cantiere.id),
+
+                        const SizedBox(height: 8),
                         AppButton(
                           label: 'Timbra cantiere',
                           icon: const Icon(LucideIcons.mapPin),
@@ -247,5 +275,158 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
       return;
     }
     context.push(AppRoutes.rapportiniEditor(id));
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Dettagli — Cliente/Commessa/Periodo/Note. All five fields
+// (customerId/commessaId/startDate/endDate/notes) are already synced to the local Cantieri
+// mirror (see this file's own header/task context) but were shown nowhere on this screen before
+// now. Each row is skipped independently when its field is absent (same contract
+// admin_cantiere_detail_screen.dart's own detail card uses for Commessa); the whole section
+// collapses to nothing when every field is, rather than showing an empty card.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _DettagliSection extends ConsumerWidget {
+  const _DettagliSection({required this.cantiere});
+
+  final CantieriData cantiere;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasNotes = cantiere.notes != null && cantiere.notes!.isNotEmpty;
+    final hasAnything =
+        cantiere.customerId != null ||
+        cantiere.commessaId != null ||
+        cantiere.startDate != null ||
+        cantiere.endDate != null ||
+        hasNotes;
+    if (!hasAnything) return const SizedBox.shrink();
+
+    // Live-fetched, no local mirror for either — same shape as
+    // admin_cantiere_detail_screen.dart's own Cliente/Commessa rows. `error`/`null` both fall
+    // back to '—': a commessa lookup throws TicketDetailOfflineException while offline (see
+    // commessaByIdProvider's own doc comment), which must read the same as "not resolved yet",
+    // not surface as a broken row on an otherwise-fine offline screen.
+    final customerId = cantiere.customerId;
+    final customerAsync = customerId == null ? null : ref.watch(customerByIdProvider(customerId));
+    final customerLabel = customerAsync?.when(
+      data: (c) => c?.companyName,
+      loading: () => 'Caricamento…',
+      error: (e, _) => null,
+    );
+
+    final commessaId = cantiere.commessaId;
+    final commessaAsync = commessaId == null ? null : ref.watch(commessaByIdProvider(commessaId));
+    final commessaLabel = commessaAsync?.when(
+      data: (c) => c?['codice'] as String?,
+      loading: () => 'Caricamento…',
+      error: (e, _) => null,
+    );
+
+    String? periodoLabel;
+    final start = cantiere.startDate;
+    final end = cantiere.endDate;
+    if (start != null && end != null) {
+      periodoLabel =
+          '${DateFormat('dd/MM/yyyy').format(start.toLocal())} – '
+          '${DateFormat('dd/MM/yyyy').format(end.toLocal())}';
+    } else if (start != null) {
+      periodoLabel = 'Dal ${DateFormat('dd/MM/yyyy').format(start.toLocal())}';
+    } else if (end != null) {
+      periodoLabel = 'Fino al ${DateFormat('dd/MM/yyyy').format(end.toLocal())}';
+    }
+
+    final entries = <({String label, String value, bool vertical})>[
+      if (customerId != null) (label: 'Cliente', value: customerLabel ?? '—', vertical: false),
+      if (commessaId != null) (label: 'Commessa', value: commessaLabel ?? '—', vertical: false),
+      if (periodoLabel != null) (label: 'Periodo', value: periodoLabel, vertical: false),
+      if (hasNotes) (label: 'Note', value: cantiere.notes!, vertical: true),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SectionTitle(title: 'Dettagli'),
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+          child: Column(
+            children: entries.asMap().entries.map((e) {
+              final entry = e.value;
+              return KeyVal(
+                label: entry.label,
+                value: entry.value,
+                vertical: entry.vertical,
+                showDivider: e.key != entries.length - 1,
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Squadra assegnata — read-only crew list from the same `cantiereCrewAssignmentsProvider`
+// (GET /api/cantieri/{id}/assegnazioni) the batch-timbra "Seleziona squadra" picker already uses
+// (cantiere_timbra_screen.dart / teammate_picker_sheet.dart) — same data, no new fetch. Collapses
+// to nothing while loading, on error (including offline — see that provider's own doc comment on
+// why AsyncError there is an expected, not exceptional, state), or when nobody is assigned: this
+// is a convenience read, not something this screen's primary Timbra/Crea-rapportino flows depend
+// on, so it must never block or clutter the rest of the page while it resolves.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _SquadraSection extends ConsumerWidget {
+  const _SquadraSection({required this.cantiereId});
+
+  final String cantiereId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final assignmentsAsync = ref.watch(cantiereCrewAssignmentsProvider(cantiereId));
+
+    return assignmentsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (assignments) {
+        if (assignments.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionTitle(title: 'Squadra assegnata'),
+            AppCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: assignments.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final a = entry.value;
+                  // Same fallback contract as everywhere else colleagueNameProvider is read: the
+                  // raw id rather than nothing, when the local mirror doesn't (yet) know them.
+                  final name = ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
+                  return ListRow(
+                    leading: AppAvatar(name: name, size: 36),
+                    title: name,
+                    meta: a.isLead
+                        ? Text(
+                            'LEAD',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                              color: context.colors.inkMuted,
+                            ),
+                          )
+                        : null,
+                    showDivider: i != assignments.length - 1,
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
