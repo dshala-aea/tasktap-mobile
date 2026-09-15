@@ -183,9 +183,9 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                 if (s != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.base,
+                      AppSpacing.pagePadding,
                       0,
-                      AppSpacing.base,
+                      AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
                     child: AppStepper(

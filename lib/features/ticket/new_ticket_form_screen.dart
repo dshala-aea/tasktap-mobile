@@ -194,9 +194,9 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
                 ScreenHeader(title: 'Nuovo ticket', showBack: true),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.base,
+                    AppSpacing.pagePadding,
                     0,
-                    AppSpacing.base,
+                    AppSpacing.pagePadding,
                     AppSpacing.base,
                   ),
                   child: AppStepper(

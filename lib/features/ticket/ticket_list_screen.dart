@@ -448,7 +448,7 @@ class _TicketRow extends StatelessWidget {
       child: InkWell(
       onTap: () => context.push('/ticket/${ticket.id}'),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
         decoration: BoxDecoration(
           border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),

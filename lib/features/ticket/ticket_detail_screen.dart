@@ -1222,14 +1222,10 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
     return Row(
       children: [
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _busy ? null : () => _pickImage(ImageSource.gallery),
+          child: AppButton.secondary(
+            label: 'Galleria',
             icon: const Icon(LucideIcons.image),
-            label: const Text('Galleria'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+            onPressed: _busy ? null : () => _pickImage(ImageSource.gallery),
           ),
         ),
         const SizedBox(width: 12),
@@ -1305,12 +1301,16 @@ class _PendingAttachmentRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (isFailed)
-            TextButton(
+          if (isFailed) ...[
+            const SizedBox(width: 8),
+            AppButton(
+              label: 'Riprova',
+              size: AppButtonSize.sm,
+              fullWidth: false,
               onPressed: () =>
                   ref.read(ticketAttachmentUploadQueueProvider).retry(attachment.id),
-              child: const Text('Riprova'),
             ),
+          ],
         ],
       ),
     );
@@ -1511,6 +1511,11 @@ class _AssignSheetState extends State<_AssignSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
+        showAppToast(
+          context,
+          message: 'Impossibile caricare i tecnici. Riprova.',
+          tone: ToastTone.error,
+        );
       }
     }
   }
@@ -1551,7 +1556,12 @@ class _AssignSheetState extends State<_AssignSheet> {
         children: [
           Text(
             'Assegna tecnico',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: context.colors.ink,
+            ),
           ),
           const SizedBox(height: 16),
           if (_isLoading)

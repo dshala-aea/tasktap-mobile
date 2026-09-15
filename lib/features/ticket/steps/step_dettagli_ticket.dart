@@ -6,7 +6,6 @@ import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/extension_fields_section.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_providers.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -109,62 +108,46 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         const SizedBox(height: 24),
 
         // ── Type ───────────────────────────────────────────────────────────
-        _SectionLabel(text: 'Tipo *'),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<int>(
-          // initialValue only applies on first build. This screen already
-          // resyncs its text controllers in didUpdateWidget when state is
-          // reset externally (e.g. wizard back-navigation); key this field
-          // by value so it gets the same resync via a fresh initialValue.
-          key: ValueKey('tipo-${widget.state.typeId}'),
-          initialValue: widget.state.typeId,
-          isExpanded: true,
-          decoration: const InputDecoration(hintText: 'Seleziona tipo…'),
-          items: types.entries
-              .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-              .toList(),
-          onChanged: (id) =>
-              id != null ? widget.onChanged(widget.state.copyWith(typeId: id)) : null,
+        AppFieldShell(
+          label: 'Tipo *',
+          child: DropdownButtonFormField<int>(
+            // initialValue only applies on first build. This screen already
+            // resyncs its text controllers in didUpdateWidget when state is
+            // reset externally (e.g. wizard back-navigation); key this field
+            // by value so it gets the same resync via a fresh initialValue.
+            key: ValueKey('tipo-${widget.state.typeId}'),
+            initialValue: widget.state.typeId,
+            isExpanded: true,
+            decoration: const InputDecoration(hintText: 'Seleziona tipo…'),
+            items: types.entries
+                .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                .toList(),
+            onChanged: (id) =>
+                id != null ? widget.onChanged(widget.state.copyWith(typeId: id)) : null,
+          ),
         ),
 
         if (widget.showPriority) ...[
           const SizedBox(height: 24),
 
           // ── Priority ───────────────────────────────────────────────────────
-          _SectionLabel(text: 'Priorità'),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: widget.state.priority,
-            isExpanded: true,
-            items: kTicketPriorities
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (p) =>
-                p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
+          AppFieldShell(
+            label: 'Priorità',
+            child: DropdownButtonFormField<String>(
+              initialValue: widget.state.priority,
+              isExpanded: true,
+              items: kTicketPriorities
+                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                  .toList(),
+              onChanged: (p) =>
+                  p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
+            ),
           ),
         ],
 
         if (widget.ticketId != null)
           ExtensionFieldsSection(entityType: 'ticket', entityId: widget.ticketId!),
       ],
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: TextStyle(
-        fontFamily: 'Inter',
-        fontSize: 15,
-        fontWeight: FontWeight.w700,
-        color: context.colors.ink,
-      ),
     );
   }
 }
