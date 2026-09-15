@@ -14,6 +14,7 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/features/cantiere/cantiere_detail_screen.dart';
+import 'package:tasktap_mobile/features/cantiere/cantiere_map_card.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
@@ -35,8 +36,13 @@ class _NullGeocodingService extends GeocodingService {
 class _FakeCantiereWorklogApiClient extends CantiereWorklogApiClient {
   _FakeCantiereWorklogApiClient() : super(Dio());
 
+  /// Overridable per test — empty by default (every existing test in this file relies on the
+  /// "Squadra assegnata" section collapsing to nothing), set to a non-empty list only by the
+  /// section-order test below, which needs the section actually rendered to check its position.
+  List<CantiereCrewAssignmentDto> assignments = const [];
+
   @override
-  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async => const [];
+  Future<List<CantiereCrewAssignmentDto>> getAssegnazioni(String cantiereId) async => assignments;
 }
 
 /// Records the cantiereId it was called with, and returns a fixed report id with no staff rows
@@ -405,5 +411,59 @@ void main() {
 
       await db.close();
     });
+  });
+
+  group('section order', () {
+    testWidgets(
+      'renders Dettagli, then Squadra assegnata, then the map, then the CTA buttons '
+      '(ADR: details before map, map before actions)',
+      (tester) async {
+        final db = AppDatabase(NativeDatabase.memory());
+        await db
+            .into(db.cantieri)
+            .insert(
+              CantieriCompanion.insert(
+                id: 'c1',
+                tenantId: 'tenant1',
+                createdAt: DateTime.utc(2026, 8, 31),
+                name: 'Cantiere Alpha',
+                address: const Value('Via Roma 1'),
+                notes: const Value('Nota di cantiere'),
+              ),
+            );
+
+        // Non-empty crew + a non-empty Dettagli field, so every section this test checks the
+        // position of actually renders instead of collapsing to SizedBox.shrink.
+        final crewClient = _FakeCantiereWorklogApiClient()
+          ..assignments = const [
+            CantiereCrewAssignmentDto(id: 'a1', userId: 'user-1', isLead: true),
+          ];
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              appDatabaseProvider.overrideWithValue(db),
+              geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+              cantiereWorklogApiClientProvider.overrideWithValue(crewClient),
+            ],
+            child: const MaterialApp(home: CantiereDetailScreen(cantiereId: 'c1')),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final dettagliY = tester.getTopLeft(find.text('Dettagli')).dy;
+        final squadraY = tester.getTopLeft(find.text('Squadra assegnata')).dy;
+        final mapY = tester.getTopLeft(find.byType(CantiereMapCard)).dy;
+        final timbraY = tester.getTopLeft(find.text('Timbra cantiere')).dy;
+        final creaRapportinoY = tester.getTopLeft(find.text('Crea rapportino')).dy;
+
+        expect(dettagliY, lessThan(squadraY));
+        expect(squadraY, lessThan(mapY));
+        expect(mapY, lessThan(timbraY));
+        expect(timbraY, lessThan(creaRapportinoY));
+
+        await db.close();
+      },
+    );
   });
 }

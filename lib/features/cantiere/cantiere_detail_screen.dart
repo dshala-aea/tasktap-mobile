@@ -164,10 +164,20 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                           ),
                         ),
 
+                        // ── Dettagli ───────────────────────────────────────────────
+                        _DettagliSection(cantiere: cantiere),
+
+                        // ── Squadra assegnata ─────────────────────────────────────
+                        _SquadraSection(cantiereId: cantiere.id),
+
                         // ── Map ────────────────────────────────────────────────────
                         //
                         // Only when there's an address worth plotting — same gate
-                        // admin_cantiere_detail_screen.dart's own map section uses.
+                        // admin_cantiere_detail_screen.dart's own map section uses. Sits after
+                        // Dettagli/Squadra and before the CTAs — the technician reads what/who this
+                        // cantiere is before where it is, and the map is the last thing before
+                        // acting on it (Timbra / Crea rapportino), not the first thing after the
+                        // name card.
                         if (cantiere.address != null && cantiere.address!.isNotEmpty) ...[
                           const SizedBox(height: 16),
                           CantiereMapCard(
@@ -179,12 +189,6 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                             ].where((s) => s != null && s.isNotEmpty).join(', '),
                           ),
                         ],
-
-                        // ── Dettagli ───────────────────────────────────────────────
-                        _DettagliSection(cantiere: cantiere),
-
-                        // ── Squadra assegnata ─────────────────────────────────────
-                        _SquadraSection(cantiereId: cantiere.id),
 
                         const SizedBox(height: 8),
                         AppButton(
