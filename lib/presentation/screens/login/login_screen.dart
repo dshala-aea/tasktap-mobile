@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show AutofillHints, TextInput;
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/router/app_router.dart' show AppRoutes;
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -81,7 +83,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.xxxl),
 
               // ── Logo / wordmark ──────────────────────────────────────────
-              const _TaskTapLogo(),
+              // Long-press is the only way in to kiosk activation (see KioskActivationScreen's
+              // own doc comment for why this is deliberately unadvertised) — an ordinary
+              // technician signing in never has a reason to hold their finger on the logo.
+              GestureDetector(
+                onLongPress: () => context.push(AppRoutes.kioskActivate),
+                child: const _TaskTapLogo(),
+              ),
 
               const SizedBox(height: AppSpacing.xxxl),
 

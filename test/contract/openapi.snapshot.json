@@ -627,6 +627,114 @@
         }
       }
     },
+    "/api/ai/settings": {
+      "get": {
+        "tags": [
+          "Ai"
+        ],
+        "summary": "Returns the tenant\u0027s AI settings, creating the default row on first read.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ai"
+        ],
+        "summary": "Replaces the tenant\u0027s AI settings.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiSettingsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiSettingsRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/log": {
+      "get": {
+        "tags": [
+          "Ai"
+        ],
+        "summary": "Returns a page of the tenant\u0027s AI call log, newest first.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfAiCallLog"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfAiCallLog"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfAiCallLog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/audit-log": {
       "get": {
         "tags": [
@@ -7200,6 +7308,19 @@
         "responses": {
           "200": {
             "description": "List of recent notifications."
+          }
+        }
+      }
+    },
+    "/api/NotificationSettings/availability": {
+      "get": {
+        "tags": [
+          "NotificationSettings"
+        ],
+        "summary": "Reports which notification channels this deployment can actually deliver through, so a\nsettings UI can hide a toggle nothing will ever deliver through instead of offering it.",
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -13869,7 +13990,7 @@
           "Users"
         ],
         "summary": "Invites someone to this tenant: creates their identity-provider account and the local\nuser record, and lets the provider send the initialisation mail.",
-        "description": "The only way to add a person who can actually sign in. Task\u0026lt;IActionResult\u0026gt; UsersController.Create(CreateUserRequest request) takes a\ncaller-supplied \u0060ExternalUserId\u0060 and creates no identity at all, so a user added\nthrough it cannot log in \u2014 that path is for importing people who already exist in the\nidentity provider, not for onboarding.\n\nInvitations are authoritative (ADR-0014 \u00A7B.3): joining a tenant happens because somebody\nalready inside it invited you. A verified email domain may suggest a tenant; it never\ngrants access to one.\n\nOrdering is deliberate. The identity is created first and the local row second, because\nthe reverse leaves a user in the product who can never authenticate \u2014 invisible until they\ntry to log in weeks later. This way a failure leaves an orphaned provider account, which\nis recoverable: re-inviting the same address finds it. Neither order is free; this is the\none whose failure a person can act on. Same sequence the customer-portal invite already\nuses.\n\nSeat caps are checked before anything is created, so a tenant at its limit is told so\nrather than discovering it after an invitation mail has gone out.",
+        "description": "The only way to add a person who can actually sign in. Task\u0026lt;IActionResult\u0026gt; UsersController.Create(CreateUserRequest request, CancellationToken ct) takes a\ncaller-supplied \u0060ExternalUserId\u0060 and creates no identity at all, so a user added\nthrough it cannot log in \u2014 that path is for importing people who already exist in the\nidentity provider, not for onboarding.\n\nInvitations are authoritative (ADR-0014 \u00A7B.3): joining a tenant happens because somebody\nalready inside it invited you. A verified email domain may suggest a tenant; it never\ngrants access to one.\n\nOrdering is deliberate. The identity is created first and the local row second, because\nthe reverse leaves a user in the product who can never authenticate \u2014 invisible until they\ntry to log in weeks later. This way a failure leaves an orphaned provider account, which\nis recoverable: re-inviting the same address finds it. Neither order is free; this is the\none whose failure a person can act on. Same sequence the customer-portal invite already\nuses.\n\nSeat caps are checked before anything is created, so a tenant at its limit is told so\nrather than discovering it after an invitation mail has gone out.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15978,6 +16099,76 @@
         },
         "description": "Request model for an admin/supervisor force-close of another user\u0027s open entry."
       },
+      "AiCallLog": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "reportId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tokensIn": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tokensOut": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "estimatedCost": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "succeeded": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "Full-detail per-call record of an AI draft-generation call \u2014 the durable, queryable audit and\nbilling record behind the fast Redis monthly counter (\u0060IAiQuotaStore\u0060). Every call is\nlogged here regardless of whether it was within the included allowance or overage, so the\nnightly overage-reporting sweep (Task 7) can sum a tenant\u0027s calls for the current period."
+      },
       "AiGenerateReportRequest": {
         "type": "object",
         "properties": {
@@ -16103,6 +16294,48 @@
             "format": "int32"
           }
         }
+      },
+      "AiSettings": {
+        "type": "object",
+        "properties": {
+          "autoDraftEnabled": {
+            "type": "boolean",
+            "description": "Whether AI-assisted report drafting (\u0060POST /api/ai/reports/draft\u0060) and its supporting\ntranscription endpoint (\u0060POST /api/ai/transcribe\u0060) are enabled for this tenant.\nChecked by \u0060AiController\u0060 before either request ever reaches the LLM provider or\nconsumes quota. Defaults to enabled \u2014 this is an opt-out, not an opt-in."
+          },
+          "quotaAlertThresholdPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Percentage of the monthly AI quota (1-100) at which the tenant wants the quota card to\nswitch into its warning state. Purely a UI/notification threshold \u2014 it never affects\nenforcement, which stays entirely inside \u0060AiQuotaService\u0060.",
+            "format": "int32"
+          },
+          "tenantId": {
+            "type": "string",
+            "description": "Tenant identifier for schema-per-tenant isolation.",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the entity.",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Date and time when the entity was created.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last updated.",
+            "format": "date-time"
+          }
+        },
+        "description": "Tenant-level AI configuration. One row per tenant, created lazily with defaults on first\nread (see \u0060AiSettingsService.GetSettingsAsync\u0060)."
       },
       "AiTranscribeResponseDto": {
         "type": "object",
@@ -21624,6 +21857,55 @@
         "type": "integer",
         "description": "Defines the types of notifications in the system."
       },
+      "PaginatedResultOfAiCallLog": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiCallLog"
+            },
+            "description": "Items for current page."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Current page number.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of items per page.",
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of items across all pages.",
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of pages.",
+            "format": "int32"
+          }
+        },
+        "description": "Paginated result wrapper."
+      },
       "PaginatedResultOfCantiere": {
         "type": "object",
         "properties": {
@@ -25975,6 +26257,23 @@
             ]
           }
         }
+      },
+      "UpdateAiSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "autoDraftEnabled": {
+            "type": "boolean"
+          },
+          "quotaAlertThresholdPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Request to replace a tenant\u0027s AI settings. Both fields are required \u2014 the settings form\nalways submits the full current state, so there is no partial-update semantics to model here\n(compare \u0060UpdateSettingsRequest\u0060 for notification preferences, which has nullable\nper-field patches because that form saves one toggle at a time)."
       },
       "UpdateAssetProgressRequest": {
         "type": "object",

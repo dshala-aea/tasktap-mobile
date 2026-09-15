@@ -14,6 +14,9 @@ import '../../features/ticket/new_ticket_form_screen.dart';
 import '../../features/ticket/ticket_detail_screen.dart';
 import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
+import '../../features/kiosk/kiosk_activation_screen.dart';
+import '../../features/kiosk/kiosk_display_screen.dart';
+import '../../presentation/providers/kiosk_providers.dart';
 import '../../features/calendario/calendario_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../features/timbra/seleziona_cantiere_screen.dart';
@@ -63,6 +66,17 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// Route path constants.
 abstract final class AppRoutes {
   static const String login = '/login';
+
+  /// Where a device that has never been activated as a kiosk goes to redeem the credential the
+  /// web admin issued (see `KioskActivationScreen`). Reached only via the hidden long-press on
+  /// the logo on [LoginScreen] — never linked from anywhere inside the authenticated app.
+  static const String kioskActivate = '/kiosk/activate';
+
+  /// The kiosk's only screen once activated ([KioskDisplayScreen]) — the router's `redirect`
+  /// callback forces every route here whenever `kioskModeProvider.active` is true, overriding
+  /// the ordinary auth guard below entirely (a kiosk tablet never signs in as a person).
+  static const String kioskDisplay = '/kiosk';
+
   static const String dashboard = '/dashboard';
   static const String ticket = '/ticket';
   static const String ticketDetail = '/ticket/:id';
@@ -168,6 +182,12 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///
+/// Kiosk guard runs BEFORE the auth guard: a device with `kioskModeProvider.active == true` is
+/// never a person's phone — every route on it, including /login, is forced to
+/// [AppRoutes.kioskDisplay] (the one exception being [AppRoutes.kioskActivate] itself mid-flow,
+/// see below). Only `KioskModeNotifier.deactivate`/`_forceDeactivate` flipping `active` back to
+/// false lets the ordinary auth guard run again.
+///
 /// Auth guard: the `redirect` callback reads [authStateProvider] from [ref].
 /// - AsyncLoading: return null (stay on current route while determining state).
 /// - null user (unauthenticated): redirect to /login.
@@ -178,6 +198,23 @@ GoRouter buildRouter(WidgetRef ref) {
     initialLocation: AppRoutes.dashboard,
     debugLogDiagnostics: false,
     redirect: (context, state) {
+      final kioskState = ref.read(kioskModeProvider);
+      final isOnKioskActivate = state.matchedLocation == AppRoutes.kioskActivate;
+      final isOnKioskDisplay = state.matchedLocation == AppRoutes.kioskDisplay;
+
+      // While secure storage is still being read at cold start, stay put — same "don't redirect
+      // yet" treatment AsyncLoading gets below.
+      if (kioskState.loading) return null;
+
+      if (kioskState.active) {
+        return isOnKioskDisplay ? null : AppRoutes.kioskDisplay;
+      }
+      // Not active: kioskDisplay itself is unreachable (nothing to show), but activation is
+      // always allowed regardless of auth state — a kiosk tablet is activated before anyone
+      // ever signs in on it.
+      if (isOnKioskDisplay) return AppRoutes.login;
+      if (isOnKioskActivate) return null;
+
       final authAsync = ref.read(authStateProvider);
       final isOnLogin = state.matchedLocation == AppRoutes.login;
 
@@ -194,9 +231,19 @@ GoRouter buildRouter(WidgetRef ref) {
         },
       );
     },
-    // Rebuild router on auth state changes so redirects are applied.
-    refreshListenable: _AuthStateListenable(ref),
+    // Rebuild router on auth state OR kiosk mode changes so redirects are applied to both.
+    refreshListenable: Listenable.merge([_AuthStateListenable(ref), _KioskStateListenable(ref)]),
     routes: [
+      // ── Kiosk ───────────────────────────────────────────────────────────
+      GoRoute(
+        path: AppRoutes.kioskActivate,
+        builder: (context, state) => const KioskActivationScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.kioskDisplay,
+        builder: (context, state) => const KioskDisplayScreen(),
+      ),
+
       // ── Auth ────────────────────────────────────────────────────────────
       GoRoute(
         path: AppRoutes.login,
@@ -732,5 +779,14 @@ GoRouter buildRouter(WidgetRef ref) {
 class _AuthStateListenable extends ChangeNotifier {
   _AuthStateListenable(WidgetRef ref) {
     ref.listenManual(authStateProvider, (prev, next) => notifyListeners());
+  }
+}
+
+/// [Listenable] that notifies go_router whenever kiosk mode is activated/deactivated, so the
+/// redirect callback's kiosk guard (see [buildRouter]) re-runs the moment
+/// `KioskModeNotifier.activate`/`deactivate` flips `kioskModeProvider.active`.
+class _KioskStateListenable extends ChangeNotifier {
+  _KioskStateListenable(WidgetRef ref) {
+    ref.listenManual(kioskModeProvider, (prev, next) => notifyListeners());
   }
 }

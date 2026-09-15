@@ -99,6 +99,11 @@ dependencies:
   # Reactive utilities (Rx.combineLatest for stream composition)
   rxdart: ^0.28.0
 
+  # Kiosk mode's attendance QR (see lib/features/kiosk) — renders the backend's rotating HMAC
+  # token as an on-screen QR code for technicians to scan with their own phone. Pure-Dart
+  # CustomPainter, no native platform code, no network calls of its own.
+  qr_flutter: ^4.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

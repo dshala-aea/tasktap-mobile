@@ -1,5 +1,7 @@
 package com.advantedge.tasktap.tasktap_mobile
 
+import android.app.ActivityManager
+import android.content.Context
 import android.os.Build
 import android.speech.SpeechRecognizer
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -34,6 +36,46 @@ class MainActivity : FlutterFragmentActivity() {
                         val available = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                             SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
                         result.success(available)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // Kiosk mode's screen pinning (see lib/core/kiosk/kiosk_lock_service.dart). This is
+        // Android's ordinary Lock Task Mode via Activity.startLockTask()/stopLockTask() — no
+        // device-owner/MDM provisioning required, unlike a fully silent, un-exitable kiosk lock.
+        // The OS itself still offers its own long-press-Back-and-Overview "unpin" gesture; this
+        // app's own hidden-tap-plus-PIN exit (KioskDisplayScreen) is the primary intended path,
+        // not a replacement for it.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tasktap/kiosk_lock")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startLockTask" -> {
+                        try {
+                            startLockTask()
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
+                    }
+                    "stopLockTask" -> {
+                        try {
+                            stopLockTask()
+                        } catch (e: Exception) {
+                            // Not currently pinned — nothing to undo.
+                        }
+                        result.success(null)
+                    }
+                    "isLockTaskActive" -> {
+                        val activityManager =
+                            getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                        val active = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            activityManager.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+                        } else {
+                            @Suppress("DEPRECATION")
+                            activityManager.isInLockTaskMode
+                        }
+                        result.success(active)
                     }
                     else -> result.notImplemented()
                 }
