@@ -97,15 +97,29 @@ class _MapPlaceholder extends StatelessWidget {
   }
 }
 
-class _EmbeddedMap extends StatelessWidget {
+class _EmbeddedMap extends StatefulWidget {
   const _EmbeddedMap({required this.point, required this.address});
 
   final GeocodedPoint point;
   final String address;
 
   @override
+  State<_EmbeddedMap> createState() => _EmbeddedMapState();
+}
+
+class _EmbeddedMapState extends State<_EmbeddedMap> {
+  // Set once an OSM tile request actually fails (offline mid-session after the initial geocode
+  // succeeded, tile server outage, etc.) — flutter_map has no built-in "map unavailable" state of
+  // its own, only this per-tile error callback, so this is the minimal signal available to fall
+  // back on. Falls back to the same AppMapCard this card's parent already shows when there's
+  // nothing to plot at all, rather than leaving blank/broken tiles on screen with no explanation.
+  bool _tileLoadFailed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final center = LatLng(point.lat, point.lng);
+    if (_tileLoadFailed) return AppMapCard(address: widget.address);
+
+    final center = LatLng(widget.point.lat, widget.point.lng);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,7 +131,7 @@ class _EmbeddedMap extends StatelessWidget {
             child: SizedBox(
               height: _mapHeight,
               child: GestureDetector(
-                onTap: () => openMapsForAddress(address),
+                onTap: () => openMapsForAddress(widget.address),
                 child: FlutterMap(
                   options: MapOptions(
                     initialCenter: center,
@@ -129,6 +143,10 @@ class _EmbeddedMap extends StatelessWidget {
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                       userAgentPackageName: _osmUserAgentPackageName,
+                      errorTileCallback: (tile, error, stackTrace) {
+                        if (_tileLoadFailed || !mounted) return;
+                        setState(() => _tileLoadFailed = true);
+                      },
                     ),
                     MarkerLayer(
                       markers: [
@@ -150,32 +168,30 @@ class _EmbeddedMap extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: AppTappable(
-              onTap: () => openMapsForAddress(address),
-              borderRadius: AppRack.insetShape,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.mapPin, size: 14, color: context.colors.inkMuted),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Apri in Mappe',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.inkMuted,
-                    ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: AppTappable(
+            onTap: () => openMapsForAddress(widget.address),
+            borderRadius: AppRack.insetShape,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(LucideIcons.mapPin, size: 14, color: context.colors.inkMuted),
+                const SizedBox(width: 6),
+                Text(
+                  'Apri in Mappe',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.inkMuted,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

@@ -15,6 +15,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -140,10 +141,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                             children: [
                               Text(
                                 cantiere.name,
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
+                                style: AppTextStyles.headlineMedium.copyWith(
                                   color: context.colors.ink,
                                 ),
                               ),
@@ -151,9 +149,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   cantiere.address!,
-                                  style: TextStyle(
-                                    fontFamily: 'Inter',
-                                    fontSize: 13,
+                                  style: AppTextStyles.bodySmall.copyWith(
                                     color: context.colors.inkMuted,
                                   ),
                                 ),
@@ -223,24 +219,30 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                         const SectionTitle(title: 'Ticket collegati'),
                         const SizedBox(height: 8),
                         ticketsAsync.when(
-                          loading: () => const Center(child: CircularProgressIndicator()),
-                          error: (e, _) => Text(
-                            'Impossibile caricare i ticket collegati.',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              color: context.colors.red,
+                          loading: () => const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(AppSpacing.xxxl),
+                              child: CircularProgressIndicator(),
+                            ),
+                          ),
+                          error: (e, _) => UnavailableState(
+                            icon: LucideIcons.ticket,
+                            titolo: 'Impossibile caricare i ticket collegati',
+                            motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                            action: AppButton(
+                              label: 'Riprova',
+                              size: AppButtonSize.sm,
+                              fullWidth: false,
+                              onPressed: () =>
+                                  ref.invalidate(ticketsForCantiereProvider(widget.cantiereId)),
                             ),
                           ),
                           data: (tickets) {
                             if (tickets.isEmpty) {
-                              return Text(
-                                'Nessun ticket collegato',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 13,
-                                  color: context.colors.inkMuted,
-                                ),
+                              return const EmptyState(
+                                icon: LucideIcons.ticket,
+                                title: 'Nessun ticket collegato',
+                                body: 'I ticket collegati a questo cantiere appariranno qui.',
                               );
                             }
                             return AppCard(
@@ -448,15 +450,11 @@ class _SquadraSection extends ConsumerWidget {
                     leading: AppAvatar(name: name, size: 36),
                     title: name,
                     meta: a.isLead
-                        ? Text(
-                            'LEAD',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                              color: context.colors.inkMuted,
-                            ),
+                        ? AppBadge(
+                            label: 'LEAD',
+                            small: true,
+                            bgColor: context.colors.inkMuted.withAlpha(31),
+                            fgColor: context.colors.inkMuted,
                           )
                         : null,
                     showDivider: i != assignments.length - 1,
