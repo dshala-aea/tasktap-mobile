@@ -138,24 +138,15 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
 
     final hasTyped = editor.title.trim().isNotEmpty || editor.details.trim().isNotEmpty;
     if (hasTyped) {
-      final overwrite = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Sostituire il testo?'),
-          content: const Text(
-            'Titolo e descrizione contengono già del testo. '
-            'La bozza AI lo sostituirà.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Sostituisci'),
-            ),
-          ],
-        ),
+      // Vetro chrome via the shared helper, not a hand-built AlertDialog — same as
+      // rapportini_list_screen.dart's own delete confirmation.
+      final overwrite = await confirmDeleteDialog(
+        context,
+        title: 'Sostituire il testo?',
+        message: 'Titolo e descrizione contengono già del testo. La bozza AI lo sostituirà.',
+        confirmLabel: 'Sostituisci',
       );
-      if (overwrite != true) return;
+      if (!overwrite) return;
     }
 
     setState(() => _busy = true);

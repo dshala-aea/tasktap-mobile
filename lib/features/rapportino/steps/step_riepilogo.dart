@@ -637,15 +637,54 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
   /// deliberate technician action ("save this for next time"), so a failure is surfaced with a
   /// SnackBar rather than swallowed silently.
   Future<void> _offerToSaveForReuse(BuildContext context, Uint8List bytes) async {
+    // Vetro chrome, not a stock AlertDialog — same AppCard + AppButton shell as the rest of the
+    // app's dialogs (see altro_hub_screen.dart's logout confirmation).
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Salva firma'),
-        content: const Text('Salva questa firma per la prossima volta?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sì')),
-        ],
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        child: AppCard(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Salva firma',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: ctx.colors.ink,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Salva questa firma per la prossima volta?',
+                style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.inkMuted),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton.ghost(
+                      label: 'No',
+                      onPressed: () => Navigator.pop(ctx, false),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppButton(
+                      label: 'Sì',
+                      onPressed: () => Navigator.pop(ctx, true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
     if (confirm != true) return;
@@ -749,53 +788,75 @@ class _TypedSigDialogState extends State<_TypedSigDialog> {
     if (mounted) Navigator.pop(context, bytes);
   }
 
+  // Vetro chrome, not a stock AlertDialog — same AppCard + AppButton shell as the rest of the
+  // app's dialogs (see altro_hub_screen.dart's logout confirmation).
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Firma digitale'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AppTextField(
-            label: 'Nome e cognome',
-            hint: 'Mario Rossi',
-            controller: _nameCtrl,
-            textInputAction: TextInputAction.done,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          CheckboxListTile(
-            value: _confirmed,
-            onChanged: (v) => setState(() => _confirmed = v ?? false),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              'Confermo l\'accettazione',
-              style: TextStyle(color: context.colors.ink, fontSize: 14),
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Firma digitale',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: context.colors.ink,
+              ),
             ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _rendering ? null : () => Navigator.pop(context),
-          child: Text('Annulla', style: TextStyle(color: context.colors.inkMuted)),
-        ),
-        TextButton(
-          onPressed: _canConfirm ? _onConfirm : null,
-          child: _rendering
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
-                )
-              : Text(
-                  'Conferma',
-                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
+            const SizedBox(height: 16),
+            AppTextField(
+              label: 'Nome e cognome',
+              hint: 'Mario Rossi',
+              controller: _nameCtrl,
+              textInputAction: TextInputAction.done,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            // AppCard's own DecoratedBox background sits between this ListTile and the nearest
+            // ambient Material now that this dialog is AppCard-wrapped rather than a stock
+            // AlertDialog — without its own Material, the checkbox's ink splash paints invisibly.
+            Material(
+              color: Colors.transparent,
+              child: CheckboxListTile(
+                value: _confirmed,
+                onChanged: (v) => setState(() => _confirmed = v ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Confermo l\'accettazione',
+                  style: TextStyle(color: context.colors.ink, fontSize: 14),
                 ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.ghost(
+                    label: 'Annulla',
+                    onPressed: _rendering ? null : () => Navigator.pop(context),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    label: 'Conferma',
+                    isLoading: _rendering,
+                    onPressed: _canConfirm ? _onConfirm : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

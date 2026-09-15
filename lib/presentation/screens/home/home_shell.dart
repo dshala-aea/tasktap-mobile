@@ -21,6 +21,7 @@ import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 import '../../../data/timbratura/work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/work_log_reconciler.dart';
+import '../../../features/altro/notifiche_provider.dart';
 
 /// The main app shell with the 5-tab floating-pill bottom navigation.
 ///
@@ -147,8 +148,14 @@ class _HomeShellState extends ConsumerState<HomeShell>
   }
 
   /// Starts (or restarts) the 60s foreground reconciliation poll.
+  ///
+  /// Gated on [backgroundSyncPreferenceProvider] — Impostazioni → "Modalità offline" ("Sincronizza
+  /// dati in background") turning this off means exactly this poll does not run. The queued-write
+  /// watchers wired in [initState] (timbra, tickets, rapportini, …) and the reconnect-triggered
+  /// sync are unaffected — see that provider's own doc comment for why.
   void _startReconcilePoll() {
     _reconcilePoll?.cancel();
+    if (!ref.read(backgroundSyncPreferenceProvider)) return;
     _reconcilePoll = Timer.periodic(const Duration(seconds: 60), (_) {
       ref.read(workLogReconcilerProvider).reconcile();
       ref.read(cantiereWorkLogReconcilerProvider).reconcile();
@@ -160,15 +167,23 @@ class _HomeShellState extends ConsumerState<HomeShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(syncProvider.notifier).performSync();
-      ref.read(workLogReconcilerProvider).reconcile();
-      ref.read(cantiereWorkLogReconcilerProvider).reconcile();
+      // Same "Modalità offline" gate as the poll above — resume-sync is the other half of
+      // "Sincronizza dati in background".
+      if (ref.read(backgroundSyncPreferenceProvider)) {
+        ref.read(syncProvider.notifier).performSync();
+        ref.read(workLogReconcilerProvider).reconcile();
+        ref.read(cantiereWorkLogReconcilerProvider).reconcile();
+      }
       // connectivityProvider.onReconnect (wired in initRealtimeEventWatcher) only fires on an
       // offline→online transition — it does NOT fire when the app is simply backgrounded past
       // the SignalR client's automatic-reconnect retry window (~42s) on a device that never lost
       // its network interface, which is the common case for this app. Forcing a fresh attempt on
       // every resume closes that gap regardless of what connectivity did while backgrounded.
       ref.read(realtimeConnectionProvider).reconnect();
+      // The unread badge otherwise only updated on cold start, an explicit visit to Notifiche, or
+      // a push arriving while foregrounded — backgrounding the app and bringing it back left it
+      // stale until one of those happened to occur.
+      ref.read(notificheProvider.notifier).refresh();
       _startReconcilePoll();
     } else {
       // Backgrounded (paused/inactive/hidden): stop the foreground fallback poll. This is

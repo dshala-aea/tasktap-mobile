@@ -13,6 +13,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
@@ -68,7 +69,7 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
-        child: _RapportiniListBody(
+        child: _RapportiniListRefresh(
           filter: _filter,
           query: _query,
           searchCtrl: _searchCtrl,
@@ -82,6 +83,41 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
       floatingActionButton: Padding(
         padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
         child: _NewRapportinoFab(),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Pull-to-refresh wrapper — same RefreshIndicator+performSync() pattern as
+// ticket_list_screen.dart / cantieri_list_screen.dart / ferie_permessi_list_screen.dart.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _RapportiniListRefresh extends ConsumerWidget {
+  const _RapportiniListRefresh({
+    required this.filter,
+    required this.query,
+    required this.searchCtrl,
+    required this.onFilterChanged,
+    required this.onQueryChanged,
+  });
+
+  final _RapportinoFilter filter;
+  final String query;
+  final TextEditingController searchCtrl;
+  final ValueChanged<_RapportinoFilter> onFilterChanged;
+  final ValueChanged<String> onQueryChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: _RapportiniListBody(
+        filter: filter,
+        query: query,
+        searchCtrl: searchCtrl,
+        onFilterChanged: onFilterChanged,
+        onQueryChanged: onQueryChanged,
       ),
     );
   }
@@ -199,6 +235,16 @@ class _RapportiniListBody extends ConsumerWidget {
                 padding: EdgeInsets.all(AppSpacing.xxxl),
                 child: CircularProgressIndicator(),
               ),
+            ),
+          )
+        // A load failure used to fall straight into the "no drafts" empty state below,
+        // indistinguishable from genuinely having none. Give it its own message.
+        else if (draftsAsync.hasError && filtered.isEmpty)
+          SliverToBoxAdapter(
+            child: EmptyState(
+              icon: LucideIcons.wifiOff,
+              title: 'Impossibile caricare i rapportini',
+              body: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
             ),
           )
         else if (filtered.isEmpty)
@@ -403,22 +449,12 @@ class _RapportinoRow extends ConsumerWidget {
 // ══════════════════════════════════════════════════════════════════════════════
 
 Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftReport draft) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Eliminare il rapportino?'),
-      content: Text('"${draft.title}" verrà eliminato definitivamente.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: TextButton.styleFrom(foregroundColor: context.colors.red),
-          child: const Text('Elimina'),
-        ),
-      ],
-    ),
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il rapportino?',
+    message: '"${draft.title}" verrà eliminato definitivamente.',
   );
-  if (confirmed != true) return false;
+  if (!confirmed) return false;
 
   await ref.read(draftReportRepositoryProvider).deleteDraft(draft.id);
 

@@ -142,7 +142,9 @@ class AltroHubScreen extends ConsumerWidget {
             icon: LucideIcons.hardHat,
             label: 'Cantieri',
             module: 'cantieri',
-            onTap: () => context.push('/altro/cantieri'),
+            // The technician-scoped Cantieri tab (with "Timbrato oggi" badges and proper
+            // empty/error states), not the office CRUD screen under /altro/cantieri.
+            onTap: () => context.go(AppRoutes.cantieri),
           ),
           (
             icon: LucideIcons.package,

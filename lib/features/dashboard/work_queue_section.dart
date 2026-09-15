@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
@@ -95,6 +96,28 @@ class _RowContent {
   final String timeLabel;
 }
 
+final _weekdayFmt = DateFormat('EEE d', 'it');
+
+/// "14:30" for today; "Dom 21, 14:30" for anything else — Programmato can hold items up to 7
+/// days out, and a bare HH:MM told the technician nothing about which day it was for. No shared
+/// "today vs. other day" helper exists elsewhere yet (calendario's own views each inline their
+/// own `isToday` check against a full day view, not a compact single-line label), so this is a
+/// small local one rather than a half-fit reuse.
+String _dateQualifiedTimeLabel(DateTime activityDate, int timeStartMinutes) {
+  final h = timeStartMinutes ~/ 60;
+  final m = timeStartMinutes % 60;
+  final time = '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(activityDate.year, activityDate.month, activityDate.day);
+  if (day == today) return time;
+
+  final label = _weekdayFmt.format(day);
+  final capitalised = '${label[0].toUpperCase()}${label.substring(1)}';
+  return '$capitalised, $time';
+}
+
 _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
   final location = ref.watch(locationByIdProvider(schedule.locationId)).valueOrNull;
   final customerName = location != null
@@ -104,12 +127,10 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
     customerName,
     location?.city,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
-  final h = schedule.timeStartMinutes ~/ 60;
-  final m = schedule.timeStartMinutes % 60;
   return _RowContent(
     title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
     subtitle: subtitle,
-    timeLabel: '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+    timeLabel: _dateQualifiedTimeLabel(schedule.activityDate, schedule.timeStartMinutes),
   );
 }
 

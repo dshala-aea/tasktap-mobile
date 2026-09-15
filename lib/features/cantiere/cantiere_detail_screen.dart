@@ -18,6 +18,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../rapportino/create_draft.dart';
 import '../ticket/ticket_providers.dart' show commessaByIdProvider;
@@ -73,23 +74,57 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
           children: [
             const ScreenHeader(title: 'Cantiere', showBack: true),
             Expanded(
-              child: cantiereAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => const UnavailableState(
-                  icon: LucideIcons.hardHat,
-                  titolo: 'Impossibile caricare il cantiere',
-                  motivo: 'Riprova tra poco.',
+              // Same RefreshIndicator+performSync() pattern as cantieri_list_screen.dart one level
+              // up — this detail screen had none of its own. Every branch below gets a real
+              // Scrollable (a RefreshIndicator only fires over one), same reasoning as that
+              // screen's own doc comment.
+              child: RefreshIndicator(
+                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                child: cantiereAsync.when(
+                loading: () => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.xxxl),
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                  ],
+                ),
+                error: (e, _) => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    UnavailableState(
+                      icon: LucideIcons.hardHat,
+                      titolo: 'Impossibile caricare il cantiere',
+                      motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                      action: AppButton(
+                        label: 'Riprova',
+                        size: AppButtonSize.sm,
+                        fullWidth: false,
+                        onPressed: () =>
+                            ref.invalidate(cantiereByIdProvider(widget.cantiereId)),
+                      ),
+                    ),
+                  ],
                 ),
                 data: (cantiere) {
                   if (cantiere == null) {
-                    return const UnavailableState(
-                      icon: LucideIcons.hardHat,
-                      titolo: 'Cantiere non trovato',
-                      motivo: 'Non risulta sincronizzato su questo dispositivo.',
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        UnavailableState(
+                          icon: LucideIcons.hardHat,
+                          titolo: 'Cantiere non trovato',
+                          motivo: 'Non risulta sincronizzato su questo dispositivo.',
+                        ),
+                      ],
                     );
                   }
 
                   return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(
                       AppSpacing.pagePadding,
                       AppSpacing.sm,
@@ -224,6 +259,7 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
                     ),
                   );
                 },
+                ),
               ),
             ),
           ],

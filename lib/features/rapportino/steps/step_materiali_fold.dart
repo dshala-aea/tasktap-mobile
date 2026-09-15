@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
-import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -224,7 +223,9 @@ class StepMaterialiFold extends ConsumerWidget {
   ) {
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
 
-    final qtyCtrl = TextEditingController(text: '1');
+    // Same +/- stepper the saved row uses (_MaterialeQtyStepper below), not raw text entry —
+    // this dialog used to be the one place quantity was typed rather than stepped.
+    double qty = 1.0;
     // Closed vocabulary (catalog_constants.dart), not free text — null means "not set".
     String? uom;
     String? selectedMaterialeId;
@@ -242,13 +243,33 @@ class StepMaterialiFold extends ConsumerWidget {
 
     showDialog<void>(
       context: context,
+      // Vetro chrome, not a stock AlertDialog — same AppCard + AppButton shell as the rest of
+      // the app's dialogs (see altro_hub_screen.dart's logout confirmation).
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Aggiungi materiale'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          child: AppCard(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Aggiungi materiale',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: ctx.colors.ink,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                 // Fabbisogno was already fetched and shown read-only on the ticket's own Materiali
                 // tab, disconnected from the one screen a technician actually adds materiali from.
                 // Nothing to type here — tapping a suggestion is the whole interaction.
@@ -258,7 +279,7 @@ class StepMaterialiFold extends ConsumerWidget {
                     onPicked: (m) {
                       selectedMaterialeId = m.materialeId;
                       freeTextName = m.materialeId == null ? m.nome : '';
-                      qtyCtrl.text = m.quantita.toString();
+                      qty = m.quantita > 0 ? m.quantita : 1.0;
                       if (m.unitaMisura?.isNotEmpty ?? false) uom = m.unitaMisura;
                       lookupFieldGeneration++;
                       setDialogState(() {});
@@ -322,17 +343,42 @@ class StepMaterialiFold extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(
-                      child: AppFieldShell(
-                        label: 'Qtà',
-                        child: TextField(
-                          controller: qtyCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                    Text(
+                      'Qtà',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: ctx.colors.inkMuted,
+                      ),
+                    ),
+                    const Spacer(),
+                    _QtyBtn(
+                      icon: LucideIcons.minus,
+                      label: 'Diminuisci quantità',
+                      onTap: qty > 1 ? () => setDialogState(() => qty -= 1) : null,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                      child: Text(
+                        qty.toStringAsFixed(qty == qty.truncateToDouble() ? 0 : 1),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: ctx.colors.ink,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    _QtyBtn(
+                      icon: LucideIcons.plus,
+                      label: 'Aumenta quantità',
+                      onTap: () => setDialogState(() => qty += 1),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
                     Expanded(
                       child: AppFieldShell(
                         label: 'Unità',
@@ -377,33 +423,49 @@ class StepMaterialiFold extends ConsumerWidget {
                   ],
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
-            ElevatedButton(
-              onPressed: () {
-                final qty = double.tryParse(qtyCtrl.text) ?? 1.0;
-                final id = 'mat-${DateTime.now().millisecondsSinceEpoch}';
-                final typed = freeTextName.trim();
-                notifier.addMateriale(
-                  MaterialeRow(
-                    id: id,
-                    reportId: reportId,
-                    materialeId: selectedMaterialeId,
-                    // Whichever one holds the answer. There is no mode to consult any more, so
-                    // the row records what is actually there.
-                    freeTextName: selectedMaterialeId == null && typed.isNotEmpty ? typed : null,
-                    quantity: qty,
-                    unitOfMeasure: uom,
-                    magazzinoId: selectedMagazzinoId,
                   ),
-                );
-                Navigator.pop(ctx);
-              },
-              child: const Text('Aggiungi'),
-            ),
-          ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: AppButton.ghost(
+                      label: 'Annulla',
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppButton(
+                      label: 'Aggiungi',
+                      onPressed: () {
+                        final id = 'mat-${DateTime.now().millisecondsSinceEpoch}';
+                        final typed = freeTextName.trim();
+                        notifier.addMateriale(
+                          MaterialeRow(
+                            id: id,
+                            reportId: reportId,
+                            materialeId: selectedMaterialeId,
+                            // Whichever one holds the answer. There is no mode to consult any
+                            // more, so the row records what is actually there.
+                            freeTextName: selectedMaterialeId == null && typed.isNotEmpty
+                                ? typed
+                                : null,
+                            quantity: qty,
+                            unitOfMeasure: uom,
+                            magazzinoId: selectedMagazzinoId,
+                          ),
+                        );
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          ),
         ),
       ),
     );

@@ -30,6 +30,7 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import 'cantiere_timbra_screen.dart' show cantieriProvider;
 
 class SelezionaCantiereScreen extends ConsumerStatefulWidget {
@@ -89,22 +90,48 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
               onChanged: (v) => setState(() => _query = v),
             ),
             Expanded(
-              child: cantieriAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => const UnavailableState(
-                  icon: LucideIcons.hardHat,
-                  titolo: 'Impossibile caricare i cantieri',
-                  motivo: 'Trascina in basso su un\'altra scheda per aggiornare, oppure riprova tra poco.',
+              // Same RefreshIndicator+performSync() pattern as cantieri_list_screen.dart, and the
+              // same reason its own doc comment gives for wrapping every branch (loading/error/
+              // empty/populated) in one Scrollable, not just the populated ListView: a
+              // RefreshIndicator only fires over a Scrollable descendant. The copy used to send
+              // the technician to "an[other] tab" to pull-to-refresh because this screen had none
+              // of its own — it does now.
+              child: RefreshIndicator(
+                onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                child: cantieriAsync.when(
+                loading: () => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    Center(child: Padding(
+                      padding: EdgeInsets.all(AppSpacing.xxxl),
+                      child: CircularProgressIndicator(),
+                    )),
+                  ],
+                ),
+                error: (e, _) => ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: const [
+                    UnavailableState(
+                      icon: LucideIcons.hardHat,
+                      titolo: 'Impossibile caricare i cantieri',
+                      motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                    ),
+                  ],
                 ),
                 data: (cantieri) {
                   if (cantieri.isEmpty) {
-                    return const UnavailableState(
-                      icon: LucideIcons.hardHat,
-                      titolo: 'Nessun cantiere disponibile',
-                      motivo:
-                          'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
-                          'è stato creato uno di recente, apri una qualsiasi scheda e trascina in '
-                          'basso per aggiornare, oppure riprova tra poco.',
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        UnavailableState(
+                          icon: LucideIcons.hardHat,
+                          titolo: 'Nessun cantiere disponibile',
+                          motivo:
+                              'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
+                              'è stato creato uno di recente, trascina in basso per aggiornare, '
+                              'oppure riprova tra poco.',
+                        ),
+                      ],
                     );
                   }
 
@@ -120,14 +147,20 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
                   ].where((c) => _matches(c, _query)).toList();
 
                   if (ordered.isEmpty) {
-                    return UnavailableState(
-                      icon: LucideIcons.searchX,
-                      titolo: 'Nessun risultato',
-                      motivo: 'Nessun cantiere corrisponde a "$_query".',
+                    return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        UnavailableState(
+                          icon: LucideIcons.searchX,
+                          titolo: 'Nessun risultato',
+                          motivo: 'Nessun cantiere corrisponde a "$_query".',
+                        ),
+                      ],
                     );
                   }
 
                   return ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(
                       AppSpacing.pagePadding,
                       0,
@@ -182,6 +215,7 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
                     },
                   );
                 },
+                ),
               ),
             ),
           ],

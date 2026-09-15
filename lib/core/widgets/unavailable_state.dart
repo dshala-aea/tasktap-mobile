@@ -33,6 +33,7 @@ class UnavailableState extends StatelessWidget {
     required this.titolo,
     required this.motivo,
     this.icon = LucideIcons.alertTriangle,
+    this.action,
   });
 
   /// What is missing (short, e.g. "Catalogo materiali non disponibile").
@@ -44,6 +45,11 @@ class UnavailableState extends StatelessWidget {
   /// Defaults to a generic "something's off" glyph; pass a domain icon (e.g.
   /// [LucideIcons.package]) to match the surrounding screen's iconography.
   final IconData icon;
+
+  /// Optional retry action — same slot shape as [EmptyState.action]. Pass e.g. an
+  /// `AppButton(label: 'Riprova', ...)` at any call site whose `motivo` copy already promises a
+  /// retry ("riprova tra poco") with no actual gesture behind it.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +91,7 @@ class UnavailableState extends StatelessWidget {
                     height: 1.4,
                   ),
                 ),
+                if (action != null) ...[const SizedBox(height: 20), action!],
               ],
             ),
           ),

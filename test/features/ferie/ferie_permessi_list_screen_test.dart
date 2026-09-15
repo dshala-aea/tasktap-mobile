@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/features/ferie/ferie_permessi_list_screen.dart';
 
 class _FakeAbsenceRequestApiClient extends AbsenceRequestApiClient {
@@ -60,7 +62,14 @@ AbsenceRequestDto _request({
 
 Widget _buildScreen(_FakeAbsenceRequestApiClient fake) {
   return ProviderScope(
-    overrides: [absenceRequestApiClientProvider.overrideWithValue(fake)],
+    overrides: [
+      absenceRequestApiClientProvider.overrideWithValue(fake),
+      // Cancel now goes through ensureOnlineOrWarn (same guard the sibling create flow already
+      // used) — without these, the unoverridden real providers resolve as offline/unknown in the
+      // test harness and every cancel silently no-ops before it reaches the fake client.
+      isOnlineProvider.overrideWithValue(true),
+      cachedEntitlementProvider.overrideWith((ref) => null),
+    ],
     child: const MaterialApp(home: FeriePermessiListScreen()),
   );
 }

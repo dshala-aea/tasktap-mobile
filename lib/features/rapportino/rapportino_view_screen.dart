@@ -41,14 +41,25 @@ class RapportinoViewScreen extends ConsumerWidget {
       backgroundColor: context.colors.bg2,
       body: draftAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
+        // No online/offline distinction to draw here (unlike the ticket detail tabs): this reads
+        // the local Drift mirror only (rapportinoByIdProvider), never the network, so an error
+        // here is a local read failure, not connectivity — and a retry re-opens that same stream.
         error: (e, _) => SafeArea(
           child: Column(
             children: [
               ScreenHeader(title: 'Rapportino', showBack: true),
-              EmptyState(
-                icon: LucideIcons.xCircle,
-                title: 'Errore',
-                body: 'Impossibile caricare il rapportino.',
+              Expanded(
+                child: UnavailableState(
+                  icon: LucideIcons.xCircle,
+                  titolo: 'Impossibile caricare il rapportino',
+                  motivo: 'Si è verificato un errore imprevisto. Riprova.',
+                  action: AppButton(
+                    label: 'Riprova',
+                    size: AppButtonSize.sm,
+                    fullWidth: false,
+                    onPressed: () => ref.invalidate(rapportinoByIdProvider(reportId)),
+                  ),
+                ),
               ),
             ],
           ),

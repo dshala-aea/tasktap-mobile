@@ -421,8 +421,8 @@ void main() {
         reason: 'confirmation checkbox should be visible',
       );
 
-      TextButton confermaButton() =>
-          tester.widget<TextButton>(find.widgetWithText(TextButton, 'Conferma'));
+      AppButton confermaButton() =>
+          tester.widget<AppButton>(find.widgetWithText(AppButton, 'Conferma'));
 
       // Neither a name nor a ticked checkbox alone is enough — Conferma starts disabled.
       expect(confermaButton().onPressed, isNull, reason: 'empty name, unchecked box');
@@ -438,7 +438,7 @@ void main() {
       // Confirming renders the typed signature to PNG bytes via real dart:ui image encoding
       // (PictureRecorder → Image → toByteData), then `_captureSig`'s continuation writes the
       // file and calls `saveCustomerSignature` — real dart:io + Drift work, same as above.
-      await tester.tap(find.widgetWithText(TextButton, 'Conferma'));
+      await tester.tap(find.widgetWithText(AppButton, 'Conferma'));
       await tester.pump();
       await Future<void>.delayed(const Duration(milliseconds: 300));
       await tester.pump();
@@ -559,7 +559,7 @@ void main() {
         await tester.tap(find.byType(Checkbox));
         await tester.pump();
 
-        await tester.tap(find.widgetWithText(TextButton, 'Conferma'));
+        await tester.tap(find.widgetWithText(AppButton, 'Conferma'));
         await tester.pump();
         await Future<void>.delayed(const Duration(milliseconds: 300));
         await tester.pump();

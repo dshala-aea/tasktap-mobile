@@ -9,6 +9,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import 'calendario_providers.dart';
 import 'views/giorno_view.dart';
 import 'views/lista_view.dart';
@@ -93,13 +94,23 @@ class CalendarioScreen extends ConsumerWidget {
                     velocity < 0 ? 1 : -1,
                   );
                 },
-                child: _CalendarioBody(
-                  view: view,
-                  selectedDate: selectedDate,
-                  onSelectDate: (d) =>
-                      ref.read(selectedDateProvider.notifier).state = d,
-                  onSwitchView: (v) =>
-                      ref.read(calendarioViewProvider.notifier).state = v,
+                // Same RefreshIndicator+performSync() pattern as the rest of the app. Every
+                // schedule body reads from the Drift mirror (schedulesInRangeProvider), which
+                // sync fills — same relationship cantieri_list_screen.dart has to its own
+                // provider. Giorno/Settimana/Lista each already wrap their content in a real
+                // Scrollable (SingleChildScrollView/ListView) that the pull gesture needs; Mese
+                // is a fixed month grid with none, so the gesture is a no-op there today, same as
+                // any other RefreshIndicator over non-scrolling content.
+                child: RefreshIndicator(
+                  onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                  child: _CalendarioBody(
+                    view: view,
+                    selectedDate: selectedDate,
+                    onSelectDate: (d) =>
+                        ref.read(selectedDateProvider.notifier).state = d,
+                    onSwitchView: (v) =>
+                        ref.read(calendarioViewProvider.notifier).state = v,
+                  ),
                 ),
               ),
             ),

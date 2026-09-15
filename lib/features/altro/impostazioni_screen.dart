@@ -151,6 +151,10 @@ class ImpostazioniScreen extends ConsumerWidget {
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
+                  // Same fix as "Tema scuro" below and "Autenticazione biometrica" in Account:
+                  // persisted, read nowhere. Now drives HomeShell's automatic background sync
+                  // (60s foreground poll + resume sync) via backgroundSyncPreferenceProvider,
+                  // bound in main.dart.
                   _ToggleRow(
                     icon: LucideIcons.wifiOff,
                     title: 'Modalità offline',

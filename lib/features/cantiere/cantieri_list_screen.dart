@@ -5,7 +5,9 @@
 // Deliberately not a reuse of admin_cantiere_list_screen.dart: that one is CRUD-oriented,
 // office/admin-only. This one reads cantieriProvider exactly as CantiereTimbraScreen's picker
 // already does — already scoped server-side to the technician's own CantiereAssignment rows
-// (falling back to all active cantieri when they have none), so no new filtering logic here.
+// (falling back to all active cantieri when they have none). A client-side name/address search
+// (AppSearchBar) narrows that same local list further — same pattern the Ticket/Rapportini/
+// Magazzino lists already use, since cantieriProvider is the whole synced mirror, not a query.
 //
 // Structured as one always-present CustomScrollView wrapped in a single RefreshIndicator —
 // loading/error/empty/populated content all live as slivers inside it — mirroring
@@ -29,13 +31,36 @@ import '../../data/sync/sync_service.dart';
 import '../timbra/cantiere_timbra_screen.dart'
     show cantiereActiveSessionProvider, cantiereTodayHoursProvider, cantieriProvider;
 
-class CantieriListScreen extends ConsumerWidget {
+class CantieriListScreen extends ConsumerStatefulWidget {
   const CantieriListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CantieriListScreen> createState() => _CantieriListScreenState();
+}
+
+class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cantieriAsync = ref.watch(cantieriProvider);
-    final cantieri = cantieriAsync.valueOrNull ?? const [];
+    final allCantieri = cantieriAsync.valueOrNull ?? const [];
+    // Client-side filter, same as the Ticket/Rapportini/Magazzino lists — cantieriProvider is
+    // already the whole local (synced) mirror, not a server query.
+    final cantieri = _query.isEmpty
+        ? allCantieri
+        : allCantieri.where((c) {
+            final q = _query.toLowerCase();
+            return c.name.toLowerCase().contains(q) ||
+                (c.address?.toLowerCase().contains(q) ?? false);
+          }).toList();
     // For the "Timbrato oggi" per-row indicator below — the currently-active cantiere (if any)
     // counts as "timbrato oggi" even before it has a closed interval of its own yet.
     final activeCantiereId = ref.watch(cantiereActiveSessionProvider)?.cantiereId;
@@ -58,6 +83,13 @@ class CantieriListScreen extends ConsumerWidget {
                   child: ScreenHeader(title: 'Cantieri'),
                 ),
               ),
+              SliverToBoxAdapter(
+                child: AppSearchBar(
+                  controller: _searchCtrl,
+                  hint: 'Cerca per nome o indirizzo…',
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
               if (cantieriAsync.isLoading)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -73,7 +105,7 @@ class CantieriListScreen extends ConsumerWidget {
                     motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
                   ),
                 )
-              else if (cantieri.isEmpty)
+              else if (allCantieri.isEmpty)
                 const SliverToBoxAdapter(
                   child: UnavailableState(
                     icon: LucideIcons.hardHat,
@@ -81,6 +113,16 @@ class CantieriListScreen extends ConsumerWidget {
                     motivo:
                         'Non risultano cantieri sincronizzati su questo dispositivo. Trascina in '
                         'basso per aggiornare, oppure riprova tra poco.',
+                  ),
+                )
+              // An empty *filter* is not the same claim as an empty catalogue — same distinction
+              // magazzino_screen.dart's Articoli tab already draws.
+              else if (cantieri.isEmpty)
+                SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: LucideIcons.searchX,
+                    title: 'Nessun risultato',
+                    body: 'Nessun cantiere corrisponde a "$_query".',
                   ),
                 )
               else

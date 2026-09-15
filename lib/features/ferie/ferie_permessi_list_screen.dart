@@ -7,6 +7,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -102,21 +103,20 @@ class _FeriePermessiRowState extends ConsumerState<_FeriePermessiRow> {
   bool get _cancellable => _kCancellable.contains(widget.item.status);
 
   Future<bool> _confirmCancel() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Annullare la richiesta?'),
-        content: const Text('La richiesta verrà annullata e non potrà più essere ripristinata.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Chiudi')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Annulla richiesta'),
-          ),
-        ],
-      ),
+    // Vetro chrome via the shared helper, not a hand-built AlertDialog — same as
+    // rapportini_list_screen.dart's own delete confirmation.
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Annullare la richiesta?',
+      message: 'La richiesta verrà annullata e non potrà più essere ripristinata.',
+      confirmLabel: 'Annulla richiesta',
     );
-    if (confirmed != true) return false;
+    if (!confirmed) return false;
+    if (!mounted) return false;
+
+    // The sibling create flow (ferie_permessi_form_screen.dart's own _save) already guards its
+    // write with this; cancelling one skipped it.
+    if (!ensureOnlineOrWarn(context, ref)) return false;
 
     try {
       await ref.read(absenceRequestApiClientProvider).cancel(widget.item.id);
@@ -143,7 +143,23 @@ class _FeriePermessiRowState extends ConsumerState<_FeriePermessiRow> {
       ),
       title: absenceTypeLabel(widget.item.type),
       subtitle: _subtitle,
-      meta: AppBadge(label: absenceStatusLabel(widget.item.status)),
+      meta: !_cancellable
+          ? AppBadge(label: absenceStatusLabel(widget.item.status))
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppBadge(label: absenceStatusLabel(widget.item.status)),
+                // A swipe is the only way a mouse/keyboard/TalkBack/VoiceOver user cannot
+                // perform — this button reaches the exact same cancel path (_confirmCancel) so
+                // both ways to cancel a request agree on what "cancel" does, not just on how you
+                // trigger it. Same fix as rapportini_list_screen.dart's own delete button.
+                IconButton(
+                  icon: Icon(LucideIcons.x, size: 18, color: context.colors.inkMuted),
+                  tooltip: 'Annulla richiesta',
+                  onPressed: () => _confirmCancel(),
+                ),
+              ],
+            ),
     );
 
     if (!_cancellable) return row;

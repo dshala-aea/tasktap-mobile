@@ -202,10 +202,13 @@ class _TicketDetailBody extends ConsumerWidget {
     final contractAsync = contractId == null
         ? null
         : ref.watch(contractByIdProvider(contractId));
+    // Same offline-vs-error distinction the timer bar below already draws (see its own
+    // "Timer non disponibile offline" branch) — this used to collapse any error, including
+    // offline, to a bare "—".
     final contractLabel = contractAsync?.when(
       data: (c) => c?['name'] as String? ?? '—',
       loading: () => 'Caricamento…',
-      error: (e, _) => '—',
+      error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
     // Feature audit module #13, Gap 6: mobile already syncs `Ticket.commessaId` but showed it
@@ -217,7 +220,7 @@ class _TicketDetailBody extends ConsumerWidget {
     final commessaLabel = commessaAsync?.when(
       data: (c) => c?['codice'] as String? ?? '—',
       loading: () => 'Caricamento…',
-      error: (e, _) => '—',
+      error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
     return SafeArea(
@@ -1424,10 +1427,17 @@ class _PianificazioniTab extends ConsumerWidget {
           child: CircularProgressIndicator(),
         ),
       ),
-      error: (e, _) => const _EmptyTab(
+      // Every sibling tab (Allegati, Materiali, Rapportini, Storico) uses _TabError, which also
+      // names the offline case — this one used to fall back to the generic empty-state widget.
+      error: (e, _) => _TabError(
         icon: LucideIcons.calendar,
-        label: 'Errore caricamento',
-        body: 'Impossibile caricare le pianificazioni.',
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Pianificazioni non disponibili offline',
+        offlineBody:
+            'Le pianificazioni di questo ticket richiedono una connessione per essere elencate: '
+            'riprova quando torni online.',
+        errorTitle: 'Impossibile caricare le pianificazioni',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (schedules) => schedules.isEmpty
           ? const _EmptyTab(

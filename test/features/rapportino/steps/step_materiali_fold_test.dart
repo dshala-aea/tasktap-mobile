@@ -18,7 +18,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
-import 'package:tasktap_mobile/core/widgets/app_text_field.dart';
 import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -591,10 +590,9 @@ void main() {
       await tester.tap(find.text('Nastro isolante'));
       await tester.pumpAndSettle();
 
-      final qtyField = tester.widget<TextField>(
-        find.descendant(of: find.byType(AppFieldShell).first, matching: find.byType(TextField)),
-      );
-      expect(qtyField.controller?.text, '2.0');
+      // Qtà is a +/- stepper now (same widget the saved row already used), not a TextField —
+      // the planned line's quantity (2) shows as plain "2" text, not a controller value.
+      expect(find.text('2'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

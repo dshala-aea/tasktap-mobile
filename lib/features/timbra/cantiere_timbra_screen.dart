@@ -776,39 +776,70 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
   void _showBatchFailuresDialog(List<BatchStartResult> failures) {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        // A large crew (or large accessibility text scaling) can overflow a plain min-size
-        // Column — scrollable makes the content area scroll instead.
-        scrollable: true,
-        title: const Text('Alcuni membri non sono stati avviati'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: failures.map((f) {
-            final reason = switch (f.error) {
-              'AlreadyOpen' => 'ha già una timbratura aperta',
-              'NotAssigned' => 'non risulta assegnato a questo cantiere',
-              _ => 'errore sconosciuto',
-            };
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              // A plain `showDialog` builder never rebuilds on its own, so `colleagueNameProvider`
-              // — a StreamProvider backed by a Drift watchSingleOrNull() query that resolves
-              // asynchronously — must be watched from a Consumer scoped to just this row, not read
-              // once from the enclosing method. `ref.read` here would capture whatever the
-              // provider's state happened to be at that exact instant (almost always still
-              // loading) and never update. Same fallback contract as everywhere else
-              // colleagueNameProvider is read (see teammate_picker_sheet.dart).
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final name = ref.watch(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
-                  return Text('$name: $reason');
-                },
+      // Vetro chrome, not a stock AlertDialog — same AppCard shell as the rest of the app's
+      // dialogs (see altro_hub_screen.dart's logout confirmation). Still scrollable: a large
+      // crew (or large accessibility text scaling) can overflow a plain min-size Column.
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+        child: AppCard(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Alcuni membri non sono stati avviati',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: ctx.colors.ink,
+                ),
               ),
-            );
-          }).toList(),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: failures.map((f) {
+                      final reason = switch (f.error) {
+                        'AlreadyOpen' => 'ha già una timbratura aperta',
+                        'NotAssigned' => 'non risulta assegnato a questo cantiere',
+                        _ => 'errore sconosciuto',
+                      };
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        // A plain `showDialog` builder never rebuilds on its own, so
+                        // `colleagueNameProvider` — a StreamProvider backed by a Drift
+                        // watchSingleOrNull() query that resolves asynchronously — must be
+                        // watched from a Consumer scoped to just this row, not read once from
+                        // the enclosing method. `ref.read` here would capture whatever the
+                        // provider's state happened to be at that exact instant (almost always
+                        // still loading) and never update. Same fallback contract as everywhere
+                        // else colleagueNameProvider is read (see teammate_picker_sheet.dart).
+                        child: Consumer(
+                          builder: (context, ref, _) {
+                            final name =
+                                ref.watch(colleagueNameProvider(f.userId)).valueOrNull ??
+                                f.userId;
+                            return Text(
+                              '$name: $reason',
+                              style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.ink),
+                            );
+                          },
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              AppButton(label: 'OK', onPressed: () => Navigator.of(ctx).pop()),
+            ],
+          ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
       ),
     );
   }

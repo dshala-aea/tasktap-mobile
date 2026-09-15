@@ -412,6 +412,20 @@ class SyncService {
 // Riverpod provider
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// Whether automatic background sync (the 60s foreground poll and the app-resume sync in
+/// [HomeShell]) should run at all.
+///
+/// Defaults to true and is overridden in `main.dart` with the Impostazioni → "Modalità offline"
+/// setting — same pattern as `gpsPreferenceProvider` in core/location: a core default here (data
+/// layer must not import a feature), bound once in main.dart so no call site has to remember the
+/// setting exists.
+///
+/// Deliberately does NOT gate the initial post-login sync or the reconnect-triggered flush of
+/// queued offline writes (timbra, tickets, rapportini, …) — those exist to avoid losing or
+/// silently staling data, not to keep it fresh in the background, so they stay on even with this
+/// preference off.
+final backgroundSyncPreferenceProvider = Provider<bool>((ref) => true);
+
 /// Provides the [AppDatabase] singleton.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();

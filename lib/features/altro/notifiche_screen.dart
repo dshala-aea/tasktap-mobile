@@ -85,7 +85,12 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
-        child: CustomScrollView(
+        // Same RefreshIndicator pattern as the rest of the app; the refresh action is this
+        // screen's own notificheProvider.refresh() rather than the general performSync() — the
+        // notification badge/list isn't part of that sync loop (see notifiche_provider.dart).
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(notificheProvider.notifier).refresh(),
+          child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: ScreenHeader(
@@ -204,6 +209,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
               padding: EdgeInsets.only(bottom: context.navClearance),
             ),
           ],
+          ),
         ),
       ),
     );

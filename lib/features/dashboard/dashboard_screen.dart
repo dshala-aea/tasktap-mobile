@@ -207,6 +207,12 @@ class _ClockInPrompt extends ConsumerWidget {
     ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
       if (previous is AsyncLoading && next is AsyncData && !next.hasError) {
         showAppToast(context, message: 'Turno iniziato', tone: ToastTone.success);
+      } else if (next is AsyncError) {
+        // The success branch above got a toast; a failed punch fired from here gave zero
+        // feedback — the hero just silently stopped loading. Same toast text/mechanism
+        // TimbraScreen's own punch failure already uses (timbra_screen.dart), so a failure
+        // reads the same whether it started from Home or from the Timbra tab.
+        showAppToast(context, message: 'Errore durante la timbratura. Riprova.', tone: ToastTone.error);
       }
     });
 

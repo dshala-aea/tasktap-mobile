@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/location/location_service.dart';
 import 'core/security/biometric_lock.dart';
+import 'data/sync/sync_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -115,6 +116,13 @@ Future<void> runTaskTapApp() async {
         // remember the setting exists — which is exactly how it ended up controlling nothing.
         gpsPreferenceProvider.overrideWith(
           (ref) => ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
+        ),
+        // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Same defect as
+        // the dark-theme toggle used to be: persisted, read nowhere. Binds to HomeShell's
+        // automatic background sync (60s foreground poll + resume sync) — see
+        // backgroundSyncPreferenceProvider's own doc comment for what stays on regardless.
+        backgroundSyncPreferenceProvider.overrideWith(
+          (ref) => ref.watch(impostazioniProvider.select((s) => s.syncOffline)),
         ),
       ],
       child: const TaskTapApp(),
