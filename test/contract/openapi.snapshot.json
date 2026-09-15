@@ -5831,7 +5831,7 @@
         "tags": [
           "MaintenanceTemplates"
         ],
-        "summary": "Deletes a tenant-owned template entirely \u2014 every version, and every group and control\nbelonging to any of them \u2014 once nothing references it. Tenant-only, like\nTask\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.DeleteGroup(Guid groupId, CancellationToken ct = default(CancellationToken)) and Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.DeleteControl(Guid controlId, CancellationToken ct = default(CancellationToken)): a curated System template is\nwithdrawn via Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.Retire(Guid versionId, CancellationToken ct = default(CancellationToken)), never deleted, and that asymmetry (retiring vs. deleting)\nis the same one ADR-0012 already draws for any published version, so there is no symmetric\nSystem-delete need to fill here.",
+        "summary": "Deletes a template entirely \u2014 every version, and every group and control belonging to any\nof them \u2014 once nothing references it.",
         "parameters": [
           {
             "name": "templateId",
@@ -15982,7 +15982,11 @@
         "type": "object",
         "properties": {
           "scheduleId": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional schedule to draft from. When present, this is the most specific signal\navailable and wins over Guid? AiGenerateReportRequest.TicketId/Guid? AiGenerateReportRequest.CantiereId (Tier 1 \u2014\nsee \u0060ReportContextBuilder\u0060).",
             "format": "uuid"
           },
           "ticketId": {
@@ -15990,7 +15994,15 @@
               "null",
               "string"
             ],
-            "description": "Optional ticket override. When null, pulled from Schedule.TicketId.",
+            "description": "Optional ticket override. When a Schedule is present and this is null, it is pulled\nfrom Schedule.TicketId. When no Schedule is present, this alone drives ticket-scoped\ncontext (Tier 2).",
+            "format": "uuid"
+          },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional cantiere (construction site) id, for drafts started from a cantiere with no\nlinked schedule or ticket (Tier 3). Mobile\u0027s cantiere-linked draft flow carries this\nlocally already; wiring it into the request body is a separate mobile-side change.",
             "format": "uuid"
           },
           "voiceTranscript": {
@@ -15998,9 +16010,10 @@
               "null",
               "string"
             ],
-            "description": "Optional voice transcript to include in context (from Whisper)."
+            "description": "Optional voice transcript to include in context (from Whisper). The sole basis for a\ndraft when none of the above ids are present (Tier 4)."
           }
-        }
+        },
+        "description": "What to draft a rapportino from. A \u0060Schedule\u0060 is no longer required \u2014 mobile\u0027s\nticket-linked, cantiere-linked and blank draft-creation entry points all leave\n\u0060ScheduleId\u0060 null (the schedule-start endpoint that would populate it has never been\nwired on mobile), and the office/ticket-centric web editor is ticket-driven too. At least\none of Guid? AiGenerateReportRequest.ScheduleId, Guid? AiGenerateReportRequest.TicketId, Guid? AiGenerateReportRequest.CantiereId or a\nnon-empty string? AiGenerateReportRequest.VoiceTranscript must be present \u2014 \u0060AiController\u0060 rejects a\nrequest carrying none of them with 400 before it reaches \u0060ReportContextBuilder\u0060."
       },
       "AiQuotaInfo": {
         "required": [
