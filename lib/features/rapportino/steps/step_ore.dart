@@ -51,7 +51,7 @@ class StepOre extends ConsumerWidget {
         AppSpacing.pagePadding,
         AppSpacing.base,
         AppSpacing.pagePadding,
-        AppSpacing.sm,
+        AppSpacing.xl,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -87,14 +87,10 @@ class StepOre extends ConsumerWidget {
             ),
 
           // Add staff button
-          OutlinedButton.icon(
-            onPressed: () => _showAddStaffDialog(context, ref),
+          AppButton.secondary(
+            label: 'Aggiungi tecnico',
             icon: const Icon(LucideIcons.userPlus),
-            label: const Text('Aggiungi tecnico'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+            onPressed: () => _showAddStaffDialog(context, ref),
           ),
           const SizedBox(height: 20),
 
@@ -596,17 +592,25 @@ class _NumField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Label above and the theme's own decoration, like every other field. This one also
-    // hand-rolled its border radius and padding, so an ore box did not match the box beside it.
-    return AppFieldShell(
+    // AppTextField, like every other field. This one used to hand-roll a TextFormField inside
+    // AppFieldShell, which duplicated AppTextField's own label-above treatment instead of reusing
+    // it, and hand-rolled its border radius and padding, so an ore box did not match the box
+    // beside it.
+    return AppTextField(
       label: label,
-      child: TextFormField(
-        controller: controller,
-        decoration: InputDecoration(suffixText: suffix),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-        onChanged: onChanged,
-      ),
+      controller: controller,
+      suffixIcon: suffix.isEmpty
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.md),
+              child: Center(
+                widthFactor: 1,
+                child: Text(suffix, style: TextStyle(color: context.colors.inkMuted)),
+              ),
+            ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+      onChanged: onChanged,
     );
   }
 }

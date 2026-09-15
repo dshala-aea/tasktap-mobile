@@ -127,25 +127,48 @@ class _RapportiniListRefresh extends ConsumerWidget {
 // FAB — creates a draft and navigates to the editor
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _NewRapportinoFab extends ConsumerWidget {
+class _NewRapportinoFab extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return AppFab(tooltip: 'Nuovo rapportino', onPressed: () => _createNewDraft(context, ref));
+  ConsumerState<_NewRapportinoFab> createState() => _NewRapportinoFabState();
+}
+
+class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
+  // Guards against a rapid double-tap firing two overlapping `createLocalDraft` calls, which
+  // created two drafts from one tap. AppFab has no busy/disabled state of its own, so this wraps
+  // it with an IgnorePointer + dimmed opacity for the duration of the create call rather than
+  // adding that state to the shared widget.
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: _busy,
+      child: Opacity(
+        opacity: _busy ? 0.6 : 1,
+        child: AppFab(tooltip: 'Nuovo rapportino', onPressed: () => _createNewDraft(context, ref)),
+      ),
+    );
   }
 
   Future<void> _createNewDraft(BuildContext context, WidgetRef ref) async {
-    final id = await createLocalDraft(ref, title: 'Nuovo rapportino');
-    if (!context.mounted) return;
-    if (id == null) {
-      // Refused rather than authored by a placeholder. See createLocalDraft.
-      showAppToast(
-        context,
-        message: 'Accedi per creare un rapportino.',
-        tone: ToastTone.warning,
-      );
-      return;
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await createLocalDraft(ref, title: 'Nuovo rapportino');
+      if (!context.mounted) return;
+      if (id == null) {
+        // Refused rather than authored by a placeholder. See createLocalDraft.
+        showAppToast(
+          context,
+          message: 'Accedi per creare un rapportino.',
+          tone: ToastTone.warning,
+        );
+        return;
+      }
+      context.push(AppRoutes.rapportiniEditor(id));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    context.push(AppRoutes.rapportiniEditor(id));
   }
 }
 
@@ -330,7 +353,7 @@ class _RapportinoRow extends ConsumerWidget {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
         decoration: BoxDecoration(
           border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),

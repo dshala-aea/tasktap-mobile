@@ -112,21 +112,15 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
               ),
             ),
             const SizedBox(width: 8),
-            if (_busy)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              AppButton(
-                label: 'Genera',
-                size: AppButtonSize.sm,
-                fullWidth: false,
-                onPressed: disabled
-                    ? null
-                    : () => _generateAiDraft(scheduleId, ticketId, cantiereId),
-              ),
+            AppButton(
+              label: _busy ? 'Generazione...' : 'Genera',
+              size: AppButtonSize.sm,
+              fullWidth: false,
+              isLoading: _busy,
+              onPressed: disabled
+                  ? null
+                  : () => _generateAiDraft(scheduleId, ticketId, cantiereId),
+            ),
           ],
         ),
       ),

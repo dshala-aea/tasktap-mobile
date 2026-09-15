@@ -2,7 +2,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:file_picker/file_picker.dart';
@@ -11,7 +10,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/catalog_constants.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../core/scanner/barcode_scan_sheet.dart';
@@ -74,11 +72,11 @@ class StepMaterialiFold extends ConsumerWidget {
         children: [
           // ── "Nessun materiale" toggle ──────────────────────────────────────
           AppCard(
-            padding: EdgeInsets.fromLTRB(
+            padding: const EdgeInsets.fromLTRB(
               AppSpacing.base,
               AppSpacing.xs,
               AppSpacing.base,
-              context.navClearance,
+              AppSpacing.xs,
             ),
             child: Row(
               children: [
@@ -125,15 +123,11 @@ class StepMaterialiFold extends ConsumerWidget {
                 ),
               ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
+            AppButton.secondary(
+              label: 'Aggiungi materiale',
+              icon: const Icon(LucideIcons.plusSquare),
               onPressed: () =>
                   _showAddMaterialeDialog(context, ref, furgoneAsync.valueOrNull, state.ticketId),
-              icon: const Icon(LucideIcons.plusSquare),
-              label: const Text('Aggiungi materiale'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 52),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
             ),
             const SizedBox(height: 24),
           ],
@@ -170,28 +164,18 @@ class StepMaterialiFold extends ConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pickImage(context, ref, ImageSource.gallery),
+                child: AppButton.secondary(
+                  label: 'Galleria',
                   icon: const Icon(LucideIcons.image),
-                  label: const Text('Galleria'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 52),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                  onPressed: () => _pickImage(context, ref, ImageSource.gallery),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _pickImage(context, ref, ImageSource.camera),
+                child: AppButton(
+                  label: 'Fotocamera',
                   icon: const Icon(LucideIcons.camera),
-                  label: const Text('Fotocamera'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.Y,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(0, 52),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
+                  onPressed: () => _pickImage(context, ref, ImageSource.camera),
                 ),
               ),
             ],
@@ -201,14 +185,10 @@ class StepMaterialiFold extends ConsumerWidget {
           // delivery note, a manufacturer certificate) could never be attached from here at all —
           // separate from any backend-side content-type restriction, which a backend agent is
           // relaxing concurrently. Goes through the same addAllegato path images already use.
-          OutlinedButton.icon(
-            onPressed: () => _pickDocument(context, ref),
+          AppButton.secondary(
+            label: 'Documento (PDF)',
             icon: const Icon(LucideIcons.fileText),
-            label: const Text('Documento (PDF)'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
+            onPressed: () => _pickDocument(context, ref),
           ),
         ],
       ),
@@ -1119,10 +1099,10 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
           ],
         );
       case ControlType.number:
-        return TextField(
+        return AppTextField(
+          label: 'Valore',
           controller: _numberCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(hintText: 'Valore', isDense: true),
           onChanged: (v) => _save(numberValue: v.trim().isEmpty ? null : double.tryParse(v.trim())),
         );
       case ControlType.dateTime:
@@ -1170,9 +1150,9 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
   }
 
   Widget _freeTextField() {
-    return TextField(
+    return AppTextField(
+      label: 'Valore',
       controller: _textCtrl,
-      decoration: const InputDecoration(hintText: 'Valore', isDense: true),
       onChanged: (v) => _save(stringValue: v.trim().isEmpty ? null : v.trim()),
     );
   }

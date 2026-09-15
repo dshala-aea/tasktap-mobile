@@ -188,8 +188,8 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                 crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 3,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
+                mainAxisSpacing: AppSpacing.md,
+                crossAxisSpacing: AppSpacing.md,
                 childAspectRatio: 1.0,
                 children: [
                   _StepTile(

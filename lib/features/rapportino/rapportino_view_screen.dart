@@ -401,11 +401,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                     child: Row(
                       children: [
                         Expanded(
-                          child: AppButton(
-                            label: 'Scarica PDF',
-                            icon: const Icon(LucideIcons.download, size: 16),
-                            onPressed: () => _openReportPdf(context, ref, draft.id),
-                          ),
+                          child: _DownloadPdfButton(reportId: draft.id),
                         ),
                         const SizedBox(width: 8),
                         _SharePdfButton(reportId: draft.id),
@@ -481,6 +477,43 @@ Future<File?> _fetchPdfToTempFile(
     if (!context.mounted) return null;
     showAppToast(context, message: 'Impossibile scaricare il PDF.', tone: ToastTone.error);
     return null;
+  }
+}
+
+/// "Scarica PDF" — downloads (via [_openReportPdf]) and opens the report's PDF in the device's
+/// default viewer. Same local-`_busy` shape as its sibling [_SharePdfButton] below, so the two
+/// download actions next to each other agree on what "in progress" looks like: this one drives
+/// [AppButton]'s own `isLoading` state instead of a bespoke spinner, since [AppButton] (unlike the
+/// icon-only [AppTappable] share button) already renders one.
+class _DownloadPdfButton extends ConsumerStatefulWidget {
+  const _DownloadPdfButton({required this.reportId});
+
+  final String reportId;
+
+  @override
+  ConsumerState<_DownloadPdfButton> createState() => _DownloadPdfButtonState();
+}
+
+class _DownloadPdfButtonState extends ConsumerState<_DownloadPdfButton> {
+  bool _busy = false;
+
+  Future<void> _open() async {
+    setState(() => _busy = true);
+    try {
+      await _openReportPdf(context, ref, widget.reportId);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppButton(
+      label: _busy ? 'Download in corso...' : 'Scarica PDF',
+      icon: _busy ? null : const Icon(LucideIcons.download, size: 16),
+      isLoading: _busy,
+      onPressed: _busy ? null : _open,
+    );
   }
 }
 

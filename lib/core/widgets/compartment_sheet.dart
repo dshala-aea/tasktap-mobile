@@ -67,7 +67,13 @@ void openCompartmentSheet(
             child: SingleChildScrollView(
               controller: scrollController,
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                // Keyboard inset (viewInsets) plus the bottom safe-area/home-indicator inset
+                // (padding) — the sheet's content otherwise sat flush against the home indicator
+                // on notched devices whenever the keyboard was closed, since viewInsets.bottom is
+                // 0 in that state and carries none of the safe-area reservation on its own.
+                bottom:
+                    MediaQuery.of(ctx).viewInsets.bottom +
+                    MediaQuery.of(ctx).padding.bottom,
               ),
               child: content,
             ),
