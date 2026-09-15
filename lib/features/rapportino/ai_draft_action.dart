@@ -18,9 +18,18 @@
 // mirrors, re-read from the notifier in its own initState — so this renders correctly even on a
 // screen that never opens the Dettagli sheet in the same session.
 //
-// Unlike the old full-hide-when-no-schedule behavior, this widget always renders: with no
-// scheduleId it shows a disabled button and explains why, rather than disappearing and leaving the
+// Unlike the old full-hide-when-no-schedule behavior, this widget always renders: with nothing to
+// draft from it shows a disabled button and explains why, rather than disappearing and leaving the
 // technician wondering where the AI button they remember from other rapportini went.
+//
+// Availability mirrors the backend's tiered context resolution (POST /api/ai/reports/draft, which
+// now accepts any of scheduleId/ticketId/cantiereId/voiceTranscript and only 400s when none are
+// present): the button is available whenever this rapportino has a schedule, a ticket, a cantiere,
+// OR the technician has already typed or dictated something into Titolo/Descrizione that can stand
+// in as the transcript. That last case matters because a cantiere-originated rapportino with no
+// ticket and no schedule is exactly the common case a mobile-created draft starts from — before
+// this, "no schedule" meant "no AI assist" for most real usage even once the backend stopped
+// requiring one.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
@@ -52,7 +61,13 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
     final state = ref.watch(reportEditorProvider(widget.reportId));
     final scheduleId = state.scheduleId;
     final ticketId = state.ticketId;
-    final available = scheduleId != null;
+    final cantiereId = state.cantiereId;
+    // Same derivation _generateAiDraft uses to seed voiceTranscript: whatever is already typed or
+    // dictated into Descrizione. Mirrored here so a rapportino with no schedule/ticket/cantiere but
+    // some typed text still shows the button as available, not just usable once pressed.
+    final seedTranscript = state.details.trim();
+    final available =
+        scheduleId != null || ticketId != null || cantiereId != null || seedTranscript.isNotEmpty;
     final quota = ref.watch(aiQuotaProvider);
     final exhausted = quota.valueOrNull?.exhausted ?? false;
     final disabled = !available || exhausted;
@@ -78,11 +93,11 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
                     ),
                   ),
                   Text(
-                    // No schedule to draft from takes priority over the quota text: it is the
-                    // reason the button won't work here regardless of what's left this month.
+                    // Nothing to draft from takes priority over the quota text: it is the reason
+                    // the button won't work here regardless of what's left this month.
                     !available
-                        ? 'Questo rapportino non è collegato a un ticket pianificato, quindi la '
-                              'bozza automatica AI non è disponibile.'
+                        ? 'Aggiungi un ticket o un cantiere, oppure scrivi o detta qualcosa in '
+                              'Descrizione prima di generare la bozza AI.'
                         : switch (quota) {
                             AsyncData(:final value) when value.exhausted =>
                               'Quota aziendale esaurita per questo mese',
@@ -108,7 +123,9 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
                 label: 'Genera',
                 size: AppButtonSize.sm,
                 fullWidth: false,
-                onPressed: disabled ? null : () => _generateAiDraft(scheduleId, ticketId),
+                onPressed: disabled
+                    ? null
+                    : () => _generateAiDraft(scheduleId, ticketId, cantiereId),
               ),
           ],
         ),
@@ -124,7 +141,7 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
   ///
   /// Never overwrites silently. Anything the technician has already typed is what they observed on
   /// site; a model's guess must not replace it without being asked.
-  Future<void> _generateAiDraft(String scheduleId, String? ticketId) async {
+  Future<void> _generateAiDraft(String? scheduleId, String? ticketId, String? cantiereId) async {
     if (_busy) return;
 
     final editor = ref.read(reportEditorProvider(widget.reportId));
@@ -156,6 +173,7 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
           .generateDraft(
             scheduleId: scheduleId,
             ticketId: ticketId,
+            cantiereId: cantiereId,
             voiceTranscript: voiceTranscript.isEmpty ? null : voiceTranscript,
           );
 

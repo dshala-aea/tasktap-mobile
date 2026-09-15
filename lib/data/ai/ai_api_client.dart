@@ -117,19 +117,23 @@ class AiApiClient {
 
   /// POST /api/ai/reports/draft
   ///
-  /// [scheduleId] is required by the contract: the server pulls the intervento's context from the
-  /// schedule, and without one there is nothing to draft from.
+  /// All four fields are optional on the wire: the server resolves context in tiers — schedule,
+  /// then ticket, then cantiere, then the raw transcript — and uses whichever most-specific one is
+  /// present. It only 400s when none of the four are given, so the caller just needs to pass
+  /// through whatever this rapportino actually has; there is no single required field anymore.
   Future<AiReportDraftDto> generateDraft({
-    required String scheduleId,
+    String? scheduleId,
     String? ticketId,
+    String? cantiereId,
     String? voiceTranscript,
   }) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/ai/reports/draft',
         data: {
-          'scheduleId': scheduleId,
+          'scheduleId': ?scheduleId,
           'ticketId': ?ticketId,
+          'cantiereId': ?cantiereId,
           'voiceTranscript': ?voiceTranscript,
         },
       );

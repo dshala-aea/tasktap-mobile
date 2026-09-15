@@ -125,6 +125,50 @@ void main() {
     });
   });
 
+  group('generateDraft request body', () {
+    test('omits scheduleId when absent and includes cantiereId when given', () async {
+      RequestOptions? captured;
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter((options) {
+        captured = options;
+        throw DioException(requestOptions: options, type: DioExceptionType.cancel);
+      });
+      final client = AiApiClient(dio);
+
+      await expectLater(
+        () => client.generateDraft(cantiereId: 'cant-1', voiceTranscript: 'detto a voce'),
+        throwsA(isA<AiFailure>()),
+      );
+
+      final body = captured!.data as Map<String, dynamic>;
+      expect(body.containsKey('scheduleId'), isFalse);
+      expect(body.containsKey('ticketId'), isFalse);
+      expect(body['cantiereId'], 'cant-1');
+      expect(body['voiceTranscript'], 'detto a voce');
+    });
+
+    test('includes scheduleId when given, still omitting the others', () async {
+      RequestOptions? captured;
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter((options) {
+        captured = options;
+        throw DioException(requestOptions: options, type: DioExceptionType.cancel);
+      });
+      final client = AiApiClient(dio);
+
+      await expectLater(
+        () => client.generateDraft(scheduleId: 'sched-1'),
+        throwsA(isA<AiFailure>()),
+      );
+
+      final body = captured!.data as Map<String, dynamic>;
+      expect(body['scheduleId'], 'sched-1');
+      expect(body.containsKey('ticketId'), isFalse);
+      expect(body.containsKey('cantiereId'), isFalse);
+      expect(body.containsKey('voiceTranscript'), isFalse);
+    });
+  });
+
   group('AiReportDraftDto', () {
     test('carries the model so the suggestion can admit what it is', () {
       final dto = AiReportDraftDto.fromJson({
