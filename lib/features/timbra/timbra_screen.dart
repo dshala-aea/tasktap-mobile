@@ -10,6 +10,7 @@ import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/row_icon_tile.dart';
+import '../../core/widgets/screen_header.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
@@ -36,7 +37,12 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 ///     every other screen. The sun-glare property is kept differently — the punch/pause buttons
 ///     are still a saturated flat fill with white text/icon, which stays legible regardless of
 ///     the surrounding theme, without needing a dedicated dark ground under them.
-///   - `ScreenHeader` is gone. The title and date are plain inline text at the top of the page.
+///   - `ScreenHeader` was dropped for a plain inline title + date (2026-09-04, see above) — every
+///     other timbra screen (`chiudi_turno_screen.dart`, `seleziona_cantiere_screen.dart`,
+///     `cantiere_timbra_screen.dart`) already used the shared header, and the divergence bought
+///     this root-tab screen nothing the header itself doesn't already support (no back chevron,
+///     no actions — both optional on `ScreenHeader`). Reinstated 2026-09-15 for that consistency;
+///     the date now rides as the header's own `subtitle`.
 ///   - Punch/pause are now full-width rounded-rect buttons, not a floating disc/small pill — more
 ///     touch target, no wasted side margins, and closer in shape to `AppButton`'s own full-width
 ///     convention used everywhere else in the app.
@@ -115,97 +121,102 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
-        child: Padding(
-          // pagePadding (19), the same horizontal grid every rack screen in the app reads its
-          // rail from — this screen no longer has a ScreenHeader drawing that line for it.
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.lg,
-            AppSpacing.pagePadding,
-            context.navClearance,
-          ),
-          // Fixed when there is room, scrolling when there is not — see _kFixedLayoutMinHeight.
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
-              final punchGuard = ref.watch(punchGuardProvider);
-              final reducedMotion = MediaQuery.disableAnimationsOf(context);
-
-              final content = <Widget>[
-                const _ScreenTitle(),
-                const SizedBox(height: 28),
-                _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
-                const SizedBox(height: 24),
-                // The blocked reason used to be conditionally inserted into the Column outright —
-                // an abrupt pop. AnimatedSize gives it a height transition in/out instead, without
-                // needing to know its own content's height up front.
-                AnimatedSize(
-                  duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 200),
-                  alignment: Alignment.topCenter,
-                  curve: Curves.easeInOut,
-                  child: punchGuard.blocked && punchGuard.reason != null
-                      ? Column(
-                          children: [
-                            _GuardBanner(reason: punchGuard.reason!),
-                            const SizedBox(height: 16),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
+        child: Column(
+          children: [
+            ScreenHeader(title: 'Timbra', subtitle: _formatDateLabel()),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.lg,
+                  AppSpacing.pagePadding,
+                  context.navClearance,
                 ),
-                _PunchButton(
-                  shiftState: shiftState,
-                  isLoading: punchState is AsyncLoading,
-                  guard: punchGuard,
-                  onTap: () {
-                    ref.read(punchNotifierProvider.notifier).punch(shiftState);
+                // Fixed when there is room, scrolling when there is not — see
+                // _kFixedLayoutMinHeight.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
+                    final punchGuard = ref.watch(punchGuardProvider);
+                    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+
+                    final content = <Widget>[
+                      _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
+                      const SizedBox(height: 24),
+                      // The blocked reason used to be conditionally inserted into the Column
+                      // outright — an abrupt pop. AnimatedSize gives it a height transition
+                      // in/out instead, without needing to know its own content's height up
+                      // front.
+                      AnimatedSize(
+                        duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 200),
+                        alignment: Alignment.topCenter,
+                        curve: Curves.easeInOut,
+                        child: punchGuard.blocked && punchGuard.reason != null
+                            ? Column(
+                                children: [
+                                  _GuardBanner(reason: punchGuard.reason!),
+                                  const SizedBox(height: 16),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      _PunchButton(
+                        shiftState: shiftState,
+                        isLoading: punchState is AsyncLoading,
+                        guard: punchGuard,
+                        onTap: () {
+                          ref.read(punchNotifierProvider.notifier).punch(shiftState);
+                        },
+                      ),
+                      if (shiftState.isOnShift) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _PauseButton(
+                          shiftState: shiftState,
+                          isLoading: punchState is AsyncLoading,
+                          guard: ref.watch(pauseGuardProvider),
+                          onTap: () {
+                            ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                          },
+                        ),
+                      ],
+                      const SizedBox(height: AppSpacing.xl),
+                    ];
+
+                    final sessions = sessionsAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (e, _) => Text(
+                        'Errore sessioni: $e',
+                        style: TextStyle(color: context.colors.red, fontSize: 12),
+                      ),
+                      data: (list) => _SessionsCard(
+                        sessions: list,
+                        total: total,
+                        hasPendingSync: ref.watch(hasPendingSyncProvider),
+                        fillHeight: fits,
+                      ),
+                    );
+
+                    if (!fits) {
+                      return SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [...content, sessions],
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ...content,
+                        Expanded(child: sessions),
+                      ],
+                    );
                   },
                 ),
-                if (shiftState.isOnShift) ...[
-                  const SizedBox(height: 14),
-                  _PauseButton(
-                    shiftState: shiftState,
-                    isLoading: punchState is AsyncLoading,
-                    guard: ref.watch(pauseGuardProvider),
-                    onTap: () {
-                      ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
-                    },
-                  ),
-                ],
-                const SizedBox(height: 28),
-              ];
-
-              final sessions = sessionsAsync.when(
-                loading: () => const SizedBox.shrink(),
-                error: (e, _) => Text(
-                  'Errore sessioni: $e',
-                  style: TextStyle(color: context.colors.red, fontSize: 12),
-                ),
-                data: (list) => _SessionsCard(
-                  sessions: list,
-                  total: total,
-                  hasPendingSync: ref.watch(hasPendingSyncProvider),
-                  fillHeight: fits,
-                ),
-              );
-
-              if (!fits) {
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [...content, sessions],
-                  ),
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  ...content,
-                  Expanded(child: sessions),
-                ],
-              );
-            },
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -214,6 +225,38 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
 
 /// Below this the controls alone would leave the session list unreadable, so the page scrolls.
 const double _kFixedLayoutMinHeight = 640;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Date label
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// The calendar date, not the clock — this never needs the per-second tick `_SmallClock` does, so
+/// it reads `DateTime.now()` once per build rather than watching `nowProvider`. Feeds
+/// `ScreenHeader`'s `subtitle`.
+///
+/// Locale-neutral format to avoid requiring `initializeDateFormatting`. Renders as e.g.
+/// "LUN 22 GIU 2026".
+String _formatDateLabel() {
+  final now = DateTime.now();
+  const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
+  const monthNames = [
+    'GEN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAG',
+    'GIU',
+    'LUG',
+    'AGO',
+    'SET',
+    'OTT',
+    'NOV',
+    'DIC',
+  ];
+  final day = dayNames[now.weekday - 1];
+  final month = monthNames[now.month - 1];
+  return '$day ${now.day} $month ${now.year}';
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Shared duration formatting
@@ -228,79 +271,6 @@ String _formatHoursMinutes(Duration d) {
 String _formatHoursMinutesSeconds(Duration d) {
   final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
   return '${_formatHoursMinutes(d)} ${s}s';
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// _ScreenTitle
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// Replaces the old fixed-dark `ScreenHeader` — plain inline title + date, on the same flipping
-/// ground as the rest of the page. No back chevron (root tab) and no actions (nothing here is a
-/// notification or a profile setting).
-class _ScreenTitle extends StatelessWidget {
-  const _ScreenTitle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          'Timbra',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.3,
-            color: context.colors.ink,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const _DateLabel(),
-      ],
-    );
-  }
-}
-
-class _DateLabel extends StatelessWidget {
-  const _DateLabel();
-
-  @override
-  Widget build(BuildContext context) {
-    // The calendar date, not the clock — this never needs the per-second tick _SmallClock does,
-    // so it reads DateTime.now() once per rebuild rather than watching nowProvider.
-    final now = DateTime.now();
-    // Use locale-neutral format to avoid requiring initializeDateFormatting.
-    // Displays as e.g. "LUN 22 GIU 2026"
-    final dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
-    final monthNames = [
-      'GEN',
-      'FEB',
-      'MAR',
-      'APR',
-      'MAG',
-      'GIU',
-      'LUG',
-      'AGO',
-      'SET',
-      'OTT',
-      'NOV',
-      'DIC',
-    ];
-    final day = dayNames[now.weekday - 1];
-    final month = monthNames[now.month - 1];
-    final formatted = '$day ${now.day} $month ${now.year}';
-    return Text(
-      formatted,
-      style: TextStyle(
-        fontFamily: 'Inter',
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        color: context.colors.inkMuted,
-      ),
-      textAlign: TextAlign.center,
-    );
-  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -472,6 +442,28 @@ class _GuardBanner extends StatelessWidget {
 // _PunchButton
 // ══════════════════════════════════════════════════════════════════════════════
 
+// TODO(design-consistency): _PunchButton (and _PauseButton below) hand-roll their own
+// loading/press states instead of using the shared `AppButton`/`AppButton.danger` this same
+// feature uses elsewhere (chiudi_turno_screen.dart's "Conferma uscita", cantiere_timbra_screen.
+// dart's "Inizia timbratura"/"Timbra uscita cantiere"). Deliberately NOT migrated — audited and
+// judged a case where `AppButton` cannot express the same behaviour without a real regression,
+// not just a style mismatch:
+//   - Colour: this button's fill is `AppColors.Y`/`AppColors.stopDark` — fixed, theme-invariant
+//     hex values, not one of `AppButton`'s five enum-selected variants. That's not an arbitrary
+//     choice: this class's own header comment (above, "sun-glare property") explains why a
+//     flipping token pair (e.g. `AppButtonVariant.danger`'s `redSoft`/`red`) fails contrast in one
+//     theme or the other for fixed-white icon/text on top of it, while `AppColors.Y`/`stopDark`
+//     clear >7:1 regardless of theme. `AppButton` has no variant, or any way to pass a custom
+//     fill, that reproduces this.
+//   - Press feedback: this button deliberately has NO ink splash (see the tap handler below) — a
+//     splash over a saturated flat fill read as a smudge on a real device, replaced with an
+//     `AnimatedScale` press-down instead. `AppButton` always wraps its content in a Material
+//     `InkWell` with a splash; adopting it would reintroduce exactly the smudge this screen's own
+//     redesign moved away from.
+//   - `_PauseButton` similarly needs an accent colour that changes with state (cyan on resume,
+//     amber on pause) — again outside `AppButton`'s fixed variant palette.
+// If `AppButton` grows a custom-fill-colour escape hatch and/or a no-splash press mode, this pair
+// is the one caller left that should migrate onto it.
 class _PunchButton extends StatefulWidget {
   const _PunchButton({
     required this.shiftState,
@@ -607,6 +599,10 @@ class _PunchButtonState extends State<_PunchButton> {
 /// small centered chip. `AppCard`'s own default fill/border already flip with the app theme like
 /// the rest of the page now that this screen isn't a fixed-dark ground anymore — same
 /// `context.colors.surface`/`borderLight` pair `VetroGlass`'s own defaults used to read here.
+///
+/// Not migrated onto `AppButton` either — see the TODO on [_PunchButton] above (same accent-colour
+/// constraint applies here: cyan on resume vs. amber on pause, outside `AppButton`'s fixed variant
+/// palette).
 class _PauseButton extends StatelessWidget {
   const _PauseButton({
     required this.shiftState,

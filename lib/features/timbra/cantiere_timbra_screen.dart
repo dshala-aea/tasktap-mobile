@@ -654,6 +654,22 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
         await ref.read(activeCantiereLogProvider.notifier).refresh();
         setState(() => _isLoading = false);
       }
+      // Solo check-in used to leave no feedback at all beyond the screen swapping to the
+      // active-session body — the batch-start path already toasts its result (see
+      // _handleBatchStart below); this brings the solo path to parity. Folds in a GPS warning
+      // rather than staying silent about it when `location` came back null — see this method's
+      // own GPS-purpose comment above for why a null position is allowed to proceed at all.
+      // Re-checked (not reused from above): the `refresh()` await just ran, so `mounted` needs a
+      // fresh read immediately before this `context` use.
+      if (mounted) {
+        showAppToast(
+          context,
+          message: location == null
+              ? 'Ingresso cantiere registrato senza posizione GPS.'
+              : 'Ingresso cantiere registrato con successo.',
+          tone: location == null ? ToastTone.warning : ToastTone.success,
+        );
+      }
     } on DioException catch (e) {
       if (isOfflineFailure(e)) {
         // Not reachable — queue locally instead of failing the punch outright. The batch upsert
@@ -673,7 +689,20 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
               longitude: location?.lng,
             );
         unawaited(ref.read(cantiereTimbraSyncServiceProvider).syncNow());
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+          // Contrast: chiudi_turno_screen.dart's equivalent offline clock-out already toasts this
+          // — the clock-in side used to stay silent, a real gap for a safety/payroll-relevant
+          // record that a technician has no other way of knowing was captured only locally.
+          showAppToast(
+            context,
+            message: location == null
+                ? 'Ingresso registrato offline e senza posizione GPS: verrà inviato al ritorno '
+                      'della connessione.'
+                : 'Ingresso registrato offline: verrà inviato al ritorno della connessione.',
+            tone: ToastTone.warning,
+          );
+        }
       } else if (mounted) {
         setState(() {
           _isLoading = false;
@@ -745,10 +774,15 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
       // instead of it — so the lead always gets a count of what worked, not just what didn't.
       final successCount = response.results.where((r) => r.success).length;
       if (mounted) {
+        final baseMessage = successCount == 1
+            ? 'Timbrata 1 persona'
+            : 'Timbrate $successCount persone';
+        // Same GPS-null note _handleStartCantiere's own toast carries — the batch call shares one
+        // position fetch for the whole crew, so a missing fix is worth surfacing here too.
         showAppToast(
           context,
-          message: successCount == 1 ? 'Timbrata 1 persona' : 'Timbrate $successCount persone',
-          tone: ToastTone.success,
+          message: location == null ? '$baseMessage (senza posizione GPS)' : baseMessage,
+          tone: location == null ? ToastTone.warning : ToastTone.success,
         );
       }
       final failures = response.results.where((r) => !r.success).toList();
@@ -1129,7 +1163,7 @@ class _CheckInBody extends ConsumerWidget {
           const SizedBox(height: 16),
 
           if (errorMessage != null) ...[
-            _ErrorBanner(message: errorMessage!),
+            TimbraErrorBanner(message: errorMessage!),
             const SizedBox(height: 16),
           ],
 
@@ -1507,10 +1541,14 @@ class _ActiveSessionBody extends ConsumerWidget {
   }
 }
 
-// ── _ErrorBanner ──────────────────────────────────────────────────────────────
+// ── TimbraErrorBanner ────────────────────────────────────────────────────────
 
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
+/// Shared inline error banner for the cantiere check-in/check-out flow — public (not the usual
+/// private `_Foo` for a file-local widget) so `ChiudiTurnoScreen`'s own end-of-session form can
+/// reuse it instead of hand-duplicating the same red box (which is exactly what it used to do —
+/// see that file's own `_errorMessage` rendering).
+class TimbraErrorBanner extends StatelessWidget {
+  const TimbraErrorBanner({super.key, required this.message});
   final String message;
 
   @override

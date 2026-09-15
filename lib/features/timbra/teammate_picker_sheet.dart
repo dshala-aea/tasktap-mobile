@@ -110,88 +110,67 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                       AppSpacing.pagePadding,
                       AppSpacing.base,
                     ),
-                    children: [
-                      AppCard(
-                        padding: EdgeInsets.zero,
-                        child: Column(
-                          children: widget.assignments.asMap().entries.map((entry) {
-                            final i = entry.key;
-                            final a = entry.value;
-                            final isSelected = _selected.contains(a.userId);
-                            final isLast = i == widget.assignments.length - 1;
-                            // Same fallback contract as everywhere else colleagueNameProvider is
-                            // read: fall back to the raw id rather than show nothing when the
-                            // local mirror doesn't (yet) know this colleague.
-                            final name =
-                                ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
+                    // One `AppCard.pressable` per row, same selectable-row primitive
+                    // `seleziona_cantiere_screen.dart`'s own single-select cantiere picker uses —
+                    // this used to hand-roll a single `AppCard` wrapping a `Column` of raw
+                    // `InkWell`s with a manually computed top/bottom corner radius per row index, a
+                    // second selectable-row pattern doing the same job as that screen's own one.
+                    children: widget.assignments.map((a) {
+                      final isSelected = _selected.contains(a.userId);
+                      // Same fallback contract as everywhere else colleagueNameProvider is read:
+                      // fall back to the raw id rather than show nothing when the local mirror
+                      // doesn't (yet) know this colleague.
+                      final name =
+                          ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
 
-                            // A screen reader otherwise announces only the name — never whether
-                            // this row is currently checked — because the checkbox-like icon is
-                            // purely visual (an Icon carries no semantic checked state on its
-                            // own).
-                            return Semantics(
-                              button: true,
-                              checked: isSelected,
-                              child: InkWell(
-                                onTap: () => _toggle(a.userId),
-                                borderRadius: i == 0
-                                    ? const BorderRadius.vertical(top: Radius.circular(20))
-                                    : (isLast
-                                          ? const BorderRadius.vertical(bottom: Radius.circular(20))
-                                          : BorderRadius.zero),
-                                child: Container(
-                                  constraints: const BoxConstraints(minHeight: 56),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.base,
-                                    vertical: AppSpacing.md,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? AppColors.Y.withAlpha(31)
-                                        : Colors.transparent,
-                                    border: isLast
-                                        ? null
-                                        : Border(bottom: BorderSide(color: ctx.colors.borderLight)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        isSelected ? LucideIcons.checkCircle2 : LucideIcons.square,
-                                        size: 20,
-                                        color: isSelected ? AppColors.Y : ctx.colors.inkMuted,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          name,
-                                          style: TextStyle(
-                                            fontFamily: 'Inter',
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: ctx.colors.ink,
-                                          ),
-                                        ),
-                                      ),
-                                      if (a.isLead)
-                                        Text(
-                                          'LEAD',
-                                          style: TextStyle(
-                                            fontFamily: 'Inter',
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.6,
-                                            color: ctx.colors.inkMuted,
-                                          ),
-                                        ),
-                                    ],
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        // A screen reader otherwise announces only the name — never whether this
+                        // row is currently checked — because the checkbox-like icon is purely
+                        // visual (an Icon carries no semantic checked state on its own).
+                        child: Semantics(
+                          button: true,
+                          checked: isSelected,
+                          child: AppCard.pressable(
+                            onTap: () => _toggle(a.userId),
+                            backgroundColor: isSelected ? AppColors.Y.withAlpha(31) : null,
+                            borderColor: isSelected ? AppColors.Y : null,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isSelected ? LucideIcons.checkCircle2 : LucideIcons.square,
+                                  size: 20,
+                                  color: isSelected ? AppColors.Y : ctx.colors.inkMuted,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: ctx.colors.ink,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          }).toList(),
+                                if (a.isLead)
+                                  Text(
+                                    'LEAD',
+                                    style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.6,
+                                      color: ctx.colors.inkMuted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      );
+                    }).toList(),
                   ),
           ),
           Padding(
@@ -199,7 +178,12 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
               AppSpacing.pagePadding,
               AppSpacing.sm,
               AppSpacing.pagePadding,
-              AppSpacing.base + MediaQuery.of(ctx).viewInsets.bottom,
+              // Keyboard inset (viewInsets) plus the bottom safe-area/home-indicator inset
+              // (padding) — the button otherwise sat flush against the home indicator on notched
+              // devices whenever the keyboard was closed, since viewInsets.bottom is 0 in that
+              // state and carries none of the safe-area reservation on its own. Same fix as
+              // compartment_sheet.dart's own scroll padding.
+              AppSpacing.base + MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
             ),
             child: AppButton(
               label: 'Conferma (${_selected.length})',

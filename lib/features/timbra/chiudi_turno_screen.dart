@@ -38,6 +38,7 @@ import '../../presentation/providers/schedule_providers.dart';
 import '../cantiere/cantiere_providers.dart';
 import 'cantiere_timbra_screen.dart'
     show
+        TimbraErrorBanner,
         activeCantiereLogProvider,
         cantiereNetworkErrorMessage,
         clampedElapsedSinceMidnight,
@@ -70,7 +71,16 @@ class ChiudiTurnoScreen extends ConsumerStatefulWidget {
 class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
   final _descriptionCtrl = TextEditingController();
   final _safetyNotesCtrl = TextEditingController();
-  bool _isLoading = false;
+
+  // Two separate flags, not one shared `_isLoading` — "Conferma uscita" and "Esci senza
+  // aggiungere note" are two different actions that happen to call the same `_confirm` method.
+  // The old single flag drove both buttons' loading state off whichever one was tapped, so
+  // tapping the secondary link spun the primary button's own spinner instead of the link that was
+  // actually pressed.
+  bool _isConfirmLoading = false;
+  bool _isSkipLoading = false;
+  bool get _isBusy => _isConfirmLoading || _isSkipLoading;
+
   String? _errorMessage;
 
   @override
@@ -89,7 +99,11 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
     if (!await confirmGpsPurpose(context, ref)) return;
 
     setState(() {
-      _isLoading = true;
+      if (skipNotes) {
+        _isSkipLoading = true;
+      } else {
+        _isConfirmLoading = true;
+      }
       _errorMessage = null;
     });
 
@@ -122,14 +136,16 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
         _onEndedSuccessfully(offline: true);
       } else if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isConfirmLoading = false;
+          _isSkipLoading = false;
           _errorMessage = cantiereNetworkErrorMessage(e);
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isConfirmLoading = false;
+          _isSkipLoading = false;
           _errorMessage = 'Errore imprevisto. Riprova.';
         });
       }
@@ -202,7 +218,10 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                           if (ticketLabel != null) ...[
                             const SizedBox(height: 4),
                             Padding(
-                              padding: const EdgeInsets.only(left: 26),
+                              // Aligns under the name text above, not under its leading icon —
+                              // the icon's own size (18) plus the AppSpacing.sm gap after it (8),
+                              // not an unexplained flat 26.
+                              padding: const EdgeInsets.only(left: 18 + AppSpacing.sm),
                               child: Text(
                                 ticketLabel,
                                 style: TextStyle(
@@ -252,38 +271,15 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                     const SizedBox(height: 16),
 
                     if (_errorMessage != null) ...[
-                      Container(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          color: context.colors.redSoft,
-                          borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _errorMessage!,
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 13,
-                                  color: context.colors.red,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      TimbraErrorBanner(message: _errorMessage!),
                       const SizedBox(height: 16),
                     ],
 
                     AppButton.danger(
                       label: 'Conferma uscita',
                       icon: const Icon(LucideIcons.logOut),
-                      isLoading: _isLoading,
-                      onPressed: _isLoading ? null : () => _confirm(),
+                      isLoading: _isConfirmLoading,
+                      onPressed: _isBusy ? null : () => _confirm(),
                     ),
 
                     const SizedBox(height: 12),
@@ -292,20 +288,32 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(minHeight: 44),
                         child: AppTappable(
-                          onTap: _isLoading ? null : () => _confirm(skipNotes: true),
+                          onTap: _isBusy ? null : () => _confirm(skipNotes: true),
                           padding: const EdgeInsets.symmetric(
                             horizontal: AppSpacing.md,
                             vertical: AppSpacing.sm,
                           ),
-                          child: Text(
-                            'Esci senza aggiungere note',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.inkMuted,
-                            ),
-                          ),
+                          // Its own loading feedback, not the primary button's — see _isSkipLoading's
+                          // own doc comment on the bug this replaces (tapping this link used to spin
+                          // "Conferma uscita" instead of showing anything here).
+                          child: _isSkipLoading
+                              ? SizedBox(
+                                  width: 13,
+                                  height: 13,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: context.colors.inkMuted,
+                                  ),
+                                )
+                              : Text(
+                                  'Esci senza aggiungere note',
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.inkMuted,
+                                  ),
+                                ),
                         ),
                       ),
                     ),

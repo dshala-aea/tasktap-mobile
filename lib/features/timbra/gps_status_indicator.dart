@@ -79,11 +79,14 @@ class GpsStatusIndicator extends ConsumerWidget {
         Flexible(
           child: Text(
             label,
+            // Follows the same state colour as the icon/dot above — the label used to stay a
+            // fixed inkMuted regardless of state, so the two elements visually disagreed (a red
+            // dot next to muted-grey text reads as "nothing wrong").
             style: TextStyle(
               fontFamily: 'Inter',
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: context.colors.inkMuted,
+              color: dotColor,
             ),
           ),
         ),
