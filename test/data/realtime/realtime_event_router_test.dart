@@ -4,6 +4,7 @@
 // FutureProvider target; invalidation + a triggered general sync for the Drift-mirrored
 // StreamProvider targets, whose real refresh comes from the sync writing new rows, not from
 // invalidation alone).
+import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +15,8 @@ import 'package:tasktap_mobile/data/realtime/realtime_connection.dart';
 import 'package:tasktap_mobile/data/realtime/realtime_event_router.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show appDatabaseProvider, syncServiceProvider, syncProvider, SyncService, SyncStatus;
+import 'package:tasktap_mobile/features/altro/notifiche_provider.dart'
+    show NotificheNotifier, notificheProvider;
 import 'package:tasktap_mobile/features/cantiere/cantiere_providers.dart' show cantiereByIdProvider;
 import 'package:tasktap_mobile/features/rapportino/rapportino_list_providers.dart'
     show rapportiniListProvider;
@@ -22,6 +25,21 @@ import 'package:tasktap_mobile/presentation/providers/schedule_providers.dart'
     show ticketByIdProvider;
 
 class MockSyncService extends Mock implements SyncService {}
+
+/// Records [refresh] calls instead of actually hitting the network — `Env.apiBaseUrl` is empty
+/// in this test suite (no API_BASE_URL dart-define), which makes the real `refresh()` a silent
+/// no-op that leaves no observable trace, so a plain [NotificheNotifier] can't tell us whether
+/// [routeRealtimeNotification] actually called it.
+class _RefreshTrackingNotifier extends NotificheNotifier {
+  _RefreshTrackingNotifier(super.db, super.dio, super.ref);
+
+  int refreshCalls = 0;
+
+  @override
+  Future<void> refresh() async {
+    refreshCalls++;
+  }
+}
 
 void main() {
   test('a TicketWorkLogStarted event invalidates ticketWorklogsProvider for that ticket', () async {
@@ -195,6 +213,39 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(invalidated, isTrue);
       verify(() => mockSyncService.sync()).called(1);
+    },
+  );
+
+  test(
+    'routeRealtimeNotification triggers the same notificheProvider refresh app-resume uses',
+    () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      late _RefreshTrackingNotifier notifier;
+
+      final container = ProviderContainer(
+        overrides: [
+          notificheProvider.overrideWith((ref) {
+            notifier = _RefreshTrackingNotifier(db, Dio(), ref);
+            return notifier;
+          }),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await db.close();
+      });
+
+      // Establish the provider instance before routing a notification. NotificheNotifier's
+      // constructor kicks off an async, unawaitable _loadFromCache() Drift query (see
+      // notifiche_screen_test.dart's own note on this) — give it a turn of the event loop to
+      // settle before tearDown disposes the container, otherwise that query resolves against an
+      // already-disposed StateNotifier and throws.
+      container.read(notificheProvider);
+      await Future<void>.delayed(Duration.zero);
+
+      routeRealtimeNotification(container);
+
+      expect(notifier.refreshCalls, 1);
     },
   );
 }

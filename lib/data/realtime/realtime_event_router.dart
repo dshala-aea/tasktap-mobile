@@ -34,6 +34,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/admin/cantieri/admin_cantiere_detail_screen.dart'
     show adminCantiereDetailProvider;
 import '../../features/admin/reports/admin_report_list_screen.dart' show adminReportsProvider;
+import '../../features/altro/notifiche_provider.dart' show notificheProvider;
 import '../../features/cantiere/cantiere_providers.dart' show cantiereByIdProvider;
 import '../../features/rapportino/rapportino_list_providers.dart' show rapportiniListProvider;
 import '../../features/ticket/ticket_providers.dart' show ticketWorklogsProvider;
@@ -85,6 +86,17 @@ void routeRealtimeEvent(ProviderContainer container, RealtimeEvent event) {
   }
 }
 
+/// Refreshes [notificheProvider] on a realtime-delivered `ReceiveNotification` message — the same
+/// call `home_shell.dart`'s `didChangeAppLifecycleState` already makes on every app-foreground
+/// resume, reused here rather than a second invalidation/refetch mechanism. The message's own
+/// fields (title/body/etc.) are deliberately not written straight into local state: like every
+/// other realtime message routed by this file, it's a signal to re-fetch through the existing,
+/// already-trusted read path (Drift cache + `GET /api/notifications`), not a second source of
+/// truth for the notification list.
+void routeRealtimeNotification(ProviderContainer container) {
+  container.read(notificheProvider.notifier).refresh();
+}
+
 /// Call once on app start (HomeShell.initState via addPostFrameCallback, alongside every other
 /// reconnect-triggered watcher — see home_shell.dart). Starts the best-effort realtime connection
 /// and routes every event it delivers via [routeRealtimeEvent].
@@ -121,12 +133,20 @@ VoidCallback initRealtimeEventWatcher(WidgetRef ref) {
 
   final eventsSub = connection.events.listen((event) => routeRealtimeEvent(container, event));
 
+  // A real per-user notification (ticket-assigned, report-reviewed, etc.) arriving while
+  // foregrounded — see routeRealtimeNotification's own doc comment for why this reuses the
+  // existing resume-triggered refresh rather than writing the message straight into state.
+  final notificationsSub = connection.notifications.listen(
+    (_) => routeRealtimeNotification(container),
+  );
+
   final reconnectCancel = ref.read(connectivityProvider.notifier).onReconnect(() {
     connection.reconnect();
   });
 
   return () {
     eventsSub.cancel();
+    notificationsSub.cancel();
     reconnectCancel();
     connection.stop();
   };

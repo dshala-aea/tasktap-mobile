@@ -16,6 +16,107 @@ void main() {
     expect(event.data['ticketId'], 't1');
   });
 
+  test('parses a ReceiveNotification payload into a RealtimeNotificationMessage', () {
+    final raw = {
+      'id': 'n1',
+      'title': 'Ticket assegnato',
+      'message': 'Ti è stato assegnato il ticket #42.',
+      'createdAt': '2026-09-04T10:00:00Z',
+    };
+
+    final message = RealtimeNotificationMessage.fromHubPayload(raw);
+
+    expect(message.id, 'n1');
+    expect(message.title, 'Ticket assegnato');
+    expect(message.message, 'Ti è stato assegnato il ticket #42.');
+    expect(message.createdAt, DateTime.parse('2026-09-04T10:00:00Z'));
+  });
+
+  group('ReceiveNotification handling', () {
+    // connection.on('ReceiveNotification', ...) is only ever registered inside connect() against
+    // a real HubConnection — untestable without a live server (see this file's own note below).
+    // handleReceiveNotificationForTest invokes the exact same handler directly, the same way
+    // SignalR itself would call it.
+    test('a well-formed message is parsed and emitted on notifications', () async {
+      final connection = RealtimeConnection(accessTokenProvider: () => '');
+      addTearDown(connection.dispose);
+
+      final received = <RealtimeNotificationMessage>[];
+      final sub = connection.notifications.listen(received.add);
+      addTearDown(sub.cancel);
+
+      connection.handleReceiveNotificationForTest([
+        {
+          'id': 'n1',
+          'title': 'Ticket assegnato',
+          'message': 'Ti è stato assegnato il ticket #42.',
+          'createdAt': '2026-09-04T10:00:00Z',
+        },
+      ]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, hasLength(1));
+      expect(received.single.id, 'n1');
+      expect(received.single.title, 'Ticket assegnato');
+    });
+
+    test('null/empty arguments do not throw and emit nothing', () async {
+      final connection = RealtimeConnection(accessTokenProvider: () => '');
+      addTearDown(connection.dispose);
+
+      final received = <RealtimeNotificationMessage>[];
+      final sub = connection.notifications.listen(received.add);
+      addTearDown(sub.cancel);
+
+      expect(() => connection.handleReceiveNotificationForTest(null), returnsNormally);
+      expect(() => connection.handleReceiveNotificationForTest(const []), returnsNormally);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, isEmpty);
+    });
+
+    test('a non-Map payload does not throw and emits nothing', () async {
+      final connection = RealtimeConnection(accessTokenProvider: () => '');
+      addTearDown(connection.dispose);
+
+      final received = <RealtimeNotificationMessage>[];
+      final sub = connection.notifications.listen(received.add);
+      addTearDown(sub.cancel);
+
+      expect(() => connection.handleReceiveNotificationForTest(['not a map']), returnsNormally);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, isEmpty);
+    });
+
+    test('a Map payload with missing/malformed fields does not throw and emits nothing', () async {
+      final connection = RealtimeConnection(accessTokenProvider: () => '');
+      addTearDown(connection.dispose);
+
+      final received = <RealtimeNotificationMessage>[];
+      final sub = connection.notifications.listen(received.add);
+      addTearDown(sub.cancel);
+
+      // Missing 'title'/'message'/'createdAt' entirely.
+      expect(
+        () => connection.handleReceiveNotificationForTest([
+          {'id': 'n1'},
+        ]),
+        returnsNormally,
+      );
+      // 'createdAt' present but not a parseable date.
+      expect(
+        () => connection.handleReceiveNotificationForTest([
+          {'id': 'n1', 'title': 't', 'message': 'm', 'createdAt': 'not-a-date'},
+        ]),
+        returnsNormally,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(received, isEmpty);
+    });
+  });
+
   // The rest of connect()/reconnect()'s behavior (the state-aware "already connected" guard, the
   // onclose handler that clears `_connection` so a dead automatic-reconnect doesn't wedge future
   // connect() calls forever) exercises the real signalr_hub HubConnection, which this class builds

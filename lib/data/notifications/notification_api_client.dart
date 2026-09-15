@@ -173,6 +173,15 @@ const _kNotificationTypeNames = [
   'SystemAnnouncement', // 11
   'UserMention', // 12
   'LowStock', // 13
+  'AbsenceRequestDecided', // 14
+  'MaintenanceDue', // 15
+  'OvertimeThresholdCrossed', // 16
+  'ReportReviewed', // 17
+  'ReportRejected', // 18
+  'ReportCancelled', // 19
+  'AbsenceRequestSubmitted', // 20
+  'CantiereAssigned', // 21
+  'SeatLimitAlert', // 22
 ];
 
 const _kDeliveryTypeNames = ['InApp', 'Push', 'Email', 'SMS'];

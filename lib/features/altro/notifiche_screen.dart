@@ -220,6 +220,30 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
 // Notification row
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// Icon for a notification's `tipo` (the wire `NotificationTypeEnum` name — see
+/// notification_api_client.dart's `_kNotificationTypeNames`). Falls back to the generic bell for
+/// any type not covered here — this deliberately doesn't attempt full 1:1 coverage of every
+/// notification type, only the ones with an unambiguous, already-established icon elsewhere in
+/// this app (ticket icons match ticket_list_screen.dart; report icons match
+/// ticket_detail_screen.dart's 'Report' tab / step_riepilogo.dart's own alertTriangle for a
+/// problem state; hardHat matches cantiere/worksite iconography app-wide).
+IconData _iconForTipo(String? tipo) {
+  return switch (tipo) {
+    'TicketAssigned' || 'TicketCreated' => LucideIcons.ticket,
+    'TicketStatusChanged' || 'TicketCompleted' => LucideIcons.clipboardCheck,
+    'TicketOverdue' => LucideIcons.alertTriangle,
+    'ScheduleReminder' || 'ScheduleStarting' => LucideIcons.calendar,
+    'WorkLogSubmitted' => LucideIcons.fileText,
+    'ReportReviewed' => LucideIcons.clipboardCheck,
+    'ReportRejected' => LucideIcons.fileX,
+    'ReportCancelled' => LucideIcons.calendarX,
+    'AbsenceRequestSubmitted' || 'AbsenceRequestDecided' => LucideIcons.calendarCheck,
+    'CantiereAssigned' => LucideIcons.hardHat,
+    'SeatLimitAlert' => LucideIcons.alertTriangle,
+    _ => LucideIcons.bell,
+  };
+}
+
 class _NotificaRow extends StatelessWidget {
   const _NotificaRow({
     required this.notifica,
@@ -244,7 +268,7 @@ class _NotificaRow extends StatelessWidget {
               color: context.colors.blue.withAlpha(26),
               borderRadius: AppRack.insetShape,
             ),
-            child: Icon(LucideIcons.bell, size: 20, color: context.colors.blue),
+            child: Icon(_iconForTipo(notifica.tipo), size: 20, color: context.colors.blue),
           ),
           if (!notifica.letta)
             Positioned(

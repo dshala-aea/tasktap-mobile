@@ -2,8 +2,16 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // RealtimeConnection
 //
-// One persistent SignalR connection to NotificationHub's tenant-broadcast
-// "ReceiveEvent" messages, regardless of how many screens are open. Auth is via an
+// One persistent SignalR connection to NotificationHub, regardless of how many screens are
+// open. Two independent message kinds arrive on it:
+//   - "ReceiveEvent": tenant-wide broadcast messages (`{type,data,occurredAt}`), parsed into
+//     [RealtimeEvent] and exposed via [events].
+//   - "ReceiveNotification": per-user real notifications (`{id,title,message,createdAt}` — every
+//     ticket-assigned/report-reviewed/etc. notification the backend creates for this user),
+//     parsed into [RealtimeNotificationMessage] and exposed via [notifications]. The web frontend
+//     already listens for this; this is the mobile side of the same delivery path.
+//
+// Auth is via an
 // accessTokenFactory, which signalr_hub appends as ?access_token=<jwt> on the
 // websocket handshake URL — matching Program.cs's existing
 // JwtBearerEvents.OnMessageReceived handling for the /api/hubs path prefix (the
@@ -35,6 +43,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signalr_hub/signalr_client.dart';
 
@@ -54,6 +63,27 @@ extension type RealtimeEvent._(({String type, Map<String, dynamic> data}) _value
   Map<String, dynamic> get data => _value.data;
 }
 
+/// A parsed `"ReceiveNotification"` hub message: `{ id, title, message, createdAt }` on the
+/// wire — a per-user real notification (the same row `GET /api/notifications` would eventually
+/// return), not a tenant-wide broadcast. Mirrors [RealtimeEvent]'s `extension type` pattern for
+/// structural consistency with the rest of this file.
+extension type RealtimeNotificationMessage._(
+  ({String id, String title, String message, DateTime createdAt}) _value
+) {
+  factory RealtimeNotificationMessage.fromHubPayload(Map<String, dynamic> raw) =>
+      RealtimeNotificationMessage._((
+        id: raw['id'] as String,
+        title: raw['title'] as String,
+        message: raw['message'] as String,
+        createdAt: DateTime.parse(raw['createdAt'] as String),
+      ));
+
+  String get id => _value.id;
+  String get title => _value.title;
+  String get message => _value.message;
+  DateTime get createdAt => _value.createdAt;
+}
+
 class RealtimeConnection {
   RealtimeConnection({required String Function() accessTokenProvider})
     : _accessTokenProvider = accessTokenProvider;
@@ -61,10 +91,16 @@ class RealtimeConnection {
   final String Function() _accessTokenProvider;
   HubConnection? _connection;
   final _eventsController = StreamController<RealtimeEvent>.broadcast();
+  final _notificationsController = StreamController<RealtimeNotificationMessage>.broadcast();
 
   /// Parsed `ReceiveEvent` messages. A plain broadcast stream — safe for any number of
   /// listeners (or none), and never closes on connection loss.
   Stream<RealtimeEvent> get events => _eventsController.stream;
+
+  /// Parsed `ReceiveNotification` messages — this user's own real notifications, delivered as
+  /// they're created rather than waiting for the next poll/resume. Same broadcast-stream
+  /// contract as [events].
+  Stream<RealtimeNotificationMessage> get notifications => _notificationsController.stream;
 
   /// Connects if not already connected/connecting. No-op when there's no access token
   /// (unauthenticated), no configured API base URL, or a connection attempt is already in
@@ -110,6 +146,8 @@ class RealtimeConnection {
         }
       });
 
+      connection.on('ReceiveNotification', _handleReceiveNotification);
+
       // Fires on ANY close — a clean stop(), the server closing it, or the automatic-reconnect
       // policy above exhausting its retries and giving up. Clearing `_connection` here (rather
       // than only in the start() failure path below) is what keeps the guard above accurate: a
@@ -126,6 +164,35 @@ class RealtimeConnection {
       _connection = null;
     }
   }
+
+  /// Parses and emits a `ReceiveNotification` hub message, in the same defensive style as the
+  /// `ReceiveEvent` registration above (missing/empty `arguments`, or a non-`Map` payload, are
+  /// silently dropped). Additionally wrapped in try/catch around the field-level parse itself:
+  /// unlike `ReceiveEvent`'s payload (already tolerant of an unknown `type` downstream —
+  /// realtime_event_router.dart just ignores it), a per-user notification with a missing/
+  /// malformed field has no safe partial-render, so the only best-effort move is to drop the
+  /// whole message rather than let it take down the app's one realtime connection.
+  void _handleReceiveNotification(List<Object?>? arguments) {
+    if (arguments == null || arguments.isEmpty) return;
+    final raw = arguments[0];
+    if (raw is! Map) return;
+    try {
+      _notificationsController.add(
+        RealtimeNotificationMessage.fromHubPayload(raw.cast<String, dynamic>()),
+      );
+    } catch (_) {
+      // Best-effort — see connect()'s own doc comment.
+    }
+  }
+
+  /// Test-only hook that invokes [_handleReceiveNotification] directly, the same way SignalR
+  /// itself would call it via `connection.on('ReceiveNotification', ...)`. Exists because the
+  /// real registration only happens inside [connect] against a live `HubConnection`, which
+  /// (per this file's own test suite) can't be faked without a real server on the other end of a
+  /// websocket handshake — this lets the defensive parsing behavior stay unit-testable anyway.
+  @visibleForTesting
+  void handleReceiveNotificationForTest(List<Object?>? arguments) =>
+      _handleReceiveNotification(arguments);
 
   /// Forces a fresh connection attempt (e.g. after the access token changes, or the app
   /// resumes from background). `withAutomaticReconnect()` already handles transient drops
@@ -155,6 +222,7 @@ class RealtimeConnection {
   Future<void> dispose() async {
     await stop();
     await _eventsController.close();
+    await _notificationsController.close();
   }
 }
 
