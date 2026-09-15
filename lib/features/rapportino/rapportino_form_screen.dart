@@ -1,9 +1,12 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/app_compartment_tile.dart';
@@ -37,6 +40,17 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 //    technician had done anything was the "prefilled with a stranger" bug this fixed). Instead the
 //    row is added the moment the technician actually opens Ore, and only if it's still empty —
 //    added on genuine entry into the step, not fabricated ahead of it.
+//
+// GPS auto-capture is a third, independent one-shot concern, deliberately NOT piggybacked on the
+// Dettagli auto-open above. Every real draft-creation entry point (ticket detail's "Crea
+// rapportino", the rapportini list's "Nuovo rapportino", create_draft.dart's
+// createCantiereReportDraft) pre-fills a non-empty title, so dettagliDone is already true on first
+// build and the Dettagli auto-open never fires — which used to mean GPS, wired into
+// StepDettagli.initState, never fired either unless the technician manually tapped an already-
+// checkmarked Dettagli tile. Firing it here instead, gated only by the same preconditions
+// captureGpsSilently's callers already use (preference on, no coordinate yet), makes it reachable
+// regardless of whether Dettagli ever opens. StepDettagli no longer captures GPS itself — this is
+// now the only trigger, so there's nothing to race or double-fire.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class RapportinoFormScreen extends ConsumerStatefulWidget {
@@ -50,6 +64,7 @@ class RapportinoFormScreen extends ConsumerStatefulWidget {
 
 class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
   bool _hasAutoOpenedDettagli = false;
+  bool _hasAttemptedGpsCapture = false;
 
   Future<void> _openOre(BuildContext context) async {
     final reportId = widget.reportId;
@@ -90,6 +105,20 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
         if (!context.mounted) return;
         openCompartmentSheet(context, label: 'Dettagli', content: StepDettagli(reportId: reportId));
       });
+    }
+
+    // Independent one-shot: capture GPS silently the moment the draft's data has finished loading,
+    // regardless of whether Dettagli ever opens — see this file's own header comment for why this
+    // can no longer piggyback on the auto-open above. No postFrameCallback needed here (unlike
+    // Dettagli's sheet, this touches no BuildContext), and the gpsLatitude == null guard is what
+    // keeps this a true one-shot: once a coordinate lands, this never fires again for this draft,
+    // rework or otherwise.
+    if (!_hasAttemptedGpsCapture &&
+        !editorState.isLoading &&
+        ref.read(gpsPreferenceProvider) &&
+        editorState.gpsLatitude == null) {
+      _hasAttemptedGpsCapture = true;
+      unawaited(ref.read(reportEditorProvider(reportId).notifier).captureGpsSilently());
     }
 
     return Scaffold(

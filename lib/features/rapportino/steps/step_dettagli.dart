@@ -1,6 +1,4 @@
 // dart format width=100
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -56,15 +54,13 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     _showCollegamento =
         (s.ticketFreeText?.isNotEmpty ?? false) || (s.cantiereFreeText?.isNotEmpty ?? false);
 
-    // Auto-acquire GPS on first entry when permission is already granted — no manual tap needed
-    // for the common case (returning technician, permission already decided). The manual button
-    // in _GpsCapture below stays the only way to (a) grant permission for the first time, where
-    // the purpose dialog must show before any OS prompt, and (b) manually refresh afterward.
-    // Fire-and-forget: captureGpsSilently() already swallows errors and never prompts, so this
-    // can't crash or block the form.
-    if (ref.read(gpsPreferenceProvider) && s.gpsLatitude == null) {
-      unawaited(ref.read(reportEditorProvider(widget.reportId).notifier).captureGpsSilently());
-    }
+    // GPS auto-capture used to fire from here on first entry, but that made it reachable only when
+    // this step actually mounted — which the auto-open on RapportinoFormScreen gates on the draft's
+    // title being empty, something no real draft-creation entry point leaves true. It now fires
+    // once, unconditionally, from RapportinoFormScreen itself — see that file's own header comment.
+    // The manual button in _GpsCapture below stays the only way to (a) grant permission for the
+    // first time, where the purpose dialog must show before any OS prompt, and (b) manually refresh
+    // afterward.
   }
 
   @override

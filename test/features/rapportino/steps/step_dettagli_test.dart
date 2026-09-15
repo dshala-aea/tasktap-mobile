@@ -48,8 +48,10 @@ ProviderContainer _buildContainer({
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       aiApiClientProvider.overrideWithValue(_FakeAiApiClient()),
-      // No location capture in these tests — the auto-GPS-on-entry behavior (report_editor_providers'
-      // captureGpsSilently) is exercised in ai_draft_action_test.dart / gps auto-capture tests instead.
+      // StepDettagli itself no longer captures GPS (that moved to RapportinoFormScreen — see its
+      // own header comment), so this override only keeps the manual "Acquisisci"/"Aggiorna" button
+      // in _GpsCapture from hitting real location services in these tests. The auto-capture-on-
+      // screen-entry behavior is covered end-to-end by rapportino_form_screen_test.dart instead.
       gpsPreferenceProvider.overrideWithValue(false),
       reportEditorProvider(_reportId).overrideWith(
         (ref) => ReportEditorNotifier(

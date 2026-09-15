@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/submission_queue.dart';
@@ -30,6 +31,18 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 class MockSubmissionQueue extends Mock implements SubmissionQueue {}
+
+/// A fake location service, injected per `location_service.dart`'s own doc comment ("tested via a
+/// fake injected implementation"). Never touches real GPS/platform channels — returns a fixed
+/// fix immediately, with no permission prompt (the `ILocationService` base already answers
+/// `willPromptForPermission` with `false`, i.e. "permission already decided").
+class _FakeLocationServiceWithFix extends ILocationService {
+  const _FakeLocationServiceWithFix();
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async =>
+      (lat: 45.4642, lng: 9.1900, accuracy: 8.0);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -298,6 +311,98 @@ void main() {
       // Queue must have been called
       verify(() => fakeQueue.enqueue(reportId)).called(1);
       verify(() => fakeQueue.processAll()).called(1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoFormScreen — GPS auto-capture', () {
+    // The exact integration gap the diagnosis found: `_seedDraft` gives the draft a non-empty
+    // title, the same shape every real draft-creation entry point (ticket detail's "Crea
+    // rapportino", the rapportini list's "Nuovo rapportino", create_draft.dart's
+    // createCantiereReportDraft) leaves a fresh draft in. That title means the Dettagli auto-open
+    // never fires and the technician never taps the Dettagli tile in this test — so a coordinate
+    // landing on the draft anyway proves the capture is reachable independently of Dettagli, not
+    // just that the notifier method works in isolation.
+    testWidgets(
+      'captures GPS silently on screen load for a title-prefilled draft, with no tap at all',
+      (tester) async {
+        await _seedDraft(db, reportId);
+
+        final container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+            gpsPreferenceProvider.overrideWithValue(true),
+            locationServiceProvider.overrideWithValue(const _FakeLocationServiceWithFix()),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final state = container.read(reportEditorProvider(reportId));
+        expect(state.gpsLatitude, closeTo(45.4642, 0.0001));
+        expect(state.gpsLongitude, closeTo(9.1900, 0.0001));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('does not capture GPS when the draft already has a coordinate (rework)', (
+      tester,
+    ) async {
+      // Pre-fills editor state directly with an existing coordinate, same override pattern as the
+      // "submit calls queue" test above — the point here is the gpsLatitude == null guard, which
+      // doesn't care how the draft got its state, only what it already holds by the time this
+      // screen's first build runs.
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+          gpsPreferenceProvider.overrideWithValue(true),
+          locationServiceProvider.overrideWithValue(const _FakeLocationServiceWithFix()),
+          reportEditorProvider(reportId).overrideWith(
+            (ref) => ReportEditorNotifier(
+              initialState: ReportEditorState(
+                reportId: reportId,
+                tenantId: 'tenant-1',
+                insertedUserId: 'user-1',
+                title: 'Test draft',
+                gpsLatitude: 41.9,
+                gpsLongitude: 12.5,
+              ),
+              repo: DraftReportRepository(db),
+              // The fake with a fix, not DisabledLocationService — so if the gpsLatitude == null
+              // guard were ever broken, this test would actually catch it (the coordinate would
+              // change to the fake's fix) instead of passing vacuously because nothing captures.
+              locationService: const _FakeLocationServiceWithFix(),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final state = container.read(reportEditorProvider(reportId));
+      // Untouched — the pre-existing coordinate, not the fake service's fix.
+      expect(state.gpsLatitude, 41.9);
+      expect(state.gpsLongitude, 12.5);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
