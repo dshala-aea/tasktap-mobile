@@ -7892,6 +7892,56 @@
         }
       }
     },
+    "/api/ProdottoAssistenza/{id}/libretti": {
+      "get": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "summary": "The libretti (containers) that this product currently belongs to as a child \u2014 the reverse\nof Task\u0026lt;IActionResult\u0026gt; ProdottoAssistenzaController.GetChildren(Guid id, CancellationToken ct). A product can belong to more than one libretto simultaneously\n(ProdottoAssistenzaLibretto is non-unique on ProdottoAssistenzaId), so this can return more\nthan one row.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ProdottoAssistenza/{id}/libretti/{childId}": {
       "post": {
         "tags": [
@@ -14100,6 +14150,146 @@
         }
       }
     },
+    "/api/Users/{id}/rates": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Returns this user\u0027s hourly cost (internal) and sell rate (billed to customers) \u2014\ndecimal? User.HourlyCost/decimal? User.HourlySellRate. Both are\n\u0060[JsonIgnore]\u0060d on the entity precisely so Task\u0026lt;IActionResult\u0026gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task\u0026lt;IActionResult\u0026gt; UsersController.GetById(Guid id, CancellationToken ct)/\nTask\u0026lt;IActionResult\u0026gt; UsersController.GetCurrentUser() never carry them (see those fields\u0027 remarks) \u2014 this is the\nonly read path, gated on the narrower string PermissionCatalogue.TeamUserRateRead\nrather than string PermissionCatalogue.TeamUserRead, which Technician also holds.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRatesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRatesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRatesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Sets this user\u0027s hourly cost and/or sell rate. See Task\u0026lt;IActionResult\u0026gt; UsersController.GetRates(Guid id) for why this is\na dedicated endpoint rather than folded into Task\u0026lt;IActionResult\u0026gt; UsersController.Update(Guid id, UpdateUserRequest request, CancellationToken ct): gated on\nstring PermissionCatalogue.TeamUserRateWrite, distinct from\nstring PermissionCatalogue.TeamUserWrite. Same \u0022only touch a field when the\nrequest actually supplies it\u0022 convention as Task\u0026lt;IActionResult\u0026gt; UsersController.Update(Guid id, UpdateUserRequest request, CancellationToken ct) and\n\u0060MaterialiController.Update\u0060 \u2014 a request cannot explicitly clear a rate back to\nnull through this endpoint, same pre-existing limitation as those.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRatesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRatesRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRatesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Users/me": {
       "get": {
         "tags": [
@@ -17188,7 +17378,8 @@
           "headerImageStyle",
           "footerImageStyle",
           "header",
-          "footer"
+          "footer",
+          "staff"
         ],
         "type": "object",
         "properties": {
@@ -17277,6 +17468,16 @@
               },
               {
                 "$ref": "#/components/schemas/HeaderFooterOptionsDto"
+              }
+            ]
+          },
+          "staff": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StaffOptionsDto"
               }
             ]
           }
@@ -24562,6 +24763,18 @@
       "SquadraRuoloEnum": {
         "type": "integer"
       },
+      "StaffOptionsDto": {
+        "required": [
+          "showHoursBreakdown"
+        ],
+        "type": "object",
+        "properties": {
+          "showHoursBreakdown": {
+            "type": "boolean"
+          }
+        },
+        "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \u0022Ore lavorate\u0022 total, as exposed over the wire."
+      },
       "StartCantiereWorkLogRequest": {
         "type": "object",
         "properties": {
@@ -27920,6 +28133,32 @@
           }
         }
       },
+      "UpdateUserRatesRequest": {
+        "type": "object",
+        "properties": {
+          "hourlyCost": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Internal hourly cost to the company (EUR). Null = leave unchanged.",
+            "format": "double"
+          },
+          "hourlySellRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Customer-billed hourly rate (EUR). Null = leave unchanged.",
+            "format": "double"
+          }
+        },
+        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; UsersController.UpdateRates(Guid id, UpdateUserRatesRequest request, CancellationToken ct)."
+      },
       "UpdateUserRequest": {
         "type": "object",
         "properties": {
@@ -28442,6 +28681,36 @@
           }
         },
         "description": "Represents a user within a tenant organization."
+      },
+      "UserRatesResponse": {
+        "required": [
+          "hourlyCost",
+          "hourlySellRate"
+        ],
+        "type": "object",
+        "properties": {
+          "hourlyCost": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Internal cost to the company (EUR/hour), or null when unset.",
+            "format": "double"
+          },
+          "hourlySellRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Customer-billed rate (EUR/hour), or null when unset/not billable.",
+            "format": "double"
+          }
+        },
+        "description": "Response body for Task\u0026lt;IActionResult\u0026gt; UsersController.GetRates(Guid id)."
       },
       "UserRole": {
         "type": "object",
