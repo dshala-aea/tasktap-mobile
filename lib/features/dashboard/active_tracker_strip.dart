@@ -6,7 +6,6 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_rack.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
@@ -54,7 +53,7 @@ class ActiveTrackerStrip extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < trackers.length; i++) ...[
-          if (i > 0) const SizedBox(height: 6),
+          if (i > 0) const SizedBox(height: AppSpacing.xs),
           _TrackerRow(tracker: trackers[i], now: now),
         ],
       ],
@@ -172,9 +171,9 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
             // The live indicator — an equipment lamp, not a status pill. See LiveDot's own doc
             // comment for why it's green, deliberately not the accent.
             const LiveDot(),
-            const SizedBox(width: 10),
+            const SizedBox(width: AppSpacing.sm),
             Icon(_glyph(t.kind), size: 16, color: AppColors.onDarkMuted),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             if (ticketId != null)
               Expanded(
                 child: InkWell(
@@ -243,10 +242,16 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   };
 }
 
-/// A 48dp action on the hero's glass.
+/// A compact action on the hero's glass.
 ///
-/// Icon-only to keep the row dense, so the semantic label carries the whole meaning — and when the
-/// server refuses the action, the reason is spoken rather than the control silently doing nothing.
+/// Was a hand-rolled `Material`/`InkWell` icon button — the only tap target in this row not built
+/// on the shared `AppButton` its sibling in `work_queue_section.dart`'s "Apri" already uses.
+/// `AppButton` has no icon-only variant (an icon always pairs with a visible label — see
+/// `app_button.dart`'s own build()), so this keeps the label visible rather than inventing one;
+/// `.dark` is the closest fit for a small solid tap target that reads clearly against the hero's
+/// flat `AppColors.Y` ground regardless of theme (its own `bg`/`fg` are visible on both). When the
+/// server refuses the action, the reason is still spoken via [Semantics]/[Tooltip] rather than the
+/// control silently doing nothing.
 class _GlassAction extends StatelessWidget {
   const _GlassAction({
     required this.icon,
@@ -270,21 +275,12 @@ class _GlassAction extends StatelessWidget {
       label: blocked ? '$label — $blockedReason' : label,
       child: Tooltip(
         message: blocked ? blockedReason! : label,
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: AppRack.insetShape,
-          child: InkWell(
-            onTap: blocked ? null : onTap,
-            borderRadius: AppRack.insetShape,
-            child: Opacity(
-              opacity: blocked ? 0.4 : 1,
-              child: SizedBox(
-                width: 48,
-                height: 48,
-                child: Icon(icon, size: 18, color: AppColors.onDark),
-              ),
-            ),
-          ),
+        child: AppButton.dark(
+          label: label,
+          icon: Icon(icon),
+          size: AppButtonSize.sm,
+          fullWidth: false,
+          onPressed: blocked ? null : onTap,
         ),
       ),
     );

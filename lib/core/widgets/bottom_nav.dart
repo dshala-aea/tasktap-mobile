@@ -5,6 +5,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
 import '../theme/app_rack.dart';
+import '../theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
@@ -123,7 +124,13 @@ class AppBottomNav extends StatelessWidget {
               ),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+              // Was (6, 8, 6, 6) — off-scale, and not even internally consistent (top 2px more
+              // than the other three sides). AppRack.navBarHeight's own formula bakes in "6 pill
+              // padding" top and bottom around the 48px tab row (see its doc comment); uniform
+              // AppSpacing.xs (4) on every side is the nearest token AND the value that actually
+              // reconciles this pill's real rendered height with that documented 74 — every
+              // screen's nav clearance already assumes.
+              padding: const EdgeInsets.all(AppSpacing.xs),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final availableWidth = constraints.maxWidth;
@@ -238,7 +245,10 @@ class AppBottomNav extends StatelessWidget {
     return SafeArea(
       right: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 18, 12, 18),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.lg,
+        ),
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -255,8 +265,8 @@ class AppBottomNav extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 16,
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.base,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -417,18 +427,34 @@ class _NavTab extends StatelessWidget {
               ? Duration.zero
               : AppRack.drawerOut,
           curve: AppRack.slideOut,
+          // Was unset: with no `alignment`, Container/AnimatedContainer positions its child at a
+          // fixed offset from the padding-defined top-left and lets any leftover space (from the
+          // minHeight/minWidth constraints below) pile up on the bottom/right instead of
+          // distributing evenly. Active and inactive tabs have different content heights (a
+          // Column with a label vs. a bare Icon), so with a fixed padding.top that leftover space
+          // differed between states too — a real, measurable few-px vertical shift of the icon
+          // every time a tab was selected. Centering makes the icon's on-screen position
+          // insensitive to exactly how much slack space the taller/shorter content leaves.
+          alignment: Alignment.center,
           constraints: const BoxConstraints(
             minWidth: 48,
             minHeight: 48,
           ),
+          // Horizontal padding here is NOT free to snap wherever: `_measuredActiveLabelWidths`
+          // above bakes in "+20 padding" (2 × 10) as part of the slot width it pre-computes for
+          // each active label, so the active slot is always sized with room to spare for this
+          // exact padding. AppSpacing.sm (8, total 16) stays under that budget — strictly safer,
+          // never the cause of the clipping `_requiredActiveWidthFor`'s own regression test
+          // guards against. AppSpacing.md (12) is `inactive`'s exact value already, just no longer
+          // a bare literal.
           padding: vertical
               ? EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: active ? 8 : 12,
+                  horizontal: AppSpacing.sm,
+                  vertical: active ? AppSpacing.sm : AppSpacing.md,
                 )
               : EdgeInsets.symmetric(
-                  horizontal: active ? 10 : 12,
-                  vertical: active ? 7 : 12,
+                  horizontal: active ? AppSpacing.sm : AppSpacing.md,
+                  vertical: active ? AppSpacing.sm : AppSpacing.md,
                 ),
           decoration: BoxDecoration(
             color: active ? AppColors.Y : null,

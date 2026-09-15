@@ -43,5 +43,13 @@ abstract final class AppSpacing {
   static const double inputRadius = AppRack.insetRadius;
 
   /// Bottom nav bar height (including safe-area overlay).
-  static const double bottomNavHeight = 64;
+  ///
+  /// Was a stale, independently hardcoded `64` — the floating pill's real height is
+  /// [AppRack.navBarHeight] (74), the one screens actually read for nav clearance
+  /// (`context.navClearance`, `home_shell.dart`'s `Rack(bottom: ...)`). This alias exists only so
+  /// `app_theme.dart`'s `navigationBarTheme.height` (Material's own `NavigationBar`, which this app
+  /// does not instantiate anywhere — the real bottom nav is [AppBottomNav]) doesn't keep lying
+  /// about the number, the same reasoning [cardRadius]/[buttonRadius]/[inputRadius] above alias
+  /// [AppRack] rather than duplicating its values.
+  static const double bottomNavHeight = AppRack.navBarHeight;
 }

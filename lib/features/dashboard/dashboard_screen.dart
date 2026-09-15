@@ -41,7 +41,23 @@ class DashboardScreen extends ConsumerWidget {
       // The hero paints over the rail, so the rail starts below it. Without this the world's
       // most load-bearing mark is hidden behind the one panel guaranteed to be on screen.
       body: RefreshIndicator(
-        onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+        // performSync() itself never throws — SyncNotifier catches internally and parks the
+        // failure in SyncState.status/errorMessage (see sync_service.dart) — so a pull-to-refresh
+        // that hit a real failure used to just stop spinning with zero feedback, the technician
+        // left to guess whether it actually synced. Same showAppToast/ToastTone.error convention
+        // this screen's own _ClockInPrompt already uses for a failed punch below, and
+        // ai_draft_action.dart's AI-generation errors use the same way.
+        onRefresh: () async {
+          await ref.read(syncProvider.notifier).performSync();
+          if (!context.mounted) return;
+          if (ref.read(syncProvider).status == SyncStatus.error) {
+            showAppToast(
+              context,
+              message: 'Aggiornamento non riuscito. Riprova.',
+              tone: ToastTone.error,
+            );
+          }
+        },
         child: CustomScrollView(
           slivers: [
             // ── Hero ──────────────────────────────────────────────────────────
@@ -229,7 +245,7 @@ class _ClockInPrompt extends ConsumerWidget {
           : () =>
                 ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
+        padding: const EdgeInsets.all(AppSpacing.base),
         child: Row(
           children: [
             if (busy)

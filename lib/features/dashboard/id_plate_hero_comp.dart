@@ -51,7 +51,11 @@ class IdPlateHeroComp extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                // Was .start: the 44dp HeaderIconBtn actions are taller than the 26px username
+                // line, so top-aligning them against a shorter line reads as the icons hanging low
+                // rather than sitting level with the name. .center (this Row's own default — kept
+                // explicit for clarity) lines the icons up with the text's vertical middle instead.
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Text(

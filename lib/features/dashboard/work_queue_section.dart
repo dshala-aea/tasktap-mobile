@@ -251,7 +251,7 @@ class _CompactTier extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
             child: Text(
               '$title  ${schedules.length}',
               style: TextStyle(
@@ -265,7 +265,7 @@ class _CompactTier extends StatelessWidget {
           ),
           for (var i = 0; i < schedules.length; i++)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: _CompactRow(schedule: schedules[i], tier: tier),
             ),
         ],
