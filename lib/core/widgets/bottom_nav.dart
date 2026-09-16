@@ -427,15 +427,6 @@ class _NavTab extends StatelessWidget {
               ? Duration.zero
               : AppRack.drawerOut,
           curve: AppRack.slideOut,
-          // Was unset: with no `alignment`, Container/AnimatedContainer positions its child at a
-          // fixed offset from the padding-defined top-left and lets any leftover space (from the
-          // minHeight/minWidth constraints below) pile up on the bottom/right instead of
-          // distributing evenly. Active and inactive tabs have different content heights (a
-          // Column with a label vs. a bare Icon), so with a fixed padding.top that leftover space
-          // differed between states too — a real, measurable few-px vertical shift of the icon
-          // every time a tab was selected. Centering makes the icon's on-screen position
-          // insensitive to exactly how much slack space the taller/shorter content leaves.
-          alignment: Alignment.center,
           constraints: const BoxConstraints(
             minWidth: 48,
             minHeight: 48,
@@ -460,29 +451,41 @@ class _NavTab extends StatelessWidget {
             color: active ? AppColors.Y : null,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: active
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      item.icon,
-                      size: 18,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 4),
+          // Center (a real widget, not Container's own `alignment` param): Container/
+          // AnimatedContainer's `alignment` wraps the child in an Align, and Align needs to
+          // EXPAND to fill whatever height it's given — under Scaffold.bottomNavigationBar's
+          // loose/unbounded height constraint this either crashes ("BoxConstraints forces an
+          // infinite height") or, worse in release builds, silently grows to fill the screen,
+          // which is exactly the live regression this replaces. A bare `Center` widget here
+          // instead doesn't change how the OUTER AnimatedContainer sizes itself (still just
+          // `constraints` clamped to the child's own natural size via Column's mainAxisSize.min
+          // below / the bare Icon's intrinsic size) — it only centers within whatever slack
+          // space already exists, with no unbounded-constraint hazard.
+          child: Center(
+            child: active
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        item.icon,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(height: 4),
 
-                    // Never scaled down: `_buildBar`'s width allocation guarantees this slot is
-                    // always wide enough for this exact label at this exact (12px) size — see
-                    // `_requiredActiveWidthFor`.
-                    label,
-                  ],
-                )
-              : Icon(
-                  item.icon,
-                  size: 18,
-                  color: context.colors.inkMuted,
-                ),
+                      // Never scaled down: `_buildBar`'s width allocation guarantees this slot is
+                      // always wide enough for this exact label at this exact (12px) size — see
+                      // `_requiredActiveWidthFor`.
+                      label,
+                    ],
+                  )
+                : Icon(
+                    item.icon,
+                    size: 18,
+                    color: context.colors.inkMuted,
+                  ),
+          ),
         ),
       ),
     );
