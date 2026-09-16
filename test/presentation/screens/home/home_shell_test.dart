@@ -114,4 +114,53 @@ void main() {
     }
     await db.close();
   });
+
+  /// Regression: on the wide/tablet layout, `nav` used to sit as a bare, unwrapped `Row` child
+  /// (no `Expanded`/`Flexible`/size wrapper) — a plain Row child gets the full Scaffold body
+  /// height as a loose-but-bounded cross-axis constraint, and `_buildRail`'s own `Center`/`Align`
+  /// descendants (the same `RenderPositionedBox` mechanism behind the phone bar's "fills the
+  /// whole screen" bug — see bottom_nav_test.dart) expand to fill it, so the rail silently became
+  /// full-screen tall too. Now wrapped in `IntrinsicHeight` to force it back to its own natural
+  /// (shrink-wrapped) content height.
+  testWidgets('AppBottomNav rail stays a compact card on a wide window, does not fill the screen', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final db = AppDatabase(NativeDatabase.memory());
+    final dio = MockDio();
+    when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer(
+      (_) async => Response(requestOptions: RequestOptions(path: '/api/Auth/me'), statusCode: 401),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          dioProvider.overrideWithValue(dio),
+          connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
+          pendingSyncCountProvider.overrideWith((ref) => Stream.value((pending: 0, failed: 0))),
+        ],
+        child: MaterialApp.router(routerConfig: _buildTestRouter()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final height = tester.getSize(find.byType(AppBottomNav)).height;
+    expect(
+      height,
+      lessThan(500),
+      reason: 'AppBottomNav rail rendered $height logical px tall on a 1200px-tall window — it '
+          'should shrink-wrap its 5 stacked items, not stretch to fill the Scaffold body',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(Duration.zero);
+    }
+    await db.close();
+  });
 }

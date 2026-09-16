@@ -430,6 +430,11 @@ class _NavTab extends StatelessWidget {
           constraints: const BoxConstraints(
             minWidth: 48,
             minHeight: 48,
+            // maxHeight is the actual fix for the "nav fills the whole screen" regression — see
+            // the comment on `child: Center(...)` below for why. 56 is small buffer over the
+            // active tab's real content height (icon 18 + 4 gap + 12px label + 16 vertical
+            // padding = 50) so nothing clips.
+            maxHeight: 56,
           ),
           // Horizontal padding here is NOT free to snap wherever: `_measuredActiveLabelWidths`
           // above bakes in "+20 padding" (2 × 10) as part of the slot width it pre-computes for
@@ -451,16 +456,25 @@ class _NavTab extends StatelessWidget {
             color: active ? AppColors.Y : null,
             borderRadius: BorderRadius.circular(12),
           ),
-          // Center (a real widget, not Container's own `alignment` param): Container/
-          // AnimatedContainer's `alignment` wraps the child in an Align, and Align needs to
-          // EXPAND to fill whatever height it's given — under Scaffold.bottomNavigationBar's
-          // loose/unbounded height constraint this either crashes ("BoxConstraints forces an
-          // infinite height") or, worse in release builds, silently grows to fill the screen,
-          // which is exactly the live regression this replaces. A bare `Center` widget here
-          // instead doesn't change how the OUTER AnimatedContainer sizes itself (still just
-          // `constraints` clamped to the child's own natural size via Column's mainAxisSize.min
-          // below / the bare Icon's intrinsic size) — it only centers within whatever slack
-          // space already exists, with no unbounded-constraint hazard.
+          // THE REAL BUG (a prior fix here swapped Container's `alignment:` param for this
+          // explicit `Center` — that changed NOTHING: `Center` IS `Align`, same RenderObject,
+          // same sizing rule, so the swap was a no-op and the regression survived it).
+          //
+          // RenderPositionedBox (what both Align and Center are) does not need an UNBOUNDED
+          // constraint to blow up — it expands to fill ANY constraint that is merely bounded,
+          // loose or tight, min or not: "as big as possible" is its default width/height factor,
+          // and it only falls back to shrink-wrapping the child when the incoming max is
+          // literally infinite. Scaffold.bottomNavigationBar hands its child a LOOSE but
+          // perfectly finite max height (0..screenHeight) — bounded, not infinite — so Align
+          // happily resolves to the full screen height. That's the actual regression: no crash,
+          // no infinite-constraint assertion, just this widget silently becoming as tall as the
+          // whole Scaffold body every time.
+          //
+          // The real fix is the `maxHeight: 56` above: it caps what Align/Center can possibly
+          // expand to, so "as big as possible" resolves to a small, fixed, correct size instead
+          // of the screen. `Center` is kept only because it's still the simplest way to place
+          // icon-only inactive tabs in the middle of their slot — it is safe now that the
+          // constraint it fills is capped.
           child: Center(
             child: active
                 ? Column(

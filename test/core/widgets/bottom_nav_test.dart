@@ -102,6 +102,40 @@ void main() {
       expect(find.byType(BackdropFilter), findsNothing);
     });
 
+    /// Regression for the "nav fills the whole screen" bug: `Scaffold.bottomNavigationBar` hands
+    /// its child a LOOSE (not tight, but still bounded/finite) height constraint — up to the full
+    /// screen height. `RenderPositionedBox` (what `Align` and `Center` both are) expands to fill
+    /// ANY bounded constraint, not just an unbounded one, so without an explicit cap the nav
+    /// silently grew to fill that whole loose bound. Mounted exactly like `home_shell.dart` does
+    /// it (bottomNavigationBar + extendBody, with real body content competing for the same
+    /// space) so this catches the real constraint chain, not just the widget in isolation.
+    testWidgets('stays a compact pill under Scaffold.bottomNavigationBar, does not fill the screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            extendBody: true,
+            body: Container(color: Colors.white),
+            bottomNavigationBar: AppBottomNav(currentIndex: 0, onTap: (_) {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final height = tester.getSize(find.byType(AppBottomNav)).height;
+      expect(
+        height,
+        lessThan(120),
+        reason: 'AppBottomNav rendered $height logical px tall — it should be a fixed-height '
+            'pill (~74px incl. safe area/margins), not stretch to fill available space',
+      );
+    });
+
     test('defaultItems has Cantieri at index 2, not Timbra', () {
       expect(AppBottomNav.defaultItems[2].label, 'Cantieri');
       expect(
