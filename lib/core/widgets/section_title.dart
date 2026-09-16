@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Section heading row.
 ///
-/// Spec: Sora 700/18 DARK; padding top 20 / horizontal 19 / bottom 10;
-/// optional trailing [action] widget.
+/// Archivo Narrow 700/18, theme ink; padding top [AppSpacing.lg] / horizontal
+/// [AppSpacing.pagePadding] / bottom 10 (no named token matches 10 exactly — left as a literal
+/// rather than snapping to the nearest one, [AppSpacing.sm]'s 8, which would be a real 2px
+/// visual change); optional trailing [action] widget.
 ///
 /// ```dart
 /// SectionTitle(title: 'Attività recenti');
 /// SectionTitle(title: 'Rapportini', action: TextButton(onPressed: ..., child: Text('Vedi tutti')));
 /// ```
 class SectionTitle extends StatelessWidget {
-  const SectionTitle({
-    super.key,
-    required this.title,
-    this.action,
-    this.trailing,
-  });
+  const SectionTitle({super.key, required this.title, this.action, this.trailing});
 
   final String title;
 
@@ -33,7 +31,12 @@ class SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 20, 19, 10),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.lg,
+        AppSpacing.pagePadding,
+        10,
+      ),
       child: Row(
         children: [
           Expanded(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
+import '../theme/app_spacing.dart';
 
 /// Flat Documento replacement for the old `VetroCompartmentTile` — same interface, so every call
 /// site swaps one name for the other with no other changes. Shared across Ticket detail,
@@ -42,7 +43,7 @@ class AppCompartmentTile extends StatelessWidget {
           child: MediaQuery(
             data: MediaQuery.of(context).copyWith(textScaler: clampedScaler),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

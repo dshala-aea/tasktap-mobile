@@ -60,9 +60,7 @@ class ProfiloScreen extends ConsumerWidget {
 
                     Text(
                       user.email,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: context.colors.inkFaint,
-                      ),
+                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
                     ),
                   ],
                 ),
@@ -94,33 +92,16 @@ class ProfiloScreen extends ConsumerWidget {
   }
 
   String _initials(String nameOrEmail) {
-    final parts = nameOrEmail
-        .split(RegExp(r'[\s@]+'))
-        .where((p) => p.isNotEmpty);
+    final parts = nameOrEmail.split(RegExp(r'[\s@]+')).where((p) => p.isNotEmpty);
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
-  Future<bool> _confirmLogout(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Disconnetti'),
-        content: const Text('Sei sicuro di voler uscire dall\'account?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: context.colors.red),
-            child: const Text('Disconnetti'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
+  Future<bool> _confirmLogout(BuildContext context) => confirmDeleteDialog(
+    context,
+    title: 'Disconnetti',
+    message: 'Sei sicuro di voler uscire dall\'account?',
+    confirmLabel: 'Disconnetti',
+  );
 }

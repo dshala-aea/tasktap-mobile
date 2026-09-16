@@ -59,6 +59,7 @@ import 'teammate_picker_sheet.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 const _uuid = Uuid();
 
@@ -848,7 +849,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                         _ => 'errore sconosciuto',
                       };
                       return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                         // A plain `showDialog` builder never rebuilds on its own, so
                         // `colleagueNameProvider` — a StreamProvider backed by a Drift
                         // watchSingleOrNull() query that resolves asynchronously — must be
@@ -1150,10 +1151,7 @@ class _CheckInBody extends ConsumerWidget {
                             Expanded(
                               child: Text(
                                 c.name,
-                                style: TextStyle(
-                                  fontFamily: 'Archivo Narrow',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
+                                style: AppTextStyles.titleMedium.copyWith(
                                   color: context.colors.ink,
                                 ),
                               ),

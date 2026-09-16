@@ -10,6 +10,7 @@ import '../../data/gdpr/gdpr_api_client.dart';
 import '../../data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // I miei dati
@@ -206,15 +207,7 @@ class _CategoryRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      category.label,
-                      style: TextStyle(
-                        fontFamily: 'Archivo Narrow',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: c.ink,
-                      ),
-                    ),
+                    Text(category.label, style: AppTextStyles.titleMedium.copyWith(color: c.ink)),
                     if (category.nota != null) ...[
                       const SizedBox(height: 3),
                       Text(

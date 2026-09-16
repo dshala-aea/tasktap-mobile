@@ -21,10 +21,8 @@ class RowIconTile extends StatelessWidget {
     this.iconSize = 20,
     this.radius,
     this.color,
-  }) : assert(
-         icon != null || child != null,
-         'RowIconTile needs an icon or a child',
-       );
+    this.circle = false,
+  }) : assert(icon != null || child != null, 'RowIconTile needs an icon or a child');
 
   final IconData? icon;
 
@@ -43,6 +41,11 @@ class RowIconTile extends StatelessWidget {
   /// the one accent ([AppColors.Y]), matching a plain, non-semantic row.
   final Color? color;
 
+  /// A circular tile instead of the default rounded-square — the same fill/icon-color formula,
+  /// just [BoxShape.circle]. Was hand-rolled separately at its one call site
+  /// (`step_ore.dart`'s per-technician avatar tile) before this param existed.
+  final bool circle;
+
   @override
   Widget build(BuildContext context) {
     final resolvedColor = color ?? AppColors.Y;
@@ -51,7 +54,8 @@ class RowIconTile extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: resolvedColor.withAlpha(31),
-        borderRadius: BorderRadius.circular(radius ?? AppRack.insetRadius),
+        shape: circle ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circle ? null : BorderRadius.circular(radius ?? AppRack.insetRadius),
       ),
       child: child ?? Icon(icon, size: iconSize, color: resolvedColor),
     );

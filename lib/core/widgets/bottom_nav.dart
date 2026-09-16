@@ -42,12 +42,7 @@ class AppBottomNavItem {
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
 /// ```
 class AppBottomNav extends StatelessWidget {
-  const AppBottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    this.items,
-  });
+  const AppBottomNav({super.key, required this.currentIndex, required this.onTap, this.items});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -85,7 +80,7 @@ class AppBottomNav extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, 18),
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
@@ -140,12 +135,8 @@ class AppBottomNav extends StatelessWidget {
                   if (tabs.length <= 1) {
                     activeWidth = availableWidth;
                   } else {
-                    final target = math.max(
-                      _preferredActiveWidth,
-                      requiredActiveWidth,
-                    );
-                    final roomyTotal =
-                        target + inactiveCount * comfortableInactiveWidth;
+                    final target = math.max(_preferredActiveWidth, requiredActiveWidth);
+                    final roomyTotal = target + inactiveCount * comfortableInactiveWidth;
 
                     if (availableWidth >= roomyTotal) {
                       // Plenty of room: active gets its target; inactive tabs split the rest
@@ -155,9 +146,7 @@ class AppBottomNav extends StatelessWidget {
                     } else {
                       // Squeeze: shrink inactive tabs toward their hard floor FIRST, so the
                       // active tab keeps whatever it actually needs to show its full label.
-                      final minTotal =
-                          requiredActiveWidth +
-                          inactiveCount * minInactiveWidth;
+                      final minTotal = requiredActiveWidth + inactiveCount * minInactiveWidth;
                       if (availableWidth >= minTotal) {
                         activeWidth = requiredActiveWidth;
                       } else {
@@ -193,12 +182,8 @@ class AppBottomNav extends StatelessWidget {
                     children: [
                       for (var i = 0; i < tabs.length; i++)
                         _AnimatedNavSlot(
-                          width: i == currentIndex
-                              ? activeWidth
-                              : inactiveWidth,
-                          duration: reduceMotion
-                              ? Duration.zero
-                              : AppRack.drawerOut,
+                          width: i == currentIndex ? activeWidth : inactiveWidth,
+                          duration: reduceMotion ? Duration.zero : AppRack.drawerOut,
                           child: _NavTab(
                             item: tabs[i],
                             active: i == currentIndex,
@@ -222,10 +207,7 @@ class AppBottomNav extends StatelessWidget {
     return SafeArea(
       right: false,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.lg,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
@@ -247,9 +229,7 @@ class AppBottomNav extends StatelessWidget {
                 children: [
                   for (var i = 0; i < tabs.length; i++)
                     Padding(
-                      padding: EdgeInsets.only(
-                        bottom: i == tabs.length - 1 ? 0 : 14,
-                      ),
+                      padding: EdgeInsets.only(bottom: i == tabs.length - 1 ? 0 : 14),
                       child: _NavTab(
                         item: tabs[i],
                         active: i == currentIndex,
@@ -286,11 +266,7 @@ class AppBottomNav extends StatelessWidget {
 /// (never triggered on any screen width this app targets): if content ever still doesn't fit,
 /// it is clipped at the slot boundary rather than painted over a neighboring tab.
 class _AnimatedNavSlot extends StatelessWidget {
-  const _AnimatedNavSlot({
-    required this.width,
-    required this.duration,
-    required this.child,
-  });
+  const _AnimatedNavSlot({required this.width, required this.duration, required this.child});
 
   final double width;
   final Duration duration;
@@ -397,9 +373,7 @@ class _NavTab extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : AppRack.drawerOut,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
           curve: AppRack.slideOut,
           constraints: const BoxConstraints(
             minWidth: 48,

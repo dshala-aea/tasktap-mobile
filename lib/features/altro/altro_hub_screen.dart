@@ -49,17 +49,13 @@ class AltroHubScreen extends ConsumerWidget {
             // ── Gestione section ───────────────────────────────────────────
             const SliverToBoxAdapter(child: SectionTitle(title: 'Gestione')),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.pagePadding,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               sliver: SliverGrid(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   // 2 on a phone, more on a tablet/wide window — same width-driven breakpoint
                   // rapportino_form_screen.dart's materiali grid already uses, so a fixed count
                   // doesn't stretch two tiles across a much wider viewport.
-                  crossAxisCount: MediaQuery.sizeOf(context).width > 600
-                      ? 4
-                      : 2,
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   // Was 1.4 — tall enough that VetroCompartmentTile's icon-top/label-bottom
@@ -74,10 +70,7 @@ class AltroHubScreen extends ConsumerWidget {
                   childAspectRatio: 1.5,
                 ),
                 delegate: SliverChildListDelegate(
-                  _buildGestioneTiles(
-                    context,
-                    ref.watch(cachedEntitlementProvider).valueOrNull,
-                  ),
+                  _buildGestioneTiles(context, ref.watch(cachedEntitlementProvider).valueOrNull),
                 ),
               ),
             ),
@@ -89,9 +82,7 @@ class AltroHubScreen extends ConsumerWidget {
             // ── Danger: Logout ─────────────────────────────────────────────
             SliverToBoxAdapter(child: _LogoutRow(ref: ref)),
 
-            SliverPadding(
-              padding: EdgeInsets.only(bottom: context.navClearance),
-            ),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),
@@ -109,10 +100,7 @@ class AltroHubScreen extends ConsumerWidget {
   /// Keys are `ModuleKeys` from the backend (`src/TaskTapAPI.Core/Billing/ModuleKeys.cs`).
   /// Never gate on a key that is not in that file — a typo reads as "not entitled" and silently
   /// removes a screen.
-  List<Widget> _buildGestioneTiles(
-    BuildContext context,
-    Entitlement? entitlement,
-  ) {
+  List<Widget> _buildGestioneTiles(BuildContext context, Entitlement? entitlement) {
     final tiles = <({IconData icon, String label, String module, VoidCallback onTap})>[
       (
         icon: LucideIcons.clipboardList,
@@ -217,10 +205,7 @@ class _UserCard extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
           children: [
-            AppAvatar(
-              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
-              size: 52,
-            ),
+            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 52),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -302,10 +287,7 @@ class _SistemaSection extends ConsumerWidget {
           ),
           // Audit log
           ListRow(
-            leading: _sistemaTileIcon(
-              LucideIcons.clipboardCheck,
-              context.colors.green,
-            ),
+            leading: _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
             title: 'Audit log',
             subtitle: 'Cronologia attività',
             showDivider: true,
@@ -322,10 +304,7 @@ class _SistemaSection extends ConsumerWidget {
           // it is not a preference, it is the answer to "what do you know about me", and the
           // backend has served it since before this app shipped with nothing on the client asking.
           ListRow(
-            leading: _sistemaTileIcon(
-              LucideIcons.shieldCheck,
-              context.colors.blue,
-            ),
+            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.blue),
             title: 'I miei dati',
             subtitle: 'Cosa registra l\'azienda su di te',
             showDivider: true,
@@ -341,10 +320,7 @@ class _SistemaSection extends ConsumerWidget {
           ),
           // Ruoli e permessi
           ListRow(
-            leading: _sistemaTileIcon(
-              LucideIcons.shieldCheck,
-              context.colors.amber,
-            ),
+            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.amber),
             title: 'Ruoli e permessi',
             subtitle: 'Gestione accessi',
             showDivider: false,
@@ -366,10 +342,7 @@ class _SistemaSection extends ConsumerWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(
-        color: color.withAlpha(26),
-        borderRadius: AppRack.insetShape,
-      ),
+      decoration: BoxDecoration(color: color.withAlpha(26), borderRadius: AppRack.insetShape),
       child: Icon(icon, size: 18, color: color),
     );
   }
@@ -412,62 +385,13 @@ class _LogoutRow extends StatelessWidget {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
-    // Vetro chrome, not a stock AlertDialog — the app's own glass card + AppButton pair, so a
-    // confirmation this consequential still reads as part of the app rather than a bare Material
-    // dialog. Same confirm/cancel logic as before, only the surface changed.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-        child: AppCard(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Esci dall\'account',
-                style: TextStyle(
-                  fontFamily: 'Archivo Narrow',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: ctx.colors.ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Sei sicuro di voler uscire dall\'account?',
-                style: TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 14,
-                  color: ctx.colors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton.ghost(
-                      label: 'Annulla',
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton.danger(
-                      label: 'Esci',
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Esci dall\'account',
+      message: 'Sei sicuro di voler uscire dall\'account?',
+      confirmLabel: 'Esci',
     );
-    if (confirmed == true) {
+    if (confirmed) {
       await ref.read(loginProvider.notifier).signOut();
     }
   }

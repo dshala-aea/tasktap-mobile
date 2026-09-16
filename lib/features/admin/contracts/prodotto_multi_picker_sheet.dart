@@ -17,6 +17,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../../core/theme/app_text_styles.dart';
 
 /// Opens the asset picker as a bottom sheet. [prodotti] is the full candidate list (each a raw
 /// `{id, name}` map, same shape `AdminApiClient.fetchProdottiAssistenza` returns); [initialIds]
@@ -64,7 +65,10 @@ class _ProdottoMultiPickerSheetContentState extends State<_ProdottoMultiPickerSh
       expand: false,
       builder: (ctx, scrollController) => Column(
         children: [
-          const Padding(padding: EdgeInsets.only(top: 10, bottom: 4), child: SheetHandle()),
+          const Padding(
+            padding: EdgeInsets.only(top: 10, bottom: AppSpacing.xs),
+            child: SheetHandle(),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.pagePadding,
@@ -161,10 +165,7 @@ class _ProdottoMultiPickerSheetContentState extends State<_ProdottoMultiPickerSh
                                       Expanded(
                                         child: Text(
                                           name,
-                                          style: TextStyle(
-                                            fontFamily: 'Archivo Narrow',
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
+                                          style: AppTextStyles.titleMedium.copyWith(
                                             color: ctx.colors.ink,
                                           ),
                                         ),

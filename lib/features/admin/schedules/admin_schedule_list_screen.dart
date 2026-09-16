@@ -398,7 +398,7 @@ class _FilterButton extends StatelessWidget {
       color: active ? tint : context.colors.surface,
       border: Border.all(color: active ? tint : context.colors.borderMedium),
       borderRadius: AppRack.insetShape,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
       semanticLabel: 'Filtri${active ? ' ($activeCount attivi)' : ''}',
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -546,6 +546,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: SheetHandle(),
+            ),
             Text('Filtri', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
             Row(
@@ -622,9 +626,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
+                  child: AppButton.ghost(
+                    label: 'Azzera',
                     onPressed: () => Navigator.pop(context, const AdminScheduleFilters()),
-                    child: const Text('Azzera'),
                   ),
                 ),
                 const SizedBox(width: 12),

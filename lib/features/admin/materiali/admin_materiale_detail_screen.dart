@@ -75,26 +75,16 @@ class AdminMaterialeDetailScreen extends ConsumerWidget {
 /// (`PUT` with `isActive: true`) both already exist.
 Future<void> _toggleActive(BuildContext context, WidgetRef ref, MaterialiData materiale) async {
   final deactivating = materiale.isActive;
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog.adaptive(
-      title: Text(deactivating ? 'Disattiva materiale' : 'Riattiva materiale'),
-      content: Text(
-        deactivating
-            ? 'Il materiale "${materiale.name}" non sarà più selezionabile nei nuovi rapportini o carichi/scarichi. Puoi riattivarlo in qualsiasi momento.'
-            : 'Il materiale "${materiale.name}" tornerà selezionabile.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: deactivating ? TextButton.styleFrom(foregroundColor: ctx.colors.red) : null,
-          child: Text(deactivating ? 'Disattiva' : 'Riattiva'),
-        ),
-      ],
-    ),
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: deactivating ? 'Disattiva materiale' : 'Riattiva materiale',
+    message: deactivating
+        ? 'Il materiale "${materiale.name}" non sarà più selezionabile nei nuovi rapportini o carichi/scarichi. Puoi riattivarlo in qualsiasi momento.'
+        : 'Il materiale "${materiale.name}" tornerà selezionabile.',
+    confirmLabel: deactivating ? 'Disattiva' : 'Riattiva',
+    danger: deactivating,
   );
-  if (confirmed != true) return;
+  if (!confirmed) return;
   if (!context.mounted) return;
   if (!ensureOnlineOrWarn(context, ref)) return;
 

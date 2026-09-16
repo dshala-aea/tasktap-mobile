@@ -61,6 +61,10 @@ GoRouter _makeQuickActionRouter() => GoRouter(
       builder: (_, _) =>
           const Scaffold(body: Center(child: Text('SELEZIONA-CANTIERE-SCREEN-MARKER'))),
     ),
+    GoRoute(
+      path: AppRoutes.timbraQr,
+      builder: (_, _) => const Scaffold(body: Center(child: Text('TIMBRA-QR-SCREEN-MARKER'))),
+    ),
   ],
 );
 
@@ -163,20 +167,24 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('offers the two things a technician starts from here, plus Le mie timbrature', (
-      tester,
-    ) async {
-      // Was four. "Rapportini" and "Magazzino" are destinations the Altro tab already reaches;
-      // a shortcut to a screen one tap away is not a shortcut, it is a second door. "Le mie
-      // timbrature" was added back as a third tile — a view, not a start action — because it's
-      // the personal-Timbra home now that the Timbra bottom-nav tab is gone.
-      await pumpDashboard(tester);
+    testWidgets(
+      'offers the two things a technician starts from here, plus Le mie timbrature and Timbra con QR',
+      (tester) async {
+        // Was four (Rapportini/Magazzino dropped — destinations the Altro tab already reaches; a
+        // shortcut to a screen one tap away is not a shortcut, it is a second door), then three
+        // ("Le mie timbrature" added back as a view, not a start action, since it's the
+        // personal-Timbra home now that the Timbra bottom-nav tab is gone). "Timbra con QR" is a
+        // fourth: the kiosk QR scan used to be two taps deep (Dashboard → Timbra → QR) with no
+        // entry point of its own here, even though it's meant to be the fast path when arriving
+        // at a kiosk totem.
+        await pumpDashboard(tester);
 
-      expect(find.byType(QuickAction, skipOffstage: false), findsNWidgets(3));
-      expect(find.text('Magazzino', skipOffstage: false), findsNothing);
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
+        expect(find.byType(QuickAction, skipOffstage: false), findsNWidgets(4));
+        expect(find.text('Magazzino', skipOffstage: false), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
 
     // ── Le mie timbrature (Task 11: personal-Timbra entry point) ────────────
     //
@@ -252,6 +260,34 @@ void main() {
         await tester.pumpAndSettle();
       },
     );
+
+    // ── Timbra con QR (Dashboard entry point for the kiosk-scan flow) ───────
+    //
+    // Same destination as TimbraScreen's own header action (AppRoutes.timbraQr) — this tile just
+    // gives it a one-tap Dashboard entry point too, since there's no Timbra bottom-nav tab to
+    // reach it from otherwise.
+
+    testWidgets('tapping Timbra con QR pushes AppRoutes.timbraQr', (tester) async {
+      final router = _makeQuickActionRouter();
+      await tester.pumpWidget(_buildDashboardWithRouter(db: db, repo: repo, router: router));
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final tile = find.text('Timbra\ncon QR', skipOffstage: false);
+      expect(tile, findsOneWidget);
+
+      await tester.ensureVisible(tile);
+      await tester.pumpAndSettle();
+
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+
+      expect(find.text('TIMBRA-QR-SCREEN-MARKER'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
 
     testWidgets('shows the clock-in prompt, not a placeholder, when no clock is running', (
       tester,

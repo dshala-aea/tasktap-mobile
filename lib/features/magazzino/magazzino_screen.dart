@@ -102,11 +102,7 @@ class _MagazzinoBody extends ConsumerWidget {
   final ValueChanged<bool> onSottoScortaChanged;
   final ValueChanged<String> onCategoryChanged;
 
-  static final _priceFormat = NumberFormat.currency(
-    locale: 'it',
-    symbol: '€',
-    decimalDigits: 2,
-  );
+  static final _priceFormat = NumberFormat.currency(locale: 'it', symbol: '€', decimalDigits: 2);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -120,9 +116,7 @@ class _MagazzinoBody extends ConsumerWidget {
       },
       child: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(title: 'Magazzino', showBack: true),
-          ),
+          SliverToBoxAdapter(child: ScreenHeader(title: 'Magazzino', showBack: true)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.xs),
@@ -150,11 +144,16 @@ class _MagazzinoBody extends ConsumerWidget {
                       onChanged: onQueryChanged,
                       // Own right margin dropped to a small gap — the scan button follows it now,
                       // rather than the field sitting flush against the screen edge.
-                      margin: const EdgeInsets.fromLTRB(19, 0, 8, 12),
+                      margin: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.sm,
+                        AppSpacing.md,
+                      ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(right: 8, bottom: 12),
+                    padding: const EdgeInsets.only(right: AppSpacing.sm, bottom: AppSpacing.md),
                     child: IconButton(
                       icon: const Icon(LucideIcons.scanLine),
                       tooltip: 'Scansiona codice',
@@ -267,10 +266,7 @@ class _MagazzinoBody extends ConsumerWidget {
       else
         SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _MaterialeRow(
-              materiale: filtered[i],
-              priceFormat: _priceFormat,
-            ),
+            (context, i) => _MaterialeRow(materiale: filtered[i], priceFormat: _priceFormat),
             childCount: filtered.length,
           ),
         ),
@@ -282,10 +278,7 @@ class _MagazzinoBody extends ConsumerWidget {
   List<Widget> _giacenzeSlivers(BuildContext context, WidgetRef ref) {
     final async = ref.watch(
       giacenzeProvider(
-        GiacenzeQuery(
-          q: query.isEmpty ? null : query,
-          soloSottoScorta: soloSottoScorta,
-        ),
+        GiacenzeQuery(q: query.isEmpty ? null : query, soloSottoScorta: soloSottoScorta),
       ),
     );
 
@@ -337,12 +330,8 @@ class _MagazzinoBody extends ConsumerWidget {
         data: (page) => page.elementi.isEmpty
             ? SliverToBoxAdapter(
                 child: EmptyState(
-                  icon: soloSottoScorta
-                      ? LucideIcons.checkCircle
-                      : LucideIcons.searchX,
-                  title: soloSottoScorta
-                      ? 'Nessuna scorta sotto minimo'
-                      : 'Nessuna giacenza',
+                  icon: soloSottoScorta ? LucideIcons.checkCircle : LucideIcons.searchX,
+                  title: soloSottoScorta ? 'Nessuna scorta sotto minimo' : 'Nessuna giacenza',
                   body: soloSottoScorta
                       ? 'Tutti i materiali sono sopra la soglia minima.'
                       : 'Nessuna giacenza corrisponde alla ricerca.',
@@ -370,8 +359,7 @@ class _MagazzinoBody extends ConsumerWidget {
           child: UnavailableState(
             icon: LucideIcons.wifiOff,
             titolo: 'Movimenti non disponibili',
-            motivo:
-                'Lo storico movimenti si legge solo online. Riprova quando hai segnale.',
+            motivo: 'Lo storico movimenti si legge solo online. Riprova quando hai segnale.',
             action: AppButton(
               label: 'Riprova',
               size: AppButtonSize.sm,
@@ -404,10 +392,7 @@ class _Spinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Center(
-    child: Padding(
-      padding: EdgeInsets.all(AppSpacing.xxxl),
-      child: CircularProgressIndicator(),
-    ),
+    child: Padding(padding: EdgeInsets.all(AppSpacing.xxxl), child: CircularProgressIndicator()),
   );
 }
 
@@ -423,21 +408,16 @@ class _MaterialeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final codeMarca = [
       materiale.code,
-      if (materiale.marca != null && materiale.marca!.isNotEmpty)
-        materiale.marca,
+      if (materiale.marca != null && materiale.marca!.isNotEmpty) materiale.marca,
     ].join(' · ');
 
     final subParts = [
-      if (materiale.unitOfMeasure != null &&
-          materiale.unitOfMeasure!.isNotEmpty)
+      if (materiale.unitOfMeasure != null && materiale.unitOfMeasure!.isNotEmpty)
         materiale.unitOfMeasure!,
-      if (materiale.category != null && materiale.category!.isNotEmpty)
-        materiale.category!,
+      if (materiale.category != null && materiale.category!.isNotEmpty) materiale.category!,
     ].join(' · ');
 
-    final priceLabel = materiale.salePrice != null
-        ? priceFormat.format(materiale.salePrice)
-        : null;
+    final priceLabel = materiale.salePrice != null ? priceFormat.format(materiale.salePrice) : null;
 
     return ListRow(
       leading: _Tile(icon: LucideIcons.package),
@@ -477,16 +457,13 @@ class _GiacenzaRow extends ConsumerWidget {
       // the strap here would cost it the meaning it has everywhere else.
       ledgeColor: giacenza.sottoScorta ? c.red : null,
       leading: _Tile(
-        icon: giacenza.sottoScorta
-            ? LucideIcons.alertTriangle
-            : LucideIcons.package,
+        icon: giacenza.sottoScorta ? LucideIcons.alertTriangle : LucideIcons.package,
         tint: giacenza.sottoScorta ? c.red : null,
       ),
       title: giacenza.materialeNome ?? giacenza.materialeId,
       subtitle: [
         if (giacenza.magazzinoNome != null) giacenza.magazzinoNome!,
-        if (giacenza.stockMinimo != null)
-          'min ${giacenza.stockMinimo!.toStringAsFixed(0)}',
+        if (giacenza.stockMinimo != null) 'min ${giacenza.stockMinimo!.toStringAsFixed(0)}',
       ].join(' · '),
       meta: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -504,11 +481,7 @@ class _GiacenzaRow extends ConsumerWidget {
           if (giacenza.sottoScorta)
             Text(
               'sotto scorta',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: c.red,
-              ),
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.red),
             ),
         ],
       ),
@@ -526,7 +499,7 @@ class _GiacenzaRow extends ConsumerWidget {
       builder: (ctx) => SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           // AppCard as the sheet shell, ListRow for each action — same vocabulary the rest of
           // the app's action lists use (ticket_detail_screen's attachment/report rows), rather
           // than the plain ListTiles this sheet used to hand-roll.
@@ -536,11 +509,7 @@ class _GiacenzaRow extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListRow(
-                  leading: Icon(
-                    LucideIcons.arrowDownToLine,
-                    size: 20,
-                    color: ctx.colors.green,
-                  ),
+                  leading: Icon(LucideIcons.arrowDownToLine, size: 20, color: ctx.colors.green),
                   title: 'Carico',
                   subtitle: 'Aggiungi quantità a questo magazzino',
                   onTap: () {
@@ -549,11 +518,7 @@ class _GiacenzaRow extends ConsumerWidget {
                   },
                 ),
                 ListRow(
-                  leading: Icon(
-                    LucideIcons.arrowUpFromLine,
-                    size: 20,
-                    color: ctx.colors.amber,
-                  ),
+                  leading: Icon(LucideIcons.arrowUpFromLine, size: 20, color: ctx.colors.amber),
                   title: 'Scarico',
                   subtitle: 'Rimuovi quantità da questo magazzino',
                   onTap: () {
@@ -562,11 +527,7 @@ class _GiacenzaRow extends ConsumerWidget {
                   },
                 ),
                 ListRow(
-                  leading: Icon(
-                    LucideIcons.arrowLeftRight,
-                    size: 20,
-                    color: ctx.colors.inkMuted,
-                  ),
+                  leading: Icon(LucideIcons.arrowLeftRight, size: 20, color: ctx.colors.inkMuted),
                   title: 'Trasferisci',
                   subtitle: 'Sposta quantità verso un altro magazzino',
                   onTap: () {
@@ -575,14 +536,8 @@ class _GiacenzaRow extends ConsumerWidget {
                   },
                 ),
                 ListRow(
-                  leading: Icon(
-                    LucideIcons.alertTriangle,
-                    size: 20,
-                    color: ctx.colors.inkMuted,
-                  ),
-                  title: hasStockMinimo
-                      ? 'Modifica soglia minima'
-                      : 'Imposta soglia minima',
+                  leading: Icon(LucideIcons.alertTriangle, size: 20, color: ctx.colors.inkMuted),
+                  title: hasStockMinimo ? 'Modifica soglia minima' : 'Imposta soglia minima',
                   showDivider: hasStockMinimo,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -591,11 +546,7 @@ class _GiacenzaRow extends ConsumerWidget {
                 ),
                 if (hasStockMinimo)
                   ListRow(
-                    leading: Icon(
-                      LucideIcons.x,
-                      size: 20,
-                      color: ctx.colors.red,
-                    ),
+                    leading: Icon(LucideIcons.x, size: 20, color: ctx.colors.red),
                     title: 'Rimuovi soglia minima',
                     showDivider: false,
                     onTap: () async {
@@ -611,11 +562,7 @@ class _GiacenzaRow extends ConsumerWidget {
     );
   }
 
-  void _showMovimentoDialog(
-    BuildContext context,
-    WidgetRef ref,
-    MovimentoKind kind,
-  ) {
+  void _showMovimentoDialog(BuildContext context, WidgetRef ref, MovimentoKind kind) {
     final qtyCtrl = TextEditingController(text: '1');
     final noteCtrl = TextEditingController();
     final isCarico = kind == MovimentoKind.carico;
@@ -628,7 +575,7 @@ class _GiacenzaRow extends ConsumerWidget {
           return Dialog(
             backgroundColor: Colors.transparent,
             child: AppCard(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 18, AppSpacing.lg, AppSpacing.lg),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -652,12 +599,8 @@ class _GiacenzaRow extends ConsumerWidget {
                     label: 'Quantità',
                     child: TextField(
                       controller: qtyCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                      ],
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -688,9 +631,7 @@ class _GiacenzaRow extends ConsumerWidget {
 
                                   setDialogState(() => isSaving = true);
                                   try {
-                                    final client = ref.read(
-                                      magazzinoApiClientProvider,
-                                    );
+                                    final client = ref.read(magazzinoApiClientProvider);
                                     final note = noteCtrl.text.trim().isEmpty
                                         ? null
                                         : noteCtrl.text.trim();
@@ -725,10 +666,7 @@ class _GiacenzaRow extends ConsumerWidget {
                                     if (context.mounted) {
                                       showAppToast(
                                         context,
-                                        message: _movimentoErrorMessage(
-                                          e,
-                                          isCarico: isCarico,
-                                        ),
+                                        message: _movimentoErrorMessage(e, isCarico: isCarico),
                                         tone: ToastTone.error,
                                       );
                                     }
@@ -768,7 +706,7 @@ class _GiacenzaRow extends ConsumerWidget {
           return Dialog(
             backgroundColor: Colors.transparent,
             child: AppCard(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 18, AppSpacing.lg, AppSpacing.lg),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -804,10 +742,7 @@ class _GiacenzaRow extends ConsumerWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Da: ${giacenza.magazzinoNome ?? giacenza.magazzinoId}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: ctx.colors.inkMuted,
-                          ),
+                          style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
                         ),
                         const SizedBox(height: 12),
                         Consumer(
@@ -815,15 +750,11 @@ class _GiacenzaRow extends ConsumerWidget {
                             final async = ref.watch(magazziniProvider);
                             return async.when(
                               loading: () => const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
+                                padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                                 child: CircularProgressIndicator(),
                               ),
-                              error: (e, _) => Text(
-                                humanErrorMessage(
-                                  e,
-                                  azione: 'caricare i magazzini',
-                                ),
-                              ),
+                              error: (e, _) =>
+                                  Text(humanErrorMessage(e, azione: 'caricare i magazzini')),
                               data: (list) {
                                 final options = list
                                     .where((m) => m.id != giacenza.magazzinoId)
@@ -833,19 +764,13 @@ class _GiacenzaRow extends ConsumerWidget {
                                   child: DropdownButtonFormField<String>(
                                     // ignore: deprecated_member_use — controlled field
                                     value: destinationId,
-                                    decoration: const InputDecoration(
-                                      isDense: true,
-                                    ),
+                                    decoration: const InputDecoration(isDense: true),
                                     isExpanded: true,
                                     items: [
                                       for (final m in options)
-                                        DropdownMenuItem(
-                                          value: m.id,
-                                          child: Text(m.nome),
-                                        ),
+                                        DropdownMenuItem(value: m.id, child: Text(m.nome)),
                                     ],
-                                    onChanged: (v) =>
-                                        setDialogState(() => destinationId = v),
+                                    onChanged: (v) => setDialogState(() => destinationId = v),
                                   ),
                                 );
                               },
@@ -857,14 +782,8 @@ class _GiacenzaRow extends ConsumerWidget {
                           label: 'Quantità',
                           child: TextField(
                             controller: qtyCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'[0-9.]'),
-                              ),
-                            ],
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -894,15 +813,12 @@ class _GiacenzaRow extends ConsumerWidget {
                               : () async {
                                   final qty = double.tryParse(qtyCtrl.text);
                                   final dest = destinationId;
-                                  if (qty == null || qty <= 0 || dest == null)
-                                    return;
+                                  if (qty == null || qty <= 0 || dest == null) return;
                                   if (!ensureOnlineOrWarn(context, ref)) return;
 
                                   setDialogState(() => isSaving = true);
                                   try {
-                                    final client = ref.read(
-                                      magazzinoApiClientProvider,
-                                    );
+                                    final client = ref.read(magazzinoApiClientProvider);
                                     await client.trasferimento(
                                       magazzinoId: giacenza.magazzinoId,
                                       materialeId: giacenza.materialeId,
@@ -926,10 +842,7 @@ class _GiacenzaRow extends ConsumerWidget {
                                     if (context.mounted) {
                                       showAppToast(
                                         context,
-                                        message: _movimentoErrorMessage(
-                                          e,
-                                          isCarico: false,
-                                        ),
+                                        message: _movimentoErrorMessage(e, isCarico: false),
                                         tone: ToastTone.error,
                                       );
                                     }
@@ -950,16 +863,14 @@ class _GiacenzaRow extends ConsumerWidget {
   }
 
   void _showStockMinimoDialog(BuildContext context, WidgetRef ref) {
-    final ctrl = TextEditingController(
-      text: giacenza.stockMinimo?.toStringAsFixed(0) ?? '',
-    );
+    final ctrl = TextEditingController(text: giacenza.stockMinimo?.toStringAsFixed(0) ?? '');
 
     showDialog<void>(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         child: AppCard(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 18, AppSpacing.lg, AppSpacing.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -978,12 +889,8 @@ class _GiacenzaRow extends ConsumerWidget {
                 label: 'Quantità minima',
                 child: TextField(
                   controller: ctrl,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  ],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                   autofocus: true,
                 ),
               ),
@@ -1008,10 +915,7 @@ class _GiacenzaRow extends ConsumerWidget {
                         try {
                           await ref
                               .read(magazzinoApiClientProvider)
-                              .setStockMinimo(
-                                stockId: giacenza.id,
-                                stockMinimo: value,
-                              );
+                              .setStockMinimo(stockId: giacenza.id, stockMinimo: value);
                           _refresh(ref);
                           if (context.mounted) {
                             showAppToast(
@@ -1024,10 +928,7 @@ class _GiacenzaRow extends ConsumerWidget {
                           if (context.mounted) {
                             showAppToast(
                               context,
-                              message: humanErrorMessage(
-                                e,
-                                azione: 'salvare la soglia minima',
-                              ),
+                              message: humanErrorMessage(e, azione: 'salvare la soglia minima'),
                               tone: ToastTone.error,
                             );
                           }
@@ -1049,16 +950,10 @@ class _GiacenzaRow extends ConsumerWidget {
   Future<void> _clearStockMinimo(BuildContext context, WidgetRef ref) async {
     if (!ensureOnlineOrWarn(context, ref)) return;
     try {
-      await ref
-          .read(magazzinoApiClientProvider)
-          .clearStockMinimo(stockId: giacenza.id);
+      await ref.read(magazzinoApiClientProvider).clearStockMinimo(stockId: giacenza.id);
       _refresh(ref);
       if (context.mounted) {
-        showAppToast(
-          context,
-          message: 'Soglia minima rimossa',
-          tone: ToastTone.success,
-        );
+        showAppToast(context, message: 'Soglia minima rimossa', tone: ToastTone.success);
       }
     } catch (e) {
       if (context.mounted) {
@@ -1138,11 +1033,7 @@ class _MovimentoRow extends StatelessWidget {
         children: [
           Text(
             qtyLabel,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: c.ink,
-            ),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.ink),
           ),
           Text(
             _dateFormat.format(movimento.data.toLocal()),

@@ -80,7 +80,7 @@ class _NavigaButton extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,

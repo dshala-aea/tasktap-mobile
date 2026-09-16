@@ -32,6 +32,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import 'cantiere_timbra_screen.dart' show cantieriProvider;
+import '../../core/theme/app_text_styles.dart';
 
 class SelezionaCantiereScreen extends ConsumerStatefulWidget {
   const SelezionaCantiereScreen({super.key, this.ticketId, this.customerId});
@@ -173,7 +174,7 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
                       itemBuilder: (context, i) {
                         final c = ordered[i];
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                           child: AppCard.pressable(
                             onTap: () => _select(c),
                             child: Row(
@@ -186,10 +187,7 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
                                     children: [
                                       Text(
                                         c.name,
-                                        style: TextStyle(
-                                          fontFamily: 'Archivo Narrow',
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
+                                        style: AppTextStyles.titleMedium.copyWith(
                                           color: context.colors.ink,
                                         ),
                                       ),

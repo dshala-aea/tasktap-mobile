@@ -213,8 +213,8 @@ void main() {
       await tester.tap(find.text('Genera pianificazione'));
       await tester.pumpAndSettle();
 
-      final generaButton = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, 'Genera'),
+      final generaButton = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Genera'),
       );
       expect(generaButton.onPressed, isNull);
       await teardown(tester);

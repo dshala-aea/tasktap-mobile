@@ -46,6 +46,7 @@ import 'cantiere_timbra_screen.dart'
         formatHoursMinutes,
         isOfflineFailure;
 import 'gps_status_indicator.dart';
+import '../../core/theme/app_text_styles.dart';
 
 const _uuid = Uuid();
 
@@ -205,10 +206,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                               Expanded(
                                 child: Text(
                                   cantiereAsync.valueOrNull?.name ?? 'Cantiere',
-                                  style: TextStyle(
-                                    fontFamily: 'Archivo Narrow',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
+                                  style: AppTextStyles.titleMedium.copyWith(
                                     color: context.colors.ink,
                                   ),
                                 ),

@@ -361,12 +361,7 @@ class _StaffTileState extends State<_StaffTile> {
           // Header row
           Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(color: AppColors.Y.withAlpha(31), shape: BoxShape.circle),
-                child: Icon(LucideIcons.user, size: 18, color: AppColors.Y),
-              ),
+              const RowIconTile(icon: LucideIcons.user, size: 36, iconSize: 18, circle: true),
               const SizedBox(width: 10),
               Expanded(
                 child: Consumer(

@@ -8,6 +8,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/kiosk/kiosk_lock_service.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/theme/app_palette.dart';
+import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_text_field.dart';
 import '../../data/kiosk/kiosk_api_client.dart';
 import '../../presentation/providers/kiosk_providers.dart';
@@ -119,9 +121,7 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Inserisci il PIN di uscita impostato all\'attivazione.',
-                  ),
+                  const Text('Inserisci il PIN di uscita impostato all\'attivazione.'),
                   const SizedBox(height: AppSpacing.base),
                   AppTextField(
                     label: 'PIN',
@@ -132,10 +132,7 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                   ),
                   if (wrongPin) ...[
                     const SizedBox(height: AppSpacing.xs),
-                    const Text(
-                      'PIN errato.',
-                      style: TextStyle(color: Colors.red),
-                    ),
+                    Text('PIN errato.', style: TextStyle(color: dialogContext.colors.red)),
                   ],
                 ],
               ),
@@ -144,19 +141,17 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                   onPressed: () => Navigator.of(dialogContext).pop(false),
                   child: const Text('Annulla'),
                 ),
-                FilledButton(
+                AppButton(
+                  label: 'Disattiva',
+                  size: AppButtonSize.sm,
                   onPressed: () async {
-                    final ok = await ref
-                        .read(kioskModeProvider.notifier)
-                        .deactivate(pinCtrl.text);
+                    final ok = await ref.read(kioskModeProvider.notifier).deactivate(pinCtrl.text);
                     if (ok) {
-                      if (dialogContext.mounted)
-                        Navigator.of(dialogContext).pop(true);
+                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
                     } else {
                       setDialogState(() => wrongPin = true);
                     }
                   },
-                  child: const Text('Disattiva'),
                 ),
               ],
             );
@@ -186,17 +181,13 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                     kioskState.deviceLabel?.isNotEmpty == true
                         ? kioskState.deviceLabel!
                         : 'Totem presenze TaskTap',
-                    style: AppTextStyles.headlineMedium.copyWith(
-                      color: Colors.white,
-                    ),
+                    style: AppTextStyles.headlineMedium.copyWith(color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     DateFormat('EEEE d MMMM · HH:mm:ss', 'it').format(_now),
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: Colors.white70,
-                    ),
+                    style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
                   ),
                   const SizedBox(height: AppSpacing.xxl),
                   Container(
@@ -221,35 +212,26 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                   const SizedBox(height: AppSpacing.xxl),
                   Text(
                     'Inquadra il codice con la tua app TaskTap per timbrare',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: Colors.white70,
-                    ),
+                    style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
                     textAlign: TextAlign.center,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: AppSpacing.base),
                     Text(
                       _error!,
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.orangeAccent,
-                      ),
+                      style: AppTextStyles.bodySmall.copyWith(color: Colors.orangeAccent),
                       textAlign: TextAlign.center,
                     ),
                   ],
-                  if (kioskState.lockOutcome ==
-                      KioskLockOutcome.unsupportedPlatform) ...[
+                  if (kioskState.lockOutcome == KioskLockOutcome.unsupportedPlatform) ...[
                     const SizedBox(height: AppSpacing.base),
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.xxl,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
                       child: Text(
                         'Blocco schermo non disponibile su questo dispositivo: abilita '
                         'manualmente "Accesso guidato" (iOS) per impedire l\'uscita '
                         'dall\'app.',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: Colors.amber,
-                        ),
+                        style: AppTextStyles.bodySmall.copyWith(color: Colors.amber),
                         textAlign: TextAlign.center,
                       ),
                     ),

@@ -5,6 +5,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_vetro_palette.dart';
 import 'app_button.dart';
 import 'empty_state.dart';
+import '../theme/app_spacing.dart';
 
 /// Shown where a fetch or submit genuinely failed — a network drop, a 403, a 500 — as opposed to
 /// [UnavailableState]'s "no client code path fetches this yet".
@@ -51,15 +52,11 @@ class ErrorState extends StatelessWidget {
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 40),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 40),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: VetroStateCard(
-            iconBadge: VetroStateIconBadge(
-              icon: icon,
-              tint: v.statusBad,
-              tintBg: v.statusBadBg,
-            ),
+            iconBadge: VetroStateIconBadge(icon: icon, tint: v.statusBad, tintBg: v.statusBadBg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -20,6 +20,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../presentation/providers/schedule_providers.dart';
+import '../../core/theme/app_text_styles.dart';
 
 /// Opens the teammate picker as a bottom sheet. Returns the selected userIds, or null if the
 /// technician dismissed the sheet without confirming a selection.
@@ -64,7 +65,10 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
       expand: false,
       builder: (ctx, scrollController) => Column(
         children: [
-          const Padding(padding: EdgeInsets.only(top: 10, bottom: 4), child: SheetHandle()),
+          const Padding(
+            padding: EdgeInsets.only(top: 10, bottom: AppSpacing.xs),
+            child: SheetHandle(),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.pagePadding,
@@ -124,7 +128,7 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                           ref.watch(colleagueNameProvider(a.userId)).valueOrNull ?? a.userId;
 
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                         // A screen reader otherwise announces only the name — never whether this
                         // row is currently checked — because the checkbox-like icon is purely
                         // visual (an Icon carries no semantic checked state on its own).
@@ -146,10 +150,7 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                                 Expanded(
                                   child: Text(
                                     name,
-                                    style: TextStyle(
-                                      fontFamily: 'Archivo Narrow',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
+                                    style: AppTextStyles.titleMedium.copyWith(
                                       color: ctx.colors.ink,
                                     ),
                                   ),

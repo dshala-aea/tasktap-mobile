@@ -311,7 +311,9 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
-            ElevatedButton(
+            AppButton(
+              label: 'Aggiungi',
+              size: AppButtonSize.sm,
               onPressed: () async {
                 final barcode = barcodeCtrl.text.trim();
                 if (barcode.isEmpty) return;
@@ -337,7 +339,6 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                   });
                 }
               },
-              child: const Text('Aggiungi'),
             ),
           ],
         ),
@@ -631,7 +632,7 @@ class _ImageSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionTitle(title: 'Immagine'),
+        const StepLabel(title: 'Immagine'),
         const SizedBox(height: 8),
         if (imageUrl != null)
           ClipRRect(
@@ -679,7 +680,10 @@ class _ImageSection extends StatelessWidget {
           ],
         ),
         if (isBusy)
-          const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
+          const Padding(
+            padding: EdgeInsets.only(top: AppSpacing.sm),
+            child: LinearProgressIndicator(),
+          ),
       ],
     );
   }
@@ -707,7 +711,7 @@ class _BarcodesSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionTitle(title: 'Barcode'),
+        const StepLabel(title: 'Barcode'),
         const SizedBox(height: 8),
         if (!loaded)
           Text(

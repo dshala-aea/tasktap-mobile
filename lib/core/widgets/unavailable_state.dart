@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_palette.dart';
+import '../theme/app_spacing.dart';
 import 'empty_state.dart';
 
 /// Shown where a screen needs backend data that no client code path fetches (or writes to the
@@ -51,13 +52,64 @@ class UnavailableState extends StatelessWidget {
   /// retry ("riprova tra poco") with no actual gesture behind it.
   final Widget? action;
 
+  /// A fetch-on-demand tab's own error state — offline and generic-failure read as genuinely
+  /// different things to a technician (nothing to do about one, a real retry-worthy problem on
+  /// the other), so this always distinguishes them rather than showing one flat error for both.
+  ///
+  /// Was `ticket_detail_screen.dart`'s own private `_TabError` class, duplicated in spirit (not
+  /// literally copy-pasted, but reinvented) at two other raw [UnavailableState] call sites in the
+  /// same screen that never got the same split — this is now the one place that logic lives.
+  ///
+  /// ```dart
+  /// ticketReportsProvider(ticketId).when(
+  ///   error: (e, _) => UnavailableState.forFetchError(
+  ///     icon: LucideIcons.fileText,
+  ///     offline: e is TicketDetailOfflineException,
+  ///     offlineTitle: 'Rapportini non disponibili offline',
+  ///     offlineBody: 'La lista richiede una connessione: riprova quando torni online.',
+  ///     errorTitle: 'Impossibile caricare i rapportini',
+  ///     errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+  ///   ),
+  ///   ...
+  /// );
+  /// ```
+  factory UnavailableState.forFetchError({
+    Key? key,
+    required bool offline,
+    required String offlineTitle,
+    required String offlineBody,
+    required String errorTitle,
+    required String errorBody,
+    IconData icon = LucideIcons.alertTriangle,
+  }) {
+    return offline
+        ? UnavailableState(
+            key: key,
+            icon: LucideIcons.wifiOff,
+            titolo: offlineTitle,
+            motivo: offlineBody,
+          )
+        : UnavailableState(key: key, icon: icon, titolo: errorTitle, motivo: errorBody);
+  }
+
+  /// Same as the plain constructor, wrapped in the horizontal page padding a tab's own content
+  /// needs (the plain constructor already pads itself for a full-screen placement, which double-
+  /// pads inside a tab that provides its own outer padding) — [forFetchError]'s original call
+  /// sites all wanted this; kept as an explicit opt-in rather than baked into every use.
+  Widget paddedForTab() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      child: this,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 40),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 40),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
           child: VetroStateCard(

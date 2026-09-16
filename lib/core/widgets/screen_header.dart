@@ -4,6 +4,8 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../theme/app_rack.dart';
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 /// 38×38 circular icon button (≥44 pt hit area), BG3 bg (or glass), icon 17, optional red dot
 /// badge.
@@ -93,10 +95,7 @@ class HeaderIconBtn extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: context.colors.red,
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: context.colors.bg3,
-                          width: 1.5,
-                        ),
+                        border: Border.all(color: context.colors.bg3, width: 1.5),
                       ),
                     ),
                   ),
@@ -143,12 +142,17 @@ class ScreenHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final titleColor = context.colors.ink;
     final row = Padding(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+      ),
       child: Row(
         children: [
           if (showBack)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.only(right: AppSpacing.sm),
               child: HeaderIconBtn(
                 icon: LucideIcons.chevronLeft,
                 label: 'Indietro',
@@ -177,12 +181,7 @@ class ScreenHeader extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Archivo',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: context.colors.inkMuted,
-                    ),
+                    style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                   ),
               ],
             ),

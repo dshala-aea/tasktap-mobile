@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Search input — a flat Documento sheet, 12 px radius, pad 10/14, search icon (16, MUTED) + 14 px
 /// input. Spec margin: 0 / 19 / 12.
@@ -21,7 +22,12 @@ class AppSearchBar extends StatelessWidget {
     this.controller,
     this.hint = 'Cerca…',
     this.onChanged,
-    this.margin = const EdgeInsets.fromLTRB(19, 0, 19, 12),
+    this.margin = const EdgeInsets.fromLTRB(
+      AppSpacing.pagePadding,
+      0,
+      AppSpacing.pagePadding,
+      AppSpacing.md,
+    ),
   });
 
   final TextEditingController? controller;
@@ -42,14 +48,10 @@ class AppSearchBar extends StatelessWidget {
             border: Border.all(color: context.colors.borderLight),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
             child: Row(
               children: [
-                Icon(
-                  LucideIcons.search,
-                  size: 16,
-                  color: context.colors.inkMuted,
-                ),
+                Icon(LucideIcons.search, size: 16, color: context.colors.inkMuted),
                 const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
@@ -62,10 +64,7 @@ class AppSearchBar extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       border: InputBorder.none,
                       hintText: hint,
-                      hintStyle: TextStyle(
-                        fontSize: 14,
-                        color: context.colors.inkDisabled,
-                      ),
+                      hintStyle: TextStyle(fontSize: 14, color: context.colors.inkDisabled),
                     ),
                   ),
                 ),

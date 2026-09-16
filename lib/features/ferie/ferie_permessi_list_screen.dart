@@ -11,6 +11,7 @@ import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 const Set<int> _kCancellable = {0, 1}; // Pending, Approved
 
@@ -166,7 +167,7 @@ class _FeriePermessiRowState extends ConsumerState<_FeriePermessiRow> {
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
+        padding: const EdgeInsets.only(right: AppSpacing.xl),
         child: Icon(LucideIcons.x, color: context.colors.red),
       ),
       confirmDismiss: (_) => _confirmCancel(),

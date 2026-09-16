@@ -21,6 +21,7 @@ import 'steps/step_ore.dart';
 import 'steps/step_riepilogo.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoFormScreen
@@ -113,13 +114,17 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     final ticketId = editorState.ticketId;
     final controlliDone = ticketId == null
         ? true
-        : ref.watch(cachedTicketControlsProvider(ticketId)).maybeWhen(
-            data: (groups) => controlliCompletionFor(
-              requiredControlIds: flattenTicketControls(groups).map((f) => f.control.id).toList(),
-              recordedRows: editorState.controlloRows,
-            ),
-            orElse: () => false,
-          );
+        : ref
+              .watch(cachedTicketControlsProvider(ticketId))
+              .maybeWhen(
+                data: (groups) => controlliCompletionFor(
+                  requiredControlIds: flattenTicketControls(
+                    groups,
+                  ).map((f) => f.control.id).toList(),
+                  recordedRows: editorState.controlloRows,
+                ),
+                orElse: () => false,
+              );
 
     // Once per screen lifetime, after the first frame (a BuildContext for showModalBottomSheet
     // isn't valid mid-build) — and only for a draft with nothing in Dettagli yet, so reopening an
@@ -392,12 +397,7 @@ class _CompletionCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           ready ? 'Pronto per l\'invio' : 'Da completare',
-                          style: const TextStyle(
-                            fontFamily: 'Archivo Narrow',
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: AppTextStyles.titleMedium.copyWith(color: Colors.white),
                         ),
                       ],
                     ),

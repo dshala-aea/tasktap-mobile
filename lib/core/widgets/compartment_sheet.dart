@@ -12,11 +12,7 @@ import 'screen_header.dart';
 /// grid of tiles that each open a sheet, so the page itself never grows or shrinks around whatever
 /// is open. Scrollable and height-capped: the content widgets this wraps were built to sit inside
 /// an ambient scroll view, not to bound their own height, so this supplies both.
-void openCompartmentSheet(
-  BuildContext context, {
-  required String label,
-  required Widget content,
-}) {
+void openCompartmentSheet(BuildContext context, {required String label, required Widget content}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -31,7 +27,7 @@ void openCompartmentSheet(
       builder: (ctx, scrollController) => Column(
         children: [
           const Padding(
-            padding: EdgeInsets.only(top: 10, bottom: 4),
+            padding: EdgeInsets.only(top: 10, bottom: AppSpacing.xs),
             child: SheetHandle(),
           ),
           Padding(
@@ -71,9 +67,7 @@ void openCompartmentSheet(
                 // (padding) — the sheet's content otherwise sat flush against the home indicator
                 // on notched devices whenever the keyboard was closed, since viewInsets.bottom is
                 // 0 in that state and carries none of the safe-area reservation on its own.
-                bottom:
-                    MediaQuery.of(ctx).viewInsets.bottom +
-                    MediaQuery.of(ctx).padding.bottom,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
               ),
               child: content,
             ),

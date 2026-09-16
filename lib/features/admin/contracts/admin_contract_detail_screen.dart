@@ -305,39 +305,66 @@ class _GeneraScheduleDialogState extends ConsumerState<_GeneraScheduleDialog> {
     final techniciansAsync = ref.watch(techniciansProvider);
     final technicians = techniciansAsync.valueOrNull ?? [];
 
-    return AlertDialog(
-      title: const Text('Generare la pianificazione?'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Verranno create le pianificazioni ricorrenti del contratto. ${widget.rangeLabel}.'),
-          const SizedBox(height: 16),
-          AppFieldShell(
-            label: 'Tecnico *',
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedUserId,
-              items: technicians
-                  .map(
-                    (t) => DropdownMenuItem(
-                      value: t['id'] as String,
-                      child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedUserId = v),
-              hint: const Text('Seleziona un tecnico'),
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Generare la pianificazione?',
+              style: TextStyle(
+                fontFamily: 'Archivo Narrow',
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: context.colors.ink,
+              ),
             ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annulla')),
-        TextButton(
-          onPressed: _selectedUserId == null ? null : () => Navigator.pop(context, _selectedUserId),
-          child: const Text('Genera'),
+            const SizedBox(height: 8),
+            Text(
+              'Verranno create le pianificazioni ricorrenti del contratto. ${widget.rangeLabel}.',
+              style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+            ),
+            const SizedBox(height: 16),
+            AppFieldShell(
+              label: 'Tecnico *',
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedUserId,
+                items: technicians
+                    .map(
+                      (t) => DropdownMenuItem(
+                        value: t['id'] as String,
+                        child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedUserId = v),
+                hint: const Text('Seleziona un tecnico'),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.ghost(label: 'Annulla', onPressed: () => Navigator.pop(context)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppButton(
+                    label: 'Genera',
+                    onPressed: _selectedUserId == null
+                        ? null
+                        : () => Navigator.pop(context, _selectedUserId),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

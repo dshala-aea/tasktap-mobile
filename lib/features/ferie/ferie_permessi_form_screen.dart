@@ -144,24 +144,17 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
           context.navClearance,
         ),
         children: [
-          Text(
-            'Tipo',
-            style: TextStyle(
-              fontFamily: 'Archivo',
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: context.colors.inkMuted,
+          AppFieldShell(
+            label: 'Tipo',
+            child: DropdownButtonFormField<int>(
+              initialValue: _type,
+              isExpanded: true,
+              items: [
+                for (var i = 0; i < kAbsenceTypeLabels.length; i++)
+                  DropdownMenuItem(value: i, child: Text(kAbsenceTypeLabels[i])),
+              ],
+              onChanged: (t) => t != null ? setState(() => _type = t) : null,
             ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            initialValue: _type,
-            isExpanded: true,
-            items: [
-              for (var i = 0; i < kAbsenceTypeLabels.length; i++)
-                DropdownMenuItem(value: i, child: Text(kAbsenceTypeLabels[i])),
-            ],
-            onChanged: (t) => t != null ? setState(() => _type = t) : null,
           ),
           const SizedBox(height: 16),
 

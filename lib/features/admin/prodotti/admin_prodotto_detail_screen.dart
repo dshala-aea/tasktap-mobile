@@ -190,29 +190,22 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Delete confirmation dialog + API call — mirrors `_deleteCantiere` in
-/// admin_cantiere_detail_screen.dart (no shared confirm-dialog widget exists yet in this app).
+/// Delete confirmation dialog + API call — same shape as `_deleteCantiere` in
+/// admin_cantiere_detail_screen.dart, both via the shared `confirmDeleteDialog`.
 Future<void> _deleteProdotto(
   BuildContext context,
   WidgetRef ref,
   String prodottoId,
   String name,
 ) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog.adaptive(
-      title: const Text('Eliminare il prodotto?'),
-      content: Text(
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il prodotto?',
+    message:
         'Il prodotto "$name" verrà eliminato definitivamente. L\'operazione non può '
         'essere annullata.',
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
-      ],
-    ),
   );
-  if (confirmed != true || !context.mounted) return;
+  if (!confirmed || !context.mounted) return;
 
   try {
     await ref.read(adminApiClientProvider).deleteProdottoAssistenza(prodottoId);
@@ -271,22 +264,8 @@ class _MatricoleSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.pagePadding,
-              vertical: AppSpacing.md,
-            ),
-            child: Row(
-              children: [
-                Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
-                const SizedBox(width: 8),
-                Expanded(child: Text('Impossibile caricare. Riprova.')),
-                TextButton(
-                  onPressed: () => ref.invalidate(adminProdottoMatricoleProvider(prodottoId)),
-                  child: const Text('Riprova'),
-                ),
-              ],
-            ),
+          error: (e, _) => AppSectionError(
+            onRetry: () => ref.invalidate(adminProdottoMatricoleProvider(prodottoId)),
           ),
           data: (matricole) {
             if (matricole.isEmpty) {
@@ -336,18 +315,13 @@ class _MatricoleSection extends ConsumerWidget {
     required String matricolaId,
     required String numero,
   }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog.adaptive(
-        title: const Text('Rimuovere la matricola?'),
-        content: Text('Vuoi rimuovere la matricola "$numero" da questo prodotto?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
-        ],
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Rimuovere la matricola?',
+      message: 'Vuoi rimuovere la matricola "$numero" da questo prodotto?',
+      confirmLabel: 'Rimuovi',
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
 
     try {
       await ref.read(adminApiClientProvider).deleteMatricola(prodottoId, matricolaId);
@@ -441,6 +415,10 @@ class _AddMatricolaSheetState extends State<_AddMatricolaSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: SheetHandle(),
+            ),
             Text('Aggiungi matricola', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
             AppTextField(label: 'Numero di serie *', hint: 'Es. SN-00123', controller: _numeroCtrl),

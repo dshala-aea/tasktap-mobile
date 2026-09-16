@@ -4,6 +4,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_palette.dart';
 import 'app_text_field.dart';
+import '../theme/app_spacing.dart';
 
 /// One row in a lookup: something already in the local cache that can be picked by name.
 class LookupItem {
@@ -208,7 +209,7 @@ class _AppLookupFieldState extends State<AppLookupField> {
         if (suggestions.isNotEmpty) _SuggestionList(items: suggestions, onTap: _select),
         if (widget.items.isEmpty && widget.emptyCacheHint != null && _focus.hasFocus)
           Padding(
-            padding: const EdgeInsets.only(top: 6, left: 4),
+            padding: const EdgeInsets.only(top: 6, left: AppSpacing.xs),
             child: Text(
               widget.emptyCacheHint!,
               style: TextStyle(fontSize: 12, color: context.colors.inkMuted),

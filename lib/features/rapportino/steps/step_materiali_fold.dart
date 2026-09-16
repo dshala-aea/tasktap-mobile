@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/catalog_constants.dart';
 import '../../../core/utils/error_message.dart';
+import '../../admin/admin_widgets.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../core/scanner/barcode_scan_sheet.dart';
 import '../../../data/local/app_database.dart';
@@ -375,7 +376,7 @@ class StepMaterialiFold extends ConsumerWidget {
                           onTap: () => setDialogState(() => showAdvanced = !showAdvanced),
                           borderRadius: AppRack.insetShape,
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                             child: Row(
                               children: [
                                 Icon(LucideIcons.warehouse, size: 14, color: ctx.colors.inkMuted),
@@ -510,16 +511,16 @@ class StepMaterialiFold extends ConsumerWidget {
             final async = ref.watch(magazziniProvider);
             return async.when(
               loading: () => const Padding(
-                padding: EdgeInsets.all(32),
+                padding: EdgeInsets.all(AppSpacing.xxl),
                 child: Center(child: CircularProgressIndicator()),
               ),
               error: (e, _) => Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(humanErrorMessage(e, azione: 'caricare i magazzini')),
               ),
               data: (list) => list.isEmpty
                   ? const Padding(
-                      padding: EdgeInsets.all(24),
+                      padding: EdgeInsets.all(AppSpacing.xl),
                       child: Text('Nessun magazzino disponibile.'),
                     )
                   : ListView(
@@ -630,7 +631,7 @@ class _FabbisognoSuggestions extends ConsumerWidget {
     if (planned.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -644,11 +645,7 @@ class _FabbisognoSuggestions extends ConsumerWidget {
             runSpacing: 8,
             children: [
               for (final m in planned)
-                ActionChip(
-                  avatar: const Icon(LucideIcons.plusSquare, size: 14),
-                  label: Text(m.nome),
-                  onPressed: () => onPicked(m),
-                ),
+                AppChip(label: m.nome, icon: LucideIcons.plusSquare, onTap: () => onPicked(m)),
             ],
           ),
         ],
@@ -891,7 +888,7 @@ class _PhotoThumb extends StatelessWidget {
                 )
               : Container(
                   color: context.colors.bg3,
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(AppSpacing.xs),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1200,8 +1197,10 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
         );
       case ControlType.dateTime:
         final value = existing?.dateValue ?? c.dateValue;
-        return OutlinedButton.icon(
-          onPressed: () async {
+        return AdminDateField(
+          label: 'Valore',
+          value: value != null ? DateFormat('dd/MM/yyyy', 'it').format(value) : 'Seleziona data',
+          onTap: () async {
             final picked = await showDatePicker(
               context: context,
               initialDate: value ?? DateTime.now(),
@@ -1210,14 +1209,6 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
             );
             if (picked != null) _save(dateValue: picked);
           },
-          icon: const Icon(LucideIcons.calendar, size: 16),
-          label: Text(
-            value != null ? DateFormat('dd/MM/yyyy', 'it').format(value) : 'Seleziona data',
-          ),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-            alignment: Alignment.centerLeft,
-          ),
         );
       case ControlType.options:
         final options = c.choiceOptions;
@@ -1227,14 +1218,16 @@ class _ControlloInputCardState extends ConsumerState<_ControlloInputCard> {
           return _freeTextField();
         }
         final currentValue = existing?.stringValue ?? c.stringValue;
-        return DropdownButtonFormField<String>(
-          initialValue: options.contains(currentValue) ? currentValue : null,
-          decoration: const InputDecoration(isDense: true),
-          isExpanded: true,
-          items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-          onChanged: (v) {
-            if (v != null) _save(stringValue: v);
-          },
+        return AppFieldShell(
+          label: 'Valore',
+          child: DropdownButtonFormField<String>(
+            initialValue: options.contains(currentValue) ? currentValue : null,
+            isExpanded: true,
+            items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+            onChanged: (v) {
+              if (v != null) _save(stringValue: v);
+            },
+          ),
         );
       case ControlType.text:
       case ControlType.unknown:

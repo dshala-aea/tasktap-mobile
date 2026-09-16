@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_rack.dart';
+import '../theme/app_spacing.dart';
 
 /// The app's general-purpose container — a flat Documento sheet.
 ///
@@ -48,14 +49,17 @@ class AppCard extends StatelessWidget {
   /// on this widget before this change; it already did nothing).
   final bool flush;
 
-  static const EdgeInsets _defaultPadding = EdgeInsets.fromLTRB(14, 12, 14, 12);
+  static const EdgeInsets _defaultPadding = EdgeInsets.fromLTRB(
+    14,
+    AppSpacing.md,
+    14,
+    AppSpacing.md,
+  );
   static const _radius = AppRack.freeShape;
 
   @override
   Widget build(BuildContext context) {
-    final border = strapped
-        ? AppColors.Y
-        : (borderColor ?? context.colors.borderLight);
+    final border = strapped ? AppColors.Y : (borderColor ?? context.colors.borderLight);
     final content = Padding(padding: padding ?? _defaultPadding, child: child);
 
     return DecoratedBox(
@@ -69,11 +73,7 @@ class AppCard extends StatelessWidget {
           : Material(
               color: Colors.transparent,
               borderRadius: _radius,
-              child: InkWell(
-                borderRadius: _radius,
-                onTap: onTap,
-                child: content,
-              ),
+              child: InkWell(borderRadius: _radius, onTap: onTap, child: content),
             ),
     );
   }

@@ -365,7 +365,7 @@ class _RapportinoRow extends ConsumerWidget {
             children: [
               Container(
                 width: 3,
-                margin: const EdgeInsets.only(right: 12),
+                margin: const EdgeInsets.only(right: AppSpacing.md),
                 decoration: BoxDecoration(
                   color: isSubmitted ? context.colors.inkDisabled : AppColors.Y,
                   borderRadius: BorderRadius.circular(3),
@@ -461,7 +461,7 @@ class _RapportinoRow extends ConsumerWidget {
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
+        padding: const EdgeInsets.only(right: AppSpacing.xl),
         child: Icon(LucideIcons.trash2, color: context.colors.red),
       ),
       confirmDismiss: (_) => _confirmDeleteDraft(context, ref, draft),

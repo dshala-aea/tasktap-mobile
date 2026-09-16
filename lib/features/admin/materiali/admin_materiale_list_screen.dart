@@ -156,11 +156,16 @@ class _AdminMaterialeListBody extends ConsumerWidget {
                     onChanged: onQueryChanged,
                     // Own right margin dropped to a small gap — the scan button follows it now,
                     // rather than the field sitting flush against the screen edge.
-                    margin: const EdgeInsets.fromLTRB(19, 0, 8, 12),
+                    margin: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      0,
+                      AppSpacing.sm,
+                      AppSpacing.md,
+                    ),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 12),
+                  padding: const EdgeInsets.only(right: AppSpacing.sm, bottom: AppSpacing.md),
                   child: IconButton(
                     icon: const Icon(LucideIcons.scanLine),
                     tooltip: 'Scansiona codice',

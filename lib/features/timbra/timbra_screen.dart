@@ -18,6 +18,7 @@ import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TimbraScreen
@@ -330,7 +331,7 @@ class _HeroStatus extends StatelessWidget {
             key: ValueKey(label),
             label: 'Stato: $label',
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
               decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -887,7 +888,7 @@ class _SessionRow extends StatelessWidget {
     final color = _color(context, session.eventType);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         children: [
           // Tinted at low alpha with the row's own event colour — the same "icon-coloured tile"
@@ -910,15 +911,7 @@ class _SessionRow extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            timeStr,
-            style: TextStyle(
-              fontFamily: 'Archivo Narrow',
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: context.colors.ink,
-            ),
-          ),
+          Text(timeStr, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
         ],
       ),
     );

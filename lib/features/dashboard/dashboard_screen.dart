@@ -118,10 +118,7 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   child: trackers.isEmpty
                       ? const _ClockInPrompt(key: ValueKey('idle'))
-                      : ActiveTrackerStrip(
-                          key: const ValueKey('active'),
-                          trackers: trackers,
-                        ),
+                      : ActiveTrackerStrip(key: const ValueKey('active'), trackers: trackers),
                 ),
               ),
             ),
@@ -190,15 +187,25 @@ class DashboardScreen extends ConsumerWidget {
                         onTap: () => context.push(AppRoutes.timbra),
                       ),
                     ),
+                    Expanded(
+                      child: QuickAction(
+                        icon: LucideIcons.scanLine,
+                        label: 'Timbra\ncon QR',
+                        // Same destination as TimbraScreen's own header action — there's no
+                        // Timbra bottom-nav tab, so this was previously two taps deep (Dashboard →
+                        // Timbra → QR) for what's meant to be the fast path when arriving at a
+                        // kiosk totem. TimbraScreen keeps its own copy of this action too; nothing
+                        // else about that screen changes.
+                        onTap: () => context.push(AppRoutes.timbraQr),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
 
             // Bottom padding so the last card clears the floating bottom nav.
-            SliverPadding(
-              padding: EdgeInsets.only(bottom: context.navClearance),
-            ),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),
@@ -225,11 +232,7 @@ class _ClockInPrompt extends ConsumerWidget {
     // "it worked" language the rest of the app already speaks, not a new one invented here.
     ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
       if (previous is AsyncLoading && next is AsyncData && !next.hasError) {
-        showAppToast(
-          context,
-          message: 'Turno iniziato',
-          tone: ToastTone.success,
-        );
+        showAppToast(context, message: 'Turno iniziato', tone: ToastTone.success);
       } else if (next is AsyncError) {
         // The success branch above got a toast; a failed punch fired from here gave zero
         // feedback — the hero just silently stopped loading. Same toast text/mechanism
@@ -253,9 +256,7 @@ class _ClockInPrompt extends ConsumerWidget {
       backgroundColor: AppColors.Y,
       onTap: busy
           ? null
-          : () => ref
-                .read(punchNotifierProvider.notifier)
-                .punch(ref.read(timbraStateProvider)),
+          : () => ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider)),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.base),
         child: Row(
@@ -264,10 +265,7 @@ class _ClockInPrompt extends ConsumerWidget {
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.WHITE,
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
               )
             else
               const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
@@ -282,11 +280,7 @@ class _ClockInPrompt extends ConsumerWidget {
               ),
             ),
             const Spacer(),
-            Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: AppColors.WHITE.withAlpha(179),
-            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
           ],
         ),
       ),

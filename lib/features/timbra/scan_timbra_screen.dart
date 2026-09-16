@@ -193,7 +193,7 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (_error != null) _ErrorBanner(message: _error!),
+                            if (_error != null) InlineAlert(message: _error!),
                             if (_terminal) ...[
                               const SizedBox(height: AppSpacing.base),
                               AppButton(
@@ -215,25 +215,6 @@ class _KioskConfirmTimbraScreenState extends ConsumerState<KioskConfirmTimbraScr
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: context.colors.red.withAlpha(20),
-        border: Border.all(color: context.colors.red.withAlpha(80)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(message, style: AppTextStyles.bodySmall.copyWith(color: context.colors.red)),
     );
   }
 }

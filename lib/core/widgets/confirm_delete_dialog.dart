@@ -22,6 +22,10 @@ Future<bool> confirmDeleteDialog(
   required String title,
   required String message,
   String confirmLabel = 'Elimina',
+
+  /// False for a confirm that reverses a prior destructive action (e.g. "Riattiva" undoing a
+  /// deactivate) — same chrome, but the confirm button reads as a normal action, not a warning.
+  bool danger = true,
 }) async {
   final confirmed = await showDialog<bool>(
     context: context,
@@ -46,11 +50,7 @@ Future<bool> confirmDeleteDialog(
             const SizedBox(height: 8),
             Text(
               message,
-              style: TextStyle(
-                fontFamily: 'Archivo',
-                fontSize: 14,
-                color: ctx.colors.inkMuted,
-              ),
+              style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: ctx.colors.inkMuted),
             ),
             const SizedBox(height: 20),
             Row(
@@ -63,10 +63,15 @@ Future<bool> confirmDeleteDialog(
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: AppButton.danger(
-                    label: confirmLabel,
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                  ),
+                  child: danger
+                      ? AppButton.danger(
+                          label: confirmLabel,
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                        )
+                      : AppButton(
+                          label: confirmLabel,
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                        ),
                 ),
               ],
             ),

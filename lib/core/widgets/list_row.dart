@@ -58,21 +58,14 @@ class ListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final stripeColor = strapped
-        ? AppColors.Y
-        : (ledgeColor ?? Colors.transparent);
+    final stripeColor = strapped ? AppColors.Y : (ledgeColor ?? Colors.transparent);
 
     return InkWell(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.pagePadding,
-          vertical: 11,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
         decoration: BoxDecoration(
-          border: showDivider
-              ? Border(bottom: BorderSide(color: c.borderLight))
-              : null,
+          border: showDivider ? Border(bottom: BorderSide(color: c.borderLight)) : null,
         ),
         // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: a caller may size
         // this row from a SliverChildBuilderDelegate item with no bounded height for `stretch` to
@@ -83,7 +76,7 @@ class ListRow extends StatelessWidget {
             children: [
               Container(
                 width: 3,
-                margin: const EdgeInsets.only(right: 12),
+                margin: const EdgeInsets.only(right: AppSpacing.md),
                 decoration: BoxDecoration(
                   color: stripeColor,
                   borderRadius: BorderRadius.circular(3),
@@ -113,11 +106,7 @@ class ListRow extends StatelessWidget {
                         subtitle!,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: 'Archivo',
-                          fontSize: 12,
-                          color: c.inkMuted,
-                        ),
+                        style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkMuted),
                       ),
                     ],
                   ],

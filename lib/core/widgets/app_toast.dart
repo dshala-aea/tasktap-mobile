@@ -274,7 +274,10 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
                       AppTappable(
                         onTap: widget.onAction,
                         borderRadius: BorderRadius.circular(8),
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xs,
+                          vertical: 10,
+                        ),
                         child: Text(
                           widget.actionLabel!,
                           style: TextStyle(

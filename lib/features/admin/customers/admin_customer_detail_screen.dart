@@ -275,7 +275,7 @@ class _OverviewCard extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: overviewAsync.when(
         loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
           child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
         ),
         error: (e, _) => Text(
@@ -368,7 +368,7 @@ class _SediSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(locationsForCustomerProvider(customerId)),
           ),
           data: (locations) {
@@ -483,7 +483,7 @@ class _ContrattiSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCustomerContractsProvider(customerId)),
           ),
           data: (contracts) {
@@ -556,7 +556,7 @@ class _ProdottiSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCustomerProdottiProvider(customerId)),
           ),
           data: (prodotti) {
@@ -593,41 +593,6 @@ class _ProdottiSection extends ConsumerWidget {
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Shared inline error for a section — mirrors `_SectionError` in
-// admin_cantiere_detail_screen.dart (a failed sub-section should not block the rest of the
-// detail screen from being usable).
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _SectionError extends StatelessWidget {
-  const _SectionError({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.pagePadding,
-        vertical: AppSpacing.md,
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Impossibile caricare. Riprova.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.red),
-            ),
-          ),
-          TextButton(onPressed: onRetry, child: const Text('Riprova')),
-        ],
-      ),
-    );
-  }
-}
-
 class _TicketHistoryCard extends ConsumerWidget {
   const _TicketHistoryCard({required this.customerId});
   final String customerId;
@@ -640,7 +605,7 @@ class _TicketHistoryCard extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
       child: ticketsAsync.when(
         loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
           child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
         ),
         error: (e, _) => Text(
@@ -654,7 +619,7 @@ class _TicketHistoryCard extends ConsumerWidget {
             const SizedBox(height: 4),
             if (tickets.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                 child: Text(
                   'Nessun intervento registrato per questo cliente.',
                   style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),

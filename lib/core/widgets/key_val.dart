@@ -3,6 +3,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 /// Key–value display row / column.
 ///
@@ -58,8 +59,7 @@ class KeyVal extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (showDivider)
-          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+        if (showDivider) Divider(height: 1, thickness: 1, color: context.colors.borderLight),
       ],
     );
   }
@@ -86,11 +86,7 @@ class KeyVal extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: 4),
-            Icon(
-              LucideIcons.chevronRight,
-              size: 14,
-              color: context.colors.inkMuted,
-            ),
+            Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
           ],
         ],
       ),
@@ -104,10 +100,7 @@ class KeyVal extends StatelessWidget {
       // the 44pt/48dp floor every other control in the app enforces (see the status pill's own
       // ConstrainedBox on ticket detail) — this is the shared shape every tappable KeyVal on
       // ticket/rapportino detail goes through, so the fix belongs here, once.
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: row,
-      ),
+      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: row),
     );
   }
 
@@ -122,12 +115,7 @@ class KeyVal extends StatelessWidget {
           Text(
             value,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Archivo',
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: context.colors.ink,
-            ),
+            style: AppTextStyles.bodyMedium.copyWith(color: context.colors.ink),
           ),
         ],
       ),

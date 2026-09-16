@@ -14,6 +14,7 @@ import '../../presentation/providers/auth_providers.dart';
 import 'impostazioni_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ImpostazioniScreen
@@ -39,9 +40,7 @@ class ImpostazioniScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: ScreenHeader(title: 'Impostazioni', showBack: true),
-            ),
+            SliverToBoxAdapter(child: ScreenHeader(title: 'Impostazioni', showBack: true)),
 
             // ── Profile card ───────────────────────────────────────────────
             SliverToBoxAdapter(
@@ -49,9 +48,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Notifiche — canali ────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Notifiche'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -64,8 +61,7 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Notifiche push',
                     subtitle: 'Ricevi avvisi in tempo reale',
                     value: settings.pushAbilitate,
-                    onChanged: (_) =>
-                        _togglePush(context, settings.pushAbilitate, notifier),
+                    onChanged: (_) => _togglePush(context, settings.pushAbilitate, notifier),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.mail,
@@ -87,9 +83,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Notifiche — categorie ─────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Notifiche attive'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Notifiche attive')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -98,16 +92,14 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Interventi',
                     subtitle: 'Nuovi interventi assegnati',
                     value: settings.notificheInterventi,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheInterventi'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheInterventi'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.calendar,
                     title: 'Pianificazione',
                     subtitle: 'Promemoria e cambi di programmazione',
                     value: settings.notifichePianificazione,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notifichePianificazione'),
+                    onChanged: (_) => notifier.toggle(key: 'notifichePianificazione'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.shieldCheck,
@@ -121,16 +113,14 @@ class ImpostazioniScreen extends ConsumerWidget {
                     title: 'Ore e presenze',
                     subtitle: 'Invio e approvazione di ore e presenze',
                     value: settings.notificheOrePresenze,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheOrePresenze'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheOrePresenze'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.fileText,
                     title: 'Rapportini',
                     subtitle: 'Aggiornamenti sui rapportini',
                     value: settings.notificheRapportini,
-                    onChanged: (_) =>
-                        notifier.toggle(key: 'notificheRapportini'),
+                    onChanged: (_) => notifier.toggle(key: 'notificheRapportini'),
                   ),
                   _ToggleRow(
                     icon: LucideIcons.atSign,
@@ -145,9 +135,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── App ───────────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'App'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'App')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -182,9 +170,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             ),
 
             // ── Account ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Account'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Account')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -207,9 +193,7 @@ class ImpostazioniScreen extends ConsumerWidget {
             // screen (see i_miei_dati_screen.dart's own header comment) — one row here, not the
             // mockup's separate "Esporta"/"Consensi" pair, since both would point at the same
             // real screen.
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Privacy'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Privacy')),
             SliverToBoxAdapter(
               child: _SettingsGroup(
                 children: [
@@ -231,17 +215,11 @@ class ImpostazioniScreen extends ConsumerWidget {
             // of that is something the app can turn on. What it can do is say which part is
             // missing, so a technician who cannot find the microphone gets an answer instead of
             // filing a bug, and so a fleet can be checked without instrumenting a build.
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Dettatura'),
-            ),
-            const SliverToBoxAdapter(
-              child: _SettingsGroup(children: [_DictationDiagnosticsRow()]),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Dettatura')),
+            const SliverToBoxAdapter(child: _SettingsGroup(children: [_DictationDiagnosticsRow()])),
 
             // ── Sistema ───────────────────────────────────────────────────
-            const SliverToBoxAdapter(
-              child: _SettingsSectionTitle(title: 'Sistema'),
-            ),
+            const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'Sistema')),
             SliverToBoxAdapter(
               child: _SettingsGroup(children: [_LogoutSettingRow(ref: ref)]),
             ),
@@ -272,9 +250,7 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
-            SliverPadding(
-              padding: EdgeInsets.only(bottom: context.navClearance),
-            ),
+            SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
           ],
         ),
       ),
@@ -416,10 +392,7 @@ class _ProfileCard extends StatelessWidget {
       child: AppCard(
         child: Row(
           children: [
-            AppAvatar(
-              name: displayName.isNotEmpty ? displayName : (email ?? '?'),
-              size: 48,
-            ),
+            AppAvatar(name: displayName.isNotEmpty ? displayName : (email ?? '?'), size: 48),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -534,14 +507,9 @@ class _ToggleRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minHeight: 56),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.base,
-        vertical: 10,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
       decoration: BoxDecoration(
-        border: showDivider
-            ? Border(bottom: BorderSide(color: context.colors.borderLight))
-            : null,
+        border: showDivider ? Border(bottom: BorderSide(color: context.colors.borderLight)) : null,
       ),
       child: Row(
         children: [
@@ -552,15 +520,7 @@ class _ToggleRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontFamily: 'Archivo Narrow',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.ink,
-                  ),
-                ),
+                Text(title, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
                 Text(
                   subtitle,
                   style: TextStyle(
@@ -604,10 +564,7 @@ class _LinkRow extends StatelessWidget {
       onTap: onTap,
       child: Container(
         constraints: const BoxConstraints(minHeight: 56),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.base,
-          vertical: 10,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
         decoration: BoxDecoration(
           border: showDivider
               ? Border(bottom: BorderSide(color: context.colors.borderLight))
@@ -622,15 +579,7 @@ class _LinkRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: 'Archivo Narrow',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.ink,
-                    ),
-                  ),
+                  Text(title, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
                   Text(
                     subtitle,
                     style: TextStyle(
@@ -642,11 +591,7 @@ class _LinkRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: context.colors.inkMuted,
-            ),
+            Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkMuted),
           ],
         ),
       ),
@@ -668,10 +613,7 @@ class _LogoutSettingRow extends StatelessWidget {
       leading: Container(
         width: 34,
         height: 34,
-        decoration: BoxDecoration(
-          color: context.colors.redSoft,
-          borderRadius: AppRack.insetShape,
-        ),
+        decoration: BoxDecoration(color: context.colors.redSoft, borderRadius: AppRack.insetShape),
         child: Icon(LucideIcons.logOut, size: 17, color: context.colors.red),
       ),
       title: 'Esci dall\'account',
@@ -682,62 +624,13 @@ class _LogoutSettingRow extends StatelessWidget {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
-    // Vetro chrome, not a stock AlertDialog — the app's own glass card + AppButton pair, so a
-    // confirmation this consequential still reads as part of the app rather than a bare Material
-    // dialog. Same confirm/cancel logic as before, only the surface changed.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-        child: AppCard(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Esci dall\'account',
-                style: TextStyle(
-                  fontFamily: 'Archivo Narrow',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: ctx.colors.ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Sei sicuro di voler uscire dall\'account?',
-                style: TextStyle(
-                  fontFamily: 'Archivo',
-                  fontSize: 14,
-                  color: ctx.colors.inkMuted,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton.ghost(
-                      label: 'Annulla',
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton.danger(
-                      label: 'Esci',
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Esci dall\'account',
+      message: 'Sei sicuro di voler uscire dall\'account?',
+      confirmLabel: 'Esci',
     );
-    if (confirmed == true) {
+    if (confirmed) {
       await ref.read(loginProvider.notifier).signOut();
     }
   }
@@ -758,40 +651,21 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
     final capability = ref.watch(dictationCapabilityProvider);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.base,
-        AppSpacing.md,
-        AppSpacing.base,
-        14,
-      ),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.md, AppSpacing.base, 14),
       child: capability.when(
-        loading: () =>
-            const _DictationLine(label: 'Verifica in corso…', state: null),
-        error: (_, _) =>
-            const _DictationLine(label: 'Verifica non riuscita', state: false),
+        loading: () => const _DictationLine(label: 'Verifica in corso…', state: null),
+        error: (_, _) => const _DictationLine(label: 'Verifica non riuscita', state: false),
         data: (c) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              c.canDictate
-                  ? 'Dettatura disponibile'
-                  : 'Dettatura non disponibile',
-              style: TextStyle(
-                fontFamily: 'Archivo Narrow',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: context.colors.ink,
-              ),
+              c.canDictate ? 'Dettatura disponibile' : 'Dettatura non disponibile',
+              style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink),
             ),
             const SizedBox(height: 10),
+            _DictationLine(label: 'Riconoscimento vocale', state: c.recognizerAvailable),
             _DictationLine(
-              label: 'Riconoscimento vocale',
-              state: c.recognizerAvailable,
-            ),
-            _DictationLine(
-              label: c.italianLocaleId == null
-                  ? 'Italiano'
-                  : 'Italiano (${c.italianLocaleId})',
+              label: c.italianLocaleId == null ? 'Italiano' : 'Italiano (${c.italianLocaleId})',
               state: c.italianAvailable,
             ),
             // The one that decides it. Everything else can be true and dictation still refused,
@@ -801,10 +675,7 @@ class _DictationDiagnosticsRow extends ConsumerWidget {
               label: 'Funziona offline (sul dispositivo)',
               state: c.onDeviceRecognitionAvailable,
             ),
-            _DictationLine(
-              label: 'Microfono consentito',
-              state: c.microphoneGranted,
-            ),
+            _DictationLine(label: 'Microfono consentito', state: c.microphoneGranted),
             if (!c.canDictate) ...[
               const SizedBox(height: 10),
               Text(
@@ -858,11 +729,7 @@ class _DictationLine extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                fontFamily: 'Archivo',
-                fontSize: 12,
-                color: context.colors.inkMuted,
-              ),
+              style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
             ),
           ),
         ],

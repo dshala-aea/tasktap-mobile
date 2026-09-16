@@ -234,18 +234,13 @@ class _SquadraDetailBody extends ConsumerWidget {
   }
 
   Future<void> _removeMember(BuildContext context, String userId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog.adaptive(
-        title: const Text('Rimuovi membro'),
-        content: const Text('Vuoi rimuovere questo membro dalla squadra?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Rimuovi')),
-        ],
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Rimuovi membro',
+      message: 'Vuoi rimuovere questo membro dalla squadra?',
+      confirmLabel: 'Rimuovi',
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       try {
         final container = ProviderScope.containerOf(context);
         final api = container.read(adminApiClientProvider);
@@ -346,6 +341,10 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
+            child: SheetHandle(),
+          ),
           Text('Aggiungi membro', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (_isLoading)

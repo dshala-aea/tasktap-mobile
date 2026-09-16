@@ -391,7 +391,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
                     final c = conflicts[i];
                     final dateLabel = DateFormat('EEE d MMM', 'it').format(c.activityDate);
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -449,103 +449,103 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
                 context.navClearance,
               ),
               children: [
-            AppTextField(label: 'Titolo', controller: _titleCtrl),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Titolo', controller: _titleCtrl),
+                const SizedBox(height: 16),
 
-            // ── Date picker ──────────────────────────────────────────────
-            AdminDateField(label: 'Data', value: dateLabel, onTap: _pickDate),
-            const SizedBox(height: 16),
+                // ── Date picker ──────────────────────────────────────────────
+                AdminDateField(label: 'Data', value: dateLabel, onTap: _pickDate),
+                const SizedBox(height: 16),
 
-            // ── Time pickers ─────────────────────────────────────────────
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: AdminDateField(
-                    label: 'Inizio',
-                    value: _startTime.format(context),
-                    icon: LucideIcons.clock,
-                    onTap: _pickStartTime,
+                // ── Time pickers ─────────────────────────────────────────────
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: AdminDateField(
+                        label: 'Inizio',
+                        value: _startTime.format(context),
+                        icon: LucideIcons.clock,
+                        onTap: _pickStartTime,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AdminDateField(
+                        label: 'Fine',
+                        value: _endTime.format(context),
+                        icon: LucideIcons.clock,
+                        onTap: _pickEndTime,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // ── Assignment ────────────────────────────────────────────────
+                Text(
+                  'Assegnazione *',
+                  style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
+                ),
+                const SizedBox(height: 6),
+                AppTabs(
+                  tabs: const [
+                    AppTab(label: 'Tecnico'),
+                    AppTab(label: 'Capo squadra'),
+                    AppTab(label: 'Squadra'),
+                  ],
+                  selectedIndex: _assignmentType.index,
+                  onSelected: (i) => setState(() => _assignmentType = AssignmentType.values[i]),
+                ),
+                const SizedBox(height: 12),
+                if (_isLoadingAssignment)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else
+                  _AssignmentPicker(
+                    type: _assignmentType,
+                    selectedUserId: _selectedUserId,
+                    onUserChanged: (v) => setState(() => _selectedUserId = v),
+                    selectedTeamLeadId: _selectedTeamLeadId,
+                    onTeamLeadChanged: (v) => setState(() => _selectedTeamLeadId = v),
+                    selectedStaffIds: _selectedStaffIds,
+                    onStaffToggled: (id, selected) => setState(() {
+                      if (selected) {
+                        _selectedStaffIds.add(id);
+                      } else {
+                        _selectedStaffIds.remove(id);
+                      }
+                    }),
+                    selectedSquadraId: _selectedSquadraId,
+                    onSquadraChanged: (v) => setState(() => _selectedSquadraId = v),
+                    squadraDisabled: _isEditing && !_assignmentLoadedLive,
+                  ),
+                const SizedBox(height: 16),
+
+                // ── Location selector ────────────────────────────────────────
+                AppFieldShell(
+                  label: 'Sede *',
+                  child: DropdownButtonFormField<String>(
+                    // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                    value: _selectedLocationId,
+                    items: locations
+                        .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedLocationId = v),
+                    validator: (v) => v == null ? 'Campo obbligatorio' : null,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AdminDateField(
-                    label: 'Fine',
-                    value: _endTime.format(context),
-                    icon: LucideIcons.clock,
-                    onTap: _pickEndTime,
-                  ),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
+                const SizedBox(height: 32),
+
+                AppButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea pianificazione',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // ── Assignment ────────────────────────────────────────────────
-            Text(
-              'Assegnazione *',
-              style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
-            ),
-            const SizedBox(height: 6),
-            AppTabs(
-              tabs: const [
-                AppTab(label: 'Tecnico'),
-                AppTab(label: 'Capo squadra'),
-                AppTab(label: 'Squadra'),
-              ],
-              selectedIndex: _assignmentType.index,
-              onSelected: (i) => setState(() => _assignmentType = AssignmentType.values[i]),
-            ),
-            const SizedBox(height: 12),
-            if (_isLoadingAssignment)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else
-              _AssignmentPicker(
-                type: _assignmentType,
-                selectedUserId: _selectedUserId,
-                onUserChanged: (v) => setState(() => _selectedUserId = v),
-                selectedTeamLeadId: _selectedTeamLeadId,
-                onTeamLeadChanged: (v) => setState(() => _selectedTeamLeadId = v),
-                selectedStaffIds: _selectedStaffIds,
-                onStaffToggled: (id, selected) => setState(() {
-                  if (selected) {
-                    _selectedStaffIds.add(id);
-                  } else {
-                    _selectedStaffIds.remove(id);
-                  }
-                }),
-                selectedSquadraId: _selectedSquadraId,
-                onSquadraChanged: (v) => setState(() => _selectedSquadraId = v),
-                squadraDisabled: _isEditing && !_assignmentLoadedLive,
-              ),
-            const SizedBox(height: 16),
-
-            // ── Location selector ────────────────────────────────────────
-            AppFieldShell(
-              label: 'Sede *',
-              child: DropdownButtonFormField<String>(
-                // ignore: deprecated_member_use — controlled field, needs value not initialValue
-                value: _selectedLocationId,
-                items: locations
-                    .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedLocationId = v),
-                validator: (v) => v == null ? 'Campo obbligatorio' : null,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Note', controller: _descriptionCtrl, maxLines: 3),
-            const SizedBox(height: 32),
-
-            AppButton(
-              label: _isEditing ? 'Salva modifiche' : 'Crea pianificazione',
-              onPressed: _isSaving ? null : _save,
-              isLoading: _isSaving,
-            ),
               ],
             ),
           ),
@@ -657,7 +657,7 @@ class _AssignmentPicker extends ConsumerWidget {
       case AssignmentType.squadra:
         if (squadraDisabled) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Text(
               'Assegnazione a squadra non disponibile offline. Torna online per modificarla.',
               style: TextStyle(fontSize: 12, color: context.colors.inkMuted),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'app_button.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // askPermissionPurpose
@@ -77,7 +78,7 @@ class _PurposeSheet extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: c.surface,
@@ -85,7 +86,12 @@ class _PurposeSheet extends StatelessWidget {
             border: Border.all(color: c.borderLight),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.base,
+              AppSpacing.lg,
+              AppSpacing.lg,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -96,7 +102,7 @@ class _PurposeSheet extends StatelessWidget {
                   child: Container(
                     width: 36,
                     height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
+                    margin: const EdgeInsets.only(bottom: AppSpacing.base),
                     decoration: BoxDecoration(
                       color: c.borderMedium,
                       borderRadius: BorderRadius.circular(2),

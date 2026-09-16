@@ -115,14 +115,10 @@ class _TicketListBody extends ConsumerWidget {
     // tickets, and a per-row locationByIdProvider/customerByIdProvider watch opened (and tore
     // down, on scroll-out) two live Drift subscriptions per visible row.
     final locationsById = {
-      for (final l
-          in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[])
-        l.id: l,
+      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[]) l.id: l,
     };
     final customersById = {
-      for (final c
-          in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[])
-        c.id: c,
+      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[]) c.id: c,
     };
 
     // Compute counts for subtitle.
@@ -134,8 +130,7 @@ class _TicketListBody extends ConsumerWidget {
     // Filter + search.
     final filtered = allTickets.where((t) {
       final statusName = statusMap[t.statusId]?.toLowerCase() ?? '';
-      final matchFilter =
-          filter.statusMatch == null || statusName == filter.statusMatch;
+      final matchFilter = filter.statusMatch == null || statusName == filter.statusMatch;
       final matchQuery =
           query.isEmpty ||
           t.title.toLowerCase().contains(query.toLowerCase()) ||
@@ -157,9 +152,7 @@ class _TicketListBody extends ConsumerWidget {
             ),
           ),
           if (pendingTickets.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _PendingTicketsSection(pendingTickets: pendingTickets),
-            ),
+            SliverToBoxAdapter(child: _PendingTicketsSection(pendingTickets: pendingTickets)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(top: AppSpacing.pagePadding),
@@ -304,11 +297,9 @@ class _PendingTicketRow extends ConsumerWidget {
     final reducedMotion = MediaQuery.of(context).disableAnimations;
 
     final String subtitle = switch (state) {
-      PendingTicketState.pendingSync =>
-        'In attesa di connessione — verrà inviato automaticamente',
+      PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
       PendingTicketState.submitting => 'Invio in corso…',
-      PendingTicketState.failed =>
-        'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+      PendingTicketState.failed => 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
       PendingTicketState.submitted => 'Inviato',
     };
 
@@ -317,9 +308,7 @@ class _PendingTicketRow extends ConsumerWidget {
     // accounted for — the one state change here that actually needs to register as "something
     // changed," not just "something is different now."
     return AnimatedContainer(
-      duration: reducedMotion
-          ? Duration.zero
-          : const Duration(milliseconds: 250),
+      duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isFailed ? context.colors.redSoft : context.colors.bg3,
@@ -328,9 +317,7 @@ class _PendingTicketRow extends ConsumerWidget {
       child: Row(
         children: [
           AnimatedSwitcher(
-            duration: reducedMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 250),
+            duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
             transitionBuilder: (child, animation) =>
                 FadeTransition(opacity: animation, child: child),
             child: Icon(
@@ -382,8 +369,7 @@ class _PendingTicketRow extends ConsumerWidget {
               label: 'Riprova',
               size: AppButtonSize.sm,
               fullWidth: false,
-              onPressed: () =>
-                  ref.read(ticketCreationQueueProvider).retry(ticket.id),
+              onPressed: () => ref.read(ticketCreationQueueProvider).retry(ticket.id),
             ),
           ],
         ],
@@ -420,21 +406,15 @@ class _TicketRow extends StatelessWidget {
   final String where;
   final bool isLast;
 
-  Color _priorityColor(
-    BuildContext context,
-    AppVetroPalette v,
-    String? priority,
-  ) => switch (priority) {
-    // statusBad/statusWarn: context.vetro's semantic status tokens, out of scope for this sweep
-    // (see status_colors.dart) — left as-is, not converted to a flat AppColors constant.
-    'Urgente' => v.statusBad,
-    'Alta' => v.statusWarn,
-    'Media' => AppColors.Y,
-    _ =>
-      context
-          .colors
-          .inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
-  };
+  Color _priorityColor(BuildContext context, AppVetroPalette v, String? priority) =>
+      switch (priority) {
+        // statusBad/statusWarn: context.vetro's semantic status tokens, out of scope for this sweep
+        // (see status_colors.dart) — left as-is, not converted to a flat AppColors constant.
+        'Urgente' => v.statusBad,
+        'Alta' => v.statusWarn,
+        'Media' => AppColors.Y,
+        _ => context.colors.inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
+      };
 
   /// The stripe's own colour is invisible to a colorblind technician or a screen reader —
   /// spoken/announced priority instead of relying on hue alone to triage a list of thirty tickets.
@@ -473,9 +453,7 @@ class _TicketRow extends StatelessWidget {
             vertical: AppSpacing.md,
           ),
           decoration: BoxDecoration(
-            border: isLast
-                ? null
-                : Border(bottom: BorderSide(color: context.colors.borderLight)),
+            border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
           ),
           // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
           // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the
@@ -488,7 +466,7 @@ class _TicketRow extends StatelessWidget {
               children: [
                 Container(
                   width: 3,
-                  margin: const EdgeInsets.only(right: 12),
+                  margin: const EdgeInsets.only(right: AppSpacing.md),
                   decoration: BoxDecoration(
                     color: _priorityColor(context, v, ticket.priority),
                     borderRadius: BorderRadius.circular(3),
@@ -512,8 +490,7 @@ class _TicketRow extends StatelessWidget {
                               ),
                             ),
                           const Spacer(),
-                          if (statusName.isNotEmpty)
-                            StatusPill(stato: statusName, small: true),
+                          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -529,8 +506,7 @@ class _TicketRow extends StatelessWidget {
                           letterSpacing: -0.1,
                         ),
                       ),
-                      if (ticket.description != null &&
-                          ticket.description!.isNotEmpty) ...[
+                      if (ticket.description != null && ticket.description!.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
                           ticket.description!,
@@ -548,11 +524,7 @@ class _TicketRow extends StatelessWidget {
                         Row(
                           children: [
                             if (where.isNotEmpty) ...[
-                              Icon(
-                                LucideIcons.mapPin,
-                                size: 11,
-                                color: context.colors.inkFaint,
-                              ),
+                              Icon(LucideIcons.mapPin, size: 11, color: context.colors.inkFaint),
                               const SizedBox(width: 3),
                               Flexible(
                                 child: Text(
@@ -575,12 +547,8 @@ class _TicketRow extends StatelessWidget {
                                 style: TextStyle(
                                   fontFamily: 'Archivo',
                                   fontSize: 11,
-                                  fontWeight: isOverdue
-                                      ? FontWeight.w700
-                                      : FontWeight.w600,
-                                  color: isOverdue
-                                      ? v.statusBad
-                                      : context.colors.inkMuted,
+                                  fontWeight: isOverdue ? FontWeight.w700 : FontWeight.w600,
+                                  color: isOverdue ? v.statusBad : context.colors.inkMuted,
                                 ),
                               ),
                             ],

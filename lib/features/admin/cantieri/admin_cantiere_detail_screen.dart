@@ -339,7 +339,7 @@ class _ContactsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCantiereRemoteDetailProvider(cantiereId)),
           ),
           data: (detail) {
@@ -547,6 +547,10 @@ class _ContactFormSheetState extends State<_ContactFormSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: SheetHandle(),
+            ),
             Text(
               _isEditing ? 'Modifica contatto' : 'Aggiungi contatto',
               style: Theme.of(context).textTheme.titleMedium,
@@ -614,7 +618,7 @@ class _CrewSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCantiereRemoteDetailProvider(cantiereId)),
           ),
           data: (detail) {
@@ -788,6 +792,10 @@ class _AddAssignmentSheetState extends State<_AddAssignmentSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
+            child: SheetHandle(),
+          ),
           Text('Aggiungi persona', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (_isLoading)
@@ -854,7 +862,7 @@ class _WorkLogsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCantiereWorkLogsProvider(cantiereId)),
           ),
           data: (logs) {
@@ -924,7 +932,7 @@ class _TicketsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCantiereTicketsProvider(cantiereId)),
           ),
           data: (tickets) {
@@ -997,7 +1005,7 @@ class _ReportsSection extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (e, _) => _SectionError(
+          error: (e, _) => AppSectionError(
             onRetry: () => ref.invalidate(adminCantiereReportsProvider(cantiereId)),
           ),
           data: (reports) {
@@ -1036,40 +1044,6 @@ class _ReportsSection extends ConsumerWidget {
           },
         ),
       ],
-    );
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Shared inline error for a section (distinct from the page-level [ErrorState] — a failed
-// sub-section should not block the rest of the detail screen from being usable).
-// ══════════════════════════════════════════════════════════════════════════════
-
-class _SectionError extends StatelessWidget {
-  const _SectionError({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.pagePadding,
-        vertical: AppSpacing.md,
-      ),
-      child: Row(
-        children: [
-          Icon(LucideIcons.alertTriangle, size: 16, color: context.colors.red),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Impossibile caricare. Riprova.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.red),
-            ),
-          ),
-          TextButton(onPressed: onRetry, child: const Text('Riprova')),
-        ],
-      ),
     );
   }
 }

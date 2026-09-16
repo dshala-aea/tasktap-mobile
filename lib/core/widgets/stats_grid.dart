@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// A single statistic (label + value).
 class StatItem {
@@ -57,7 +58,7 @@ class _Cell extends StatelessWidget {
     final label = item.label.replaceAll('\n', ' ');
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

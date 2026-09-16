@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// A single tab descriptor with an optional count pill.
 class AppTab {
@@ -107,26 +108,16 @@ class _PinnedTabsDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => AppTabs.height;
 
   @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) {
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: background,
         // Only once something is actually passing underneath. A permanent rule would draw a second
         // line under the strip while it is still sitting in the page, competing with the active
         // tab's own accent underline.
-        border: overlapsContent
-            ? Border(bottom: BorderSide(color: divider, width: 1))
-            : null,
+        border: overlapsContent ? Border(bottom: BorderSide(color: divider, width: 1)) : null,
       ),
-      child: AppTabs(
-        tabs: tabs,
-        selectedIndex: selectedIndex,
-        onSelected: onSelected,
-      ),
+      child: AppTabs(tabs: tabs, selectedIndex: selectedIndex, onSelected: onSelected),
     );
   }
 
@@ -154,9 +145,7 @@ class _AppTabsState extends State<AppTabs> {
     // The ticket screen has seven tabs. Opening it on tab six — which happens on any return to a
     // screen that remembers where you were — used to show the strip scrolled to the start, with
     // the selected tab off to the right and nothing saying so.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _revealSelected(animate: false),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealSelected(animate: false));
   }
 
   @override
@@ -183,8 +172,7 @@ class _AppTabsState extends State<AppTabs> {
       if (attempt >= 3 || widget.tabs.length < 2) return;
       final position = _controller.position;
       _controller.jumpTo(
-        position.maxScrollExtent *
-            (widget.selectedIndex / (widget.tabs.length - 1)),
+        position.maxScrollExtent * (widget.selectedIndex / (widget.tabs.length - 1)),
       );
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _revealSelected(animate: false, attempt: attempt + 1),
@@ -216,12 +204,7 @@ class _AppTabsState extends State<AppTabs> {
         shaderCallback: (rect) => LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: const [
-            Colors.transparent,
-            Colors.black,
-            Colors.black,
-            Colors.transparent,
-          ],
+          colors: const [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
           stops: const [0, 0.03, 0.97, 1],
         ).createShader(rect),
         blendMode: BlendMode.dstIn,
@@ -239,15 +222,9 @@ class _AppTabsState extends State<AppTabs> {
               label: tab.label,
               child: AppTappable(
                 onTap: () => onSelected(i),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: AppSpacing.md),
                 border: Border(
-                  bottom: BorderSide(
-                    color: active ? AppColors.Y : Colors.transparent,
-                    width: 2,
-                  ),
+                  bottom: BorderSide(color: active ? AppColors.Y : Colors.transparent, width: 2),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -258,25 +235,18 @@ class _AppTabsState extends State<AppTabs> {
                         fontFamily: 'Archivo',
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: active
-                            ? context.colors.ink
-                            : context.colors.inkMuted,
+                        color: active ? context.colors.ink : context.colors.inkMuted,
                       ),
                     ),
                     if (tab.count != null) ...[
                       const SizedBox(width: 6),
                       DecoratedBox(
                         decoration: BoxDecoration(
-                          color: active
-                              ? AppColors.Y.withAlpha(31)
-                              : context.colors.bg3,
+                          color: active ? AppColors.Y.withAlpha(31) : context.colors.bg3,
                           borderRadius: BorderRadius.circular(9),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                           child: Text(
                             '${tab.count}',
                             style: TextStyle(
@@ -286,9 +256,7 @@ class _AppTabsState extends State<AppTabs> {
                               // accentInk, not raw Y — same dark-mode AA gap as
                               // AppPalette.accentInk's own doc comment describes: this badge's
                               // fill is a translucent Y tint over a flipping background.
-                              color: active
-                                  ? context.colors.accentInk
-                                  : context.colors.inkMuted,
+                              color: active ? context.colors.accentInk : context.colors.inkMuted,
                             ),
                           ),
                         ),

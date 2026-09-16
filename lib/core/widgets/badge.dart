@@ -74,16 +74,16 @@ class AppBadge extends StatelessWidget {
 /// AppChip(label: 'Settimana', onTap: () {});
 /// ```
 class AppChip extends StatelessWidget {
-  const AppChip({
-    super.key,
-    required this.label,
-    this.active = false,
-    this.onTap,
-  });
+  const AppChip({super.key, required this.label, this.active = false, this.onTap, this.icon});
 
   final String label;
   final bool active;
   final VoidCallback? onTap;
+
+  /// A leading glyph — a suggestion chip's "tap to add" cue, for instance. Was reason enough for
+  /// one call site (the rapportino wizard's fabbisogno suggestions) to reach for a raw Material
+  /// `ActionChip` instead of this widget; this closes that gap.
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -92,6 +92,13 @@ class AppChip extends StatelessWidget {
     final borderColor = active ? AppColors.Y : context.colors.borderMedium;
 
     const radius = AppRack.insetRadius;
+    final textStyle = TextStyle(
+      fontFamily: 'Archivo',
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: fg,
+      letterSpacing: 0.1,
+    );
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
@@ -102,16 +109,16 @@ class AppChip extends StatelessWidget {
         border: Border.all(color: borderColor, width: 1),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontFamily: 'Archivo',
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: fg,
-              letterSpacing: 0.1,
-            ),
-          ),
+          child: icon == null
+              ? Text(label, style: textStyle)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 14, color: fg),
+                    const SizedBox(width: 4),
+                    Text(label, style: textStyle),
+                  ],
+                ),
         ),
       ),
     );

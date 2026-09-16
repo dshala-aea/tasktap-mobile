@@ -144,72 +144,72 @@ class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen>
                 context.navClearance,
               ),
               children: [
-            AppTextField(
-              label: 'Nome *',
-              controller: _nomeCtrl,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Descrizione', controller: _descrizioneCtrl, maxLines: 3),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Specializzazione', controller: _specializzazioneCtrl),
-            const SizedBox(height: 16),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    label: 'Colore calendario (hex)',
-                    hint: '#FF5722',
-                    controller: _coloreCtrl,
-                  ),
+                AppTextField(
+                  label: 'Nome *',
+                  controller: _nomeCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
                 ),
-                const SizedBox(width: 8),
-                AnimatedBuilder(
-                  animation: _coloreCtrl,
-                  builder: (context, _) => Container(
-                    width: 36,
-                    height: 36,
-                    margin: const EdgeInsets.only(bottom: 4),
-                    decoration: BoxDecoration(
-                      color: _parseColor(context, _coloreCtrl.text),
-                      borderRadius: AppRack.insetShape,
-                      border: Border.all(color: context.colors.divider),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Descrizione', controller: _descrizioneCtrl, maxLines: 3),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Specializzazione', controller: _specializzazioneCtrl),
+                const SizedBox(height: 16),
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Colore calendario (hex)',
+                        hint: '#FF5722',
+                        controller: _coloreCtrl,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    AnimatedBuilder(
+                      animation: _coloreCtrl,
+                      builder: (context, _) => Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: _parseColor(context, _coloreCtrl.text),
+                          borderRadius: AppRack.insetShape,
+                          border: Border.all(color: context.colors.divider),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
+                const SizedBox(height: 16),
 
-            // Only shown while editing — a new squadra is always created active
-            // (SquadreController.Create hardcodes IsActive=true), so there is nothing to toggle
-            // yet. This is the only way to deactivate/reactivate a squadra from mobile.
-            if (_isEditing)
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _isActive ? 'Squadra attiva' : 'Squadra disattivata',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
-                    ),
+                // Only shown while editing — a new squadra is always created active
+                // (SquadreController.Create hardcodes IsActive=true), so there is nothing to toggle
+                // yet. This is the only way to deactivate/reactivate a squadra from mobile.
+                if (_isEditing)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _isActive ? 'Squadra attiva' : 'Squadra disattivata',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                        ),
+                      ),
+                      AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
+                    ],
                   ),
-                  AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
-                ],
-              ),
-            const SizedBox(height: 32),
+                const SizedBox(height: 32),
 
-            AppButton(
-              label: _isEditing ? 'Salva modifiche' : 'Crea squadra',
-              onPressed: _isSaving ? null : _save,
-              isLoading: _isSaving,
-            ),
+                AppButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea squadra',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
+                ),
               ],
             ),
           ),

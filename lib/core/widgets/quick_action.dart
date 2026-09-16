@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Quick action — 50 px accent circle + icon (20) + centered Inter 700/10
 /// label.
@@ -10,12 +11,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// QuickAction(icon: LucideIcons.plus, label: 'Nuovo', onTap: () {});
 /// ```
 class QuickAction extends StatelessWidget {
-  const QuickAction({
-    super.key,
-    required this.icon,
-    required this.label,
-    this.onTap,
-  });
+  const QuickAction({super.key, required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
@@ -30,7 +26,7 @@ class QuickAction extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs, horizontal: 2),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
