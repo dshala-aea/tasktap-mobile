@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/admin/reports/admin_report_detail_screen.dart';
@@ -19,9 +20,13 @@ class _FakeAdminApiClient extends AdminApiClient {
   _FakeAdminApiClient() : super(Dio());
 
   int controllaCalls = 0;
+  int fatturaCalls = 0;
 
   @override
   Future<void> controllaReport(String reportId) async => controllaCalls++;
+
+  @override
+  Future<void> fatturaReport(String reportId) async => fatturaCalls++;
 }
 
 void main() {
@@ -81,4 +86,45 @@ void main() {
     expect(api.controllaCalls, 1);
     expect(fetchCalls, greaterThan(fetchesBeforeTransition));
   });
+
+  testWidgets(
+    'the Fattura action stays on this screen showing Fatturato + an XML download action, '
+    'instead of popping back to the list',
+    (tester) async {
+      await initializeDateFormatting('it', null);
+      final api = _FakeAdminApiClient();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adminApiClientProvider.overrideWithValue(api),
+            adminReportsProvider.overrideWith((ref, filter) async => const <Map<String, dynamic>>[]),
+          ],
+          child: MaterialApp(
+            home: Navigator(
+              onGenerateRoute: (settings) => MaterialPageRoute(
+                builder: (_) => AdminReportDetailScreen(
+                  report: const {'id': 'r1', 'title': 'Rapportino 1', 'stato': 'Controllato'},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Segna come fatturato'), findsOneWidget);
+
+      await tester.tap(find.text('Segna come fatturato'));
+      await tester.pumpAndSettle();
+
+      // Transition fired, but the screen is still here — this used to pop back to the list on
+      // its own, which is the reported bug (the office user's next step is usually downloading
+      // the XML, not going back to find the row again).
+      expect(api.fatturaCalls, 1);
+      expect(find.byType(AdminReportDetailScreen), findsOneWidget);
+      expect(find.text('Scarica XML fattura'), findsOneWidget);
+      expect(find.text('Segna come fatturato'), findsNothing);
+    },
+  );
 }

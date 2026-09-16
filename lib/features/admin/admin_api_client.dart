@@ -1317,6 +1317,21 @@ class AdminApiClient {
   Future<void> fatturaReport(String reportId) async {
     await _dio.post('/api/reports/$reportId/fattura');
   }
+
+  /// `GET /api/reports/{id}/fattura-xml` — the FatturaPA-shaped XML for this report's billable
+  /// materials/labour (see `ReportFatturaXmlService` doc comment on the backend for the "not
+  /// SDI-submission-ready" scope caveat). Pure download, no stato side effect on the backend —
+  /// same shape as `_fetchPdfToTempFile`'s PDF download in `rapportino_view_screen.dart`, which
+  /// this mirrors so a caller can save-and-share the bytes the same way.
+  Future<List<int>> fatturaXml(String reportId) async {
+    final res = await _dio.get<List<int>>(
+      '/api/reports/$reportId/fattura-xml',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = res.data;
+    if (bytes == null) throw StateError('empty fattura-xml response');
+    return bytes;
+  }
 }
 
 final adminApiClientProvider = Provider<AdminApiClient>((ref) {
