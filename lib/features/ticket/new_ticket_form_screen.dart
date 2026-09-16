@@ -44,8 +44,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   NewTicketFormState _formState = const NewTicketFormState();
   bool _isSubmitting = false;
 
-  late final ProviderSubscription<AsyncValue<List<TicketStatuse>>>
-  _statusListener;
+  late final ProviderSubscription<AsyncValue<List<TicketStatuse>>> _statusListener;
 
   int get _stepIndex => _FormStep.values.indexOf(_step);
   bool get _isFirst => _step == _FormStep.clienteSede;
@@ -156,11 +155,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       );
       Navigator.of(context).pop(true); // return true = created (locally)
     } else if (outcome.isSubmitted) {
-      showAppToast(
-        context,
-        message: 'Ticket creato con successo',
-        tone: ToastTone.success,
-      );
+      showAppToast(context, message: 'Ticket creato con successo', tone: ToastTone.success);
       Navigator.of(context).pop(true);
     } else {
       // Failed while online: the request may have already reached the

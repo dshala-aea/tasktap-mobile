@@ -3,7 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
-import '../../data/entitlements/entitlement_service.dart' show internalUserIdPrefsKey;
+import '../../data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
 import '../../data/sync/sync_service.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
@@ -146,6 +147,7 @@ class LoginNotifier extends StateNotifier<LoginState> {
   }
 }
 
-final loginProvider = StateNotifierProvider.autoDispose<LoginNotifier, LoginState>((ref) {
-  return LoginNotifier(ref.watch(authRepositoryProvider), ref);
-});
+final loginProvider =
+    StateNotifierProvider.autoDispose<LoginNotifier, LoginState>((ref) {
+      return LoginNotifier(ref.watch(authRepositoryProvider), ref);
+    });

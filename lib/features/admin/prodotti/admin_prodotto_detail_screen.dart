@@ -99,7 +99,7 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                   AppSpacing.pagePadding,
                   0,
                 ),
-                child: StatusPill(stato: isActive ? 'Attivo' : 'Inattivo', outlined: true),
+                child: StatusPill(stato: isActive ? 'Attivo' : 'Inattivo'),
               ),
             ),
 
@@ -134,7 +134,8 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                         label: 'Prossima manutenzione',
                         value: dateLabel('prossimaManutenzione'),
                         valueColor: isOverdue('prossimaManutenzione') ? context.colors.red : null,
-                        showDivider: description.isNotEmpty || notes.isNotEmpty || externalId.isNotEmpty,
+                        showDivider:
+                            description.isNotEmpty || notes.isNotEmpty || externalId.isNotEmpty,
                       ),
                       if (description.isNotEmpty)
                         KeyVal(
@@ -191,13 +192,20 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
 
 /// Delete confirmation dialog + API call — mirrors `_deleteCantiere` in
 /// admin_cantiere_detail_screen.dart (no shared confirm-dialog widget exists yet in this app).
-Future<void> _deleteProdotto(BuildContext context, WidgetRef ref, String prodottoId, String name) async {
+Future<void> _deleteProdotto(
+  BuildContext context,
+  WidgetRef ref,
+  String prodottoId,
+  String name,
+) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog.adaptive(
       title: const Text('Eliminare il prodotto?'),
-      content: Text('Il prodotto "$name" verrà eliminato definitivamente. L\'operazione non può '
-          'essere annullata.'),
+      content: Text(
+        'Il prodotto "$name" verrà eliminato definitivamente. L\'operazione non può '
+        'essere annullata.',
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
         TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Elimina')),
@@ -435,11 +443,7 @@ class _AddMatricolaSheetState extends State<_AddMatricolaSheet> {
           children: [
             Text('Aggiungi matricola', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
-            AppTextField(
-              label: 'Numero di serie *',
-              hint: 'Es. SN-00123',
-              controller: _numeroCtrl,
-            ),
+            AppTextField(label: 'Numero di serie *', hint: 'Es. SN-00123', controller: _numeroCtrl),
             const SizedBox(height: 16),
             AppTextField(label: 'Note', controller: _noteCtrl),
             const SizedBox(height: 16),

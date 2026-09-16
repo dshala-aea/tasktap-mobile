@@ -57,9 +57,7 @@ class DraftReportRepository {
   /// Rapportini list needs to keep showing it (with its up-to-date status) rather than have it
   /// disappear the moment `markSubmitted`/a sync clears the flag.
   Stream<List<DraftReport>> watchAllReports() {
-    return (_db.select(
-      _db.draftReports,
-    )..orderBy([(r) => OrderingTerm.desc(r.updatedAt)])).watch();
+    return (_db.select(_db.draftReports)..orderBy([(r) => OrderingTerm.desc(r.updatedAt)])).watch();
   }
 
   /// Delete a draft and all its children.

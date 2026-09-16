@@ -56,7 +56,9 @@ final locationsForCustomerProvider = StreamProvider.autoDispose
     .family<List<Location>, String>((ref, customerId) {
       final db = ref.watch(appDatabaseProvider);
       return (db.select(db.locations)
-            ..where((l) => l.customerId.equals(customerId) & l.isActive.equals(true))
+            ..where(
+              (l) => l.customerId.equals(customerId) & l.isActive.equals(true),
+            )
             ..orderBy([(l) => OrderingTerm.asc(l.name)]))
           .watch();
     });

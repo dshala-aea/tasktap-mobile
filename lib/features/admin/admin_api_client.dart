@@ -273,6 +273,7 @@ class AdminApiClient {
     DateTime? endDate,
     int status = 0,
     String? customerId,
+
     /// See [createCantiere]'s own doc comment on this field.
     String? commessaId,
   }) async {
@@ -322,7 +323,13 @@ class AdminApiClient {
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/cantieri/$cantiereId/contacts',
-      data: {'name': name, 'role': ?role, 'phone': ?phone, 'email': ?email, 'notes': ?notes},
+      data: {
+        'name': name,
+        'role': ?role,
+        'phone': ?phone,
+        'email': ?email,
+        'notes': ?notes,
+      },
     );
     return res.data!['id'] as String;
   }
@@ -338,12 +345,21 @@ class AdminApiClient {
   }) async {
     await _dio.put(
       '/api/cantieri/$cantiereId/contacts/$contactId',
-      data: {'name': name, 'role': ?role, 'phone': ?phone, 'email': ?email, 'notes': ?notes},
+      data: {
+        'name': name,
+        'role': ?role,
+        'phone': ?phone,
+        'email': ?email,
+        'notes': ?notes,
+      },
     );
   }
 
   /// Mirrors `DELETE /api/cantieri/{id}/contacts/{contactId}` (`CantieriController.DeleteContact`).
-  Future<void> deleteCantiereContact(String cantiereId, String contactId) async {
+  Future<void> deleteCantiereContact(
+    String cantiereId,
+    String contactId,
+  ) async {
     await _dio.delete('/api/cantieri/$cantiereId/contacts/$contactId');
   }
 
@@ -373,7 +389,10 @@ class AdminApiClient {
 
   /// Mirrors `DELETE /api/cantieri/{id}/assignments/{assignmentId}`
   /// (`CantieriController.RemoveAssignment`).
-  Future<void> removeCantiereAssignment(String cantiereId, String assignmentId) async {
+  Future<void> removeCantiereAssignment(
+    String cantiereId,
+    String assignmentId,
+  ) async {
     await _dio.delete('/api/cantieri/$cantiereId/assignments/$assignmentId');
   }
 
@@ -384,19 +403,31 @@ class AdminApiClient {
   // (frontend/src/features/cantieri/CantiereSections.tsx).
 
   /// Interventi (tickets) raised on this cantiere — `GET /api/tickets?cantiereId=`.
-  Future<List<Map<String, dynamic>>> fetchCantiereTickets(String cantiereId) async {
+  Future<List<Map<String, dynamic>>> fetchCantiereTickets(
+    String cantiereId,
+  ) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/tickets',
-      queryParameters: {'cantiereId': cantiereId, 'pageSize': 50, 'sort': '-createdAt'},
+      queryParameters: {
+        'cantiereId': cantiereId,
+        'pageSize': 50,
+        'sort': '-createdAt',
+      },
     );
     return pagedItems(res.data);
   }
 
   /// Hours logged on this cantiere — `GET /api/cantiereworklog?cantiereId=`.
-  Future<List<Map<String, dynamic>>> fetchCantiereWorkLogs(String cantiereId) async {
+  Future<List<Map<String, dynamic>>> fetchCantiereWorkLogs(
+    String cantiereId,
+  ) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/cantiereworklog',
-      queryParameters: {'cantiereId': cantiereId, 'pageSize': 50, 'sort': '-workDate'},
+      queryParameters: {
+        'cantiereId': cantiereId,
+        'pageSize': 50,
+        'sort': '-workDate',
+      },
     );
     return pagedItems(res.data);
   }
@@ -646,13 +677,19 @@ class AdminApiClient {
   ///
   /// [activeOnly], like [fetchTechnicians]'s own filter, excludes deactivated users — they don't
   /// need to be counted as squadra members or looked up for a last-access display.
-  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({bool activeOnly = true}) async {
+  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({
+    bool activeOnly = true,
+  }) async {
     final result = <Map<String, dynamic>>[];
     var page = 1;
     while (true) {
       final res = await _dio.get<Map<String, dynamic>>(
         '/api/users',
-        queryParameters: {if (activeOnly) 'isActive': true, 'page': page, 'pageSize': 100},
+        queryParameters: {
+          if (activeOnly) 'isActive': true,
+          'page': page,
+          'pageSize': 100,
+        },
       );
       final items = pagedItems(res.data);
       result.addAll(items);
@@ -847,7 +884,9 @@ class AdminApiClient {
   /// own `customerId` query param (Gap 8 of the feature audit — a customer's Prodotti section
   /// needs this scoped, not a client-side filter over an unpaginated fetch that could miss rows
   /// past the default 20-item page).
-  Future<List<Map<String, dynamic>>> fetchProdottiAssistenza({String? customerId}) async {
+  Future<List<Map<String, dynamic>>> fetchProdottiAssistenza({
+    String? customerId,
+  }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/prodottoassistenza',
       queryParameters: {'customerId': ?customerId, 'pageSize': 100},
@@ -860,7 +899,9 @@ class AdminApiClient {
   /// [fetchProdottiAssistenza], which requires scoping by customer. Needed wherever only the id
   /// is in hand (e.g. a contract's `prodottoAssistenzaId`, with no customer context loaded).
   Future<Map<String, dynamic>?> fetchProdottoAssistenzaById(String id) async {
-    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza/$id');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/prodottoassistenza/$id',
+    );
     return res.data;
   }
 
@@ -868,7 +909,9 @@ class AdminApiClient {
   /// `GET /api/prodottoassistenza/lookups` (`ProdottoAssistenzaController.GetLookups`). Feeds
   /// the admin prodotto form's Modello `AppLookupField`: a convenience list, not a constraint.
   Future<Map<String, dynamic>?> fetchProdottoAssistenzaLookups() async {
-    final res = await _dio.get<Map<String, dynamic>>('/api/prodottoassistenza/lookups');
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/prodottoassistenza/lookups',
+    );
     return res.data;
   }
 
@@ -918,7 +961,8 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (code != null && code.isNotEmpty) 'codice': code,
         if (category != null && category.isNotEmpty) 'categoria': category,
-        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty) 'um': unitOfMeasure,
+        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty)
+          'um': unitOfMeasure,
         'prezzoAcquisto': ?purchasePrice,
         'prezzoVendita': ?salePrice,
         if (marca != null && marca.isNotEmpty) 'marchio': marca,
@@ -930,7 +974,8 @@ class AdminApiClient {
           'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
         if (prossimaManutenzione != null)
           'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
-        if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
+        if (externalId != null && externalId.isNotEmpty)
+          'externalId': externalId,
       },
     );
     return res.data!['id'] as String;
@@ -1014,11 +1059,17 @@ class AdminApiClient {
   // the wrong one instead of editing in place).
 
   Future<List<Map<String, dynamic>>> fetchMatricole(String prodottoId) async {
-    final res = await _dio.get<List<dynamic>>('/api/prodottoassistenza/$prodottoId/matricole');
+    final res = await _dio.get<List<dynamic>>(
+      '/api/prodottoassistenza/$prodottoId/matricole',
+    );
     return (res.data ?? const []).cast<Map<String, dynamic>>();
   }
 
-  Future<String> addMatricola(String prodottoId, {required String numero, String? note}) async {
+  Future<String> addMatricola(
+    String prodottoId, {
+    required String numero,
+    String? note,
+  }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/prodottoassistenza/$prodottoId/matricole',
       data: {'numero': numero, 'note': ?note},
@@ -1027,7 +1078,9 @@ class AdminApiClient {
   }
 
   Future<void> deleteMatricola(String prodottoId, String matricolaId) async {
-    await _dio.delete('/api/prodottoassistenza/$prodottoId/matricole/$matricolaId');
+    await _dio.delete(
+      '/api/prodottoassistenza/$prodottoId/matricole/$matricolaId',
+    );
   }
 
   // ── Contracts ────────────────────────────────────────────────────────────
@@ -1036,7 +1089,9 @@ class AdminApiClient {
   /// `customerId` query param (Gap 7 of the feature audit — a customer's Contratti section needs
   /// this scoped, not a client-side filter over an unpaginated fetch that could miss rows past the
   /// default 20-item page).
-  Future<List<Map<String, dynamic>>> fetchContracts({String? customerId}) async {
+  Future<List<Map<String, dynamic>>> fetchContracts({
+    String? customerId,
+  }) async {
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/contracts',
       queryParameters: {'customerId': ?customerId, 'pageSize': 100},
@@ -1081,6 +1136,7 @@ class AdminApiClient {
     String? tipo,
     String? externalId,
     String? codice,
+
     /// Assets this contract covers. Omitted/empty means none — the pre-existing behavior.
     List<String>? prodottoAssistenzaIds,
   }) async {
@@ -1101,11 +1157,14 @@ class AdminApiClient {
         if (numero != null && numero.isNotEmpty) 'numero': numero,
         'autoRenewal': autoRenewal,
         'scadenzaGiorni': ?scadenzaGiorni,
-        if (condizioni != null && condizioni.isNotEmpty) 'condizioni': condizioni,
+        if (condizioni != null && condizioni.isNotEmpty)
+          'condizioni': condizioni,
         if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
-        if (externalId != null && externalId.isNotEmpty) 'externalId': externalId,
+        if (externalId != null && externalId.isNotEmpty)
+          'externalId': externalId,
         if (codice != null && codice.isNotEmpty) 'codice': codice,
-        if (prodottoAssistenzaIds != null) 'prodottoAssistenzaIds': prodottoAssistenzaIds,
+        if (prodottoAssistenzaIds != null)
+          'prodottoAssistenzaIds': prodottoAssistenzaIds,
       },
     );
     return res.data!['id'] as String;
@@ -1143,6 +1202,7 @@ class AdminApiClient {
     String? tipo,
     String? externalId,
     String? codice,
+
     /// Null (the default) leaves the contract's covered assets untouched. A non-null list —
     /// including an empty one — fully replaces them (`ContractsController.Update`'s own
     /// comment): whatever the picker currently shows must always be sent here, never omitted,
@@ -1305,7 +1365,12 @@ class AdminApiClient {
     // same endpoint, two shapes, one app. This was the broken one.
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/reports',
-      queryParameters: {'stato': ?stato, 'cantiereId': ?cantiereId, 'page': page, 'pageSize': pageSize},
+      queryParameters: {
+        'stato': ?stato,
+        'cantiereId': ?cantiereId,
+        'page': page,
+        'pageSize': pageSize,
+      },
     );
     return pagedItems(res.data);
   }

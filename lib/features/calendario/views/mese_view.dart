@@ -39,7 +39,8 @@ class MeseView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final grouped = groupSchedulesByDay(schedules);
-    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+    final teamScheduleIds =
+        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
     final selectedKey = DateTime(
@@ -85,7 +86,7 @@ class MeseView extends ConsumerWidget {
                       child: Text(
                         dayNameFmt.format(d).toUpperCase(),
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                           color: context.colors.inkMuted,
@@ -119,7 +120,9 @@ class MeseView extends ConsumerWidget {
                       final isSelected = key == selectedKey;
                       final daySchedules = grouped[key] ?? [];
                       final count = daySchedules.length;
-                      final hasTeam = daySchedules.any((s) => teamScheduleIds.contains(s.id));
+                      final hasTeam = daySchedules.any(
+                        (s) => teamScheduleIds.contains(s.id),
+                      );
 
                       return Expanded(
                         child: Padding(
@@ -141,7 +144,7 @@ class MeseView extends ConsumerWidget {
                                 Text(
                                   '${day.day}',
                                   style: TextStyle(
-                                    fontFamily: 'Inter',
+                                    fontFamily: 'Archivo',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: isSelected
@@ -175,7 +178,11 @@ class MeseView extends ConsumerWidget {
 }
 
 class _EventDots extends StatelessWidget {
-  const _EventDots({required this.count, required this.isSelected, this.hasTeam = false});
+  const _EventDots({
+    required this.count,
+    required this.isSelected,
+    this.hasTeam = false,
+  });
 
   final int count;
   final bool isSelected;

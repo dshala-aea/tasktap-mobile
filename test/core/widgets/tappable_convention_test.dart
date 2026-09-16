@@ -24,6 +24,12 @@ void main() {
         'the day disc is an AnimatedContainer that moves on selection',
     'lib/features/timbra/timbra_screen.dart':
         'the 180dp gradient disc: ink over a glow reads as a smudge, and it swaps to a spinner',
+    'lib/presentation/screens/login/login_screen.dart':
+        'the logo\'s long-press into kiosk activation is deliberately unadvertised — an InkWell '
+        'ripple would visibly hint the logo is interactive, defeating the point',
+    'lib/features/kiosk/kiosk_display_screen.dart':
+        'the corner exit gesture is a deliberately invisible, unlabelled tap target — a ripple '
+        'would announce exactly what a kiosk lock screen exists to hide',
   };
 
   test('only the documented exceptions use a bare GestureDetector', () {

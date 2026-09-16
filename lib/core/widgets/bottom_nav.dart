@@ -19,10 +19,7 @@ abstract final class AppBottomNavIcons {
 
 /// A single bottom-navigation tab descriptor.
 class AppBottomNavItem {
-  const AppBottomNavItem({
-    required this.icon,
-    required this.label,
-  });
+  const AppBottomNavItem({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -59,26 +56,11 @@ class AppBottomNav extends StatelessWidget {
   final List<AppBottomNavItem>? items;
 
   static const List<AppBottomNavItem> defaultItems = [
-    AppBottomNavItem(
-      icon: AppBottomNavIcons.dashboard,
-      label: 'Dashboard',
-    ),
-    AppBottomNavItem(
-      icon: AppBottomNavIcons.ticket,
-      label: 'Ticket',
-    ),
-    AppBottomNavItem(
-      icon: AppBottomNavIcons.cantieri,
-      label: 'Cantieri',
-    ),
-    AppBottomNavItem(
-      icon: AppBottomNavIcons.calendario,
-      label: 'Calendario',
-    ),
-    AppBottomNavItem(
-      icon: AppBottomNavIcons.altro,
-      label: 'Altro',
-    ),
+    AppBottomNavItem(icon: AppBottomNavIcons.dashboard, label: 'Dashboard'),
+    AppBottomNavItem(icon: AppBottomNavIcons.ticket, label: 'Ticket'),
+    AppBottomNavItem(icon: AppBottomNavIcons.cantieri, label: 'Cantieri'),
+    AppBottomNavItem(icon: AppBottomNavIcons.calendario, label: 'Calendario'),
+    AppBottomNavItem(icon: AppBottomNavIcons.altro, label: 'Altro'),
   ];
 
   /// Above this window width (a tablet/expanded window, not a phone in any orientation this app
@@ -90,19 +72,14 @@ class AppBottomNav extends StatelessWidget {
     final tabs = items ?? defaultItems;
     final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
 
-    return wide
-        ? _buildRail(context, tabs)
-        : _buildBar(context, tabs);
+    return wide ? _buildRail(context, tabs) : _buildBar(context, tabs);
   }
 
   /// Compact width (phone).
   ///
   /// The active item receives substantially more horizontal space so its complete icon + label
   /// can be displayed. Width changes are animated when the selected tab changes.
-  Widget _buildBar(
-    BuildContext context,
-    List<AppBottomNavItem> tabs,
-  ) {
+  Widget _buildBar(BuildContext context, List<AppBottomNavItem> tabs) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
     return SafeArea(
@@ -118,10 +95,7 @@ class AppBottomNav extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               color: context.colors.surface,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1,
-              ),
+              border: Border.all(color: context.colors.borderLight, width: 1),
             ),
             child: Padding(
               // Was (6, 8, 6, 6) — off-scale, and not even internally consistent (top 2px more
@@ -166,8 +140,12 @@ class AppBottomNav extends StatelessWidget {
                   if (tabs.length <= 1) {
                     activeWidth = availableWidth;
                   } else {
-                    final target = math.max(_preferredActiveWidth, requiredActiveWidth);
-                    final roomyTotal = target + inactiveCount * comfortableInactiveWidth;
+                    final target = math.max(
+                      _preferredActiveWidth,
+                      requiredActiveWidth,
+                    );
+                    final roomyTotal =
+                        target + inactiveCount * comfortableInactiveWidth;
 
                     if (availableWidth >= roomyTotal) {
                       // Plenty of room: active gets its target; inactive tabs split the rest
@@ -177,7 +155,9 @@ class AppBottomNav extends StatelessWidget {
                     } else {
                       // Squeeze: shrink inactive tabs toward their hard floor FIRST, so the
                       // active tab keeps whatever it actually needs to show its full label.
-                      final minTotal = requiredActiveWidth + inactiveCount * minInactiveWidth;
+                      final minTotal =
+                          requiredActiveWidth +
+                          inactiveCount * minInactiveWidth;
                       if (availableWidth >= minTotal) {
                         activeWidth = requiredActiveWidth;
                       } else {
@@ -238,10 +218,7 @@ class AppBottomNav extends StatelessWidget {
 
   /// ≥[wideBreakpoint] (tablet/expanded window) — same tabs, same flat-fill active-state, laid out
   /// as a fixed vertical rail along the leading edge.
-  Widget _buildRail(
-    BuildContext context,
-    List<AppBottomNavItem> tabs,
-  ) {
+  Widget _buildRail(BuildContext context, List<AppBottomNavItem> tabs) {
     return SafeArea(
       right: false,
       child: Padding(
@@ -258,10 +235,7 @@ class AppBottomNav extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               color: context.colors.surface,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1,
-              ),
+              border: Border.all(color: context.colors.borderLight, width: 1),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -407,7 +381,7 @@ class _NavTab extends StatelessWidget {
       textAlign: TextAlign.center,
       overflow: TextOverflow.visible,
       style: const TextStyle(
-        fontFamily: 'Inter',
+        fontFamily: 'Archivo',
         fontSize: 12,
         height: 1.0,
         fontWeight: FontWeight.w600,
@@ -431,10 +405,15 @@ class _NavTab extends StatelessWidget {
             minWidth: 48,
             minHeight: 48,
             // maxHeight is the actual fix for the "nav fills the whole screen" regression — see
-            // the comment on `child: Center(...)` below for why. 56 is small buffer over the
-            // active tab's real content height (icon 18 + 4 gap + 12px label + 16 vertical
-            // padding = 50) so nothing clips.
-            maxHeight: 56,
+            // the comment on `child: Center(...)` below for why. Buffer over the active tab's
+            // real content height (icon 18 + 4 gap + 12px label + 16 vertical padding = 50) was
+            // 56 (6px buffer), sized against Inter's metrics; the Il Documento font sweep moved
+            // this label onto Archivo, whose taller natural line-height (the `height: 1.0` on the
+            // label's TextStyle scales the font's own metric, not a fixed 12px box — different
+            // fonts disagree on what that is) ate the buffer down to a real, reproducible 2px
+            // RenderFlex overflow (test/presentation/app_shell_test.dart's "tapping Ticket tab
+            // switches branch"). 60 restores real headroom rather than tuning to the exact px.
+            maxHeight: 60,
           ),
           // Horizontal padding here is NOT free to snap wherever: `_measuredActiveLabelWidths`
           // above bakes in "+20 padding" (2 × 10) as part of the slot width it pre-computes for
@@ -470,7 +449,7 @@ class _NavTab extends StatelessWidget {
           // no infinite-constraint assertion, just this widget silently becoming as tall as the
           // whole Scaffold body every time.
           //
-          // The real fix is the `maxHeight: 56` above: it caps what Align/Center can possibly
+          // The real fix is the `maxHeight` above: it caps what Align/Center can possibly
           // expand to, so "as big as possible" resolves to a small, fixed, correct size instead
           // of the screen. `Center` is kept only because it's still the simplest way to place
           // icon-only inactive tabs in the middle of their slot — it is safe now that the
@@ -481,11 +460,7 @@ class _NavTab extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        item.icon,
-                        size: 18,
-                        color: Colors.white,
-                      ),
+                      Icon(item.icon, size: 18, color: Colors.white),
                       const SizedBox(height: 4),
 
                       // Never scaled down: `_buildBar`'s width allocation guarantees this slot is
@@ -494,11 +469,7 @@ class _NavTab extends StatelessWidget {
                       label,
                     ],
                   )
-                : Icon(
-                    item.icon,
-                    size: 18,
-                    color: context.colors.inkMuted,
-                  ),
+                : Icon(item.icon, size: 18, color: context.colors.inkMuted),
           ),
         ),
       ),

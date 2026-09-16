@@ -52,12 +52,17 @@ class UnknownAuthError extends AuthFailure {
 
 /// Maps an [AuthFailure] to a user-facing Italian string.
 String authFailureMessage(AuthFailure failure) => switch (failure) {
-  InvalidCredentials() => 'Email o password errati. Controlla le credenziali e riprova.',
-  AdditionalFactorRequired() => 'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
-  AccountDisabled() => 'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
+  InvalidCredentials() =>
+    'Email o password errati. Controlla le credenziali e riprova.',
+  AdditionalFactorRequired() =>
+    'Serve una verifica aggiuntiva. Accedi dal browser per continuare.',
+  AccountDisabled() =>
+    'Il tuo account è stato disabilitato. Contatta l\'assistenza.',
   EmailNotFound() => 'Nessun account trovato con questa email.',
-  TooManyRequests() => 'Troppi tentativi. Attendi qualche minuto prima di riprovare.',
+  TooManyRequests() =>
+    'Troppi tentativi. Attendi qualche minuto prima di riprovare.',
   NetworkError() => 'Nessuna connessione. Controlla la rete e riprova.',
   SessionExpired() => 'La sessione è scaduta. Effettua nuovamente l\'accesso.',
-  UnknownAuthError(:final message) => 'Si è verificato un errore imprevisto. ($message)',
+  UnknownAuthError(:final message) =>
+    'Si è verificato un errore imprevisto. ($message)',
 };

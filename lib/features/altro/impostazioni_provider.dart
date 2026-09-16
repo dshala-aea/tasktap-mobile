@@ -104,7 +104,8 @@ class ImpostazioniState {
       notificheEmail: notificheEmail ?? this.notificheEmail,
       notificheInApp: notificheInApp ?? this.notificheInApp,
       notificheInterventi: notificheInterventi ?? this.notificheInterventi,
-      notifichePianificazione: notifichePianificazione ?? this.notifichePianificazione,
+      notifichePianificazione:
+          notifichePianificazione ?? this.notifichePianificazione,
       notificheLicenza: notificheLicenza ?? this.notificheLicenza,
       notificheOrePresenze: notificheOrePresenze ?? this.notificheOrePresenze,
       notificheRapportini: notificheRapportini ?? this.notificheRapportini,
@@ -195,14 +196,18 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       'notifichePianificazione' => state.copyWith(
         notifichePianificazione: !state.notifichePianificazione,
       ),
-      'notificheLicenza' => state.copyWith(notificheLicenza: !state.notificheLicenza),
+      'notificheLicenza' => state.copyWith(
+        notificheLicenza: !state.notificheLicenza,
+      ),
       'notificheOrePresenze' => state.copyWith(
         notificheOrePresenze: !state.notificheOrePresenze,
       ),
       'notificheRapportini' => state.copyWith(
         notificheRapportini: !state.notificheRapportini,
       ),
-      'notificheMenzioni' => state.copyWith(notificheMenzioni: !state.notificheMenzioni),
+      'notificheMenzioni' => state.copyWith(
+        notificheMenzioni: !state.notificheMenzioni,
+      ),
       'syncOffline' => state.copyWith(syncOffline: !state.syncOffline),
       'geoLocazione' => state.copyWith(geoLocazione: !state.geoLocazione),
       'temaScuro' => state.copyWith(temaScuro: !state.temaScuro),
@@ -312,7 +317,10 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     await prefs.setBool(_kNotificheEmail, remote.enableEmail);
     await prefs.setBool(_kNotificheInApp, remote.enableInApp);
     await prefs.setBool(_kNotificheInterventi, remote.ticketNotifications);
-    await prefs.setBool(_kNotifichePianificazione, remote.scheduleNotifications);
+    await prefs.setBool(
+      _kNotifichePianificazione,
+      remote.scheduleNotifications,
+    );
     await prefs.setBool(_kNotificheLicenza, remote.licenseNotifications);
     await prefs.setBool(_kNotificheOrePresenze, remote.workLogNotifications);
     await prefs.setBool(_kNotificheRapportini, remote.documentNotifications);

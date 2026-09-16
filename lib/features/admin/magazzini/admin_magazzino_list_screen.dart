@@ -103,7 +103,7 @@ class _MagazzinoRow extends StatelessWidget {
       leading: const RowIconTile(icon: LucideIcons.warehouse),
       title: magazzino.nome,
       subtitle: magazzino.tipo,
-      meta: !magazzino.isActive ? const StatusPill(stato: 'Inattivo', small: true, outlined: true) : null,
+      meta: !magazzino.isActive ? const StatusPill(stato: 'Inattivo', small: true) : null,
       showDivider: !isLast,
       onTap: () => context.push('/altro/magazzino/magazzini/${magazzino.id}', extra: magazzino),
     );

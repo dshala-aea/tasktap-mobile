@@ -38,7 +38,10 @@ abstract interface class IAuthRepository {
   /// [AdditionalFactorRequired] when the caller should fall back to [signIn] (the account needs
   /// more than a password), or any other [AuthFailure] when it should not (wrong credentials,
   /// network error, unexpected upstream error).
-  Future<({AuthUser? user, AuthFailure? failure})> signInWithPassword(String loginName, String password);
+  Future<({AuthUser? user, AuthFailure? failure})> signInWithPassword(
+    String loginName,
+    String password,
+  );
 
   /// Silently refresh the session using the stored refresh token.
   ///

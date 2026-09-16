@@ -44,9 +44,9 @@ class _ScanTimbraScreenState extends State<ScanTimbraScreen> {
   Future<void> _scan() async {
     final value = await openBarcodeScanSheet(context, title: 'Scansiona il totem');
     if (value == null || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => KioskConfirmTimbraScreen(token: value.trim())),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => KioskConfirmTimbraScreen(token: value.trim())));
   }
 
   @override

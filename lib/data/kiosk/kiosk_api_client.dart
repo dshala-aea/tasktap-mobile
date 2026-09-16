@@ -40,7 +40,8 @@ class KioskApiException implements Exception {
   final String? message;
 
   @override
-  String toString() => 'KioskApiException($reason${message != null ? ': $message' : ''})';
+  String toString() =>
+      'KioskApiException($reason${message != null ? ': $message' : ''})';
 }
 
 /// Talks to the kiosk-only backend surface using the device's own `X-Api-Key` credential.
@@ -89,8 +90,10 @@ class KioskApiClient {
 
   KioskApiException _mapError(DioException e) {
     final status = e.response?.statusCode;
-    if (status == 401) return const KioskApiException(KioskApiFailureReason.invalidOrRevoked);
-    if (status == 402) return const KioskApiException(KioskApiFailureReason.notEntitled);
+    if (status == 401)
+      return const KioskApiException(KioskApiFailureReason.invalidOrRevoked);
+    if (status == 402)
+      return const KioskApiException(KioskApiFailureReason.notEntitled);
     switch (e.type) {
       case DioExceptionType.connectionError:
       case DioExceptionType.connectionTimeout:

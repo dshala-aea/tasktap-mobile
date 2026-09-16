@@ -888,7 +888,7 @@ class _WorkLogsSection extends ConsumerWidget {
                     subtitle: userName != null
                         ? '$dateLabel · $startTime${endTime != null ? '–$endTime' : ' (in corso)'}'
                         : '$startTime${endTime != null ? '–$endTime' : ' (in corso)'}',
-                    meta: StatusPill(stato: stato, small: true, outlined: true),
+                    meta: StatusPill(stato: stato, small: true),
                     showDivider: entry.key < logs.length - 1,
                   );
                 }).toList(),
@@ -949,7 +949,7 @@ class _TicketsSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.ticket),
                     title: title,
                     subtitle: numero != null && numero.isNotEmpty ? numero : null,
-                    meta: StatusPill(stato: statusLabel, small: true, outlined: true),
+                    meta: StatusPill(stato: statusLabel, small: true),
                     onTap: id == null ? null : () => context.push('/ticket/$id'),
                     showDivider: entry.key < tickets.length - 1,
                   );
@@ -1026,7 +1026,7 @@ class _ReportsSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.fileText),
                     title: title,
                     subtitle: dateLabel,
-                    meta: StatusPill(stato: statoLabel, small: true, outlined: true),
+                    meta: StatusPill(stato: statoLabel, small: true),
                     onTap: id == null ? null : () => context.push('/altro/rapportini/view/$id'),
                     showDivider: entry.key < reports.length - 1,
                   );

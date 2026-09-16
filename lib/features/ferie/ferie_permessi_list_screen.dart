@@ -137,18 +137,15 @@ class _FeriePermessiRowState extends ConsumerState<_FeriePermessiRow> {
   @override
   Widget build(BuildContext context) {
     final row = ListRow(
-      leading: RowIconTile(
-        icon: LucideIcons.calendarDays,
-        color: AppColors.Y,
-      ),
+      leading: RowIconTile(icon: LucideIcons.calendarDays, color: AppColors.Y),
       title: absenceTypeLabel(widget.item.type),
       subtitle: _subtitle,
       meta: !_cancellable
-          ? AppBadge(label: absenceStatusLabel(widget.item.status))
+          ? StatusPill(stato: absenceStatusLabel(widget.item.status))
           : Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AppBadge(label: absenceStatusLabel(widget.item.status)),
+                StatusPill(stato: absenceStatusLabel(widget.item.status)),
                 // A swipe is the only way a mouse/keyboard/TalkBack/VoiceOver user cannot
                 // perform — this button reaches the exact same cancel path (_confirmCancel) so
                 // both ways to cancel a request agree on what "cancel" does, not just on how you

@@ -35,7 +35,8 @@ class AuthUser {
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
   @override
-  String toString() => 'AuthUser(id: $id, email: $email, expiresAt: $expiresAt)';
+  String toString() =>
+      'AuthUser(id: $id, email: $email, expiresAt: $expiresAt)';
 
   @override
   bool operator ==(Object other) =>

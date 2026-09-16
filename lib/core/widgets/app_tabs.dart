@@ -255,7 +255,7 @@ class _AppTabsState extends State<AppTabs> {
                     Text(
                       tab.label,
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo',
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: active
@@ -280,11 +280,14 @@ class _AppTabsState extends State<AppTabs> {
                           child: Text(
                             '${tab.count}',
                             style: TextStyle(
-                              fontFamily: 'Inter',
+                              fontFamily: 'Archivo',
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
+                              // accentInk, not raw Y — same dark-mode AA gap as
+                              // AppPalette.accentInk's own doc comment describes: this badge's
+                              // fill is a translucent Y tint over a flipping background.
                               color: active
-                                  ? AppColors.Y
+                                  ? context.colors.accentInk
                                   : context.colors.inkMuted,
                             ),
                           ),

@@ -89,19 +89,21 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
     double? latitude,
     double? longitude,
   }) async {
-    await _db.into(_db.cantierePunches).insert(
-      CantierePunchesCompanion.insert(
-        id: id,
-        eventTime: eventTime,
-        eventType: eventType,
-        cantiereId: Value(cantiereId),
-        customerId: Value(customerId),
-        ticketId: Value(ticketId),
-        description: Value(description),
-        latitude: Value(latitude),
-        longitude: Value(longitude),
-      ),
-    );
+    await _db
+        .into(_db.cantierePunches)
+        .insert(
+          CantierePunchesCompanion.insert(
+            id: id,
+            eventTime: eventTime,
+            eventType: eventType,
+            cantiereId: Value(cantiereId),
+            customerId: Value(customerId),
+            ticketId: Value(ticketId),
+            description: Value(description),
+            latitude: Value(latitude),
+            longitude: Value(longitude),
+          ),
+        );
   }
 
   (DateTime, DateTime) _todayBounds() {
@@ -142,9 +144,9 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
 
   @override
   Future<void> markSyncError(String id, String message) async {
-    await (_db.update(_db.cantierePunches)..where((t) => t.id.equals(id))).write(
-      CantierePunchesCompanion(syncError: Value(message)),
-    );
+    await (_db.update(
+      _db.cantierePunches,
+    )..where((t) => t.id.equals(id))).write(CantierePunchesCompanion(syncError: Value(message)));
   }
 
   @override
@@ -157,10 +159,9 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
   @override
   Future<void> clearToday() async {
     final (start, end) = _todayBounds();
-    await (_db.delete(_db.cantierePunches)
-          ..where(
-            (t) => t.eventTime.isBiggerOrEqualValue(start) & t.eventTime.isSmallerThanValue(end),
-          ))
+    await (_db.delete(_db.cantierePunches)..where(
+          (t) => t.eventTime.isBiggerOrEqualValue(start) & t.eventTime.isSmallerThanValue(end),
+        ))
         .go();
   }
 }

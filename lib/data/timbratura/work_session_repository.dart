@@ -72,16 +72,18 @@ class WorkSessionRepository implements IWorkSessionRepository {
     double? longitude,
     double? gpsAccuracyMeters,
   }) async {
-    await _db.into(_db.workSessions).insert(
-      WorkSessionsCompanion.insert(
-        id: id,
-        eventTime: eventTime,
-        eventType: eventType,
-        latitude: Value(latitude),
-        longitude: Value(longitude),
-        gpsAccuracyMeters: Value(gpsAccuracyMeters),
-      ),
-    );
+    await _db
+        .into(_db.workSessions)
+        .insert(
+          WorkSessionsCompanion.insert(
+            id: id,
+            eventTime: eventTime,
+            eventType: eventType,
+            latitude: Value(latitude),
+            longitude: Value(longitude),
+            gpsAccuracyMeters: Value(gpsAccuracyMeters),
+          ),
+        );
   }
 
   @override

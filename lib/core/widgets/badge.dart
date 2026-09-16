@@ -53,7 +53,7 @@ class AppBadge extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontFamily: 'Inter',
+            fontFamily: 'Archivo',
             fontSize: fontSize,
             fontWeight: outlined ? FontWeight.w700 : FontWeight.w500,
             color: fg,
@@ -105,7 +105,7 @@ class AppChip extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 11,
               fontWeight: FontWeight.w500,
               color: fg,

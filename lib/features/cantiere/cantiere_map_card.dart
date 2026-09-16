@@ -130,8 +130,9 @@ class _EmbeddedMapState extends State<_EmbeddedMap> {
             borderRadius: AppRack.freeShape,
             child: SizedBox(
               height: _mapHeight,
-              child: GestureDetector(
+              child: AppTappable(
                 onTap: () => openMapsForAddress(widget.address),
+                semanticLabel: 'Apri indirizzo in mappe',
                 child: FlutterMap(
                   options: MapOptions(
                     initialCenter: center,
@@ -173,10 +174,7 @@ class _EmbeddedMapState extends State<_EmbeddedMap> {
           child: AppTappable(
             onTap: () => openMapsForAddress(widget.address),
             borderRadius: AppRack.insetShape,
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.sm,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -185,7 +183,7 @@ class _EmbeddedMapState extends State<_EmbeddedMap> {
                 Text(
                   'Apri in Mappe',
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: context.colors.inkMuted,

@@ -38,7 +38,10 @@ class AppAvatar extends StatelessWidget {
   }
 
   String _initials() {
-    final parts = name.split(RegExp(r'[\s@.]+')).where((p) => p.isNotEmpty).toList();
+    final parts = name
+        .split(RegExp(r'[\s@.]+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts[0][0].toUpperCase();
     return '${parts[0][0]}${parts[parts.length - 1][0]}'.toUpperCase();
@@ -55,7 +58,7 @@ class AppAvatar extends StatelessWidget {
           child: Text(
             _initials(),
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: size * 0.36,
               fontWeight: FontWeight.w700,
               color: Colors.white,

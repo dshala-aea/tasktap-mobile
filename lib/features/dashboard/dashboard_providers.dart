@@ -151,7 +151,9 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
   final live = today.where((s) => s.statusId == _kStatusInProgress).toList();
   final inAttesa = today.where((s) => s.statusId == _kStatusWaiting).toList();
   final fatto = today
-      .where((s) => s.statusId == _kStatusCompleted || s.statusId == _kStatusClosed)
+      .where(
+        (s) => s.statusId == _kStatusCompleted || s.statusId == _kStatusClosed,
+      )
       .toList();
 
   // Neither live, waiting, nor done: an open job still ahead today, in time order.
@@ -164,7 +166,9 @@ final workQueueProvider = Provider.autoDispose<WorkQueueBuckets>((ref) {
   }).toList();
 
   final daFare = actionableToday.isEmpty ? null : actionableToday.first;
-  final restOfToday = actionableToday.isEmpty ? const <Schedule>[] : actionableToday.skip(1);
+  final restOfToday = actionableToday.isEmpty
+      ? const <Schedule>[]
+      : actionableToday.skip(1);
   final programmato = [
     ...restOfToday,
     ...upcoming.where((s) => s.statusId != _kStatusCancelled),

@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/kiosk/kiosk_lock_service.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/app_text_field.dart';
 import '../../data/kiosk/kiosk_api_client.dart';
 import '../../presentation/providers/kiosk_providers.dart';
 
@@ -118,18 +119,23 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Inserisci il PIN di uscita impostato all\'attivazione.'),
+                  const Text(
+                    'Inserisci il PIN di uscita impostato all\'attivazione.',
+                  ),
                   const SizedBox(height: AppSpacing.base),
-                  TextField(
+                  AppTextField(
+                    label: 'PIN',
                     controller: pinCtrl,
                     obscureText: true,
                     keyboardType: TextInputType.number,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'PIN'),
                   ),
                   if (wrongPin) ...[
                     const SizedBox(height: AppSpacing.xs),
-                    const Text('PIN errato.', style: TextStyle(color: Colors.red)),
+                    const Text(
+                      'PIN errato.',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ],
                 ],
               ),
@@ -144,7 +150,8 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                         .read(kioskModeProvider.notifier)
                         .deactivate(pinCtrl.text);
                     if (ok) {
-                      if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+                      if (dialogContext.mounted)
+                        Navigator.of(dialogContext).pop(true);
                     } else {
                       setDialogState(() => wrongPin = true);
                     }
@@ -179,13 +186,17 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                     kioskState.deviceLabel?.isNotEmpty == true
                         ? kioskState.deviceLabel!
                         : 'Totem presenze TaskTap',
-                    style: AppTextStyles.headlineMedium.copyWith(color: Colors.white),
+                    style: AppTextStyles.headlineMedium.copyWith(
+                      color: Colors.white,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     DateFormat('EEEE d MMMM · HH:mm:ss', 'it').format(_now),
-                    style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: Colors.white70,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xxl),
                   Container(
@@ -210,26 +221,35 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                   const SizedBox(height: AppSpacing.xxl),
                   Text(
                     'Inquadra il codice con la tua app TaskTap per timbrare',
-                    style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: Colors.white70,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: AppSpacing.base),
                     Text(
                       _error!,
-                      style: AppTextStyles.bodySmall.copyWith(color: Colors.orangeAccent),
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.orangeAccent,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
-                  if (kioskState.lockOutcome == KioskLockOutcome.unsupportedPlatform) ...[
+                  if (kioskState.lockOutcome ==
+                      KioskLockOutcome.unsupportedPlatform) ...[
                     const SizedBox(height: AppSpacing.base),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.xxl,
+                      ),
                       child: Text(
                         'Blocco schermo non disponibile su questo dispositivo: abilita '
                         'manualmente "Accesso guidato" (iOS) per impedire l\'uscita '
                         'dall\'app.',
-                        style: AppTextStyles.bodySmall.copyWith(color: Colors.amber),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.amber,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -239,7 +259,9 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
             ),
 
             // Hidden exit gesture — an invisible tap target in the top-left corner, deliberately
-            // unlabelled (see this class's own doc comment for why).
+            // unlabelled (see this class's own doc comment for why). Bare GestureDetector, not
+            // AppTappable — a ripple would announce exactly what a kiosk lock screen exists to
+            // hide (see tappable_convention_test.dart's `allowed` entry for this file).
             Positioned(
               top: 0,
               left: 0,

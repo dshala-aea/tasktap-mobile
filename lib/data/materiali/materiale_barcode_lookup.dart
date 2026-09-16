@@ -20,7 +20,12 @@ import '../api/dio_client.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class MaterialeMatch {
-  const MaterialeMatch({required this.id, required this.code, required this.name, this.unitOfMeasure});
+  const MaterialeMatch({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.unitOfMeasure,
+  });
 
   final String id;
   final String code;
@@ -47,13 +52,13 @@ class MaterialeMatch {
 Future<MaterialeMatch?> lookupMaterialeByBarcode(WidgetRef ref, String barcode) async {
   final db = ref.read(appDatabaseProvider);
 
-  final localHit = await (db.select(db.materialeBarcodes)
-        ..where((b) => b.barcode.equals(barcode)))
-      .getSingleOrNull();
+  final localHit = await (db.select(
+    db.materialeBarcodes,
+  )..where((b) => b.barcode.equals(barcode))).getSingleOrNull();
   if (localHit != null) {
-    final materiale = await (db.select(db.materiali)
-          ..where((m) => m.id.equals(localHit.materialeId)))
-        .getSingleOrNull();
+    final materiale = await (db.select(
+      db.materiali,
+    )..where((m) => m.id.equals(localHit.materialeId))).getSingleOrNull();
     if (materiale != null) return MaterialeMatch.fromLocal(materiale);
     // The barcode row exists but its parent doesn't (e.g. the material went inactive and dropped
     // out of sync after the barcode itself was cached) — fall through to a live lookup rather

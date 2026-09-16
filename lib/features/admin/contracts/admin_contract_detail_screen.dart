@@ -110,9 +110,7 @@ class AdminContractDetailScreen extends ConsumerWidget {
                               bottom: AppSpacing.sm,
                             ),
                             child: Row(
-                              children: [
-                                StatusPill(stato: isActive ? 'Attivo' : 'Inattivo', outlined: true),
-                              ],
+                              children: [StatusPill(stato: isActive ? 'Attivo' : 'Inattivo')],
                             ),
                           ),
                           Divider(height: 1, thickness: 1, color: context.colors.borderLight),

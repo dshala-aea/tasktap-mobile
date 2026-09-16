@@ -33,8 +33,16 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData atSign = IconData(0xf170, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
-  static const IconData bell = IconData(0xf19c, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData atSign = IconData(
+    0xf170,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData bell = IconData(
+    0xf19c,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData bellOff = IconData(
     0xf19f,
     fontFamily: 'Lucide',
@@ -80,7 +88,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData check = IconData(0xf1ee, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData check = IconData(
+    0xf1ee,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData checkCircle = IconData(
     0xf1f0,
     fontFamily: 'Lucide',
@@ -126,8 +138,16 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData clock = IconData(0xf221, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
-  static const IconData cloud = IconData(0xf22e, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData clock = IconData(
+    0xf221,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData cloud = IconData(
+    0xf22e,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData cloudOff = IconData(
     0xf236,
     fontFamily: 'Lucide',
@@ -143,7 +163,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData eye = IconData(0xf29c, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData eye = IconData(
+    0xf29c,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData eyeOff = IconData(
     0xf29d,
     fontFamily: 'Lucide',
@@ -164,7 +188,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData fileX = IconData(0xf2dc, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData fileX = IconData(
+    0xf2dc,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData filter = IconData(
     0xf2e0,
     fontFamily: 'Lucide',
@@ -190,27 +218,51 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData home = IconData(0xf35e, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
-  static const IconData image = IconData(0xf365, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData home = IconData(
+    0xf35e,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData image = IconData(
+    0xf365,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData imageOff = IconData(
     0xf367,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData inbox = IconData(0xf36a, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
-  static const IconData link = IconData(0xf397, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData inbox = IconData(
+    0xf36a,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData link = IconData(
+    0xf397,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData locateFixed = IconData(
     0xf3ac,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData logIn = IconData(0xf3af, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData logIn = IconData(
+    0xf3af,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData logOut = IconData(
     0xf3b0,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData mail = IconData(0xf3b4, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData mail = IconData(
+    0xf3b4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData mapPin = IconData(
     0xf3c0,
     fontFamily: 'Lucide',
@@ -221,8 +273,16 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData minus = IconData(0xf3dc, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
-  static const IconData moon = IconData(0xf3eb, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData minus = IconData(
+    0xf3dc,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData moon = IconData(
+    0xf3eb,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData moreHorizontal = IconData(
     0xf3ed,
     fontFamily: 'Lucide',
@@ -265,8 +325,16 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData play = IconData(0xf457, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
-  static const IconData plus = IconData(0xf45e, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData play = IconData(
+    0xf457,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData plus = IconData(
+    0xf45e,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData plusCircle = IconData(
     0xf45f,
     fontFamily: 'Lucide',
@@ -335,7 +403,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData send = IconData(0xf4b2, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData send = IconData(
+    0xf4b2,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData settings = IconData(
     0xf4b9,
     fontFamily: 'Lucide',
@@ -356,13 +428,21 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData timer = IconData(0xf53a, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData timer = IconData(
+    0xf53a,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData trash2 = IconData(
     0xf546,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData user = IconData(0xf564, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData user = IconData(
+    0xf564,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData userCheck = IconData(
     0xf566,
     fontFamily: 'Lucide',
@@ -378,7 +458,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData users = IconData(0xf574, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData users = IconData(
+    0xf574,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData users2 = IconData(
     0xf575,
     fontFamily: 'Lucide',
@@ -399,7 +483,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
-  static const IconData x = IconData(0xf59e, fontFamily: 'Lucide', fontPackage: 'lucide_icons');
+  static const IconData x = IconData(
+    0xf59e,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData xCircle = IconData(
     0xf59f,
     fontFamily: 'Lucide',

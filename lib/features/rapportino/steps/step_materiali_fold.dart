@@ -24,16 +24,19 @@ import '../../magazzino/magazzino_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart' show ticketMaterialiProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Step 3 — Materiali  (folds Controlli + Foto/Allegati as sub-sections)
+// Step 3 — Materiali  (folds Foto/Allegati as a sub-section)
 //
 // - Qty steppers (− value +) per MaterialeRow
 // - "Aggiungi materiale" opens picker dialog
 // - "Nessun materiale" toggle (setMaterialiNotRequired)
-// - Controlli sub-section (upsertControllo)
 // - Foto/allegati sub-section (addAllegato/removeAllegato)
+//
+// Controlli used to fold in here too — it's its own compartment tile now (StepControlli, bottom
+// of this file); see that class's own doc comment for why.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class StepMaterialiFold extends ConsumerWidget {
@@ -132,14 +135,11 @@ class StepMaterialiFold extends ConsumerWidget {
             const SizedBox(height: 24),
           ],
 
-          // ── Controlli sub-section ──────────────────────────────────────────
-          // The checklist for this intervention, resolved server-side from the
-          // ticket's maintenance-template version (ADR-0012) — not a free-text
-          // "type an ID" box. See _ControlliChecklist.
-          StepLabel(title: 'Controlli'),
-          const SizedBox(height: 8),
-          _ControlliChecklist(reportId: reportId, ticketId: state.ticketId),
-          const SizedBox(height: 24),
+          // Controlli moved to its own compartment tile (see StepControlli, bottom of this file)
+          // — it used to live here, bundling a third unrelated sub-flow (a server-driven
+          // checklist with its own loading/error/empty states) into a tile already carrying
+          // materials-picking and photo capture. Densest screen in the rapportino, on the one
+          // task where a mis-tap has real cost; splitting it was the fix, not just a nice-to-have.
 
           // ── Foto / Allegati sub-section ────────────────────────────────────
           StepLabel(title: 'Foto / Allegati (${photos.length})'),
@@ -220,6 +220,13 @@ class StepMaterialiFold extends ConsumerWidget {
     // stock picked up from a Sede for a job done off the van.
     String? selectedMagazzinoId = defaultMagazzino?.id;
     String? selectedMagazzinoNome = defaultMagazzino?.nome;
+    // Unità/magazzino collapse behind one disclosure by default — both are usually already
+    // resolved (unit from the catalog pick, magazzino from the technician's own furgone), so
+    // showing two more decision rows every time competed with the two decisions that actually
+    // need a tap on every add (what, how much). Collapsed values still apply silently; expanding
+    // only matters for the exception (a part with no catalog unit, stock from a different
+    // magazzino). See critique P2 "Materiali add-dialog cognitive overload."
+    var showAdvanced = false;
 
     showDialog<void>(
       context: context,
@@ -230,221 +237,261 @@ class StepMaterialiFold extends ConsumerWidget {
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
           child: AppCard(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Aggiungi materiale',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: ctx.colors.ink,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                // Fabbisogno was already fetched and shown read-only on the ticket's own Materiali
-                // tab, disconnected from the one screen a technician actually adds materiali from.
-                // Nothing to type here — tapping a suggestion is the whole interaction.
-                if (ticketId != null)
-                  _FabbisognoSuggestions(
-                    ticketId: ticketId,
-                    onPicked: (m) {
-                      selectedMaterialeId = m.materialeId;
-                      freeTextName = m.materialeId == null ? m.nome : '';
-                      qty = m.quantita > 0 ? m.quantita : 1.0;
-                      if (m.unitaMisura?.isNotEmpty ?? false) uom = m.unitaMisura;
-                      lookupFieldGeneration++;
-                      setDialogState(() {});
-                    },
-                  ),
-                // Same single field as the rest of the wizard. This dialog is opened once per
-                // material — often a dozen times on one job — so the catalogo/testo-libero mode
-                // switch was being paid over and over on the same rapportino.
-                //
-                // A ConsumerWidget of its own, watching allMaterialiProvider live, rather than a
-                // `catalogo` list captured once via `ref.read` when the dialog opened. That read
-                // used to hit the provider cold: allMaterialiProvider is StreamProvider.autoDispose
-                // and nothing else in this screen keeps it warm, so the very first open (the common
-                // case — a technician adds several materiali per job, but the provider is torn down
-                // between dialogs once nothing is left watching it) read it before the underlying
-                // Drift stream had delivered its first emission and got back AsyncLoading, i.e. an
-                // empty catalogo. The search box was never broken; it had nothing to search yet.
-                _MaterialeLookupField(
-                  key: ValueKey(lookupFieldGeneration),
-                  selectedId: selectedMaterialeId,
-                  initialText: freeTextName,
-                  onMaterialeSelected: (m) {
-                    selectedMaterialeId = m.id;
-                    freeTextName = '';
-                    // The catalogue knows the unit. Asking the technician to type "pz" after
-                    // picking a part that is already measured in pieces is a known answer.
-                    if (m.unitOfMeasure?.isNotEmpty ?? false) uom = m.unitOfMeasure;
-                    setDialogState(() {});
-                  },
-                  onFreeText: (v) {
-                    selectedMaterialeId = null;
-                    freeTextName = v;
-                  },
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    icon: const Icon(LucideIcons.scanLine, size: 16),
-                    label: const Text('Scansiona codice'),
-                    onPressed: () async {
-                      final code = await openBarcodeScanSheet(ctx, title: 'Scansiona materiale');
-                      if (code == null || !ctx.mounted) return;
-                      final match = await lookupMaterialeByBarcode(ref, code);
-                      if (match != null) {
-                        selectedMaterialeId = match.id;
-                        freeTextName = '';
-                        if (match.unitOfMeasure?.isNotEmpty ?? false) {
-                          uom = match.unitOfMeasure;
-                        }
-                      } else {
-                        // Not in the catalog (or its barcode) — the scan wasn't wasted, the raw
-                        // code becomes the free-text name, same as if it had been typed.
-                        selectedMaterialeId = null;
-                        freeTextName = code;
-                      }
-                      lookupFieldGeneration++;
-                      setDialogState(() {});
-                    },
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Aggiungi materiale',
+                  style: TextStyle(
+                    fontFamily: 'Archivo Narrow',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: ctx.colors.ink,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      'Qtà',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: ctx.colors.inkMuted,
-                      ),
-                    ),
-                    const Spacer(),
-                    _QtyBtn(
-                      icon: LucideIcons.minus,
-                      label: 'Diminuisci quantità',
-                      onTap: qty > 1 ? () => setDialogState(() => qty -= 1) : null,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                      child: Text(
-                        qty.toStringAsFixed(qty == qty.truncateToDouble() ? 0 : 1),
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: ctx.colors.ink,
+                const SizedBox(height: 12),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Fabbisogno was already fetched and shown read-only on the ticket's own Materiali
+                        // tab, disconnected from the one screen a technician actually adds materiali from.
+                        // Nothing to type here — tapping a suggestion is the whole interaction.
+                        if (ticketId != null)
+                          _FabbisognoSuggestions(
+                            ticketId: ticketId,
+                            onPicked: (m) {
+                              selectedMaterialeId = m.materialeId;
+                              freeTextName = m.materialeId == null ? m.nome : '';
+                              qty = m.quantita > 0 ? m.quantita : 1.0;
+                              if (m.unitaMisura?.isNotEmpty ?? false) uom = m.unitaMisura;
+                              lookupFieldGeneration++;
+                              setDialogState(() {});
+                            },
+                          ),
+                        // Same single field as the rest of the wizard. This dialog is opened once per
+                        // material — often a dozen times on one job — so the catalogo/testo-libero mode
+                        // switch was being paid over and over on the same rapportino.
+                        //
+                        // A ConsumerWidget of its own, watching allMaterialiProvider live, rather than a
+                        // `catalogo` list captured once via `ref.read` when the dialog opened. That read
+                        // used to hit the provider cold: allMaterialiProvider is StreamProvider.autoDispose
+                        // and nothing else in this screen keeps it warm, so the very first open (the common
+                        // case — a technician adds several materiali per job, but the provider is torn down
+                        // between dialogs once nothing is left watching it) read it before the underlying
+                        // Drift stream had delivered its first emission and got back AsyncLoading, i.e. an
+                        // empty catalogo. The search box was never broken; it had nothing to search yet.
+                        _MaterialeLookupField(
+                          key: ValueKey(lookupFieldGeneration),
+                          selectedId: selectedMaterialeId,
+                          initialText: freeTextName,
+                          onMaterialeSelected: (m) {
+                            selectedMaterialeId = m.id;
+                            freeTextName = '';
+                            // The catalogue knows the unit. Asking the technician to type "pz" after
+                            // picking a part that is already measured in pieces is a known answer.
+                            if (m.unitOfMeasure?.isNotEmpty ?? false) uom = m.unitOfMeasure;
+                            setDialogState(() {});
+                          },
+                          onFreeText: (v) {
+                            selectedMaterialeId = null;
+                            freeTextName = v;
+                          },
                         ),
-                      ),
-                    ),
-                    _QtyBtn(
-                      icon: LucideIcons.plus,
-                      label: 'Aumenta quantità',
-                      onTap: () => setDialogState(() => qty += 1),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppFieldShell(
-                        label: 'Unità',
-                        child: DropdownButtonFormField<String?>(
-                          initialValue: uom,
-                          hint: const Text('pz'),
-                          items: [
-                            const DropdownMenuItem<String?>(value: null, child: Text('Nessuna')),
-                            for (final u in materialeSelectOptions(kUnitOfMeasureOptions, uom))
-                              DropdownMenuItem<String?>(value: u, child: Text(u)),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            icon: const Icon(LucideIcons.scanLine, size: 18),
+                            tooltip: 'Scansiona codice',
+                            onPressed: () async {
+                              final code = await openBarcodeScanSheet(
+                                ctx,
+                                title: 'Scansiona materiale',
+                              );
+                              if (code == null || !ctx.mounted) return;
+                              final match = await lookupMaterialeByBarcode(ref, code);
+                              if (match != null) {
+                                selectedMaterialeId = match.id;
+                                freeTextName = '';
+                                if (match.unitOfMeasure?.isNotEmpty ?? false) {
+                                  uom = match.unitOfMeasure;
+                                }
+                              } else {
+                                // Not in the catalog (or its barcode) — the scan wasn't wasted, the raw
+                                // code becomes the free-text name, same as if it had been typed.
+                                selectedMaterialeId = null;
+                                freeTextName = code;
+                              }
+                              lookupFieldGeneration++;
+                              setDialogState(() {});
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text(
+                              'Qtà',
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: ctx.colors.inkMuted,
+                              ),
+                            ),
+                            const Spacer(),
+                            _QtyBtn(
+                              icon: LucideIcons.minus,
+                              label: 'Diminuisci quantità',
+                              onTap: qty > 1 ? () => setDialogState(() => qty -= 1) : null,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                              child: Text(
+                                qty.toStringAsFixed(qty == qty.truncateToDouble() ? 0 : 1),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: ctx.colors.ink,
+                                ),
+                              ),
+                            ),
+                            _QtyBtn(
+                              icon: LucideIcons.plus,
+                              label: 'Aumenta quantità',
+                              onTap: () => setDialogState(() => qty += 1),
+                            ),
                           ],
-                          onChanged: (v) => setDialogState(() => uom = v),
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                        // Unità + magazzino: one collapsed summary row instead of two always-open
+                        // ones. Both already hold a real value (catalog-derived unit, the
+                        // technician's own furgone) in the common case — "Modifica" is for the
+                        // exception, not the default path.
+                        InkWell(
+                          onTap: () => setDialogState(() => showAdvanced = !showAdvanced),
+                          borderRadius: AppRack.insetShape,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.warehouse, size: 14, color: ctx.colors.inkMuted),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    '${uom ?? 'Unità non impostata'} · '
+                                    '${selectedMagazzinoNome ?? 'Nessun magazzino'}',
+                                    style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
+                                  ),
+                                ),
+                                AnimatedRotation(
+                                  turns: showAdvanced ? 0.5 : 0,
+                                  duration: const Duration(milliseconds: 150),
+                                  child: Icon(
+                                    LucideIcons.chevronDown,
+                                    size: 16,
+                                    color: ctx.colors.inkMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (showAdvanced) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: AppFieldShell(
+                                  label: 'Unità',
+                                  child: DropdownButtonFormField<String?>(
+                                    initialValue: uom,
+                                    hint: const Text('pz'),
+                                    items: [
+                                      const DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text('Nessuna'),
+                                      ),
+                                      for (final u in materialeSelectOptions(
+                                        kUnitOfMeasureOptions,
+                                        uom,
+                                      ))
+                                        DropdownMenuItem<String?>(value: u, child: Text(u)),
+                                    ],
+                                    onChanged: (v) => setDialogState(() => uom = v),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  selectedMagazzinoNome != null
+                                      ? 'Da: $selectedMagazzinoNome'
+                                      : 'Nessun magazzino assegnato',
+                                  style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  final picked = await _pickMagazzino(ctx, ref);
+                                  if (picked != null) {
+                                    selectedMagazzinoId = picked.id;
+                                    selectedMagazzinoNome = picked.nome;
+                                    setDialogState(() {});
+                                  }
+                                },
+                                child: const Text('Cambia'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(LucideIcons.warehouse, size: 16, color: ctx.colors.inkMuted),
-                    const SizedBox(width: 6),
                     Expanded(
-                      child: Text(
-                        selectedMagazzinoNome != null
-                            ? 'Da: $selectedMagazzinoNome'
-                            : 'Nessun magazzino assegnato',
-                        style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
-                      ),
+                      child: AppButton.ghost(label: 'Annulla', onPressed: () => Navigator.pop(ctx)),
                     ),
-                    TextButton(
-                      onPressed: () async {
-                        final picked = await _pickMagazzino(ctx, ref);
-                        if (picked != null) {
-                          selectedMagazzinoId = picked.id;
-                          selectedMagazzinoNome = picked.nome;
-                          setDialogState(() {});
-                        }
-                      },
-                      child: const Text('Cambia'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Aggiungi',
+                        onPressed: () {
+                          final id = 'mat-${DateTime.now().millisecondsSinceEpoch}';
+                          final typed = freeTextName.trim();
+                          notifier.addMateriale(
+                            MaterialeRow(
+                              id: id,
+                              reportId: reportId,
+                              materialeId: selectedMaterialeId,
+                              // Whichever one holds the answer. There is no mode to consult any
+                              // more, so the row records what is actually there.
+                              freeTextName: selectedMaterialeId == null && typed.isNotEmpty
+                                  ? typed
+                                  : null,
+                              quantity: qty,
+                              unitOfMeasure: uom,
+                              magazzinoId: selectedMagazzinoId,
+                            ),
+                          );
+                          Navigator.pop(ctx);
+                        },
+                      ),
                     ),
                   ],
                 ),
               ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton.ghost(
-                      label: 'Annulla',
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Aggiungi',
-                      onPressed: () {
-                        final id = 'mat-${DateTime.now().millisecondsSinceEpoch}';
-                        final typed = freeTextName.trim();
-                        notifier.addMateriale(
-                          MaterialeRow(
-                            id: id,
-                            reportId: reportId,
-                            materialeId: selectedMaterialeId,
-                            // Whichever one holds the answer. There is no mode to consult any
-                            // more, so the row records what is actually there.
-                            freeTextName: selectedMaterialeId == null && typed.isNotEmpty
-                                ? typed
-                                : null,
-                            quantity: qty,
-                            unitOfMeasure: uom,
-                            magazzinoId: selectedMagazzinoId,
-                          ),
-                        );
-                        Navigator.pop(ctx);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
           ),
         ),
       ),
@@ -747,6 +794,7 @@ class _MaterialeQtyStepper extends ConsumerWidget {
           const SizedBox(width: 4),
           IconButton(
             icon: Icon(LucideIcons.trash2, color: context.colors.red, size: 18),
+            tooltip: 'Rimuovi materiale',
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             onPressed: onRemove,
           ),
@@ -819,8 +867,7 @@ class _PhotoThumb extends StatelessWidget {
     // above) at a small square tile, but a camera photo decodes at full sensor resolution —
     // easily 3000+ px on a side. Without cacheWidth/cacheHeight, Flutter decodes and holds every
     // thumbnail at that full size, which is a lot of memory for a grid of tiles this small.
-    final tileWidth =
-        (MediaQuery.sizeOf(context).width - AppSpacing.pagePadding * 2 - 8 * 2) / 3;
+    final tileWidth = (MediaQuery.sizeOf(context).width - AppSpacing.pagePadding * 2 - 8 * 2) / 3;
     final cachePx = (tileWidth * MediaQuery.devicePixelRatioOf(context)).round();
     // Item 7: a PDF attachment lands in this same grid (addAllegato doesn't distinguish photos
     // from documents) but isn't decodable as an image — Image.file's errorBuilder would already
@@ -907,6 +954,43 @@ class _PhotoThumb extends StatelessWidget {
 // ControlloRow / upserted the same way as before — only how the checklist itself is
 // fetched changed, not the submit payload shape.
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// Controlli's own compartment tile — the checklist for this intervention, resolved
+/// server-side from the ticket's maintenance-template version (ADR-0012), not a free-text
+/// "type an ID" box. Split out from [StepMaterialiFold] (see that class's own doc comment on
+/// this sheet's build method for why): a server-driven checklist with its own loading/error/
+/// empty states doesn't belong bundled into the materials-and-photos tile.
+class StepControlli extends StatelessWidget {
+  const StepControlli({super.key, required this.reportId, required this.ticketId});
+
+  final String reportId;
+  final String? ticketId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.base,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
+      child: _ControlliChecklist(reportId: reportId, ticketId: ticketId),
+    );
+  }
+}
+
+/// Whether every control this ticket's maintenance template requires already has a recorded
+/// answer — vacuously true when the ticket has none (nothing to do), or when this report isn't
+/// linked to a ticket at all. Read by the compartment grid's completion dot; see [StepControlli].
+bool controlliCompletionFor({
+  required List<String> requiredControlIds,
+  required List<ControlloRow> recordedRows,
+}) {
+  if (requiredControlIds.isEmpty) return true;
+  final answered = recordedRows.map((r) => r.controlId).toSet();
+  return requiredControlIds.every(answered.contains);
+}
 
 class _ControlliChecklist extends ConsumerWidget {
   const _ControlliChecklist({required this.reportId, required this.ticketId});

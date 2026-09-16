@@ -73,7 +73,7 @@ class UnavailableState extends StatelessWidget {
                   titolo,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo Narrow',
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: c.ink,
@@ -84,7 +84,7 @@ class UnavailableState extends StatelessWidget {
                   motivo,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
                     color: c.inkMuted,

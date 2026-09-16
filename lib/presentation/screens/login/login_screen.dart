@@ -41,10 +41,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _onLogin() async {
     ref.read(loginProvider.notifier).clearError();
-    await ref.read(loginProvider.notifier).signInWithPassword(
-      _usernameCtrl.text.trim(),
-      _passwordCtrl.text,
-    );
+    await ref
+        .read(loginProvider.notifier)
+        .signInWithPassword(_usernameCtrl.text.trim(), _passwordCtrl.text);
     // Router redirect handles navigation on success.
     if (ref.read(loginProvider).failure == null) {
       // Tells the platform autofill service (password manager) the credentials just used were
@@ -86,6 +85,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // Long-press is the only way in to kiosk activation (see KioskActivationScreen's
               // own doc comment for why this is deliberately unadvertised) — an ordinary
               // technician signing in never has a reason to hold their finger on the logo.
+              // Bare GestureDetector, not AppTappable — an InkWell ripple would visibly hint the
+              // logo is interactive, defeating the point (see tappable_convention_test.dart's
+              // `allowed` entry for this file).
               GestureDetector(
                 onLongPress: () => context.push(AppRoutes.kioskActivate),
                 child: const _TaskTapLogo(),
@@ -98,7 +100,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Inserisci le tue credenziali TaskTap.',
-                style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: context.colors.inkFaint,
+                ),
               ),
 
               const SizedBox(height: AppSpacing.xxl),
@@ -188,7 +192,10 @@ class _TaskTapLogo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
           decoration: BoxDecoration(
             color: AppColors.Y,
             borderRadius: BorderRadius.circular(AppSpacing.sm),
@@ -217,7 +224,10 @@ class _ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
       decoration: BoxDecoration(
         color: context.colors.red.withAlpha(20),
         border: Border.all(color: context.colors.red.withAlpha(80)),
@@ -231,7 +241,9 @@ class _ErrorBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: AppTextStyles.bodySmall.copyWith(color: context.colors.red),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: context.colors.red,
+              ),
             ),
           ),
         ],

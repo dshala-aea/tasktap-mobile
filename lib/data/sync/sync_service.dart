@@ -32,9 +32,14 @@ class SyncService {
       queryParams['since'] = lastSync.toUtc().toIso8601String();
     }
 
-    final response = await dio.get<Map<String, dynamic>>(_path, queryParameters: queryParams);
+    final response = await dio.get<Map<String, dynamic>>(
+      _path,
+      queryParameters: queryParams,
+    );
 
-    final payload = SyncResultDto.fromJson(response.data as Map<String, dynamic>);
+    final payload = SyncResultDto.fromJson(
+      response.data as Map<String, dynamic>,
+    );
 
     await db.transaction(() async {
       await _upsertCustomers(payload.customers);
@@ -86,7 +91,12 @@ class SyncService {
       await db.batch(
         (b) => b.insertAll(
           db.colleagues,
-          list.map((c) => ColleaguesCompanion.insert(id: c.id, displayName: c.displayName)),
+          list.map(
+            (c) => ColleaguesCompanion.insert(
+              id: c.id,
+              displayName: c.displayName,
+            ),
+          ),
         ),
       );
     });
@@ -294,7 +304,9 @@ class SyncService {
       // Replaced wholesale rather than merged: the payload is the whole truth about who is on
       // this schedule, and someone removed from a squadra must stop appearing on the device the
       // same way they stop appearing on the server.
-      await (db.delete(db.scheduleAssignees)..where((t) => t.scheduleId.equals(s.id))).go();
+      await (db.delete(
+        db.scheduleAssignees,
+      )..where((t) => t.scheduleId.equals(s.id))).go();
 
       for (final a in s.assignees) {
         await db
@@ -358,7 +370,9 @@ class SyncService {
               endedAt: Value(r.endedAt),
               documentTemplateId: Value(r.documentTemplateId),
               customerSignatureAllegatoId: Value(r.customerSignatureAllegatoId),
-              technicianSignatureAllegatoId: Value(r.technicianSignatureAllegatoId),
+              technicianSignatureAllegatoId: Value(
+                r.technicianSignatureAllegatoId,
+              ),
               technicianNotes: Value(r.technicianNotes),
               closedAt: Value(r.closedAt),
               stato: Value(r.stato),
@@ -435,20 +449,31 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 /// Provides the [SyncService].
 final syncServiceProvider = Provider<SyncService>((ref) {
-  return SyncService(db: ref.watch(appDatabaseProvider), dio: ref.watch(dioProvider));
+  return SyncService(
+    db: ref.watch(appDatabaseProvider),
+    dio: ref.watch(dioProvider),
+  );
 });
 
 /// Notifier that manages sync state (idle / syncing / error / done).
 enum SyncStatus { idle, syncing, done, error }
 
 class SyncState {
-  const SyncState({this.status = SyncStatus.idle, this.lastSync, this.errorMessage});
+  const SyncState({
+    this.status = SyncStatus.idle,
+    this.lastSync,
+    this.errorMessage,
+  });
 
   final SyncStatus status;
   final DateTime? lastSync;
   final String? errorMessage;
 
-  SyncState copyWith({SyncStatus? status, DateTime? lastSync, String? errorMessage}) => SyncState(
+  SyncState copyWith({
+    SyncStatus? status,
+    DateTime? lastSync,
+    String? errorMessage,
+  }) => SyncState(
     status: status ?? this.status,
     lastSync: lastSync ?? this.lastSync,
     errorMessage: errorMessage,
@@ -477,11 +502,17 @@ class SyncNotifier extends StateNotifier<SyncState> {
       final ts = await _service.sync();
       state = SyncState(status: SyncStatus.done, lastSync: ts);
     } catch (e) {
-      state = state.copyWith(status: SyncStatus.error, errorMessage: e.toString());
+      state = state.copyWith(
+        status: SyncStatus.error,
+        errorMessage: e.toString(),
+      );
     }
   }
 }
 
 final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
-  return SyncNotifier(ref.watch(syncServiceProvider), ref.watch(appDatabaseProvider));
+  return SyncNotifier(
+    ref.watch(syncServiceProvider),
+    ref.watch(appDatabaseProvider),
+  );
 });

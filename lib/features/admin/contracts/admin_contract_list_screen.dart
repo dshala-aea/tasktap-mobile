@@ -156,7 +156,7 @@ class _ContractRow extends StatelessWidget {
       leading: const RowIconTile(icon: LucideIcons.fileSignature),
       title: name,
       subtitle: customerName,
-      meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
+      meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true),
       showDivider: !isLast,
       onTap: onTap,
     );

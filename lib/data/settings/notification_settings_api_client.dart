@@ -77,7 +77,9 @@ class NotificationSettingsDto {
   /// Mention notifications — the app's "Menzioni" toggle (comments/notes that @-mention the user).
   final bool mentionNotifications;
 
-  factory NotificationSettingsDto.fromJson(Map<String, dynamic> json) => NotificationSettingsDto(
+  factory NotificationSettingsDto.fromJson(
+    Map<String, dynamic> json,
+  ) => NotificationSettingsDto(
     // Defaulting to true matches the server's own get-or-create defaults. A field the server
     // stops sending must not read as "the user switched this off".
     enableInApp: json['enableInApp'] as bool? ?? true,
@@ -99,9 +101,12 @@ class NotificationSettingsApiClient {
 
   /// GET /api/NotificationSettings
   Future<NotificationSettingsDto> fetch() async {
-    final response = await _dio.get<Map<String, dynamic>>('/api/NotificationSettings');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/NotificationSettings',
+    );
     final data = response.data;
-    if (data == null) throw StateError('Risposta vuota da NotificationSettings');
+    if (data == null)
+      throw StateError('Risposta vuota da NotificationSettings');
     return NotificationSettingsDto.fromJson(data);
   }
 
@@ -140,6 +145,7 @@ class NotificationSettingsApiClient {
   }
 }
 
-final notificationSettingsApiClientProvider = Provider<NotificationSettingsApiClient>((ref) {
-  return NotificationSettingsApiClient(ref.watch(dioProvider));
-});
+final notificationSettingsApiClientProvider =
+    Provider<NotificationSettingsApiClient>((ref) {
+      return NotificationSettingsApiClient(ref.watch(dioProvider));
+    });

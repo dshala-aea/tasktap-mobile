@@ -57,7 +57,9 @@ class AltroHubScreen extends ConsumerWidget {
                   // 2 on a phone, more on a tablet/wide window — same width-driven breakpoint
                   // rapportino_form_screen.dart's materiali grid already uses, so a fixed count
                   // doesn't stretch two tiles across a much wider viewport.
-                  crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 2,
+                  crossAxisCount: MediaQuery.sizeOf(context).width > 600
+                      ? 4
+                      : 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
                   // Was 1.4 — tall enough that VetroCompartmentTile's icon-top/label-bottom
@@ -111,79 +113,78 @@ class AltroHubScreen extends ConsumerWidget {
     BuildContext context,
     Entitlement? entitlement,
   ) {
-    final tiles =
-        <({IconData icon, String label, String module, VoidCallback onTap})>[
-          (
-            icon: LucideIcons.clipboardList,
-            label: 'Interventi',
-            module: 'interventi',
-            onTap: () => context.go(AppRoutes.ticket),
-          ),
-          (
-            icon: LucideIcons.fileText,
-            label: 'Rapportini',
-            module: 'rapportini',
-            onTap: () => context.go(AppRoutes.altroRapportini),
-          ),
-          (
-            icon: LucideIcons.users,
-            label: 'Clienti',
-            module: 'clienti',
-            onTap: () => context.push(AppRoutes.altroClienti),
-          ),
-          // Sedi are customer sites: the same always-on module, not one of its own.
-          (
-            icon: LucideIcons.mapPin,
-            label: 'Sedi',
-            module: 'clienti',
-            onTap: () => context.push('/altro/sedi'),
-          ),
-          (
-            icon: LucideIcons.hardHat,
-            label: 'Cantieri',
-            module: 'cantieri',
-            // The technician-scoped Cantieri tab (with "Timbrato oggi" badges and proper
-            // empty/error states), not the office CRUD screen under /altro/cantieri.
-            onTap: () => context.go(AppRoutes.cantieri),
-          ),
-          (
-            icon: LucideIcons.package,
-            label: 'Prodotti',
-            module: 'prodotti',
-            onTap: () => context.push('/altro/prodotti'),
-          ),
-          (
-            icon: LucideIcons.warehouse,
-            label: 'Magazzino',
-            module: 'magazzino',
-            onTap: () => context.push(AppRoutes.altroMagazzino),
-          ),
-          (
-            icon: LucideIcons.fileSignature,
-            label: 'Contratti',
-            module: 'contratti',
-            onTap: () => context.push('/altro/contratti'),
-          ),
-          // Squadre is crew management — the always-on `team` module.
-          (
-            icon: LucideIcons.users2,
-            label: 'Squadre',
-            module: 'team',
-            onTap: () => context.push('/altro/squadre'),
-          ),
-          (
-            icon: LucideIcons.calendarDays,
-            label: 'Pianificazioni',
-            module: 'pianificazione',
-            onTap: () => context.push('/altro/pianificazioni'),
-          ),
-          (
-            icon: LucideIcons.calendarX,
-            label: 'Ferie e Permessi',
-            module: 'presenze',
-            onTap: () => context.push(AppRoutes.altroFerie),
-          ),
-        ];
+    final tiles = <({IconData icon, String label, String module, VoidCallback onTap})>[
+      (
+        icon: LucideIcons.clipboardList,
+        label: 'Interventi',
+        module: 'interventi',
+        onTap: () => context.go(AppRoutes.ticket),
+      ),
+      (
+        icon: LucideIcons.fileText,
+        label: 'Rapportini',
+        module: 'rapportini',
+        onTap: () => context.go(AppRoutes.altroRapportini),
+      ),
+      (
+        icon: LucideIcons.users,
+        label: 'Clienti',
+        module: 'clienti',
+        onTap: () => context.push(AppRoutes.altroClienti),
+      ),
+      // Sedi are customer sites: the same always-on module, not one of its own.
+      (
+        icon: LucideIcons.mapPin,
+        label: 'Sedi',
+        module: 'clienti',
+        onTap: () => context.push('/altro/sedi'),
+      ),
+      (
+        icon: LucideIcons.hardHat,
+        label: 'Cantieri',
+        module: 'cantieri',
+        // The technician-scoped Cantieri tab (with "Timbrato oggi" badges and proper
+        // empty/error states), not the office CRUD screen under /altro/cantieri.
+        onTap: () => context.go(AppRoutes.cantieri),
+      ),
+      (
+        icon: LucideIcons.package,
+        label: 'Prodotti',
+        module: 'prodotti',
+        onTap: () => context.push('/altro/prodotti'),
+      ),
+      (
+        icon: LucideIcons.warehouse,
+        label: 'Magazzino',
+        module: 'magazzino',
+        onTap: () => context.push(AppRoutes.altroMagazzino),
+      ),
+      (
+        icon: LucideIcons.fileSignature,
+        label: 'Contratti',
+        module: 'contratti',
+        onTap: () => context.push('/altro/contratti'),
+      ),
+      // Squadre is crew management — the always-on `team` module.
+      (
+        icon: LucideIcons.users2,
+        label: 'Squadre',
+        module: 'team',
+        onTap: () => context.push('/altro/squadre'),
+      ),
+      (
+        icon: LucideIcons.calendarDays,
+        label: 'Pianificazioni',
+        module: 'pianificazione',
+        onTap: () => context.push('/altro/pianificazioni'),
+      ),
+      (
+        icon: LucideIcons.calendarX,
+        label: 'Ferie e Permessi',
+        module: 'presenze',
+        onTap: () => context.push(AppRoutes.altroFerie),
+      ),
+    ];
 
     return [
       for (final t in tiles)
@@ -231,7 +232,7 @@ class _UserCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: context.colors.ink,
@@ -244,7 +245,7 @@ class _UserCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo',
                         fontSize: 12,
                         color: context.colors.inkMuted,
                       ),
@@ -428,7 +429,7 @@ class _LogoutRow extends StatelessWidget {
               Text(
                 'Esci dall\'account',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: ctx.colors.ink,
@@ -437,7 +438,11 @@ class _LogoutRow extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 'Sei sicuro di voler uscire dall\'account?',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.inkMuted),
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 14,
+                  color: ctx.colors.inkMuted,
+                ),
               ),
               const SizedBox(height: 20),
               Row(

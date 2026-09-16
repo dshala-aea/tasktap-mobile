@@ -147,10 +147,7 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: ScreenHeaderBar(
-        title: _isEditing ? 'Modifica sede' : 'Nuova sede',
-        showBack: true,
-      ),
+      appBar: ScreenHeaderBar(title: _isEditing ? 'Modifica sede' : 'Nuova sede', showBack: true),
       body: Form(
         key: _formKey,
         child: ListView(

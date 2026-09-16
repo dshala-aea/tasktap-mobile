@@ -111,7 +111,7 @@ class _PurposeSheet extends StatelessWidget {
                       child: Text(
                         titolo,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo Narrow',
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
                           color: c.ink,
@@ -123,13 +123,13 @@ class _PurposeSheet extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   motivo,
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 14, height: 1.45, color: c.ink),
+                  style: TextStyle(fontFamily: 'Archivo', fontSize: 14, height: 1.45, color: c.ink),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   senzaDiEsso,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     height: 1.45,
                     color: c.inkMuted,

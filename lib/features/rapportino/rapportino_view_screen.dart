@@ -118,10 +118,8 @@ class _RapportinoViewBody extends ConsumerWidget {
     // the report) — split them here so the photo grid never shows a signature as if it were a
     // job photo, and _SignatureBlock gets the real row instead of resolving it itself.
     final allegati = allegatiAsync.valueOrNull ?? [];
-    final signatureIds = {
-      draft.customerSignatureAllegatoId,
-      draft.technicianSignatureAllegatoId,
-    }..removeWhere((id) => id == null);
+    final signatureIds = {draft.customerSignatureAllegatoId, draft.technicianSignatureAllegatoId}
+      ..removeWhere((id) => id == null);
     final photoAllegati = allegati.where((a) => !signatureIds.contains(a.id)).toList();
     final customerSignatureAllegato = draft.customerSignatureAllegatoId == null
         ? null
@@ -170,12 +168,12 @@ class _RapportinoViewBody extends ConsumerWidget {
                             ),
                             child: Row(
                               children: [
-                                StatusPill(stato: statusLabel, outlined: true),
+                                StatusPill(stato: statusLabel),
                                 const SizedBox(width: 8),
                                 Text(
                                   dateLabel,
                                   style: TextStyle(
-                                    fontFamily: 'Inter',
+                                    fontFamily: 'Archivo',
                                     fontSize: 12,
                                     color: context.colors.inkMuted,
                                   ),
@@ -235,7 +233,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                             Text(
                               draft.details!,
                               style: TextStyle(
-                                fontFamily: 'Inter',
+                                fontFamily: 'Archivo',
                                 fontSize: 13,
                                 color: context.colors.ink,
                                 height: 1.5,
@@ -273,7 +271,9 @@ class _RapportinoViewBody extends ConsumerWidget {
                               final name =
                                   m.freeTextName ??
                                   (m.materialeId != null
-                                      ? (ref.watch(materialeNameProvider(m.materialeId!)).valueOrNull ??
+                                      ? (ref
+                                                .watch(materialeNameProvider(m.materialeId!))
+                                                .valueOrNull ??
                                             m.materialeId!)
                                       : '—');
                               final qty = m.quantity.toStringAsFixed(
@@ -400,9 +400,7 @@ class _RapportinoViewBody extends ConsumerWidget {
                     ),
                     child: Row(
                       children: [
-                        Expanded(
-                          child: _DownloadPdfButton(reportId: draft.id),
-                        ),
+                        Expanded(child: _DownloadPdfButton(reportId: draft.id)),
                         const SizedBox(width: 8),
                         _SharePdfButton(reportId: draft.id),
                       ],
@@ -443,11 +441,7 @@ Future<void> _openReportPdf(BuildContext context, WidgetRef ref, String reportId
 /// Shared fetch-and-save step behind [_openReportPdf] and [_SharePdfButton] — downloads once,
 /// each caller decides what to do with the file. Returns null (and has already shown the
 /// error) on failure, so callers can just check for null rather than duplicating error UI.
-Future<File?> _fetchPdfToTempFile(
-  WidgetRef ref,
-  String reportId,
-  BuildContext context,
-) async {
+Future<File?> _fetchPdfToTempFile(WidgetRef ref, String reportId, BuildContext context) async {
   try {
     final dio = ref.read(dioProvider);
     final response = await dio.get<List<int>>(
@@ -730,7 +724,7 @@ class _SignatureBlock extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Firmato il $signedLabel',
-              style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+              style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
             ),
           ],
         ),
@@ -764,7 +758,10 @@ class _SignatureBlock extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               hasLocal
-                  ? Image.file(File(a.storagePath), errorBuilder: (_, _, _) => const _SignatureFallbackIcon())
+                  ? Image.file(
+                      File(a.storagePath),
+                      errorBuilder: (_, _, _) => const _SignatureFallbackIcon(),
+                    )
                   : a.url.isNotEmpty
                   ? Image.network(a.url, errorBuilder: (_, _, _) => const _SignatureFallbackIcon())
                   : const _SignatureFallbackIcon(),
@@ -772,7 +769,11 @@ class _SignatureBlock extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(
                   'Firmato il $signedLabel',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 12,
+                    color: context.colors.inkMuted,
+                  ),
                 ),
               ),
             ],
@@ -812,7 +813,10 @@ class _AllegatiPhotoGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tileSize =
-        (MediaQuery.sizeOf(context).width - AppSpacing.pagePadding * 2 - AppSpacing.base * 2 - 8 * 2) /
+        (MediaQuery.sizeOf(context).width -
+            AppSpacing.pagePadding * 2 -
+            AppSpacing.base * 2 -
+            8 * 2) /
         3;
     final cachePx = (tileSize * MediaQuery.devicePixelRatioOf(context)).round();
 

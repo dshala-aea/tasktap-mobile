@@ -37,7 +37,7 @@ Future<bool> confirmDeleteDialog(
             Text(
               title,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo Narrow',
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: ctx.colors.ink,
@@ -46,7 +46,11 @@ Future<bool> confirmDeleteDialog(
             const SizedBox(height: 8),
             Text(
               message,
-              style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.inkMuted),
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 14,
+                color: ctx.colors.inkMuted,
+              ),
             ),
             const SizedBox(height: 20),
             Row(

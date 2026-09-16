@@ -12,7 +12,8 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
-import '../../presentation/providers/schedule_providers.dart' show allLocationsProvider, allCustomersProvider;
+import '../../presentation/providers/schedule_providers.dart'
+    show allLocationsProvider, allCustomersProvider;
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -114,10 +115,14 @@ class _TicketListBody extends ConsumerWidget {
     // tickets, and a per-row locationByIdProvider/customerByIdProvider watch opened (and tore
     // down, on scroll-out) two live Drift subscriptions per visible row.
     final locationsById = {
-      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[]) l.id: l,
+      for (final l
+          in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[])
+        l.id: l,
     };
     final customersById = {
-      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[]) c.id: c,
+      for (final c
+          in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[])
+        c.id: c,
     };
 
     // Compute counts for subtitle.
@@ -157,9 +162,7 @@ class _TicketListBody extends ConsumerWidget {
             ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(
-                top: AppSpacing.pagePadding,
-              ),
+              padding: const EdgeInsets.only(top: AppSpacing.pagePadding),
               child: AppSearchBar(
                 controller: searchCtrl,
                 hint: 'Cerca ticket…',
@@ -227,7 +230,9 @@ class _TicketListBody extends ConsumerWidget {
                 final ticket = filtered[i];
                 final statusName = statusMap[ticket.statusId] ?? '';
                 final location = locationsById[ticket.locationId];
-                final customerName = location != null ? customersById[location.customerId]?.companyName : null;
+                final customerName = location != null
+                    ? customersById[location.customerId]?.companyName
+                    : null;
                 final where = [
                   customerName,
                   location?.city,
@@ -270,7 +275,7 @@ class _PendingTicketsSection extends StatelessWidget {
           Text(
             'In sospeso (${pendingTickets.length})',
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -312,7 +317,9 @@ class _PendingTicketRow extends ConsumerWidget {
     // accounted for — the one state change here that actually needs to register as "something
     // changed," not just "something is different now."
     return AnimatedContainer(
-      duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
+      duration: reducedMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 250),
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isFailed ? context.colors.redSoft : context.colors.bg3,
@@ -321,7 +328,9 @@ class _PendingTicketRow extends ConsumerWidget {
       child: Row(
         children: [
           AnimatedSwitcher(
-            duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
+            duration: reducedMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 250),
             transitionBuilder: (child, animation) =>
                 FadeTransition(opacity: animation, child: child),
             child: Icon(
@@ -342,7 +351,7 @@ class _PendingTicketRow extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -353,7 +362,7 @@ class _PendingTicketRow extends ConsumerWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 11,
                     color: context.colors.inkMuted,
                   ),
@@ -411,13 +420,20 @@ class _TicketRow extends StatelessWidget {
   final String where;
   final bool isLast;
 
-  Color _priorityColor(BuildContext context, AppVetroPalette v, String? priority) => switch (priority) {
+  Color _priorityColor(
+    BuildContext context,
+    AppVetroPalette v,
+    String? priority,
+  ) => switch (priority) {
     // statusBad/statusWarn: context.vetro's semantic status tokens, out of scope for this sweep
     // (see status_colors.dart) — left as-is, not converted to a flat AppColors constant.
     'Urgente' => v.statusBad,
     'Alta' => v.statusWarn,
     'Media' => AppColors.Y,
-    _ => context.colors.inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
+    _ =>
+      context
+          .colors
+          .inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
   };
 
   /// The stripe's own colour is invisible to a colorblind technician or a screen reader —
@@ -435,126 +451,149 @@ class _TicketRow extends StatelessWidget {
     final reference = ticketReference(ticket.numero);
 
     final dueDate = ticket.dueDate;
-    final isOverdue = dueDate != null &&
+    final isOverdue =
+        dueDate != null &&
         dueDate.isBefore(DateTime.now()) &&
         statusName.toLowerCase() != 'completato';
-    final dueLabel = dueDate == null ? null : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
+    final dueLabel = dueDate == null
+        ? null
+        : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
 
     final row = Semantics(
       // The stripe colour is a sighted-only cue; this is the same information for TalkBack/
       // VoiceOver, and for a sighted colorblind technician who can't tell the hues apart either.
-      label: '${_priorityLabel(ticket.priority)}. ${ticket.title}${statusName.isNotEmpty ? ', $statusName' : ''}',
+      label:
+          '${_priorityLabel(ticket.priority)}. ${ticket.title}${statusName.isNotEmpty ? ', $statusName' : ''}',
       button: true,
       child: InkWell(
-      onTap: () => context.push('/ticket/${ticket.id}'),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
-        decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
-        ),
-        // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
-        // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the
-        // Row no bounded height — `stretch` needs one to stretch the stripe into, and without
-        // IntrinsicHeight giving it one first, layout throws (RenderFlex._computeSizes, unbounded
-        // height) rather than silently doing something wrong.
-        child: IntrinsicHeight(
-          child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 3,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: _priorityColor(context, v, ticket.priority),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        onTap: () => context.push('/ticket/${ticket.id}'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pagePadding,
+            vertical: AppSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            border: isLast
+                ? null
+                : Border(bottom: BorderSide(color: context.colors.borderLight)),
+          ),
+          // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
+          // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the
+          // Row no bounded height — `stretch` needs one to stretch the stripe into, and without
+          // IntrinsicHeight giving it one first, layout throws (RenderFlex._computeSizes, unbounded
+          // height) rather than silently doing something wrong.
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 3,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: _priorityColor(context, v, ticket.priority),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (reference != null)
-                        Text(
-                          reference,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: context.colors.inkFaint,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      const Spacer(),
-                      if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true, outlined: true),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    ticket.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: context.colors.ink,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                  if (ticket.description != null && ticket.description!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      ticket.description!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
-                    ),
-                  ],
-                  if (where.isNotEmpty || dueLabel != null) ...[
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        if (where.isNotEmpty) ...[
-                          Icon(LucideIcons.mapPin, size: 11, color: context.colors.inkFaint),
-                          const SizedBox(width: 3),
-                          Flexible(
-                            child: Text(
-                              where,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          if (reference != null)
+                            Text(
+                              reference,
                               style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.ink,
+                                fontFamily: 'Archivo',
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: context.colors.inkFaint,
+                                letterSpacing: 0.3,
                               ),
                             ),
-                          ),
-                        ],
-                        if (dueLabel != null) ...[
                           const Spacer(),
-                          Text(
-                            dueLabel,
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 11,
-                              fontWeight: isOverdue ? FontWeight.w700 : FontWeight.w600,
-                              color: isOverdue ? v.statusBad : context.colors.inkMuted,
-                            ),
-                          ),
+                          if (statusName.isNotEmpty)
+                            StatusPill(stato: statusName, small: true),
                         ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        ticket.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: context.colors.ink,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                      if (ticket.description != null &&
+                          ticket.description!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          ticket.description!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 12,
+                            color: context.colors.inkMuted,
+                          ),
+                        ),
                       ],
-                    ),
-                  ],
-                ],
-              ),
+                      if (where.isNotEmpty || dueLabel != null) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            if (where.isNotEmpty) ...[
+                              Icon(
+                                LucideIcons.mapPin,
+                                size: 11,
+                                color: context.colors.inkFaint,
+                              ),
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  where,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.ink,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (dueLabel != null) ...[
+                              const Spacer(),
+                              Text(
+                                dueLabel,
+                                style: TextStyle(
+                                  fontFamily: 'Archivo',
+                                  fontSize: 11,
+                                  fontWeight: isOverdue
+                                      ? FontWeight.w700
+                                      : FontWeight.w600,
+                                  color: isOverdue
+                                      ? v.statusBad
+                                      : context.colors.inkMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
           ),
         ),
-      ),
       ),
     );
 

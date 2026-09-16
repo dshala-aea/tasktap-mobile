@@ -100,7 +100,11 @@ class TicketAttachmentUploadQueue {
       return TicketAttachmentUploadOutcome.failed(id, '', 'Allegato locale non trovato');
     }
 
-    await _repo.updateState(id: id, state: PendingTicketAttachmentState.submitting, clearError: true);
+    await _repo.updateState(
+      id: id,
+      state: PendingTicketAttachmentState.submitting,
+      clearError: true,
+    );
 
     try {
       final result = await _apiClient.uploadAttachment(

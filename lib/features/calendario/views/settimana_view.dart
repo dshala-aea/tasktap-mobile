@@ -46,7 +46,8 @@ class SettimanaView extends ConsumerWidget {
     final grouped = groupSchedulesByDay(schedules);
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
-    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+    final teamScheduleIds =
+        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -82,10 +83,12 @@ class SettimanaView extends ConsumerWidget {
                         Text(
                           dayAbbr.format(day).toUpperCase(),
                           style: TextStyle(
-                            fontFamily: 'Inter',
+                            fontFamily: 'Archivo',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isToday ? Colors.white : context.colors.inkMuted,
+                            color: isToday
+                                ? Colors.white
+                                : context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -93,7 +96,7 @@ class SettimanaView extends ConsumerWidget {
                         Text(
                           '${day.day}',
                           style: TextStyle(
-                            fontFamily: 'Inter',
+                            fontFamily: 'Archivo Narrow',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: isToday ? Colors.white : context.colors.ink,
@@ -135,7 +138,11 @@ class SettimanaView extends ConsumerWidget {
 }
 
 class _WeekEventChip extends StatelessWidget {
-  const _WeekEventChip({required this.schedule, required this.onTap, this.isTeam = false});
+  const _WeekEventChip({
+    required this.schedule,
+    required this.onTap,
+    this.isTeam = false,
+  });
 
   final Schedule schedule;
   final VoidCallback onTap;
@@ -168,7 +175,11 @@ class _WeekEventChip extends StatelessWidget {
             if (isTeam) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 1),
-                child: Icon(LucideIcons.users, size: 9, color: pair.foreground.withAlpha(204)),
+                child: Icon(
+                  LucideIcons.users,
+                  size: 9,
+                  color: pair.foreground.withAlpha(204),
+                ),
               ),
               const SizedBox(width: 3),
             ],
@@ -178,7 +189,7 @@ class _WeekEventChip extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
                   color: pair.foreground,

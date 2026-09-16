@@ -67,7 +67,7 @@ class _Cell extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 9,
               fontWeight: FontWeight.w700,
               color: c.inkMuted,
@@ -80,7 +80,7 @@ class _Cell extends StatelessWidget {
           Text(
             item.value,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: c.ink,

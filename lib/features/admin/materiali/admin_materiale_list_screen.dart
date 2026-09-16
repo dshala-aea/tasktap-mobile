@@ -288,7 +288,7 @@ class _AdminMaterialeRow extends StatelessWidget {
           if (!materiale.isActive)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: StatusPill(stato: 'Inattivo', small: true, outlined: true),
+              child: StatusPill(stato: 'Inattivo', small: true),
             ),
         ],
       ),

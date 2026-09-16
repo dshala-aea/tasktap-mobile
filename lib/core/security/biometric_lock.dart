@@ -303,7 +303,7 @@ class _LockScreen extends StatelessWidget {
                       const Text(
                         'TaskTap è bloccato',
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo Narrow',
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: AppColors.onDark,
@@ -315,7 +315,7 @@ class _LockScreen extends StatelessWidget {
                         'interventi.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 13,
                           color: AppColors.onDarkMuted,
                         ),

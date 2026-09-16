@@ -83,7 +83,7 @@ class GpsStatusIndicator extends ConsumerWidget {
             // fixed inkMuted regardless of state, so the two elements visually disagreed (a red
             // dot next to muted-grey text reads as "nothing wrong").
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: dotColor,

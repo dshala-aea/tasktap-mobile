@@ -66,7 +66,9 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
     setState(() => _creatingLocation = true);
     final String id;
     try {
-      id = await ref.read(adminApiClientProvider).createLocation(customerId: customerId, name: name);
+      id = await ref
+          .read(adminApiClientProvider)
+          .createLocation(customerId: customerId, name: name);
     } catch (e) {
       // The one failure worth surfacing here: the sede was never actually persisted.
       if (mounted) {
@@ -150,9 +152,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           // and making it impossible to type over an already-resolved value at all.
           onFreeText: (text) {
             if (text.isEmpty) {
-              widget.onChanged(
-                widget.state.copyWith(clearCustomerId: true, clearLocationId: true),
-              );
+              widget.onChanged(widget.state.copyWith(clearCustomerId: true, clearLocationId: true));
             }
           },
         ),
@@ -311,7 +311,7 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontFamily: 'Inter',
+        fontFamily: 'Archivo',
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.colors.ink,

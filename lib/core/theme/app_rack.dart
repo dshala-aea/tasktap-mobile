@@ -28,10 +28,14 @@ abstract final class AppRack {
   static const double insetRadius = cellRadius / 1.5;
 
   /// [cellRadius] on all four corners — a sheet, a dialog, a standalone panel.
-  static const BorderRadius freeShape = BorderRadius.all(Radius.circular(cellRadius));
+  static const BorderRadius freeShape = BorderRadius.all(
+    Radius.circular(cellRadius),
+  );
 
   /// [insetRadius] on all four corners — a compartment nested inside a larger container.
-  static const BorderRadius insetShape = BorderRadius.all(Radius.circular(insetRadius));
+  static const BorderRadius insetShape = BorderRadius.all(
+    Radius.circular(insetRadius),
+  );
 
   // ── The load strap: clearance for the floating nav ────────────────────────
 
@@ -67,7 +71,9 @@ abstract final class AppRack {
 /// filled in.
 extension NavClearance on BuildContext {
   double get navClearance =>
-      MediaQuery.viewPaddingOf(this).bottom + AppRack.navBarHeight + AppRack.navGap;
+      MediaQuery.viewPaddingOf(this).bottom +
+      AppRack.navBarHeight +
+      AppRack.navGap;
 }
 
 /// Bottom clearance for a FAB on a route the shell's floating nav never reaches — every

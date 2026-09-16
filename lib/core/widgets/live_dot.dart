@@ -35,7 +35,10 @@ class _LiveDotState extends State<LiveDot> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     if (MediaQuery.disableAnimationsOf(context)) {
       return DecoratedBox(
-        decoration: const BoxDecoration(color: AppColors.GREEN, shape: BoxShape.circle),
+        decoration: const BoxDecoration(
+          color: AppColors.GREEN,
+          shape: BoxShape.circle,
+        ),
         child: SizedBox(width: widget.size, height: widget.size),
       );
     }
@@ -44,7 +47,10 @@ class _LiveDotState extends State<LiveDot> with SingleTickerProviderStateMixin {
       builder: (context, _) => Opacity(
         opacity: 0.35 + (_pulse.value * 0.65),
         child: DecoratedBox(
-          decoration: const BoxDecoration(color: AppColors.GREEN, shape: BoxShape.circle),
+          decoration: const BoxDecoration(
+            color: AppColors.GREEN,
+            shape: BoxShape.circle,
+          ),
           child: SizedBox(width: widget.size, height: widget.size),
         ),
       ),

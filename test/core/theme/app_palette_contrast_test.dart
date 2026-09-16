@@ -30,6 +30,13 @@ void main() {
     test('brandOn clears 4.5:1 on the brand accent (0xFFC03221)', () {
       expect(_contrast(AppPalette.light.brandOn, const Color(0xFFC03221)), greaterThanOrEqualTo(4.5));
     });
+    // accentInk exists specifically so the brand accent can be used as *text* on a flipping
+    // background without repeating the bug this token was added to fix — see its own doc
+    // comment. Equals the unmodified accent in light mode, which app_colors.dart's own comments
+    // already document at 4.87:1+ on bg1/sheet.
+    test('accentInk clears 4.5:1 on bg2', () {
+      expect(_contrast(AppPalette.light.accentInk, AppPalette.light.bg2), greaterThanOrEqualTo(4.5));
+    });
     test('shadow and shadowInset are empty — DESIGN.md bans floating-card shadows', () {
       expect(AppPalette.light.shadow, isEmpty);
       expect(AppPalette.light.shadowInset, isEmpty);
@@ -45,6 +52,11 @@ void main() {
     });
     test('brandOn clears 4.5:1 on the brand accent (0xFFC03221)', () {
       expect(_contrast(AppPalette.dark.brandOn, const Color(0xFFC03221)), greaterThanOrEqualTo(4.5));
+    });
+    // The regression this token exists to prevent: raw AppColors.Y as text only cleared ~2.91:1
+    // on dark bg2 — below AA. accentInk's dark value is deliberately a lightened variant instead.
+    test('accentInk clears 4.5:1 on bg2 (the bug this token fixes)', () {
+      expect(_contrast(AppPalette.dark.accentInk, AppPalette.dark.bg2), greaterThanOrEqualTo(4.5));
     });
     test('shadow and shadowInset are empty — DESIGN.md bans floating-card shadows', () {
       expect(AppPalette.dark.shadow, isEmpty);

@@ -165,7 +165,7 @@ class ScreenHeader extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo Narrow',
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: titleColor,
@@ -178,7 +178,7 @@ class ScreenHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
                       color: context.colors.inkMuted,

@@ -97,7 +97,7 @@ class _ScanOverlay extends StatelessWidget {
                   child: Text(
                     title,
                     style: const TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       color: Colors.white,
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
@@ -123,7 +123,7 @@ class _ScanOverlay extends StatelessWidget {
           const SizedBox(height: 20),
           const Text(
             'Inquadra il codice a barre o QR',
-            style: TextStyle(fontFamily: 'Inter', color: Colors.white70, fontSize: 14),
+            style: TextStyle(fontFamily: 'Archivo', color: Colors.white70, fontSize: 14),
           ),
           const Spacer(flex: 2),
         ],

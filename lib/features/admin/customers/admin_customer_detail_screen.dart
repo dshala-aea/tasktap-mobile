@@ -212,7 +212,7 @@ class _CustomerDetailBody extends ConsumerWidget {
                         style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkMuted),
                       ),
                       const Spacer(),
-                      StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo', outlined: true),
+                      StatusPill(stato: customer.isActive ? 'Attivo' : 'Inattivo'),
                     ],
                   ),
                 ),
@@ -506,9 +506,7 @@ class _ContrattiSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.fileSignature),
                     title: name,
                     subtitle: price != null ? '€${price.toStringAsFixed(2)}' : null,
-                    meta: isActive
-                        ? null
-                        : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
+                    meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true),
                     onTap: () => context.push('/altro/contratti/${c['id']}', extra: c),
                     showDivider: entry.key < contracts.length - 1,
                   );
@@ -581,9 +579,7 @@ class _ProdottiSection extends ConsumerWidget {
                     leading: const RowIconTile(icon: LucideIcons.wrench),
                     title: name,
                     subtitle: serialNumber != null && serialNumber.isNotEmpty ? serialNumber : null,
-                    meta: isActive
-                        ? null
-                        : const StatusPill(stato: 'Inattivo', small: true, outlined: true),
+                    meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true),
                     onTap: () => context.push('/altro/prodotti/${p['id']}', extra: p),
                     showDivider: entry.key < prodotti.length - 1,
                   );

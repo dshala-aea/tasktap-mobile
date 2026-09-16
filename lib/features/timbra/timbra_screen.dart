@@ -116,7 +116,11 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
     // site in the app now.
     ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
       if (next is AsyncError) {
-        showAppToast(context, message: 'Errore durante la timbratura. Riprova.', tone: ToastTone.error);
+        showAppToast(
+          context,
+          message: 'Errore durante la timbratura. Riprova.',
+          tone: ToastTone.error,
+        );
       }
     });
 
@@ -346,7 +350,7 @@ class _HeroStatus extends StatelessWidget {
                   Text(
                     label,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.6,
@@ -359,20 +363,29 @@ class _HeroStatus extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            _formatHoursMinutes(total),
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 56,
-              fontWeight: FontWeight.w800,
-              color: AppColors.Y,
-              letterSpacing: -1.5,
-              height: 1.0,
-              fontFeatures: const [FontFeature.tabularFigures()],
+        // The app's one running clock nobody could not see, and until now the one liveRegion
+        // nobody added — a screen reader had no signal this number changes every minute.
+        // accentInk, not raw AppColors.Y: this Scaffold's `bg2` flips with the theme (unlike the
+        // permanently-dark punch surfaces elsewhere), and Y-as-text only clears 2.91:1 in dark
+        // mode — under even the relaxed 3:1 large-text floor at this size.
+        Semantics(
+          liveRegion: true,
+          label: 'Ore lavorate oggi ${_formatHoursMinutes(total)}',
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              _formatHoursMinutes(total),
+              style: TextStyle(
+                fontFamily: 'IBM Plex Mono',
+                fontSize: 52,
+                fontWeight: FontWeight.w600,
+                color: context.colors.accentInk,
+                letterSpacing: -1,
+                height: 1.0,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
           ),
         ),
         const SizedBox(height: 10),
@@ -399,7 +412,7 @@ class _SmallClock extends ConsumerWidget {
       child: Text(
         timeStr,
         style: TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'IBM Plex Mono',
           fontWeight: FontWeight.w600,
           fontSize: 13,
           color: context.colors.inkMuted,
@@ -441,7 +454,12 @@ class _GuardBanner extends StatelessWidget {
           Expanded(
             child: Text(
               reason,
-              style: TextStyle(fontFamily: 'Inter', fontSize: 12, height: 1.35, color: v.statusWarn),
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 12,
+                height: 1.35,
+                color: v.statusWarn,
+              ),
             ),
           ),
         ],
@@ -581,7 +599,7 @@ class _PunchButtonState extends State<_PunchButton> {
                         Text(
                           label,
                           style: const TextStyle(
-                            fontFamily: 'Inter',
+                            fontFamily: 'Archivo',
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.8,
@@ -665,7 +683,7 @@ class _PauseButton extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo Narrow',
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,
@@ -689,7 +707,7 @@ class _PauseButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+            style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -741,7 +759,7 @@ class _SessionsCard extends StatelessWidget {
                 Text(
                   'SESSIONI DI OGGI',
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.4,
@@ -755,7 +773,10 @@ class _SessionsCard extends StatelessWidget {
                     child: Container(
                       width: 7,
                       height: 7,
-                      decoration: BoxDecoration(color: context.colors.amber, shape: BoxShape.circle),
+                      decoration: BoxDecoration(
+                        color: context.colors.amber,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
                 ],
@@ -802,7 +823,7 @@ class _NoSessionsYet extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
         child: Text(
           'Nessuna timbratura oggi',
-          style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Inter'),
+          style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Archivo'),
         ),
       ),
     );
@@ -882,7 +903,7 @@ class _SessionRow extends StatelessWidget {
             child: Text(
               _label(session.eventType),
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: context.colors.ink.withAlpha(220),
@@ -892,7 +913,7 @@ class _SessionRow extends StatelessWidget {
           Text(
             timeStr,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 14,
               fontWeight: FontWeight.w600,
               color: context.colors.ink,
@@ -923,7 +944,7 @@ class _TotalRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -933,11 +954,14 @@ class _TotalRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text(
           _formatHoursMinutesSeconds(total),
-          style: const TextStyle(
-            fontFamily: 'Inter',
+          style: TextStyle(
+            fontFamily: 'Archivo Narrow',
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppColors.Y,
+            // accentInk, not raw Y — the sibling label above uses context.colors.ink, confirming
+            // this card sits on a flipping background, not a permanently-dark surface; see
+            // AppPalette.accentInk's own doc comment for the dark-mode AA bug this avoids.
+            color: context.colors.accentInk,
           ),
         ),
       ],

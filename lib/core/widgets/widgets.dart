@@ -31,4 +31,5 @@ export 'section_title.dart';
 export 'stats_grid.dart';
 export 'status_badge.dart';
 export 'status_pill.dart';
+export 'status_stamp.dart';
 export 'unavailable_state.dart';

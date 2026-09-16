@@ -82,189 +82,191 @@ class _CantiereDetailScreenState extends ConsumerState<CantiereDetailScreen> {
               child: RefreshIndicator(
                 onRefresh: () => ref.read(syncProvider.notifier).performSync(),
                 child: cantiereAsync.when(
-                loading: () => ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const [
-                    Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(AppSpacing.xxxl),
-                        child: CircularProgressIndicator(),
-                      ),
-                    ),
-                  ],
-                ),
-                error: (e, _) => ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    UnavailableState(
-                      icon: LucideIcons.hardHat,
-                      titolo: 'Impossibile caricare il cantiere',
-                      motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
-                      action: AppButton(
-                        label: 'Riprova',
-                        size: AppButtonSize.sm,
-                        fullWidth: false,
-                        onPressed: () =>
-                            ref.invalidate(cantiereByIdProvider(widget.cantiereId)),
-                      ),
-                    ),
-                  ],
-                ),
-                data: (cantiere) {
-                  if (cantiere == null) {
-                    return ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: const [
-                        UnavailableState(
-                          icon: LucideIcons.hardHat,
-                          titolo: 'Cantiere non trovato',
-                          motivo: 'Non risulta sincronizzato su questo dispositivo.',
-                        ),
-                      ],
-                    );
-                  }
-
-                  return SingleChildScrollView(
+                  loading: () => ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.sm,
-                      AppSpacing.pagePadding,
-                      AppSpacing.xxl,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AppCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                cantiere.name,
-                                style: AppTextStyles.headlineMedium.copyWith(
-                                  color: context.colors.ink,
-                                ),
-                              ),
-                              if (cantiere.address != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  cantiere.address!,
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: context.colors.inkMuted,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 8),
-                              AppBadge(label: _statusLabel(cantiere.status)),
-                            ],
-                          ),
+                    children: const [
+                      Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppSpacing.xxxl),
+                          child: CircularProgressIndicator(),
                         ),
-
-                        // ── Dettagli ───────────────────────────────────────────────
-                        _DettagliSection(cantiere: cantiere),
-
-                        // ── Squadra assegnata ─────────────────────────────────────
-                        _SquadraSection(cantiereId: cantiere.id),
-
-                        // ── Map ────────────────────────────────────────────────────
-                        //
-                        // Only when there's an address worth plotting — same gate
-                        // admin_cantiere_detail_screen.dart's own map section uses. Sits after
-                        // Dettagli/Squadra and before the CTAs — the technician reads what/who this
-                        // cantiere is before where it is, and the map is the last thing before
-                        // acting on it (Timbra / Crea rapportino), not the first thing after the
-                        // name card.
-                        if (cantiere.address != null && cantiere.address!.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          CantiereMapCard(
-                            cantiereId: cantiere.id,
-                            address: [
-                              cantiere.address,
-                              cantiere.city,
-                              cantiere.postalCode,
-                            ].where((s) => s != null && s.isNotEmpty).join(', '),
+                      ),
+                    ],
+                  ),
+                  error: (e, _) => ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      UnavailableState(
+                        icon: LucideIcons.hardHat,
+                        titolo: 'Impossibile caricare il cantiere',
+                        motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                        action: AppButton(
+                          label: 'Riprova',
+                          size: AppButtonSize.sm,
+                          fullWidth: false,
+                          onPressed: () => ref.invalidate(cantiereByIdProvider(widget.cantiereId)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  data: (cantiere) {
+                    if (cantiere == null) {
+                      return ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          UnavailableState(
+                            icon: LucideIcons.hardHat,
+                            titolo: 'Cantiere non trovato',
+                            motivo: 'Non risulta sincronizzato su questo dispositivo.',
                           ),
                         ],
+                      );
+                    }
 
-                        const SizedBox(height: 8),
-                        AppButton(
-                          label: 'Timbra cantiere',
-                          icon: const Icon(LucideIcons.mapPin),
-                          onPressed: () => context.push(
-                            AppRoutes.cantiereTimbraPath(
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        AppSpacing.sm,
+                        AppSpacing.pagePadding,
+                        AppSpacing.xxl,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AppCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  cantiere.name,
+                                  style: AppTextStyles.headlineMedium.copyWith(
+                                    color: context.colors.ink,
+                                  ),
+                                ),
+                                if (cantiere.address != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    cantiere.address!,
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: context.colors.inkMuted,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 8),
+                                // StatusPill (renders as Il Documento's stamp), not a bare
+                                // AppBadge — this is a genuine status, same vocabulary
+                                // statusFamilyOf already maps.
+                                StatusPill(stato: _statusLabel(cantiere.status)),
+                              ],
+                            ),
+                          ),
+
+                          // ── Dettagli ───────────────────────────────────────────────
+                          _DettagliSection(cantiere: cantiere),
+
+                          // ── Squadra assegnata ─────────────────────────────────────
+                          _SquadraSection(cantiereId: cantiere.id),
+
+                          // ── Map ────────────────────────────────────────────────────
+                          //
+                          // Only when there's an address worth plotting — same gate
+                          // admin_cantiere_detail_screen.dart's own map section uses. Sits after
+                          // Dettagli/Squadra and before the CTAs — the technician reads what/who this
+                          // cantiere is before where it is, and the map is the last thing before
+                          // acting on it (Timbra / Crea rapportino), not the first thing after the
+                          // name card.
+                          if (cantiere.address != null && cantiere.address!.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            CantiereMapCard(
                               cantiereId: cantiere.id,
-                              ticketId: widget.ticketId,
+                              address: [
+                                cantiere.address,
+                                cantiere.city,
+                                cantiere.postalCode,
+                              ].where((s) => s != null && s.isNotEmpty).join(', '),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // ── Crea rapportino ──────────────────────────────────────────
-                        //
-                        // The office/admin equivalent of this button (admin_cantiere_detail_
-                        // screen.dart) creates a purely local draft with blank hours via
-                        // createLocalDraft. A technician standing on-site has already logged
-                        // hours against this cantiere (Timbra cantiere, above) — this button
-                        // calls the cantiere-only report endpoint instead, so the editor opens
-                        // with those hours (and, if this technician started the batch as squadra
-                        // lead, their whole team's hours) already filled in.
-                        AppButton(
-                          label: 'Crea rapportino',
-                          icon: const Icon(LucideIcons.fileText),
-                          isLoading: _isCreatingRapportino,
-                          onPressed: _isCreatingRapportino
-                              ? null
-                              : () => _handleCreateRapportino(cantiere),
-                        ),
-                        const SizedBox(height: 24),
-                        const SectionTitle(title: 'Ticket collegati'),
-                        const SizedBox(height: 8),
-                        ticketsAsync.when(
-                          loading: () => const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(AppSpacing.xxxl),
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                          error: (e, _) => UnavailableState(
-                            icon: LucideIcons.ticket,
-                            titolo: 'Impossibile caricare i ticket collegati',
-                            motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
-                            action: AppButton(
-                              label: 'Riprova',
-                              size: AppButtonSize.sm,
-                              fullWidth: false,
-                              onPressed: () =>
-                                  ref.invalidate(ticketsForCantiereProvider(widget.cantiereId)),
-                            ),
-                          ),
-                          data: (tickets) {
-                            if (tickets.isEmpty) {
-                              return const EmptyState(
-                                icon: LucideIcons.ticket,
-                                title: 'Nessun ticket collegato',
-                                body: 'I ticket collegati a questo cantiere appariranno qui.',
-                              );
-                            }
-                            return AppCard(
-                              padding: EdgeInsets.zero,
-                              child: Column(
-                                children: tickets.asMap().entries.map((entry) {
-                                  final i = entry.key;
-                                  final t = entry.value;
-                                  return ListRow(
-                                    title: t.title,
-                                    showDivider: i != tickets.length - 1,
-                                    onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
-                                  );
-                                }).toList(),
+                          ],
+
+                          const SizedBox(height: 8),
+                          AppButton(
+                            label: 'Timbra cantiere',
+                            icon: const Icon(LucideIcons.mapPin),
+                            onPressed: () => context.push(
+                              AppRoutes.cantiereTimbraPath(
+                                cantiereId: cantiere.id,
+                                ticketId: widget.ticketId,
                               ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // ── Crea rapportino ──────────────────────────────────────────
+                          //
+                          // The office/admin equivalent of this button (admin_cantiere_detail_
+                          // screen.dart) creates a purely local draft with blank hours via
+                          // createLocalDraft. A technician standing on-site has already logged
+                          // hours against this cantiere (Timbra cantiere, above) — this button
+                          // calls the cantiere-only report endpoint instead, so the editor opens
+                          // with those hours (and, if this technician started the batch as squadra
+                          // lead, their whole team's hours) already filled in.
+                          AppButton(
+                            label: 'Crea rapportino',
+                            icon: const Icon(LucideIcons.fileText),
+                            isLoading: _isCreatingRapportino,
+                            onPressed: _isCreatingRapportino
+                                ? null
+                                : () => _handleCreateRapportino(cantiere),
+                          ),
+                          const SizedBox(height: 24),
+                          const SectionTitle(title: 'Ticket collegati'),
+                          const SizedBox(height: 8),
+                          ticketsAsync.when(
+                            loading: () => const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(AppSpacing.xxxl),
+                                child: CircularProgressIndicator(),
+                              ),
+                            ),
+                            error: (e, _) => UnavailableState(
+                              icon: LucideIcons.ticket,
+                              titolo: 'Impossibile caricare i ticket collegati',
+                              motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                              action: AppButton(
+                                label: 'Riprova',
+                                size: AppButtonSize.sm,
+                                fullWidth: false,
+                                onPressed: () =>
+                                    ref.invalidate(ticketsForCantiereProvider(widget.cantiereId)),
+                              ),
+                            ),
+                            data: (tickets) {
+                              if (tickets.isEmpty) {
+                                return const EmptyState(
+                                  icon: LucideIcons.ticket,
+                                  title: 'Nessun ticket collegato',
+                                  body: 'I ticket collegati a questo cantiere appariranno qui.',
+                                );
+                              }
+                              return AppCard(
+                                padding: EdgeInsets.zero,
+                                child: Column(
+                                  children: tickets.asMap().entries.map((entry) {
+                                    final i = entry.key;
+                                    final t = entry.value;
+                                    return ListRow(
+                                      title: t.title,
+                                      showDivider: i != tickets.length - 1,
+                                      onTap: () => context.push(AppRoutes.ticketDetailPath(t.id)),
+                                    );
+                                  }).toList(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

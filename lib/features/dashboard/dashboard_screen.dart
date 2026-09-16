@@ -118,7 +118,10 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   child: trackers.isEmpty
                       ? const _ClockInPrompt(key: ValueKey('idle'))
-                      : ActiveTrackerStrip(key: const ValueKey('active'), trackers: trackers),
+                      : ActiveTrackerStrip(
+                          key: const ValueKey('active'),
+                          trackers: trackers,
+                        ),
                 ),
               ),
             ),
@@ -222,13 +225,21 @@ class _ClockInPrompt extends ConsumerWidget {
     // "it worked" language the rest of the app already speaks, not a new one invented here.
     ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
       if (previous is AsyncLoading && next is AsyncData && !next.hasError) {
-        showAppToast(context, message: 'Turno iniziato', tone: ToastTone.success);
+        showAppToast(
+          context,
+          message: 'Turno iniziato',
+          tone: ToastTone.success,
+        );
       } else if (next is AsyncError) {
         // The success branch above got a toast; a failed punch fired from here gave zero
         // feedback — the hero just silently stopped loading. Same toast text/mechanism
         // TimbraScreen's own punch failure already uses (timbra_screen.dart), so a failure
         // reads the same whether it started from Home or from the Timbra tab.
-        showAppToast(context, message: 'Errore durante la timbratura. Riprova.', tone: ToastTone.error);
+        showAppToast(
+          context,
+          message: 'Errore durante la timbratura. Riprova.',
+          tone: ToastTone.error,
+        );
       }
     });
 
@@ -242,8 +253,9 @@ class _ClockInPrompt extends ConsumerWidget {
       backgroundColor: AppColors.Y,
       onTap: busy
           ? null
-          : () =>
-                ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider)),
+          : () => ref
+                .read(punchNotifierProvider.notifier)
+                .punch(ref.read(timbraStateProvider)),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.base),
         child: Row(
@@ -252,7 +264,10 @@ class _ClockInPrompt extends ConsumerWidget {
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.WHITE),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.WHITE,
+                ),
               )
             else
               const Icon(LucideIcons.clock, size: 18, color: AppColors.WHITE),
@@ -260,18 +275,21 @@ class _ClockInPrompt extends ConsumerWidget {
             const Text(
               'Timbra ingresso',
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: AppColors.WHITE,
               ),
             ),
             const Spacer(),
-            Icon(LucideIcons.chevronRight, size: 16, color: AppColors.WHITE.withAlpha(179)),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 16,
+              color: AppColors.WHITE.withAlpha(179),
+            ),
           ],
         ),
       ),
     );
   }
 }
-

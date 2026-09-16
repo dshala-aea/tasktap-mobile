@@ -44,7 +44,8 @@ class GiornoView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final totalHeight = (_kEndHour - _kStartHour) * _kHourHeight;
-    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+    final teamScheduleIds =
+        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(0, AppSpacing.sm, 0, context.navClearance),
@@ -72,7 +73,7 @@ class GiornoView extends ConsumerWidget {
                           child: Text(
                             '${h.toString().padLeft(2, '0')}:00',
                             style: TextStyle(
-                              fontFamily: 'Inter',
+                              fontFamily: 'Archivo',
                               fontSize: 10,
                               fontWeight: FontWeight.w500,
                               color: context.colors.inkMuted,
@@ -201,7 +202,11 @@ class _EventBlock extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (isTeam) ...[
-                  Icon(LucideIcons.users, size: 10, color: pair.foreground.withAlpha(204)),
+                  Icon(
+                    LucideIcons.users,
+                    size: 10,
+                    color: pair.foreground.withAlpha(204),
+                  ),
                   const SizedBox(width: 3),
                 ],
                 Flexible(
@@ -210,7 +215,7 @@ class _EventBlock extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       color: pair.foreground,
@@ -233,7 +238,7 @@ class _EventBlock extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
                   color: pair.foreground.withAlpha(179),

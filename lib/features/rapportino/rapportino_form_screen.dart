@@ -10,8 +10,10 @@ import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/app_compartment_tile.dart';
+import '../../data/reports/ticket_controls_cache_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import '../ticket/ticket_detail_api_client.dart' show flattenTicketControls;
 import 'ai_draft_action.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
@@ -83,7 +85,11 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     }
 
     if (!context.mounted) return;
-    openCompartmentSheet(context, label: 'Ore', content: StepOre(reportId: reportId));
+    openCompartmentSheet(
+      context,
+      label: 'Ore',
+      content: StepOre(reportId: reportId),
+    );
   }
 
   @override
@@ -96,6 +102,25 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     final oreDone = editorState.staffRows.isNotEmpty;
     final materialiDone = editorState.materialeRows.isNotEmpty || editorState.materialiNotRequired;
 
+    // Vacuously done when there's no ticket to hang controls on (a determined state, not an
+    // unknown one) or the ticket's maintenance template genuinely has none — see
+    // controlliCompletionFor's own doc comment. While the async read is still in flight with
+    // nothing cached yet, this deliberately reads as NOT done rather than falling through to the
+    // same empty-list default a genuine zero-controls ticket gets — the alternative was a
+    // false-positive "done" dot on first paint that could flip to incomplete once the real
+    // control list loaded, the exact "flash of wrong information" this screen's own isLoading
+    // gate (below) already guards against for the other three tiles.
+    final ticketId = editorState.ticketId;
+    final controlliDone = ticketId == null
+        ? true
+        : ref.watch(cachedTicketControlsProvider(ticketId)).maybeWhen(
+            data: (groups) => controlliCompletionFor(
+              requiredControlIds: flattenTicketControls(groups).map((f) => f.control.id).toList(),
+              recordedRows: editorState.controlloRows,
+            ),
+            orElse: () => false,
+          );
+
     // Once per screen lifetime, after the first frame (a BuildContext for showModalBottomSheet
     // isn't valid mid-build) — and only for a draft with nothing in Dettagli yet, so reopening an
     // already-detailed report to check Materiali doesn't get interrupted by an unwanted sheet.
@@ -103,7 +128,11 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
       _hasAutoOpenedDettagli = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
-        openCompartmentSheet(context, label: 'Dettagli', content: StepDettagli(reportId: reportId));
+        openCompartmentSheet(
+          context,
+          label: 'Dettagli',
+          content: StepDettagli(reportId: reportId),
+        );
       });
     }
 
@@ -176,63 +205,84 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                   context.navClearance,
                 ),
                 child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Primary AI-assist action first, then the manual checklist below it — natural
-              // reading order for a technician who just opened the report. Always visible (no
-              // tile tap required), unlike the old buried-in-Dettagli button it replaces.
-              AiDraftAction(reportId: reportId),
-              GridView.count(
-                // Wider than a phone (tablet, foldable unfolded) gets a fourth column instead of
-                // stretching the same three tiles across the extra width.
-                crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 3,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: AppSpacing.md,
-                crossAxisSpacing: AppSpacing.md,
-                childAspectRatio: 1.0,
-                children: [
-                  _StepTile(
-                    icon: LucideIcons.fileText,
-                    label: 'Dettagli',
-                    done: dettagliDone,
-                    onTap: () => openCompartmentSheet(
-                      context,
-                      label: 'Dettagli',
-                      content: StepDettagli(reportId: reportId),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Primary AI-assist action first, then the manual checklist below it — natural
+                    // reading order for a technician who just opened the report. Always visible (no
+                    // tile tap required), unlike the old buried-in-Dettagli button it replaces.
+                    AiDraftAction(reportId: reportId),
+                    GridView.count(
+                      // 4 columns at every width, matching the 4 tiles now in this grid (Controlli
+                      // split out from Materiali into its own tile — see StepControlli's doc
+                      // comment). Was 3-on-phone/4-on-wide when the grid held 3 tiles; left
+                      // unchanged after the split, a 4th tile wrapped to an orphaned second row on
+                      // every phone — the primary device class — directly contradicting DESIGN.md's
+                      // own "never more than one row of primary choices" rule.
+                      // AppCompartmentTile's label already wraps to 2 lines with ellipsis, so the
+                      // narrower phone tile this produces degrades safely.
+                      crossAxisCount: 4,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: AppSpacing.md,
+                      crossAxisSpacing: AppSpacing.md,
+                      childAspectRatio: 1.0,
+                      children: [
+                        _StepTile(
+                          icon: LucideIcons.fileText,
+                          label: 'Dettagli',
+                          done: dettagliDone,
+                          onTap: () => openCompartmentSheet(
+                            context,
+                            label: 'Dettagli',
+                            content: StepDettagli(reportId: reportId),
+                          ),
+                        ),
+                        _StepTile(
+                          icon: LucideIcons.clock,
+                          label: 'Ore',
+                          done: oreDone,
+                          onTap: () => _openOre(context),
+                        ),
+                        _StepTile(
+                          icon: LucideIcons.clipboardCheck,
+                          label: 'Controlli',
+                          done: controlliDone,
+                          onTap: () => openCompartmentSheet(
+                            context,
+                            label: 'Controlli',
+                            content: StepControlli(reportId: reportId, ticketId: ticketId),
+                          ),
+                        ),
+                        _StepTile(
+                          icon: LucideIcons.package,
+                          label: 'Materiali',
+                          done: materialiDone,
+                          onTap: () => openCompartmentSheet(
+                            context,
+                            label: 'Materiali',
+                            content: StepMaterialiFold(reportId: reportId),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  _StepTile(
-                    icon: LucideIcons.clock,
-                    label: 'Ore',
-                    done: oreDone,
-                    onTap: () => _openOre(context),
-                  ),
-                  _StepTile(
-                    icon: LucideIcons.package,
-                    label: 'Materiali',
-                    done: materialiDone,
-                    onTap: () => openCompartmentSheet(
-                      context,
-                      label: 'Materiali',
-                      content: StepMaterialiFold(reportId: reportId),
+                    const SizedBox(height: 20),
+                    _CompletionCard(
+                      completed: [
+                        dettagliDone,
+                        oreDone,
+                        controlliDone,
+                        materialiDone,
+                      ].where((d) => d).length,
+                      onTap: () => openCompartmentSheet(
+                        context,
+                        label: 'Riepilogo',
+                        content: StepRiepilogo(reportId: reportId),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _CompletionCard(
-                completed: [dettagliDone, oreDone, materialiDone].where((d) => d).length,
-                onTap: () => openCompartmentSheet(
-                  context,
-                  label: 'Riepilogo',
-                  content: StepRiepilogo(reportId: reportId),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }
@@ -258,7 +308,9 @@ class _CompletionCard extends StatelessWidget {
   final int completed;
   final VoidCallback onTap;
 
-  static const _total = 3;
+  // Dettagli, Ore, Controlli, Materiali — Controlli split into its own tile from what used to
+  // be a Materiali sub-section (see StepControlli's own doc comment).
+  static const _total = 4;
 
   @override
   Widget build(BuildContext context) {
@@ -291,7 +343,7 @@ class _CompletionCard extends StatelessWidget {
                   Text(
                     'Compilazione',
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       color: Colors.white.withAlpha(200),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -311,7 +363,7 @@ class _CompletionCard extends StatelessWidget {
                       '$completed di $_total',
                       key: ValueKey(completed),
                       style: const TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo Narrow',
                         color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -341,7 +393,7 @@ class _CompletionCard extends StatelessWidget {
                         Text(
                           ready ? 'Pronto per l\'invio' : 'Da completare',
                           style: const TextStyle(
-                            fontFamily: 'Inter',
+                            fontFamily: 'Archivo Narrow',
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -356,7 +408,7 @@ class _CompletionCard extends StatelessWidget {
                       Text(
                         'Rivedi e invia',
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           color: Colors.white.withAlpha(200),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,

@@ -37,14 +37,19 @@ class AdminDateField extends StatelessWidget {
         color: c.bg3,
         border: Border.all(color: c.borderLight),
         borderRadius: radius,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.md,
+        ),
         semanticLabel: '$label: $value',
         child: Row(
           children: [
             Expanded(
               child: Text(
                 value,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: c.ink),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: c.ink),
               ),
             ),
             Icon(icon, size: 18, color: c.inkMuted),

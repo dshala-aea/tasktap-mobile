@@ -72,7 +72,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
               ),
               child: Row(
                 children: [
-                  StatusPill(stato: stato, outlined: true),
+                  StatusPill(stato: stato),
                   const Spacer(),
                   Text(
                     dateLabel,
@@ -179,11 +179,7 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
               padding: const EdgeInsets.all(AppSpacing.pagePadding),
               child: Column(
                 children: [
-                  _StateTransitionButtons(
-                    stato: stato,
-                    busy: _busy,
-                    onTransition: _handleAction,
-                  ),
+                  _StateTransitionButtons(stato: stato, busy: _busy, onTransition: _handleAction),
                   // Fatturato reports keep an XML re-download available, not just the moment
                   // right after the transition — an office user coming back to this screen
                   // later still needs a copy of the invoice.
@@ -276,7 +272,11 @@ class _AdminReportDetailScreenState extends ConsumerState<AdminReportDetailScree
 }
 
 class _StateTransitionButtons extends StatelessWidget {
-  const _StateTransitionButtons({required this.stato, required this.busy, required this.onTransition});
+  const _StateTransitionButtons({
+    required this.stato,
+    required this.busy,
+    required this.onTransition,
+  });
 
   final String stato;
   final bool busy;

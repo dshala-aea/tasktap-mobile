@@ -117,9 +117,7 @@ class _AiDraftActionState extends ConsumerState<AiDraftAction> {
               size: AppButtonSize.sm,
               fullWidth: false,
               isLoading: _busy,
-              onPressed: disabled
-                  ? null
-                  : () => _generateAiDraft(scheduleId, ticketId, cantiereId),
+              onPressed: disabled ? null : () => _generateAiDraft(scheduleId, ticketId, cantiereId),
             ),
           ],
         ),

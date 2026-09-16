@@ -182,10 +182,12 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textStyle = TextStyle(
-      fontFamily: 'Inter',
+      fontFamily: 'Archivo Narrow',
       fontSize: _fontSize,
       fontWeight: FontWeight.w700,
-      color: onPressed == null && !isLoading ? _fg(context).withAlpha(100) : _fg(context),
+      color: onPressed == null && !isLoading
+          ? _fg(context).withAlpha(100)
+          : _fg(context),
       letterSpacing: 0.1,
     );
 
@@ -233,7 +235,12 @@ class AppButton extends StatelessWidget {
         ],
       );
     } else {
-      content = Text(label, style: textStyle, maxLines: 1, overflow: TextOverflow.ellipsis);
+      content = Text(
+        label,
+        style: textStyle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
 
     final bgDisabled = _bg(context) == Colors.transparent
@@ -260,7 +267,9 @@ class AppButton extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: _hPad, vertical: _vPad),
             child: DefaultTextStyle(
               style: textStyle.copyWith(
-                color: onPressed == null && !isLoading ? fgDisabled : _fg(context),
+                color: onPressed == null && !isLoading
+                    ? fgDisabled
+                    : _fg(context),
               ),
               child: content,
             ),

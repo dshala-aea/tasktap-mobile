@@ -99,122 +99,124 @@ class _SelezionaCantiereScreenState extends ConsumerState<SelezionaCantiereScree
               child: RefreshIndicator(
                 onRefresh: () => ref.read(syncProvider.notifier).performSync(),
                 child: cantieriAsync.when(
-                loading: () => ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const [
-                    Center(child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.xxxl),
-                      child: CircularProgressIndicator(),
-                    )),
-                  ],
-                ),
-                error: (e, _) => ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: const [
-                    UnavailableState(
-                      icon: LucideIcons.hardHat,
-                      titolo: 'Impossibile caricare i cantieri',
-                      motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
-                    ),
-                  ],
-                ),
-                data: (cantieri) {
-                  if (cantieri.isEmpty) {
-                    return ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: const [
-                        UnavailableState(
-                          icon: LucideIcons.hardHat,
-                          titolo: 'Nessun cantiere disponibile',
-                          motivo:
-                              'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
-                              'è stato creato uno di recente, trascina in basso per aggiornare, '
-                              'oppure riprova tra poco.',
-                        ),
-                      ],
-                    );
-                  }
-
-                  // Prefer cantieri matching the ticket's customerId — same ordering the old
-                  // inline picker gave (see _CheckInBody's own "preferred" logic before this).
-                  final preferred = widget.customerId != null
-                      ? cantieri.where((c) => c.customerId == widget.customerId).toList()
-                      : <CantieriData>[];
-                  final others = cantieri.where((c) => !preferred.contains(c)).toList();
-                  final ordered = [
-                    ...preferred,
-                    ...others,
-                  ].where((c) => _matches(c, _query)).toList();
-
-                  if (ordered.isEmpty) {
-                    return ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      children: [
-                        UnavailableState(
-                          icon: LucideIcons.searchX,
-                          titolo: 'Nessun risultato',
-                          motivo: 'Nessun cantiere corrisponde a "$_query".',
-                        ),
-                      ],
-                    );
-                  }
-
-                  return ListView.builder(
+                  loading: () => ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      0,
-                      AppSpacing.pagePadding,
-                      AppSpacing.xxl,
-                    ),
-                    itemCount: ordered.length,
-                    itemBuilder: (context, i) {
-                      final c = ordered[i];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: AppCard.pressable(
-                          onTap: () => _select(c),
-                          child: Row(
-                            children: [
-                              const RowIconTile(icon: LucideIcons.hardHat),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      c.name,
-                                      style: TextStyle(
-                                        fontFamily: 'Inter',
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: context.colors.ink,
-                                      ),
-                                    ),
-                                    if (c.city != null && c.city!.isNotEmpty)
+                    children: const [
+                      Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(AppSpacing.xxxl),
+                          child: CircularProgressIndicator(),
+                        ),
+                      ),
+                    ],
+                  ),
+                  error: (e, _) => ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: const [
+                      UnavailableState(
+                        icon: LucideIcons.hardHat,
+                        titolo: 'Impossibile caricare i cantieri',
+                        motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                      ),
+                    ],
+                  ),
+                  data: (cantieri) {
+                    if (cantieri.isEmpty) {
+                      return ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: const [
+                          UnavailableState(
+                            icon: LucideIcons.hardHat,
+                            titolo: 'Nessun cantiere disponibile',
+                            motivo:
+                                'Non risultano cantieri attivi sincronizzati su questo dispositivo. Se ne '
+                                'è stato creato uno di recente, trascina in basso per aggiornare, '
+                                'oppure riprova tra poco.',
+                          ),
+                        ],
+                      );
+                    }
+
+                    // Prefer cantieri matching the ticket's customerId — same ordering the old
+                    // inline picker gave (see _CheckInBody's own "preferred" logic before this).
+                    final preferred = widget.customerId != null
+                        ? cantieri.where((c) => c.customerId == widget.customerId).toList()
+                        : <CantieriData>[];
+                    final others = cantieri.where((c) => !preferred.contains(c)).toList();
+                    final ordered = [
+                      ...preferred,
+                      ...others,
+                    ].where((c) => _matches(c, _query)).toList();
+
+                    if (ordered.isEmpty) {
+                      return ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          UnavailableState(
+                            icon: LucideIcons.searchX,
+                            titolo: 'Nessun risultato',
+                            motivo: 'Nessun cantiere corrisponde a "$_query".',
+                          ),
+                        ],
+                      );
+                    }
+
+                    return ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.xxl,
+                      ),
+                      itemCount: ordered.length,
+                      itemBuilder: (context, i) {
+                        final c = ordered[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: AppCard.pressable(
+                            onTap: () => _select(c),
+                            child: Row(
+                              children: [
+                                const RowIconTile(icon: LucideIcons.hardHat),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
                                       Text(
-                                        c.city!,
+                                        c.name,
                                         style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 12,
-                                          color: context.colors.inkMuted,
+                                          fontFamily: 'Archivo Narrow',
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: context.colors.ink,
                                         ),
                                       ),
-                                  ],
+                                      if (c.city != null && c.city!.isNotEmpty)
+                                        Text(
+                                          c.city!,
+                                          style: TextStyle(
+                                            fontFamily: 'Archivo',
+                                            fontSize: 12,
+                                            color: context.colors.inkMuted,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              Icon(
-                                LucideIcons.chevronRight,
-                                size: 16,
-                                color: context.colors.inkDisabled,
-                              ),
-                            ],
+                                Icon(
+                                  LucideIcons.chevronRight,
+                                  size: 16,
+                                  color: context.colors.inkDisabled,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
+                        );
+                      },
+                    );
+                  },
                 ),
               ),
             ),

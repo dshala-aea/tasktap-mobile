@@ -62,7 +62,8 @@ class KioskModeState {
 /// persist + lock), deactivate (PIN check + unlock + wipe), and react to the backend revoking
 /// this device out from under it.
 class KioskModeNotifier extends StateNotifier<KioskModeState> {
-  KioskModeNotifier(this._store, this._api, this._lock) : super(const KioskModeState()) {
+  KioskModeNotifier(this._store, this._api, this._lock)
+    : super(const KioskModeState()) {
     _init();
   }
 
@@ -97,8 +98,14 @@ class KioskModeNotifier extends StateNotifier<KioskModeState> {
     required String deviceLabel,
     required String exitPin,
   }) async {
-    await _api.fetchQr(rawKey); // throws KioskApiException on invalid/revoked/network/etc.
-    await _store.save(rawKey: rawKey, deviceLabel: deviceLabel, exitPin: exitPin);
+    await _api.fetchQr(
+      rawKey,
+    ); // throws KioskApiException on invalid/revoked/network/etc.
+    await _store.save(
+      rawKey: rawKey,
+      deviceLabel: deviceLabel,
+      exitPin: exitPin,
+    );
     final outcome = await _lock.start();
     state = KioskModeState(
       loading: false,
@@ -143,10 +150,11 @@ class KioskModeNotifier extends StateNotifier<KioskModeState> {
   }
 }
 
-final kioskModeProvider = StateNotifierProvider<KioskModeNotifier, KioskModeState>((ref) {
-  return KioskModeNotifier(
-    ref.watch(kioskCredentialsStoreProvider),
-    ref.watch(kioskApiClientProvider),
-    ref.watch(kioskLockServiceProvider),
-  );
-});
+final kioskModeProvider =
+    StateNotifierProvider<KioskModeNotifier, KioskModeState>((ref) {
+      return KioskModeNotifier(
+        ref.watch(kioskCredentialsStoreProvider),
+        ref.watch(kioskApiClientProvider),
+        ref.watch(kioskLockServiceProvider),
+      );
+    });

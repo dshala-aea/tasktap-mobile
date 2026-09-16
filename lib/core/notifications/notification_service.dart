@@ -108,7 +108,8 @@ class NotificationService {
   Future<bool> hasPermission() async {
     final settings = await _messaging.getNotificationSettings();
     final status = settings.authorizationStatus;
-    return status == AuthorizationStatus.authorized || status == AuthorizationStatus.provisional;
+    return status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
   }
 
   /// Asks the OS, once the caller has already explained why.
@@ -128,7 +129,8 @@ class NotificationService {
     debugPrint('FCM permission: $status');
 
     final granted =
-        status == AuthorizationStatus.authorized || status == AuthorizationStatus.provisional;
+        status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
     if (!granted) return false;
 
     // The token could not be fetched at startup if permission was not held then.
@@ -222,7 +224,10 @@ class NotificationService {
     // Navigate based on entity type.
     // This uses a global navigator key or a routing callback.
     // For now, store the deep-link intent; the router will consume it.
-    _pendingDeepLink = DeepLinkIntent(entityType: entityType, entityId: entityId);
+    _pendingDeepLink = DeepLinkIntent(
+      entityType: entityType,
+      entityId: entityId,
+    );
 
     debugPrint('FCM deep-link: $entityType/$entityId');
   }

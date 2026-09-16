@@ -147,7 +147,7 @@ class _FeriePermessiFormScreenState extends ConsumerState<FeriePermessiFormScree
           Text(
             'Tipo',
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: context.colors.inkMuted,

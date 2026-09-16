@@ -193,7 +193,9 @@ class GdprApiClient {
   }
 }
 
-final gdprApiClientProvider = Provider<GdprApiClient>((ref) => GdprApiClient(ref.watch(dioProvider)));
+final gdprApiClientProvider = Provider<GdprApiClient>(
+  (ref) => GdprApiClient(ref.watch(dioProvider)),
+);
 
 /// Online-only, deliberately. This is the server's statement about what it holds; a cached copy
 /// would let the app assert something the company may have changed since, on the one screen where

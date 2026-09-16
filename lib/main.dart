@@ -68,7 +68,10 @@ Future<void> runTaskTapApp() async {
   // files (google-services.json / GoogleService-Info.plist) must be present.
   // Firebase is optional: when the dart-define FIREBASE_ENABLED is absent or
   // "false", push notifications are silently disabled.
-  const firebaseEnabled = String.fromEnvironment('FIREBASE_ENABLED', defaultValue: 'true');
+  const firebaseEnabled = String.fromEnvironment(
+    'FIREBASE_ENABLED',
+    defaultValue: 'true',
+  );
   if (firebaseEnabled == 'true') {
     try {
       await Firebase.initializeApp();
@@ -115,7 +118,8 @@ Future<void> runTaskTapApp() async {
         // core/location does not import a feature; bound here, once, so no call site has to
         // remember the setting exists — which is exactly how it ended up controlling nothing.
         gpsPreferenceProvider.overrideWith(
-          (ref) => ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
+          (ref) =>
+              ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
         ),
         // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Same defect as
         // the dark-theme toggle used to be: persisted, read nowhere. Binds to HomeShell's
@@ -184,9 +188,13 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // nothing read it — so it has been reporting a preference the app never honoured. It drives
     // themeMode now. Explicit light/dark rather than ThemeMode.system: the setting is a choice the
     // technician made, and silently overriding it with the phone's would be the same defect again.
-    final darkTheme = ref.watch(impostazioniProvider.select((s) => s.temaScuro));
+    final darkTheme = ref.watch(
+      impostazioniProvider.select((s) => s.temaScuro),
+    );
 
-    final biometricLock = ref.watch(impostazioniProvider.select((s) => s.autenticazioneBiometrica));
+    final biometricLock = ref.watch(
+      impostazioniProvider.select((s) => s.autenticazioneBiometrica),
+    );
 
     return MaterialApp.router(
       title: 'TaskTap',

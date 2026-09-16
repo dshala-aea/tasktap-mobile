@@ -261,7 +261,7 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
                       child: Text(
                         widget.message,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: context.colors.ink,
@@ -278,7 +278,7 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
                         child: Text(
                           widget.actionLabel!,
                           style: TextStyle(
-                            fontFamily: 'Inter',
+                            fontFamily: 'Archivo',
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                             color: style.accent,

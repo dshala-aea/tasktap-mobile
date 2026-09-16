@@ -50,7 +50,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
         Text(
           'Assegnazione',
           style: TextStyle(
-            fontFamily: 'Inter',
+            fontFamily: 'Archivo',
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: context.colors.ink,

@@ -101,7 +101,7 @@ class _CommessaDetailBody extends ConsumerWidget {
               AppSpacing.pagePadding,
               0,
             ),
-            child: StatusPill(stato: stato, outlined: true),
+            child: StatusPill(stato: stato),
           ),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -178,7 +178,6 @@ class _CommessaDetailBody extends ConsumerWidget {
                       meta: StatusPill(
                         stato: statusMap[tickets[i].statusId] ?? 'Aperto',
                         small: true,
-                        outlined: true,
                       ),
                       onTap: () => context.push('/ticket/${tickets[i].id}'),
                       showDivider: i < tickets.length - 1,

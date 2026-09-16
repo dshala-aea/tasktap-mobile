@@ -206,7 +206,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                                 child: Text(
                                   cantiereAsync.valueOrNull?.name ?? 'Cantiere',
                                   style: TextStyle(
-                                    fontFamily: 'Inter',
+                                    fontFamily: 'Archivo Narrow',
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     color: context.colors.ink,
@@ -225,7 +225,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                               child: Text(
                                 ticketLabel,
                                 style: TextStyle(
-                                  fontFamily: 'Inter',
+                                  fontFamily: 'Archivo',
                                   fontSize: 12,
                                   color: context.colors.inkMuted,
                                 ),
@@ -238,7 +238,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                           Text(
                             'TEMPO TRASCORSO',
                             style: TextStyle(
-                              fontFamily: 'Inter',
+                              fontFamily: 'Archivo',
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 1,
@@ -308,7 +308,7 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
                               : Text(
                                   'Esci senza aggiungere note',
                                   style: TextStyle(
-                                    fontFamily: 'Inter',
+                                    fontFamily: 'Archivo',
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                     color: context.colors.inkMuted,
@@ -345,7 +345,7 @@ class _ElapsedSummary extends StatelessWidget {
     return Text(
       formatHoursMinutes(elapsed),
       style: TextStyle(
-        fontFamily: 'Inter',
+        fontFamily: 'Archivo Narrow',
         fontSize: 20,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.4,

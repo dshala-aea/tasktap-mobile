@@ -35,7 +35,9 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   // All three are intentional consequences of DESIGN.md's blanket no-shadow rule, not scope creep
   // limited to AppPalette's own three call sites — see task-1b-report.md's "Fix: shadow comment
   // accuracy" note for the review that caught the original, inaccurate "no visible change" claim.
-  final shadowColor = p.shadow.isEmpty ? Colors.transparent : p.shadow.first.color;
+  final shadowColor = p.shadow.isEmpty
+      ? Colors.transparent
+      : p.shadow.first.color;
 
   final colorScheme = ColorScheme(
     brightness: brightness,
@@ -70,7 +72,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
   // The styles carry no colour of their own (see AppTextStyles), so it is applied here in one
   // place. `bodyColor` covers body/label/title, `displayColor` the display and headline sizes.
-  final textTheme = buildTextTheme().apply(bodyColor: p.ink, displayColor: p.ink);
+  final textTheme = buildTextTheme().apply(
+    bodyColor: p.ink,
+    displayColor: p.ink,
+  );
 
   return ThemeData(
     useMaterial3: true,
@@ -83,7 +88,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // AppVetroPalette rides alongside `p`, additive — see that file's own doc comment. Registering
     // it here makes `context.vetro` resolve correctly on every screen without requiring each
     // Vetro-redesigned screen to wire its own theme extension.
-    extensions: <ThemeExtension<dynamic>>[p, isDark ? AppVetroPalette.dark : AppVetroPalette.light],
+    extensions: <ThemeExtension<dynamic>>[
+      p,
+      isDark ? AppVetroPalette.dark : AppVetroPalette.light,
+    ],
     scaffoldBackgroundColor: p.bg1,
 
     // ── AppBar ─────────────────────────────────────────────────────────────
@@ -96,7 +104,9 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       surfaceTintColor: Colors.transparent,
       titleTextStyle: AppTextStyles.titleLarge.copyWith(color: p.ink),
       // Status-bar icons are the inverse of the bar behind them.
-      systemOverlayStyle: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      systemOverlayStyle: isDark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
     ),
 
     // ── Bottom Navigation Bar ──────────────────────────────────────────────
@@ -150,8 +160,13 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         backgroundColor: AppColors.Y,
         foregroundColor: p.brandOn,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl,
+          vertical: AppSpacing.md,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+        ),
         textStyle: AppTextStyles.labelLarge,
         minimumSize: const Size(double.infinity, 48),
       ),
@@ -162,8 +177,13 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: OutlinedButton.styleFrom(
         foregroundColor: p.ink,
         side: BorderSide(color: p.borderMedium),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.buttonRadius)),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl,
+          vertical: AppSpacing.md,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.buttonRadius),
+        ),
         textStyle: AppTextStyles.labelLarge,
         minimumSize: const Size(double.infinity, 48),
       ),
@@ -174,7 +194,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: TextButton.styleFrom(
         foregroundColor: p.ink,
         textStyle: AppTextStyles.labelLarge,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.base,
+          vertical: AppSpacing.sm,
+        ),
       ),
     ),
 
@@ -239,7 +262,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         borderRadius: BorderRadius.circular(AppSpacing.sm),
         side: BorderSide(color: p.borderMedium),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
     ),
 
     // ── FAB ────────────────────────────────────────────────────────────────
@@ -251,7 +277,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
     // ── List Tile ──────────────────────────────────────────────────────────
     listTileTheme: const ListTileThemeData(
-      contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.xs),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: AppSpacing.base,
+        vertical: AppSpacing.xs,
+      ),
     ),
   );
 }

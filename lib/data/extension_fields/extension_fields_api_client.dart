@@ -37,10 +37,7 @@ class ExtensionFieldsApiClient {
       queryParameters: {'entityType': entityType, 'pageSize': 100},
     );
     final items = (response.data?['items'] as List<dynamic>?) ?? const [];
-    return items
-        .cast<Map<String, dynamic>>()
-        .map(ExtensionFieldDefinitionDto.fromJson)
-        .toList()
+    return items.cast<Map<String, dynamic>>().map(ExtensionFieldDefinitionDto.fromJson).toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   }
 
@@ -184,11 +181,7 @@ class ExtensionFieldDefinitionDto {
     } catch (_) {
       // Not JSON — fall through to the comma-separated reading below.
     }
-    return raw
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    return raw.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
   }
 
   factory ExtensionFieldDefinitionDto.fromJson(Map<String, dynamic> json) {

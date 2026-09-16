@@ -131,7 +131,11 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
 }
 
 class _TicketDetailHeader extends StatelessWidget {
-  const _TicketDetailHeader({required this.title, this.subtitle, this.actions = const []});
+  const _TicketDetailHeader({
+    required this.title,
+    this.subtitle,
+    this.actions = const [],
+  });
 
   final String title;
   final String? subtitle;
@@ -141,7 +145,12 @@ class _TicketDetailHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       bottom: false,
-      child: ScreenHeader(title: title, subtitle: subtitle, showBack: true, actions: actions),
+      child: ScreenHeader(
+        title: title,
+        subtitle: subtitle,
+        showBack: true,
+        actions: actions,
+      ),
     );
   }
 }
@@ -208,7 +217,8 @@ class _TicketDetailBody extends ConsumerWidget {
     final contractLabel = contractAsync?.when(
       data: (c) => c?['name'] as String? ?? '—',
       loading: () => 'Caricamento…',
-      error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
+      error: (e, _) =>
+          e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
     // Feature audit module #13, Gap 6: mobile already syncs `Ticket.commessaId` but showed it
@@ -220,7 +230,8 @@ class _TicketDetailBody extends ConsumerWidget {
     final commessaLabel = commessaAsync?.when(
       data: (c) => c?['codice'] as String? ?? '—',
       loading: () => 'Caricamento…',
-      error: (e, _) => e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
+      error: (e, _) =>
+          e is TicketDetailOfflineException ? 'Non disponibile offline' : '—',
     );
 
     return SafeArea(
@@ -382,21 +393,26 @@ class _TicketDetailBody extends ConsumerWidget {
                           KeyVal(
                             label: 'Cliente',
                             value: customerName,
-                            onTap: () =>
-                                context.push(AppRoutes.clientiDetail(ticket.customerId)),
+                            onTap: () => context.push(
+                              AppRoutes.clientiDetail(ticket.customerId),
+                            ),
                           ),
                           KeyVal(label: 'Sede', value: locationName),
                           KeyVal(
                             label: 'Tecnico',
                             value: tecnicoLabel,
-                            showDivider: contractLabel != null || commessaLabel != null,
+                            showDivider:
+                                contractLabel != null || commessaLabel != null,
                           ),
                           if (contractLabel != null)
                             KeyVal(
                               label: 'Contratto',
                               value: contractLabel,
                               showDivider: commessaLabel != null,
-                              onTap: () => _showContractSummarySheet(context, contractId!),
+                              onTap: () => _showContractSummarySheet(
+                                context,
+                                contractId!,
+                              ),
                             ),
                           if (commessaLabel != null)
                             KeyVal(
@@ -405,7 +421,9 @@ class _TicketDetailBody extends ConsumerWidget {
                               showDivider: false,
                               onTap: commessaId == null
                                   ? null
-                                  : () => context.push('/altro/commesse/$commessaId'),
+                                  : () => context.push(
+                                      '/altro/commesse/$commessaId',
+                                    ),
                             ),
                         ],
                       ),
@@ -428,12 +446,13 @@ class _TicketDetailBody extends ConsumerWidget {
                     child: GridView(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 180,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
-                        childAspectRatio: 1.5,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 180,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                            childAspectRatio: 1.5,
+                          ),
                       children: [
                         for (final label in sectionLabels)
                           AppCompartmentTile(
@@ -482,7 +501,8 @@ class _TicketDetailBody extends ConsumerWidget {
               ),
               child: AppButton(
                 label: 'Crea rapportino',
-                onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+                onPressed: () =>
+                    _createRapportino(context, ref, ticket, locationAddress),
               ),
             )
           else
@@ -527,9 +547,9 @@ class _TicketDetailBody extends ConsumerWidget {
   /// (StepClienteSede / StepDettagliTicket), which are built to fill a page, not to sit inside a
   /// DraggableScrollableSheet the way the compartment tabs do.
   void _openEditTicket(BuildContext context, Ticket ticket) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => EditTicketScreen(ticketId: ticket.id)));
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EditTicketScreen(ticketId: ticket.id)),
+    );
   }
 
   void _showAssignSheet(BuildContext context, WidgetRef ref, Ticket ticket) {
@@ -587,7 +607,8 @@ class _ContractSummarySheet extends ConsumerWidget {
           ),
           error: (e, _) => const UnavailableState(
             titolo: 'Contratto non disponibile',
-            motivo: 'Impossibile leggere i dati del contratto. Riprova quando torni online.',
+            motivo:
+                'Impossibile leggere i dati del contratto. Riprova quando torni online.',
           ),
           data: (contract) {
             if (contract == null) {
@@ -613,7 +634,9 @@ class _ContractSummarySheet extends ConsumerWidget {
                 KeyVal(label: 'Scadenza', value: scadenzaLabel),
                 KeyVal(
                   label: 'Condizioni',
-                  value: condizioni != null && condizioni.isNotEmpty ? condizioni : '—',
+                  value: condizioni != null && condizioni.isNotEmpty
+                      ? condizioni
+                      : '—',
                   showDivider: false,
                 ),
               ],
@@ -647,7 +670,7 @@ class _Prose extends StatelessWidget {
           Text(
             body,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 13,
               color: context.colors.ink,
               height: 1.5,
@@ -851,7 +874,7 @@ class _ReportTab extends ConsumerWidget {
                 ),
                 title: r.title.isNotEmpty ? r.title : 'Rapportino',
                 subtitle: dateLabel,
-                meta: StatusPill(stato: r.statoLabel, small: true, outlined: true),
+                meta: StatusPill(stato: r.statoLabel, small: true),
                 showDivider: r != reports.last,
               );
             }).toList(),
@@ -1012,7 +1035,9 @@ class _AllegatiTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final attachmentsAsync = ref.watch(ticketAttachmentsProvider(ticketId));
-    final pending = ref.watch(pendingTicketAttachmentsProvider(ticketId)).valueOrNull ?? const [];
+    final pending =
+        ref.watch(pendingTicketAttachmentsProvider(ticketId)).valueOrNull ??
+        const [];
     // For openAttachment below — contentUrl is a path on the TaskTap API itself, not an external
     // storage URL, so it needs this same authenticated client (see openAttachment's own doc
     // comment).
@@ -1047,7 +1072,7 @@ class _AllegatiTab extends ConsumerWidget {
                 Text(
                   'In sospeso (${pending.length})',
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: context.colors.ink,
@@ -1142,10 +1167,12 @@ class _AttachmentUploadButtons extends ConsumerStatefulWidget {
   final String ticketId;
 
   @override
-  ConsumerState<_AttachmentUploadButtons> createState() => _AttachmentUploadButtonsState();
+  ConsumerState<_AttachmentUploadButtons> createState() =>
+      _AttachmentUploadButtonsState();
 }
 
-class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButtons> {
+class _AttachmentUploadButtonsState
+    extends ConsumerState<_AttachmentUploadButtons> {
   bool _busy = false;
 
   Future<void> _pickImage(ImageSource source) async {
@@ -1194,7 +1221,11 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
           tone: ToastTone.warning,
         );
       } else if (outcome.isSubmitted) {
-        showAppToast(context, message: 'Allegato caricato', tone: ToastTone.success);
+        showAppToast(
+          context,
+          message: 'Allegato caricato',
+          tone: ToastTone.success,
+        );
       } else {
         showAppToast(
           context,
@@ -1208,7 +1239,8 @@ class _AttachmentUploadButtonsState extends ConsumerState<_AttachmentUploadButto
       if (mounted) {
         showAppToast(
           context,
-          message: 'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
+          message:
+              'Foto non salvata. Riprova, e controlla lo spazio libero sul telefono.',
           tone: ToastTone.error,
         );
       }
@@ -1288,7 +1320,7 @@ class _PendingAttachmentRow extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -1296,7 +1328,10 @@ class _PendingAttachmentRow extends ConsumerWidget {
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 11, color: context.colors.inkMuted),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.colors.inkMuted,
+                  ),
                 ),
               ],
             ),
@@ -1307,8 +1342,9 @@ class _PendingAttachmentRow extends ConsumerWidget {
               label: 'Riprova',
               size: AppButtonSize.sm,
               fullWidth: false,
-              onPressed: () =>
-                  ref.read(ticketAttachmentUploadQueueProvider).retry(attachment.id),
+              onPressed: () => ref
+                  .read(ticketAttachmentUploadQueueProvider)
+                  .retry(attachment.id),
             ),
           ],
         ],
@@ -1437,7 +1473,8 @@ class _PianificazioniTab extends ConsumerWidget {
             'Le pianificazioni di questo ticket richiedono una connessione per essere elencate: '
             'riprova quando torni online.',
         errorTitle: 'Impossibile caricare le pianificazioni',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        errorBody:
+            'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ),
       data: (schedules) => schedules.isEmpty
           ? const _EmptyTab(
@@ -1525,7 +1562,11 @@ class _AssignSheetState extends State<_AssignSheet> {
     try {
       await widget.api.assignTicket(widget.ticket.id, _selectedUserId);
       if (mounted) {
-        showAppToast(context, message: 'Assegnazione aggiornata', tone: ToastTone.success);
+        showAppToast(
+          context,
+          message: 'Assegnazione aggiornata',
+          tone: ToastTone.success,
+        );
         Navigator.of(context).pop();
       }
     } catch (e) {
@@ -1557,7 +1598,7 @@ class _AssignSheetState extends State<_AssignSheet> {
           Text(
             'Assegna tecnico',
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -1871,7 +1912,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
                     child: Text(
                       'Cambia stato',
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo Narrow',
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: ctx.colors.ink,
@@ -1919,7 +1960,7 @@ class _TicketStatusRowState extends ConsumerState<_TicketStatusRow> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  StatusPill(stato: widget.statusName, outlined: true),
+                  StatusPill(stato: widget.statusName),
                   const SizedBox(width: 4),
                   Icon(LucideIcons.chevronRight, size: 14, color: c.inkMuted),
                 ],
@@ -2014,12 +2055,15 @@ class _OreTab extends ConsumerWidget {
               AppCard(
                 child: Row(
                   children: [
-                    if (running > 0) ...[const LiveDot(), const SizedBox(width: 8)],
+                    if (running > 0) ...[
+                      const LiveDot(),
+                      const SizedBox(width: 8),
+                    ],
                     Expanded(
                       child: Text(
                         'Totale registrato',
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: context.colors.inkMuted,
@@ -2029,7 +2073,7 @@ class _OreTab extends ConsumerWidget {
                     Text(
                       _hhmm(total),
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo Narrow',
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         color: context.colors.ink,
@@ -2047,7 +2091,7 @@ class _OreTab extends ConsumerWidget {
                         ? 'Un timer è ancora in corso e non è incluso nel totale.'
                         : '$running timer sono ancora in corso e non sono inclusi nel totale.',
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 11,
                       color: context.colors.inkMuted,
                     ),
@@ -2103,7 +2147,7 @@ class _WorklogRow extends StatelessWidget {
         // that the dashboard hero and TicketWorkLogDto.duration both make.
         entry.duration == null ? '—' : _hhmm(entry.duration!),
         style: TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'Archivo Narrow',
           fontSize: 14,
           fontWeight: FontWeight.w700,
           color: entry.isRunning ? c.inkMuted : c.ink,

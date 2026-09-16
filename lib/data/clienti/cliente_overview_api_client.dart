@@ -67,28 +67,29 @@ class ClienteOverviewDto {
   final String? contatto;
   final String? note;
 
-  factory ClienteOverviewDto.fromJson(Map<String, dynamic> json) => ClienteOverviewDto(
-    id: json['id'] as String? ?? '',
-    ragioneSociale: json['ragioneSociale'] as String? ?? '',
-    attivo: json['attivo'] as bool? ?? true,
-    sediAttive: asIntOr0(json['sediAttive']),
-    contratti: asIntOr0(json['contratti']),
-    interventiTotali: asIntOr0(json['interventiTotali']),
-    interventiAperti: asIntOr0(json['interventiAperti']),
-    partitaIva: json['partitaIva'] as String?,
-    codiceFiscale: json['codiceFiscale'] as String?,
-    email: json['email'] as String?,
-    pec: json['pec'] as String?,
-    sdiCode: json['sdiCode'] as String?,
-    telefono: json['telefono'] as String?,
-    indirizzo: json['indirizzo'] as String?,
-    citta: json['citta'] as String?,
-    cap: json['cap'] as String?,
-    provincia: json['provincia'] as String?,
-    paese: json['paese'] as String?,
-    contatto: json['contatto'] as String?,
-    note: json['note'] as String?,
-  );
+  factory ClienteOverviewDto.fromJson(Map<String, dynamic> json) =>
+      ClienteOverviewDto(
+        id: json['id'] as String? ?? '',
+        ragioneSociale: json['ragioneSociale'] as String? ?? '',
+        attivo: json['attivo'] as bool? ?? true,
+        sediAttive: asIntOr0(json['sediAttive']),
+        contratti: asIntOr0(json['contratti']),
+        interventiTotali: asIntOr0(json['interventiTotali']),
+        interventiAperti: asIntOr0(json['interventiAperti']),
+        partitaIva: json['partitaIva'] as String?,
+        codiceFiscale: json['codiceFiscale'] as String?,
+        email: json['email'] as String?,
+        pec: json['pec'] as String?,
+        sdiCode: json['sdiCode'] as String?,
+        telefono: json['telefono'] as String?,
+        indirizzo: json['indirizzo'] as String?,
+        citta: json['citta'] as String?,
+        cap: json['cap'] as String?,
+        provincia: json['provincia'] as String?,
+        paese: json['paese'] as String?,
+        contatto: json['contatto'] as String?,
+        note: json['note'] as String?,
+      );
 }
 
 /// Thrown before a request is attempted, so the screen can say "offline" rather than render a
@@ -106,13 +107,17 @@ class ClienteOverviewApiClient {
   final Dio _dio;
 
   Future<ClienteOverviewDto> getOverview(String customerId) async {
-    final response = await _dio.get<Map<String, dynamic>>('/api/app/clienti/$customerId/overview');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/app/clienti/$customerId/overview',
+    );
     final data = response.data;
     if (data == null) throw StateError('Risposta vuota da clienti overview');
     return ClienteOverviewDto.fromJson(data);
   }
 }
 
-final clienteOverviewApiClientProvider = Provider<ClienteOverviewApiClient>((ref) {
+final clienteOverviewApiClientProvider = Provider<ClienteOverviewApiClient>((
+  ref,
+) {
   return ClienteOverviewApiClient(ref.watch(dioProvider));
 });

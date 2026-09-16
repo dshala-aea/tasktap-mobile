@@ -20,7 +20,8 @@ class KioskActivationScreen extends ConsumerStatefulWidget {
   const KioskActivationScreen({super.key});
 
   @override
-  ConsumerState<KioskActivationScreen> createState() => _KioskActivationScreenState();
+  ConsumerState<KioskActivationScreen> createState() =>
+      _KioskActivationScreenState();
 }
 
 class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
@@ -46,7 +47,10 @@ class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
     // page shows the key as plain text, not a QR, so this only helps a site that has printed or
     // otherwise encoded that string into a scannable code of its own. Manual entry (paste/type)
     // below is the primary path.
-    final value = await openBarcodeScanSheet(context, title: 'Scansiona credenziale');
+    final value = await openBarcodeScanSheet(
+      context,
+      title: 'Scansiona credenziale',
+    );
     if (value != null && mounted) {
       setState(() => _rawKeyCtrl.text = value.trim());
     }
@@ -55,8 +59,10 @@ class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
   String? _validate() {
     final rawKey = _rawKeyCtrl.text.trim();
     if (rawKey.isEmpty) return 'Inserisci la credenziale del dispositivo.';
-    if (_pinCtrl.text.length < 4) return 'Il PIN di uscita deve avere almeno 4 cifre.';
-    if (_pinCtrl.text != _pinConfirmCtrl.text) return 'I due PIN non coincidono.';
+    if (_pinCtrl.text.length < 4)
+      return 'Il PIN di uscita deve avere almeno 4 cifre.';
+    if (_pinCtrl.text != _pinConfirmCtrl.text)
+      return 'I due PIN non coincidono.';
     return null;
   }
 
@@ -106,11 +112,7 @@ class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg1,
-      appBar: AppBar(
-        backgroundColor: context.colors.bg1,
-        elevation: 0,
-        title: const Text('Attiva modalità totem'),
-      ),
+      appBar: const ScreenHeaderBar(title: 'Attiva modalità totem'),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.pagePadding),
@@ -121,7 +123,9 @@ class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
                 'Questo dispositivo diventerà un totem presenze a schermo bloccato. Incolla o '
                 'scansiona la credenziale mostrata una sola volta dalla pagina "Dispositivi kiosk" '
                 'del pannello admin.',
-                style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: context.colors.inkFaint,
+                ),
               ),
               const SizedBox(height: AppSpacing.xxl),
 
@@ -138,7 +142,9 @@ class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
                   ),
                   child: Text(
                     _error!,
-                    style: AppTextStyles.bodySmall.copyWith(color: context.colors.red),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: context.colors.red,
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.base),
@@ -172,7 +178,9 @@ class _KioskActivationScreenState extends ConsumerState<KioskActivationScreen> {
               Text(
                 'Serve per disattivare la modalità totem su questo dispositivo. Non viene inviato '
                 'al server: conservalo tu stesso.',
-                style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkFaint),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: context.colors.inkFaint,
+                ),
               ),
               const SizedBox(height: AppSpacing.base),
               AppTextField(

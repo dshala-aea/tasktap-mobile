@@ -272,7 +272,9 @@ void main() {
       await pump(tester);
 
       expect(find.byType(StatusPill), findsOneWidget);
-      expect(find.text('Aperto'), findsOneWidget);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('APERTO'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -764,7 +766,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sostituzione valvola'), findsOneWidget);
-      expect(find.text('Inviato'), findsOneWidget);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('INVIATO'), findsOneWidget);
       await resetAndDispose(tester);
     });
 

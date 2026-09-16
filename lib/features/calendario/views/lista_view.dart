@@ -37,7 +37,8 @@ class ListaView extends ConsumerWidget {
 
     final grouped = groupSchedulesByDay(schedules);
     final dayFmt = DateFormat('EEEE d MMMM', 'it');
-    final teamScheduleIds = ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
+    final teamScheduleIds =
+        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     final children = <Widget>[];
     for (final entry in grouped.entries) {
@@ -80,7 +81,7 @@ class _DateHeader extends StatelessWidget {
       child: Text(
         _capitalize(label),
         style: TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'Archivo',
           fontSize: 13,
           fontWeight: FontWeight.w700,
           color: context.colors.ink,
@@ -95,7 +96,11 @@ class _DateHeader extends StatelessWidget {
 }
 
 class _ScheduleListRow extends StatelessWidget {
-  const _ScheduleListRow({required this.schedule, this.onTapTicket, this.isTeam = false});
+  const _ScheduleListRow({
+    required this.schedule,
+    this.onTapTicket,
+    this.isTeam = false,
+  });
 
   final Schedule schedule;
   final void Function(String ticketId)? onTapTicket;
@@ -133,11 +138,15 @@ class _ScheduleListRow extends StatelessWidget {
           if (isTeam) ...[
             Tooltip(
               message: 'Assegnato a una squadra',
-              child: Icon(LucideIcons.users, size: 14, color: context.colors.inkMuted),
+              child: Icon(
+                LucideIcons.users,
+                size: 14,
+                color: context.colors.inkMuted,
+              ),
             ),
             const SizedBox(width: 6),
           ],
-          StatusPill(stato: statusName, small: true, outlined: true),
+          StatusPill(stato: statusName, small: true),
         ],
       ),
       onTap: schedule.ticketId != null && onTapTicket != null

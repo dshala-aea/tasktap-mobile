@@ -166,13 +166,13 @@ class _Preamble extends StatelessWidget {
       children: [
         Text(
           'Questo è tutto ciò che la tua azienda ha registrato su di te in TaskTap.',
-          style: TextStyle(fontFamily: 'Inter', fontSize: 14, height: 1.45, color: c.ink),
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 14, height: 1.45, color: c.ink),
         ),
         if (exportDate != null) ...[
           const SizedBox(height: 6),
           Text(
             'Letto dal server il ${DateFormat('d MMMM y \'alle\' HH:mm', 'it').format(exportDate!)}.',
-            style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: c.inkMuted),
+            style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkMuted),
           ),
         ],
       ],
@@ -209,7 +209,7 @@ class _CategoryRow extends StatelessWidget {
                     Text(
                       category.label,
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo Narrow',
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: c.ink,
@@ -220,7 +220,7 @@ class _CategoryRow extends StatelessWidget {
                       Text(
                         category.nota!,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 12,
                           height: 1.35,
                           color: c.inkMuted,
@@ -239,7 +239,7 @@ class _CategoryRow extends StatelessWidget {
                     ? '${category.label}: numero non comunicato dal server'
                     : '${category.label}: $count',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: count == null ? c.inkMuted : c.ink,
@@ -284,7 +284,7 @@ class _ConsentBlock extends ConsumerWidget {
       error: (e, _) => AppCard(
         child: Text(
           'Elenco consensi non disponibile in questo momento.',
-          style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.inkMuted),
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: context.colors.inkMuted),
         ),
       ),
       data: (list) {
@@ -292,7 +292,7 @@ class _ConsentBlock extends ConsumerWidget {
           return AppCard(
             child: Text(
               'Nessun consenso risulta registrato a tuo nome.',
-              style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.inkMuted),
+              style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: context.colors.inkMuted),
             ),
           );
         }
@@ -351,7 +351,7 @@ class _RightsBlock extends StatelessWidget {
               Text(
                 'Correggere o cancellare',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: c.ink,
@@ -365,7 +365,7 @@ class _RightsBlock extends StatelessWidget {
             'elettronico, o per chiedere la cancellazione del tuo account, rivolgiti '
             'all\'amministrazione della tua azienda. Da qui non si cancella: il tuo account è '
             'collegato a buste paga e fatture già emesse.',
-            style: TextStyle(fontFamily: 'Inter', fontSize: 13, height: 1.45, color: c.inkMuted),
+            style: TextStyle(fontFamily: 'Archivo', fontSize: 13, height: 1.45, color: c.inkMuted),
           ),
         ],
       ),

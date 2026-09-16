@@ -57,7 +57,11 @@ const _uuid = Uuid();
 /// open, not workedMinutes or payroll-lock reasons (those stay [GiornataDto]'s job, consumed
 /// separately by `giornataProvider`/`resolveGuard`).
 class ServerWorkLogSnapshot {
-  const ServerWorkLogSnapshot({required this.isOnShift, required this.isOnPause, this.activeStartTime});
+  const ServerWorkLogSnapshot({
+    required this.isOnShift,
+    required this.isOnPause,
+    this.activeStartTime,
+  });
 
   final bool isOnShift;
   final bool isOnPause;

@@ -473,130 +473,133 @@ class _AdminMaterialeFormScreenState extends ConsumerState<AdminMaterialeFormScr
                 context.navClearance,
               ),
               children: [
-            AppTextField(
-              label: 'Codice *',
-              controller: _codeCtrl,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
+                AppTextField(
+                  label: 'Codice *',
+                  controller: _codeCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+                ),
+                const SizedBox(height: 16),
 
-            AppTextField(
-              label: 'Nome *',
-              controller: _nameCtrl,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
+                AppTextField(
+                  label: 'Nome *',
+                  controller: _nameCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+                ),
+                const SizedBox(height: 16),
 
-            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
+                const SizedBox(height: 16),
 
-            Row(
-              children: [
-                Expanded(
-                  child: AppFieldShell(
-                    label: 'Unità di misura',
-                    child: DropdownButtonFormField<String?>(
-                      initialValue: _unitOfMeasure,
-                      hint: const Text('pz, kg, mt…'),
-                      items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('Nessuna')),
-                        for (final u in materialeSelectOptions(kUnitOfMeasureOptions, _unitOfMeasure))
-                          DropdownMenuItem<String?>(value: u, child: Text(u)),
-                      ],
-                      onChanged: (v) => setState(() => _unitOfMeasure = v),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppFieldShell(
+                        label: 'Unità di misura',
+                        child: DropdownButtonFormField<String?>(
+                          initialValue: _unitOfMeasure,
+                          hint: const Text('pz, kg, mt…'),
+                          items: [
+                            const DropdownMenuItem<String?>(value: null, child: Text('Nessuna')),
+                            for (final u in materialeSelectOptions(
+                              kUnitOfMeasureOptions,
+                              _unitOfMeasure,
+                            ))
+                              DropdownMenuItem<String?>(value: u, child: Text(u)),
+                          ],
+                          onChanged: (v) => setState(() => _unitOfMeasure = v),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppLookupField(
+                        key: ValueKey('marca-$_lookupFieldGeneration'),
+                        label: 'Marca',
+                        items: _marcheItems,
+                        initialText: _marca,
+                        onSelected: (id) => setState(() => _marca = id),
+                        onFreeText: (v) => setState(() => _marca = v),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppLookupField(
-                    key: ValueKey('marca-$_lookupFieldGeneration'),
-                    label: 'Marca',
-                    items: _marcheItems,
-                    initialText: _marca,
-                    onSelected: (id) => setState(() => _marca = id),
-                    onFreeText: (v) => setState(() => _marca = v),
-                  ),
+                const SizedBox(height: 16),
+
+                AppLookupField(
+                  key: ValueKey('categoria-$_lookupFieldGeneration'),
+                  label: 'Categoria',
+                  items: _categorieItems,
+                  initialText: _category,
+                  onSelected: (id) => setState(() => _category = id),
+                  onFreeText: (v) => setState(() => _category = v),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            AppLookupField(
-              key: ValueKey('categoria-$_lookupFieldGeneration'),
-              label: 'Categoria',
-              items: _categorieItems,
-              initialText: _category,
-              onSelected: (id) => setState(() => _category = id),
-              onFreeText: (v) => setState(() => _category = v),
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    label: 'Prezzo acquisto (€)',
-                    controller: _purchasePriceCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Prezzo acquisto (€)',
+                        controller: _purchasePriceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Prezzo vendita (€)',
+                        controller: _salePriceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppTextField(
-                    label: 'Prezzo vendita (€)',
-                    controller: _salePriceCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
+                const SizedBox(height: 16),
+
+                AppTextField(
+                  label: 'Aliquota IVA (%)',
+                  hint: 'Vuoto = aliquota di default del tenant',
+                  controller: _aliquotaIvaCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
 
-            AppTextField(
-              label: 'Aliquota IVA (%)',
-              hint: 'Vuoto = aliquota di default del tenant',
-              controller: _aliquotaIvaCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
+                if (_isEditing) ...[
+                  const SizedBox(height: 24),
+                  _ImageSection(
+                    imageUrl: _imageContentUrl,
+                    isBusy: _isUploadingImage,
+                    onPickGallery: () => _pickAndUploadImage(ImageSource.gallery),
+                    onPickCamera: () => _pickAndUploadImage(ImageSource.camera),
+                    onDelete: _deleteImage,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                _BarcodesSection(
+                  barcodes: _barcodes,
+                  loaded: _detailLoaded,
+                  onAdd: _showAddBarcodeDialog,
+                  onSetPrimary: _isEditing
+                      ? (barcodeId) => _mutateBarcode(
+                          () => ref
+                              .read(adminApiClientProvider)
+                              .setPrimaryMaterialeBarcode(widget.materialeId!, barcodeId),
+                        )
+                      : _setLocalPrimary,
+                  onDelete: _isEditing
+                      ? (barcodeId) => _mutateBarcode(
+                          () => ref
+                              .read(adminApiClientProvider)
+                              .deleteMaterialeBarcode(widget.materialeId!, barcodeId),
+                        )
+                      : _deleteLocalBarcode,
+                ),
+                const SizedBox(height: 32),
 
-            if (_isEditing) ...[
-              const SizedBox(height: 24),
-              _ImageSection(
-                imageUrl: _imageContentUrl,
-                isBusy: _isUploadingImage,
-                onPickGallery: () => _pickAndUploadImage(ImageSource.gallery),
-                onPickCamera: () => _pickAndUploadImage(ImageSource.camera),
-                onDelete: _deleteImage,
-              ),
-            ],
-            const SizedBox(height: 24),
-            _BarcodesSection(
-              barcodes: _barcodes,
-              loaded: _detailLoaded,
-              onAdd: _showAddBarcodeDialog,
-              onSetPrimary: _isEditing
-                  ? (barcodeId) => _mutateBarcode(
-                      () => ref
-                          .read(adminApiClientProvider)
-                          .setPrimaryMaterialeBarcode(widget.materialeId!, barcodeId),
-                    )
-                  : _setLocalPrimary,
-              onDelete: _isEditing
-                  ? (barcodeId) => _mutateBarcode(
-                      () => ref
-                          .read(adminApiClientProvider)
-                          .deleteMaterialeBarcode(widget.materialeId!, barcodeId),
-                    )
-                  : _deleteLocalBarcode,
-            ),
-            const SizedBox(height: 32),
-
-            AppButton(
-              label: _isEditing ? 'Salva modifiche' : 'Crea materiale',
-              onPressed: _isSaving ? null : _save,
-              isLoading: _isSaving,
-            ),
+                AppButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea materiale',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
+                ),
               ],
             ),
           ),
@@ -669,6 +672,7 @@ class _ImageSection extends StatelessWidget {
               const SizedBox(width: 8),
               IconButton(
                 onPressed: isBusy ? null : onDelete,
+                tooltip: 'Rimuovi foto',
                 icon: Icon(LucideIcons.trash2, color: context.colors.red),
               ),
             ],
@@ -745,6 +749,7 @@ class _BarcodesSection extends StatelessWidget {
                           ),
                         IconButton(
                           icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.red),
+                          tooltip: 'Rimuovi barcode',
                           onPressed: () => onDelete(b['id'] as String),
                         ),
                       ],

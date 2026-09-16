@@ -398,7 +398,11 @@ void main() {
       );
       await _pumpScreen(tester, db: db, api: api);
 
-      expect(find.text('Completato'), findsWidgets); // stato pill, alongside cantiere Stato
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change. The cantiere's own top-level
+      // Stato badge (checked in "shows Stato resolved from CantiereStatusEnum" above) renders
+      // through a separate, unaffected path — only this worklog row's status pill changed.
+      expect(find.text('COMPLETATO'), findsWidgets);
       expect(find.textContaining('08:00'), findsOneWidget);
       await _teardown(tester);
     });
@@ -434,7 +438,9 @@ void main() {
       await _pumpScreen(tester, db: db, api: api);
 
       expect(find.text('Manutenzione impianto'), findsOneWidget);
-      expect(find.text('Controllato'), findsOneWidget);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('CONTROLLATO'), findsOneWidget);
       await _teardown(tester);
     });
   });

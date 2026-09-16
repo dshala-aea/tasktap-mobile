@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
+import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
@@ -348,6 +349,30 @@ void main() {
           ),
         ]),
       );
+    });
+
+    contractTest('a kiosk QR scan clock-in/out matches the server', () {
+      final client = WorklogApiClient(dio);
+      return capture(() => client.kioskScan(token: 'tok-abc123', userId: _id(18)));
+    });
+  });
+
+  group('ferie', () {
+    contractTest('an absence request matches the server', () {
+      final client = AbsenceRequestApiClient(dio);
+      return capture(
+        () => client.create(
+          type: 0,
+          startDate: DateTime.utc(2026, 8, 17),
+          endDate: DateTime.utc(2026, 8, 21),
+          reason: 'ferie estive',
+        ),
+      );
+    });
+
+    contractTest('cancelling an absence request matches the server', () {
+      final client = AbsenceRequestApiClient(dio);
+      return capture(() => client.cancel(_id(19)));
     });
   });
 
@@ -871,6 +896,12 @@ void main() {
           'test/contract/openapi.snapshot.json still predates it, so there is no schema here to '
           'compare against yet. Add a contractTest once the snapshot is refreshed from the '
           'backend (see this file\'s header comment for the refresh command).',
+      'PUT /api/extension-fields/{}/{}/values':
+          'ExtensionFieldsApiClient.saveValues sends a flat Map<String, String> keyed by '
+          'whatever custom fields this tenant configured for the entity type — there is no fixed '
+          'DTO, the server schema declares a free-form object, and a body-key check against it '
+          'would compare nothing while reading as coverage. ExtensionValueService.SetValuesAsync '
+          'already silently drops any key that is not a currently-active definition server-side.',
     };
 
     /// Proof that the checks above did something.

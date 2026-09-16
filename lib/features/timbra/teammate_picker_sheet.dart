@@ -78,7 +78,7 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                   child: Text(
                     'Seleziona squadra',
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: ctx.colors.ink,
@@ -147,7 +147,7 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                                   child: Text(
                                     name,
                                     style: TextStyle(
-                                      fontFamily: 'Inter',
+                                      fontFamily: 'Archivo Narrow',
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                       color: ctx.colors.ink,
@@ -158,7 +158,7 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
                                   Text(
                                     'LEAD',
                                     style: TextStyle(
-                                      fontFamily: 'Inter',
+                                      fontFamily: 'Archivo',
                                       fontSize: 10,
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 0.6,
@@ -183,7 +183,9 @@ class _TeammatePickerSheetContentState extends ConsumerState<_TeammatePickerShee
               // devices whenever the keyboard was closed, since viewInsets.bottom is 0 in that
               // state and carries none of the safe-area reservation on its own. Same fix as
               // compartment_sheet.dart's own scroll padding.
-              AppSpacing.base + MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+              AppSpacing.base +
+                  MediaQuery.of(ctx).viewInsets.bottom +
+                  MediaQuery.of(ctx).padding.bottom,
             ),
             child: AppButton(
               label: 'Conferma (${_selected.length})',

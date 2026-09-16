@@ -52,7 +52,7 @@ class AppStepper extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: context.colors.ink,
@@ -62,7 +62,7 @@ class AppStepper extends StatelessWidget {
             Text(
               '${currentIndex + 1} di ${steps.length}',
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.4,

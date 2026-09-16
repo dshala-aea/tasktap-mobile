@@ -47,7 +47,7 @@ void openCompartmentSheet(
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: ctx.colors.ink,

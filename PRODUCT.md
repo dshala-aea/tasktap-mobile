@@ -79,10 +79,14 @@ a modeling error, not a simplification:
 3. *Ticket / report worklog* — labor booked against one job, which is what
    gets billed.
 
-**Shipped today:** 5-tab shell (Dashboard · Ticket · Timbra · Calendario ·
-Altro); ticket list/detail/creation; a 4-step rapportino wizard with autosave,
-photo capture, GPS, material lines and signature capture; personal and
-cantiere timbratura; a 4-view calendar (giorno/settimana/mese/lista); clienti;
+**Shipped today:** 5-tab shell (Dashboard · Ticket · Cantieri · Calendario ·
+Altro) — Timbra is not a tab; personal clock-in is a 0-tap idle-hero CTA on
+Dashboard, cantiere timbra and a kiosk-QR punch flow are 1-2 taps via
+Dashboard quick actions; ticket list/detail/creation; a free-order 4-tile
+rapportino checklist (Dettagli / Ore / Controlli / Materiali, plus a
+non-peer Riepilogo review-and-submit step) with autosave, photo capture,
+GPS, material lines and signature capture; personal and cantiere
+timbratura; a 4-view calendar (giorno/settimana/mese/lista); clienti;
 magazzino; notifications; settings; and an admin CRUD surface over cantieri,
 customers, locations, materiali, prodotti, reports, schedules, squadre and
 contracts.
@@ -110,13 +114,35 @@ the two riskiest possible upgrades before a pilot.
 
 ## Brand Commitments
 
+**Superseded again, 2026-09-03: the mobile app's visual world is now Il
+Documento** (Italian back-office/paper-and-stamp system), not Cassetta below.
+The repoint aligned mobile to the *web* app's own `DESIGN.md`
+(`/mnt/d/AEA/Sviluppi/TaskTap/frontend/DESIGN.md`). Mobile now has its own
+`DESIGN.md` at this project's root too, written 2026-09-16 as part of the
+critique fix pass below — it states mobile's own translation of the world
+(no literal paper/masthead/registration-mark furniture on the technician's
+own screens; the web file stays the reference for the full desktop reading)
+— stamp red `#C03221` replaces Cassetta's
+safety orange, carbon ink `#22252E` replaces gunmetal, paper/sheet surfaces
+replace foam-gray, Archivo Narrow/Archivo/IBM Plex Mono replace the
+industrial stencil face, flat "no glassy gradients, no blur, no floating
+cards" replaces the case-shell material. A 2026-09-16 Impeccable critique
+found this repoint had shipped as a colour-token swap without the world's
+defining devices (the Stamp status/CTA component, IBM Plex Mono on
+document codes and timestamps) reaching the primary technician screens or
+the admin CRUD surface; both are being closed out from that critique's
+findings. The THESIS/NAVIGATION lines below (compartment tiles, the latch-
+row bottom nav) are themselves superseded by this pivot — the bottom nav is
+a flat Documento sheet now, not a latch row — kept here only as the
+historical record of the Cassetta decision.
+
 Superseded 2026-08-23: the user reopened every prior commitment below
 (color, typefaces, nav pattern included) and ran a fresh Impeccable
 new-work round. Three directions were built as real HTML prototypes on
 identical content and compared side by side; the user chose the
 assigned-by-roll direction.
 
-**Chosen world: Cassetta** (shadow-foam tool case). Seed key `cce7d144`,
+**Chosen world (superseded, see above): Cassetta** (shadow-foam tool case). Seed key `cce7d144`,
 assigned index 4 of a 7-candidate list derived from an Italian field
 technician's own world (cassetta attrezzi, libretto di manutenzione,
 quadro elettrico, cartellino orario, bolla a ricalco, cantiere signage,
@@ -151,8 +177,12 @@ this world.
 
 ## Evidence on Hand
 
-- `design-reference/DESIGN-SPEC.md` — the incumbent token and component set.
+- `design-reference/DESIGN-SPEC.md` — **stale**: the original pre-Cassetta,
+  pre-Documento token/component set (yellow brand, floating-pill nav). Kept
+  as historical record only; see Brand Commitments above for what's current.
 - `design-reference/DESIGN-SCREENS.md` — the per-screen implementation plan.
+  Predates the rapportino flow's redesign into a free-order tile checklist;
+  treat its step-by-step wizard description as historical, not current.
 - `docs/api-gap-list.md` — a route-existence audit dated 2026-08-03. Partly
   stale: the cantieri/materiali orphan it flags has since been wired.
 - `../docs/api/openapi.snapshot.json` — the frozen 234-route backend contract.

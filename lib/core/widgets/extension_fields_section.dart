@@ -223,10 +223,7 @@ class _ExtensionFieldsSectionState extends ConsumerState<ExtensionFieldsSection>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final d in defs) ...[
-                  _buildField(context, d),
-                  const SizedBox(height: 16),
-                ],
+                for (final d in defs) ...[_buildField(context, d), const SizedBox(height: 16)],
                 Align(
                   alignment: Alignment.centerRight,
                   child: AppButton(

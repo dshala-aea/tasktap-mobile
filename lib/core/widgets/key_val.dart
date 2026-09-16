@@ -43,7 +43,7 @@ class KeyVal extends StatelessWidget {
   final Color? valueColor;
 
   static TextStyle _labelStyle(BuildContext context) => TextStyle(
-    fontFamily: 'Inter',
+    fontFamily: 'Archivo',
     fontSize: 10,
     fontWeight: FontWeight.w700,
     color: context.colors.inkMuted,
@@ -58,7 +58,8 @@ class KeyVal extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         content,
-        if (showDivider) Divider(height: 1, thickness: 1, color: context.colors.borderLight),
+        if (showDivider)
+          Divider(height: 1, thickness: 1, color: context.colors.borderLight),
       ],
     );
   }
@@ -76,7 +77,7 @@ class KeyVal extends StatelessWidget {
               textAlign: TextAlign.end,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
                 color: valueColor ?? context.colors.ink,
@@ -85,7 +86,11 @@ class KeyVal extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: 4),
-            Icon(LucideIcons.chevronRight, size: 14, color: context.colors.inkMuted),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 14,
+              color: context.colors.inkMuted,
+            ),
           ],
         ],
       ),
@@ -99,7 +104,10 @@ class KeyVal extends StatelessWidget {
       // the 44pt/48dp floor every other control in the app enforces (see the status pill's own
       // ConstrainedBox on ticket detail) — this is the shared shape every tappable KeyVal on
       // ticket/rapportino detail goes through, so the fix belongs here, once.
-      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: row),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: row,
+      ),
     );
   }
 
@@ -115,7 +123,7 @@ class KeyVal extends StatelessWidget {
             value,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: context.colors.ink,

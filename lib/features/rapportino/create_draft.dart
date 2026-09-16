@@ -98,7 +98,9 @@ Future<String?> createLocalDraft(
       // Same shape ReportEditorNotifier._buildMetadataJson/._parseMetadataJson round-trip —
       // workAddress has no column of its own (see DraftReports.metadataJson's doc comment).
       metadataJson: Value(
-        (workAddress?.isNotEmpty ?? false) ? jsonEncode({'workAddress': workAddress}) : null,
+        (workAddress?.isNotEmpty ?? false)
+            ? jsonEncode({'workAddress': workAddress})
+            : null,
       ),
       isLocalOnly: const Value(true),
       stato: const Value('Bozza'),
@@ -360,7 +362,9 @@ Future<String?> createCantiereReportDraft(
       cantiereId: Value(cantiereId),
       customerId: Value(customerId),
       metadataJson: Value(
-        (workAddress?.isNotEmpty ?? false) ? jsonEncode({'workAddress': workAddress}) : null,
+        (workAddress?.isNotEmpty ?? false)
+            ? jsonEncode({'workAddress': workAddress})
+            : null,
       ),
       isLocalOnly: const Value(true),
       stato: const Value('Bozza'),

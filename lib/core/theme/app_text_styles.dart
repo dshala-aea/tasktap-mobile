@@ -43,22 +43,37 @@ abstract final class AppTextStyles {
     letterSpacing: -0.1,
   );
 
-  static TextStyle get titleLarge =>
-      TextStyle(fontFamily: 'Archivo Narrow', fontSize: 16, fontWeight: FontWeight.w600);
+  static TextStyle get titleLarge => TextStyle(
+    fontFamily: 'Archivo Narrow',
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+  );
 
-  static TextStyle get titleMedium =>
-      TextStyle(fontFamily: 'Archivo Narrow', fontSize: 14, fontWeight: FontWeight.w600);
+  static TextStyle get titleMedium => TextStyle(
+    fontFamily: 'Archivo Narrow',
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+  );
 
   // ── Archivo — body / labels ───────────────────────────────────────────
 
-  static TextStyle get bodyLarge =>
-      TextStyle(fontFamily: 'Archivo', fontSize: 16, fontWeight: FontWeight.w400);
+  static TextStyle get bodyLarge => TextStyle(
+    fontFamily: 'Archivo',
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+  );
 
-  static TextStyle get bodyMedium =>
-      TextStyle(fontFamily: 'Archivo', fontSize: 14, fontWeight: FontWeight.w400);
+  static TextStyle get bodyMedium => TextStyle(
+    fontFamily: 'Archivo',
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+  );
 
-  static TextStyle get bodySmall =>
-      TextStyle(fontFamily: 'Archivo', fontSize: 12, fontWeight: FontWeight.w400);
+  static TextStyle get bodySmall => TextStyle(
+    fontFamily: 'Archivo',
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+  );
 
   static TextStyle get labelLarge => TextStyle(
     fontFamily: 'Archivo',
@@ -91,8 +106,35 @@ abstract final class AppTextStyles {
     letterSpacing: -1,
   );
 
-  static TextStyle get caption =>
-      TextStyle(fontFamily: 'Archivo', fontSize: 11, fontWeight: FontWeight.w400);
+  static TextStyle get caption => TextStyle(
+    fontFamily: 'Archivo',
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+  );
+
+  // ── IBM Plex Mono — document codes, timestamps ────────────────────────────
+  //
+  // Il Documento's own rule (frontend DESIGN.md: "Mono marks identity. Document numbers, form
+  // codes, timestamps and inline data run in IBM Plex Mono — the carbon-copy impression."). Scoped
+  // to exactly that — a running clock's HH:MM:SS, a punch timestamp, a report/ticket reference
+  // number — never body text or labels; see craft-floor's own ban on monospace as a costume.
+
+  /// A live-running elapsed-time readout (timbratura/cantiere/worklog timers). Tabular figures so
+  /// the digits don't visibly shift width as seconds tick.
+  static TextStyle get timerMono => const TextStyle(
+    fontFamily: 'IBM Plex Mono',
+    fontFeatures: [FontFeature.tabularFigures()],
+    fontWeight: FontWeight.w500,
+  );
+
+  /// A document/reference code (ticket number, report number, punch timestamp) inline in body
+  /// copy — smaller and lighter than [timerMono], which is a standalone readout.
+  static TextStyle get docCode => const TextStyle(
+    fontFamily: 'IBM Plex Mono',
+    fontSize: 12,
+    fontFeatures: [FontFeature.tabularFigures()],
+    fontWeight: FontWeight.w500,
+  );
 }
 
 /// Returns a [TextTheme] fully populated with Archivo Narrow/Archivo styles.

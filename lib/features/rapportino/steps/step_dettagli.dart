@@ -222,7 +222,6 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     // showing nothing — it reads as corruption, and it is not information.
     return null;
   }
-
 }
 
 // ── GPS capture widget ────────────────────────────────────────────────────────

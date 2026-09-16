@@ -69,20 +69,29 @@ class AiReportDraftDto {
   final DateTime? suggestedStartedAt;
   final DateTime? suggestedEndedAt;
 
-  factory AiReportDraftDto.fromJson(Map<String, dynamic> json) => AiReportDraftDto(
-    title: json['title'] as String? ?? '',
-    details: json['details'] as String? ?? '',
-    modelUsed: json['modelUsed'] as String? ?? '',
-    technicianNotes: json['technicianNotes'] as String?,
-    suggestedStartedAt: DateTime.tryParse(json['suggestedStartedAt'] as String? ?? '')?.toUtc(),
-    suggestedEndedAt: DateTime.tryParse(json['suggestedEndedAt'] as String? ?? '')?.toUtc(),
-  );
+  factory AiReportDraftDto.fromJson(Map<String, dynamic> json) =>
+      AiReportDraftDto(
+        title: json['title'] as String? ?? '',
+        details: json['details'] as String? ?? '',
+        modelUsed: json['modelUsed'] as String? ?? '',
+        technicianNotes: json['technicianNotes'] as String?,
+        suggestedStartedAt: DateTime.tryParse(
+          json['suggestedStartedAt'] as String? ?? '',
+        )?.toUtc(),
+        suggestedEndedAt: DateTime.tryParse(
+          json['suggestedEndedAt'] as String? ?? '',
+        )?.toUtc(),
+      );
 }
 
 /// The company's monthly allowance is gone. Carries the reset date so the screen can say when it
 /// comes back rather than just refusing.
 class AiQuotaExhaustedException implements Exception {
-  const AiQuotaExhaustedException({this.monthlyLimit, this.used, this.resetsAt});
+  const AiQuotaExhaustedException({
+    this.monthlyLimit,
+    this.used,
+    this.resetsAt,
+  });
 
   final int? monthlyLimit;
   final int? used;
@@ -138,7 +147,8 @@ class AiApiClient {
         },
       );
       final data = response.data;
-      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      if (data == null)
+        throw const AiFailure('Risposta vuota dal servizio AI.');
       return AiReportDraftDto.fromJson(data);
     } on DioException catch (e) {
       throw _translate(e);
@@ -176,7 +186,9 @@ class AiApiClient {
       );
     }
 
-    return const AiFailure('Il servizio AI non ha risposto. Riprova più tardi.');
+    return const AiFailure(
+      'Il servizio AI non ha risposto. Riprova più tardi.',
+    );
   }
 }
 

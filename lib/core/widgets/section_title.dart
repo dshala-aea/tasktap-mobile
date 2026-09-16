@@ -12,7 +12,12 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// SectionTitle(title: 'Rapportini', action: TextButton(onPressed: ..., child: Text('Vedi tutti')));
 /// ```
 class SectionTitle extends StatelessWidget {
-  const SectionTitle({super.key, required this.title, this.action, this.trailing});
+  const SectionTitle({
+    super.key,
+    required this.title,
+    this.action,
+    this.trailing,
+  });
 
   final String title;
 
@@ -35,7 +40,7 @@ class SectionTitle extends StatelessWidget {
             child: Text(
               title,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo Narrow',
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: context.colors.ink,
@@ -46,7 +51,7 @@ class SectionTitle extends StatelessWidget {
             Text(
               trailing!,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: context.colors.inkMuted,
@@ -79,7 +84,7 @@ class StepLabel extends StatelessWidget {
     return Text(
       title,
       style: TextStyle(
-        fontFamily: 'Inter',
+        fontFamily: 'Archivo',
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.colors.ink,

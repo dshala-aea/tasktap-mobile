@@ -78,5 +78,6 @@ class KioskCredentialsStore {
     await _storage.delete(key: _exitPinHashKey);
   }
 
-  static String _hashPin(String pin) => sha256.convert(utf8.encode(pin)).toString();
+  static String _hashPin(String pin) =>
+      sha256.convert(utf8.encode(pin)).toString();
 }

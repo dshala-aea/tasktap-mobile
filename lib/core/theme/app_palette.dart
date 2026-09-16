@@ -49,6 +49,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     required this.redSoft,
     required this.brandOn,
     required this.labelCard,
+    required this.accentInk,
   });
 
   // ── Ink: what text and icons are written in ───────────────────────────────
@@ -141,6 +142,19 @@ class AppPalette extends ThemeExtension<AppPalette> {
   /// jobs — a sheet/input vs. a cell — even though they currently share a value.
   final Color labelCard;
 
+  /// The brand accent (`AppColors.Y`, stamp red), flip-safe for use as *text or icon* colour on a
+  /// light/translucent surface — never for a solid fill (fills keep using `AppColors.Y` directly
+  /// with [brandOn] on top, unaffected by this).
+  ///
+  /// Added for the documented residual at `AppPalette.dark`'s own doc comment: raw `AppColors.Y`
+  /// as text only clears 2.91:1 on [bg2] in dark mode — below AA — because the accent does not
+  /// flip and was never meant to sit under a light theme's high-luminance ink expectations. Equals
+  /// `AppColors.Y` unchanged in light mode (already 4.87-5.37:1 per that colour's own doc comment);
+  /// in dark mode, the same lightened value as [red]'s own dark variant (`#F0736E`, 6.4:1 on
+  /// `bg2`) — Y and red sit a few degrees apart on the same hue, so reusing red's already-verified
+  /// dark-mode lightening reads as the same ink family, not a second accent.
+  final Color accentInk;
+
   // ── Instances ─────────────────────────────────────────────────────────────
 
   /// The light palette. Il Documento's paper-and-ink world (see DESIGN.md).
@@ -185,6 +199,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     redSoft: Color(0xFFFFD1D1),
     brandOn: Color(0xFFFBF9F4),
     labelCard: Color(0xFFFBF9F4),
+    accentInk: Color(0xFFC03221),
   );
 
   /// The dark palette.
@@ -238,6 +253,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     redSoft: Color(0xFF4A2320),
     brandOn: Color(0xFFFBF9F4),
     labelCard: Color(0xFF1E1F24),
+    accentInk: Color(0xFFF0736E),
   );
 
   @override
@@ -267,6 +283,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
     Color? redSoft,
     Color? brandOn,
     Color? labelCard,
+    Color? accentInk,
   }) {
     return AppPalette(
       ink: ink ?? this.ink,
@@ -294,6 +311,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       redSoft: redSoft ?? this.redSoft,
       brandOn: brandOn ?? this.brandOn,
       labelCard: labelCard ?? this.labelCard,
+      accentInk: accentInk ?? this.accentInk,
     );
   }
 
@@ -330,6 +348,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
       redSoft: c(redSoft, other.redSoft),
       brandOn: c(brandOn, other.brandOn),
       labelCard: c(labelCard, other.labelCard),
+      accentInk: c(accentInk, other.accentInk),
     );
   }
 }
@@ -340,5 +359,6 @@ extension AppPaletteContext on BuildContext {
   ///
   /// A widget test that pumps a bare `MaterialApp` registers no extension, and a screen that
   /// renders in the wrong colours is a better failure there than one that cannot render at all.
-  AppPalette get colors => Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
+  AppPalette get colors =>
+      Theme.of(this).extension<AppPalette>() ?? AppPalette.light;
 }

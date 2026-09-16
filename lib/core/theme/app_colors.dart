@@ -183,7 +183,12 @@ abstract final class AppColors {
   /// SH_INSET — inset shadow: inset 0 2px 4px rgba(0,0,0,0.10).
   /// Flutter doesn't support CSS inset; approximate with inner shadow.
   static const List<BoxShadow> SH_INSET = [
-    BoxShadow(color: Color(0x1A000000), offset: Offset(0, 2), blurRadius: 4, spreadRadius: -2),
+    BoxShadow(
+      color: Color(0x1A000000),
+      offset: Offset(0, 2),
+      blurRadius: 4,
+      spreadRadius: -2,
+    ),
   ];
 
   // ── Legacy aliases (keep screens compiling) ───────────────────────────────

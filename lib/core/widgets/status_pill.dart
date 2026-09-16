@@ -1,38 +1,33 @@
 import 'package:flutter/material.dart';
 
-import '../theme/status_colors.dart';
-import 'badge.dart';
+import 'status_stamp.dart';
 
-/// Status pill badge — driven by the 13 Italian status strings.
+/// Status pill — Il Documento's stamp device, driven by the ~15 Italian status strings this app
+/// renders (see [statusFamilyOf] in `status_colors.dart`).
 ///
-/// Uses [statusColor] for background / foreground colours and wraps [AppBadge].
+/// Was a flat colored [AppBadge] pill with an `outlined` flag every call site but two already set
+/// true — a stepping-stone toward a stamped-placard look, per that flag's own retired doc comment.
+/// Now renders a real [StatusStamp] unconditionally; the flag is gone rather than kept as a no-op,
+/// since a stamp was never going to be a solid-filled pill either way.
 ///
 /// ```dart
 /// StatusPill(stato: 'In corso');
 /// StatusPill(stato: 'Completato', small: true);
 /// ```
 class StatusPill extends StatelessWidget {
-  const StatusPill({super.key, required this.stato, this.small = false, this.outlined = false});
+  const StatusPill({super.key, required this.stato, this.small = false});
 
-  /// Italian status string — one of the 13 values in DESIGN-SPEC.md.
+  /// Italian status string.
   final String stato;
 
-  /// When true renders the smaller badge variant.
+  /// When true renders the smaller stamp size.
   final bool small;
-
-  /// Rule-bordered flat badge instead of a filled color pill. See [AppBadge.outlined].
-  final bool outlined;
 
   @override
   Widget build(BuildContext context) {
-    final pair = statusColor(context, stato);
-
-    return AppBadge(
-      label: stato,
-      small: small,
-      bgColor: pair.background,
-      fgColor: pair.foreground,
-      outlined: outlined,
+    return StatusStamp(
+      stato: stato,
+      size: small ? StampSize.small : StampSize.medium,
     );
   }
 }

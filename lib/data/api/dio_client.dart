@@ -20,7 +20,10 @@ final dioProvider = Provider<Dio>((ref) {
       baseUrl: Env.apiBaseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 30),
-      headers: {'Accept': 'application/json', 'Content-Type': 'application/json'},
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
     ),
   );
 
@@ -47,7 +50,9 @@ final dioProvider = Provider<Dio>((ref) {
           handler.next(options);
         },
         onResponse: (response, handler) {
-          debugPrint('← ${response.statusCode} ${response.requestOptions.uri.path}');
+          debugPrint(
+            '← ${response.statusCode} ${response.requestOptions.uri.path}',
+          );
           handler.next(response);
         },
         onError: (error, handler) {
@@ -99,11 +104,15 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
     final response = err.response;
 
     // Only handle 401 Unauthorized — and only once (not on retry).
-    if (response?.statusCode == 401 && err.requestOptions.extra['_retried'] != true) {
+    if (response?.statusCode == 401 &&
+        err.requestOptions.extra['_retried'] != true) {
       // Attempt silent refresh.
       final refreshResult = await authRepo.refreshSession();
 
@@ -111,7 +120,8 @@ class AuthInterceptor extends Interceptor {
         // Token refreshed — retry the original request.
         final options = err.requestOptions
           ..extra['_retried'] = true
-          ..headers['Authorization'] = 'Bearer ${refreshResult.user!.accessToken}';
+          ..headers['Authorization'] =
+              'Bearer ${refreshResult.user!.accessToken}';
 
         try {
           final retryResponse = await dio.fetch(options);

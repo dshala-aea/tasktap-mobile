@@ -246,9 +246,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                     Expanded(
                       child: AppButton(
                         label: _isLast ? (_isSaving ? 'Salvataggio…' : 'Salva') : 'Avanti',
-                        onPressed: !_canProceed || _isSaving
-                            ? null
-                            : (_isLast ? _onSave : _goNext),
+                        onPressed: !_canProceed || _isSaving ? null : (_isLast ? _onSave : _goNext),
                         size: AppButtonSize.lg,
                       ),
                     ),

@@ -60,7 +60,9 @@ class ProfiloScreen extends ConsumerWidget {
 
                     Text(
                       user.email,
-                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: context.colors.inkFaint,
+                      ),
                     ),
                   ],
                 ),
@@ -92,7 +94,9 @@ class ProfiloScreen extends ConsumerWidget {
   }
 
   String _initials(String nameOrEmail) {
-    final parts = nameOrEmail.split(RegExp(r'[\s@]+')).where((p) => p.isNotEmpty);
+    final parts = nameOrEmail
+        .split(RegExp(r'[\s@]+'))
+        .where((p) => p.isNotEmpty);
     if (parts.isEmpty) return '?';
     if (parts.length == 1) return parts.first[0].toUpperCase();
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
@@ -105,7 +109,10 @@ class ProfiloScreen extends ConsumerWidget {
         title: const Text('Disconnetti'),
         content: const Text('Sei sicuro di voler uscire dall\'account?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annulla')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: context.colors.red),

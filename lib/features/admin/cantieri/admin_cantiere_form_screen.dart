@@ -25,12 +25,10 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// Keyed by the selected client id (item 2 of the admin-form audit): refetches, server-filtered
 /// via `fetchCommesse`'s own `customerId` param, whenever the client picker changes, instead of
 /// showing every commessa across every customer.
-final adminCommesseProvider = FutureProvider.autoDispose.family<List<Map<String, dynamic>>, String?>((
-  ref,
-  customerId,
-) {
-  return ref.watch(adminApiClientProvider).fetchCommesse(customerId: customerId);
-});
+final adminCommesseProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String?>((ref, customerId) {
+      return ref.watch(adminApiClientProvider).fetchCommesse(customerId: customerId);
+    });
 
 /// Admin cantiere form — create or edit.
 class AdminCantiereFormScreen extends ConsumerStatefulWidget {

@@ -119,63 +119,67 @@ class _MagazzinoBody extends ConsumerWidget {
         ref.invalidate(movimentiProvider);
       },
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(title: 'Magazzino', showBack: true),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-            child: AppTabs(
-              tabs: const [
-                AppTab(label: 'Articoli'),
-                AppTab(label: 'Giacenze'),
-                AppTab(label: 'Movimenti'),
-              ],
-              selectedIndex: tab.index,
-              onSelected: (i) => onTabChanged(_MagazzinoTab.values[i]),
-            ),
-          ),
-        ),
-        if (tab != _MagazzinoTab.movimenti)
+        slivers: [
           SliverToBoxAdapter(
-            child: Row(
-              children: [
-                Expanded(
-                  child: AppSearchBar(
-                    controller: searchCtrl,
-                    hint: tab == _MagazzinoTab.articoli
-                        ? 'Cerca per nome, codice o marca…'
-                        : 'Cerca materiale…',
-                    onChanged: onQueryChanged,
-                    // Own right margin dropped to a small gap — the scan button follows it now,
-                    // rather than the field sitting flush against the screen edge.
-                    margin: const EdgeInsets.fromLTRB(19, 0, 8, 12),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 12),
-                  child: IconButton(
-                    icon: const Icon(LucideIcons.scanLine),
-                    tooltip: 'Scansiona codice',
-                    onPressed: () async {
-                      final match = await scanForMateriale(context, ref, title: 'Cerca materiale');
-                      if (match == null) return;
-                      searchCtrl.text = match.code;
-                      onQueryChanged(match.code);
-                    },
-                  ),
-                ),
-              ],
+            child: ScreenHeader(title: 'Magazzino', showBack: true),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: AppTabs(
+                tabs: const [
+                  AppTab(label: 'Articoli'),
+                  AppTab(label: 'Giacenze'),
+                  AppTab(label: 'Movimenti'),
+                ],
+                selectedIndex: tab.index,
+                onSelected: (i) => onTabChanged(_MagazzinoTab.values[i]),
+              ),
             ),
           ),
-        ...switch (tab) {
-          _MagazzinoTab.articoli => _articoliSlivers(context, ref),
-          _MagazzinoTab.giacenze => _giacenzeSlivers(context, ref),
-          _MagazzinoTab.movimenti => _movimentiSlivers(context, ref),
-        },
-        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
-      ],
+          if (tab != _MagazzinoTab.movimenti)
+            SliverToBoxAdapter(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppSearchBar(
+                      controller: searchCtrl,
+                      hint: tab == _MagazzinoTab.articoli
+                          ? 'Cerca per nome, codice o marca…'
+                          : 'Cerca materiale…',
+                      onChanged: onQueryChanged,
+                      // Own right margin dropped to a small gap — the scan button follows it now,
+                      // rather than the field sitting flush against the screen edge.
+                      margin: const EdgeInsets.fromLTRB(19, 0, 8, 12),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8, bottom: 12),
+                    child: IconButton(
+                      icon: const Icon(LucideIcons.scanLine),
+                      tooltip: 'Scansiona codice',
+                      onPressed: () async {
+                        final match = await scanForMateriale(
+                          context,
+                          ref,
+                          title: 'Cerca materiale',
+                        );
+                        if (match == null) return;
+                        searchCtrl.text = match.code;
+                        onQueryChanged(match.code);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ...switch (tab) {
+            _MagazzinoTab.articoli => _articoliSlivers(context, ref),
+            _MagazzinoTab.giacenze => _giacenzeSlivers(context, ref),
+            _MagazzinoTab.movimenti => _movimentiSlivers(context, ref),
+          },
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
       ),
     );
   }
@@ -532,7 +536,11 @@ class _GiacenzaRow extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListRow(
-                  leading: Icon(LucideIcons.arrowDownToLine, size: 20, color: ctx.colors.green),
+                  leading: Icon(
+                    LucideIcons.arrowDownToLine,
+                    size: 20,
+                    color: ctx.colors.green,
+                  ),
                   title: 'Carico',
                   subtitle: 'Aggiungi quantità a questo magazzino',
                   onTap: () {
@@ -541,7 +549,11 @@ class _GiacenzaRow extends ConsumerWidget {
                   },
                 ),
                 ListRow(
-                  leading: Icon(LucideIcons.arrowUpFromLine, size: 20, color: ctx.colors.amber),
+                  leading: Icon(
+                    LucideIcons.arrowUpFromLine,
+                    size: 20,
+                    color: ctx.colors.amber,
+                  ),
                   title: 'Scarico',
                   subtitle: 'Rimuovi quantità da questo magazzino',
                   onTap: () {
@@ -550,7 +562,11 @@ class _GiacenzaRow extends ConsumerWidget {
                   },
                 ),
                 ListRow(
-                  leading: Icon(LucideIcons.arrowLeftRight, size: 20, color: ctx.colors.inkMuted),
+                  leading: Icon(
+                    LucideIcons.arrowLeftRight,
+                    size: 20,
+                    color: ctx.colors.inkMuted,
+                  ),
                   title: 'Trasferisci',
                   subtitle: 'Sposta quantità verso un altro magazzino',
                   onTap: () {
@@ -559,8 +575,14 @@ class _GiacenzaRow extends ConsumerWidget {
                   },
                 ),
                 ListRow(
-                  leading: Icon(LucideIcons.alertTriangle, size: 20, color: ctx.colors.inkMuted),
-                  title: hasStockMinimo ? 'Modifica soglia minima' : 'Imposta soglia minima',
+                  leading: Icon(
+                    LucideIcons.alertTriangle,
+                    size: 20,
+                    color: ctx.colors.inkMuted,
+                  ),
+                  title: hasStockMinimo
+                      ? 'Modifica soglia minima'
+                      : 'Imposta soglia minima',
                   showDivider: hasStockMinimo,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -569,7 +591,11 @@ class _GiacenzaRow extends ConsumerWidget {
                 ),
                 if (hasStockMinimo)
                   ListRow(
-                    leading: Icon(LucideIcons.x, size: 20, color: ctx.colors.red),
+                    leading: Icon(
+                      LucideIcons.x,
+                      size: 20,
+                      color: ctx.colors.red,
+                    ),
                     title: 'Rimuovi soglia minima',
                     showDivider: false,
                     onTap: () async {
@@ -610,7 +636,7 @@ class _GiacenzaRow extends ConsumerWidget {
                   Text(
                     isCarico ? 'Carico' : 'Scarico',
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: ctx.colors.ink,
@@ -662,7 +688,9 @@ class _GiacenzaRow extends ConsumerWidget {
 
                                   setDialogState(() => isSaving = true);
                                   try {
-                                    final client = ref.read(magazzinoApiClientProvider);
+                                    final client = ref.read(
+                                      magazzinoApiClientProvider,
+                                    );
                                     final note = noteCtrl.text.trim().isEmpty
                                         ? null
                                         : noteCtrl.text.trim();
@@ -697,7 +725,10 @@ class _GiacenzaRow extends ConsumerWidget {
                                     if (context.mounted) {
                                       showAppToast(
                                         context,
-                                        message: _movimentoErrorMessage(e, isCarico: isCarico),
+                                        message: _movimentoErrorMessage(
+                                          e,
+                                          isCarico: isCarico,
+                                        ),
                                         tone: ToastTone.error,
                                       );
                                     }
@@ -745,7 +776,7 @@ class _GiacenzaRow extends ConsumerWidget {
                   Text(
                     'Trasferisci',
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: ctx.colors.ink,
@@ -773,7 +804,10 @@ class _GiacenzaRow extends ConsumerWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Da: ${giacenza.magazzinoNome ?? giacenza.magazzinoId}',
-                          style: TextStyle(fontSize: 12, color: ctx.colors.inkMuted),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: ctx.colors.inkMuted,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Consumer(
@@ -785,7 +819,10 @@ class _GiacenzaRow extends ConsumerWidget {
                                 child: CircularProgressIndicator(),
                               ),
                               error: (e, _) => Text(
-                                humanErrorMessage(e, azione: 'caricare i magazzini'),
+                                humanErrorMessage(
+                                  e,
+                                  azione: 'caricare i magazzini',
+                                ),
                               ),
                               data: (list) {
                                 final options = list
@@ -796,7 +833,9 @@ class _GiacenzaRow extends ConsumerWidget {
                                   child: DropdownButtonFormField<String>(
                                     // ignore: deprecated_member_use — controlled field
                                     value: destinationId,
-                                    decoration: const InputDecoration(isDense: true),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                    ),
                                     isExpanded: true,
                                     items: [
                                       for (final m in options)
@@ -822,7 +861,9 @@ class _GiacenzaRow extends ConsumerWidget {
                               decimal: true,
                             ),
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.]'),
+                              ),
                             ],
                           ),
                         ),
@@ -853,12 +894,15 @@ class _GiacenzaRow extends ConsumerWidget {
                               : () async {
                                   final qty = double.tryParse(qtyCtrl.text);
                                   final dest = destinationId;
-                                  if (qty == null || qty <= 0 || dest == null) return;
+                                  if (qty == null || qty <= 0 || dest == null)
+                                    return;
                                   if (!ensureOnlineOrWarn(context, ref)) return;
 
                                   setDialogState(() => isSaving = true);
                                   try {
-                                    final client = ref.read(magazzinoApiClientProvider);
+                                    final client = ref.read(
+                                      magazzinoApiClientProvider,
+                                    );
                                     await client.trasferimento(
                                       magazzinoId: giacenza.magazzinoId,
                                       materialeId: giacenza.materialeId,
@@ -882,7 +926,10 @@ class _GiacenzaRow extends ConsumerWidget {
                                     if (context.mounted) {
                                       showAppToast(
                                         context,
-                                        message: _movimentoErrorMessage(e, isCarico: false),
+                                        message: _movimentoErrorMessage(
+                                          e,
+                                          isCarico: false,
+                                        ),
                                         tone: ToastTone.error,
                                       );
                                     }
@@ -920,7 +967,7 @@ class _GiacenzaRow extends ConsumerWidget {
               Text(
                 'Soglia minima',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: ctx.colors.ink,
@@ -931,7 +978,9 @@ class _GiacenzaRow extends ConsumerWidget {
                 label: 'Quantità minima',
                 child: TextField(
                   controller: ctrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                   ],
@@ -959,7 +1008,10 @@ class _GiacenzaRow extends ConsumerWidget {
                         try {
                           await ref
                               .read(magazzinoApiClientProvider)
-                              .setStockMinimo(stockId: giacenza.id, stockMinimo: value);
+                              .setStockMinimo(
+                                stockId: giacenza.id,
+                                stockMinimo: value,
+                              );
                           _refresh(ref);
                           if (context.mounted) {
                             showAppToast(

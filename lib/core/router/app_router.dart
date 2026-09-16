@@ -205,7 +205,8 @@ GoRouter buildRouter(WidgetRef ref) {
     debugLogDiagnostics: false,
     redirect: (context, state) {
       final kioskState = ref.read(kioskModeProvider);
-      final isOnKioskActivate = state.matchedLocation == AppRoutes.kioskActivate;
+      final isOnKioskActivate =
+          state.matchedLocation == AppRoutes.kioskActivate;
       final isOnKioskDisplay = state.matchedLocation == AppRoutes.kioskDisplay;
 
       // While secure storage is still being read at cold start, stay put — same "don't redirect
@@ -238,7 +239,10 @@ GoRouter buildRouter(WidgetRef ref) {
       );
     },
     // Rebuild router on auth state OR kiosk mode changes so redirects are applied to both.
-    refreshListenable: Listenable.merge([_AuthStateListenable(ref), _KioskStateListenable(ref)]),
+    refreshListenable: Listenable.merge([
+      _AuthStateListenable(ref),
+      _KioskStateListenable(ref),
+    ]),
     routes: [
       // ── Kiosk ───────────────────────────────────────────────────────────
       GoRoute(
@@ -277,7 +281,10 @@ GoRouter buildRouter(WidgetRef ref) {
         builder: (context, state) {
           final ticketId = state.uri.queryParameters['ticketId'];
           final customerId = state.uri.queryParameters['customerId'];
-          return SelezionaCantiereScreen(ticketId: ticketId, customerId: customerId);
+          return SelezionaCantiereScreen(
+            ticketId: ticketId,
+            customerId: customerId,
+          );
         },
       ),
 
@@ -417,12 +424,14 @@ GoRouter buildRouter(WidgetRef ref) {
                   ),
                   GoRoute(
                     path: 'ferie',
-                    builder: (context, state) => const FeriePermessiListScreen(),
+                    builder: (context, state) =>
+                        const FeriePermessiListScreen(),
                     routes: [
                       GoRoute(
                         path: 'nuovo',
                         parentNavigatorKey: rootNavigatorKey,
-                        builder: (context, state) => const FeriePermessiFormScreen(),
+                        builder: (context, state) =>
+                            const FeriePermessiFormScreen(),
                       ),
                     ],
                   ),
@@ -533,8 +542,9 @@ GoRouter buildRouter(WidgetRef ref) {
                     // screen (Gap 9 of the feature audit, "Pianificazioni squadra" header
                     // action) — pre-applies the squadra filter instead of landing on the
                     // unfiltered list and making the admin reopen the filter sheet.
-                    builder: (context, state) =>
-                        AdminScheduleListScreen(initialSquadraId: state.extra as String?),
+                    builder: (context, state) => AdminScheduleListScreen(
+                      initialSquadraId: state.extra as String?,
+                    ),
                     routes: [
                       GoRoute(
                         path: 'nuova',

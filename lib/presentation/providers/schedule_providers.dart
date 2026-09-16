@@ -7,7 +7,9 @@ import '../../data/sync/sync_service.dart';
 // ── Today's schedules ──────────────────────────────────────────────────────────
 
 /// Stream of today's schedules from the local Drift DB (fully offline).
-final todaySchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
+final todaySchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   // "Today" is the UTC calendar day — schedules' activityDate is stored as a
   // UTC-midnight date, so the window must be UTC to bucket correctly across the
@@ -36,7 +38,8 @@ final weekSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
   return (db.select(db.schedules)
         ..where(
           (s) =>
-              s.activityDate.isBiggerOrEqualValue(start) & s.activityDate.isSmallerThanValue(end),
+              s.activityDate.isBiggerOrEqualValue(start) &
+              s.activityDate.isSmallerThanValue(end),
         )
         ..orderBy([
           (s) => OrderingTerm.asc(s.activityDate),
@@ -48,27 +51,40 @@ final weekSchedulesProvider = StreamProvider.autoDispose<List<Schedule>>((ref) {
 // ── Customer / Location look-ups ───────────────────────────────────────────────
 
 /// Look up a single [Customer] by id from the local cache.
-final customerByIdProvider = StreamProvider.autoDispose.family<Customer?, String>((ref, id) {
-  final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.customers)..where((c) => c.id.equals(id))).watchSingleOrNull();
-});
+final customerByIdProvider = StreamProvider.autoDispose
+    .family<Customer?, String>((ref, id) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.customers,
+      )..where((c) => c.id.equals(id))).watchSingleOrNull();
+    });
 
 /// Look up a single [Location] by id from the local cache.
-final locationByIdProvider = StreamProvider.autoDispose.family<Location?, String>((ref, id) {
-  final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.locations)..where((l) => l.id.equals(id))).watchSingleOrNull();
-});
+final locationByIdProvider = StreamProvider.autoDispose
+    .family<Location?, String>((ref, id) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.locations,
+      )..where((l) => l.id.equals(id))).watchSingleOrNull();
+    });
 
 /// Look up a single [Ticket] by id from the local cache.
-final ticketByIdProvider = StreamProvider.autoDispose.family<Ticket?, String>((ref, id) {
+final ticketByIdProvider = StreamProvider.autoDispose.family<Ticket?, String>((
+  ref,
+  id,
+) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.tickets)..where((t) => t.id.equals(id))).watchSingleOrNull();
+  return (db.select(
+    db.tickets,
+  )..where((t) => t.id.equals(id))).watchSingleOrNull();
 });
 
 // ── Draft reports ──────────────────────────────────────────────────────────────
 
 /// Stream of all draft reports for the current user from the local Drift DB.
-final draftReportsProvider = StreamProvider.autoDispose<List<DraftReport>>((ref) {
+final draftReportsProvider = StreamProvider.autoDispose<List<DraftReport>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.draftReports)
         ..where((r) => r.stato.equals('Bozza'))
@@ -91,7 +107,9 @@ final allCustomersProvider = StreamProvider.autoDispose<List<Customer>>((ref) {
 /// Consumers (`step_materiali_fold.dart`) still degrade to a free-text field when the list is
 /// empty — a first run before the first sync, or a tenant with no catalogue — so a technician is
 /// never blocked from recording a materiale by name.
-final allMaterialiProvider = StreamProvider.autoDispose<List<MaterialiData>>((ref) {
+final allMaterialiProvider = StreamProvider.autoDispose<List<MaterialiData>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.materiali)
         ..where((m) => m.isActive.equals(true))
@@ -107,9 +125,13 @@ final allMaterialiProvider = StreamProvider.autoDispose<List<MaterialiData>>((re
 /// or type one. When this list is empty the step says so and offers no way to invent an entry,
 /// because the previous behaviour was to fabricate `user-<timestamp>` and let those hours reach
 /// payroll attributed to nobody.
-final allColleaguesProvider = StreamProvider.autoDispose<List<Colleague>>((ref) {
+final allColleaguesProvider = StreamProvider.autoDispose<List<Colleague>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.colleagues)..orderBy([(c) => OrderingTerm.asc(c.displayName)])).watch();
+  return (db.select(
+    db.colleagues,
+  )..orderBy([(c) => OrderingTerm.asc(c.displayName)])).watch();
 });
 
 /// One colleague's display name, from the same local mirror.
@@ -126,40 +148,46 @@ final allColleaguesProvider = StreamProvider.autoDispose<List<Colleague>>((ref) 
 /// Null when the id is unknown to the mirror — a colleague who left, or a sync that has not landed
 /// yet. Callers fall back to the id rather than to an empty string: an unfamiliar id is at least
 /// something to read out over the phone.
-final colleagueNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, userId) {
-  final db = ref.watch(appDatabaseProvider);
-  return (db.select(
-    db.colleagues,
-  )..where((c) => c.id.equals(userId))).watchSingleOrNull().map((c) => c?.displayName);
-});
+final colleagueNameProvider = StreamProvider.autoDispose
+    .family<String?, String>((ref, userId) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(db.colleagues)..where((c) => c.id.equals(userId)))
+          .watchSingleOrNull()
+          .map((c) => c?.displayName);
+    });
 
 /// Resolves a location id to its name from the local mirror — same fallback contract as
 /// [colleagueNameProvider]: null when the mirror doesn't (yet) know the id, so a caller can fall
 /// back to the raw id rather than show nothing.
-final locationNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, locationId) {
-  final db = ref.watch(appDatabaseProvider);
-  return (db.select(
-    db.locations,
-  )..where((l) => l.id.equals(locationId))).watchSingleOrNull().map((l) => l?.name);
-});
+final locationNameProvider = StreamProvider.autoDispose.family<String?, String>(
+  (ref, locationId) {
+    final db = ref.watch(appDatabaseProvider);
+    return (db.select(db.locations)..where((l) => l.id.equals(locationId)))
+        .watchSingleOrNull()
+        .map((l) => l?.name);
+  },
+);
 
 /// Resolves a customer id to its company name from the local mirror. Same fallback contract as
 /// [colleagueNameProvider].
-final customerNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, customerId) {
-  final db = ref.watch(appDatabaseProvider);
-  return (db.select(
-    db.customers,
-  )..where((c) => c.id.equals(customerId))).watchSingleOrNull().map((c) => c?.companyName);
-});
+final customerNameProvider = StreamProvider.autoDispose.family<String?, String>(
+  (ref, customerId) {
+    final db = ref.watch(appDatabaseProvider);
+    return (db.select(db.customers)..where((c) => c.id.equals(customerId)))
+        .watchSingleOrNull()
+        .map((c) => c?.companyName);
+  },
+);
 
 /// Resolves a materiale id (a catalog pick, not a free-text line) to its name from the local
 /// mirror. Same fallback contract as [colleagueNameProvider].
-final materialeNameProvider = StreamProvider.autoDispose.family<String?, String>((ref, materialeId) {
-  final db = ref.watch(appDatabaseProvider);
-  return (db.select(
-    db.materiali,
-  )..where((m) => m.id.equals(materialeId))).watchSingleOrNull().map((m) => m?.name);
-});
+final materialeNameProvider = StreamProvider.autoDispose
+    .family<String?, String>((ref, materialeId) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(db.materiali)..where((m) => m.id.equals(materialeId)))
+          .watchSingleOrNull()
+          .map((m) => m?.name);
+    });
 
 final allLocationsProvider = StreamProvider.autoDispose<List<Location>>((ref) {
   final db = ref.watch(appDatabaseProvider);
@@ -171,16 +199,22 @@ final allLocationsProvider = StreamProvider.autoDispose<List<Location>>((ref) {
 
 final allTicketsProvider = StreamProvider.autoDispose<List<Ticket>>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.tickets)..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).watch();
+  return (db.select(
+    db.tickets,
+  )..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).watch();
 });
 
 /// The cantieri, from the local mirror the sync fills.
 ///
 /// Consumers (`step_dettagli.dart`'s `_TicketCantierePicker`) still degrade to a free-text field
 /// when the list is empty, so report submission is never blocked.
-final allCantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref) {
+final allCantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((
+  ref,
+) {
   final db = ref.watch(appDatabaseProvider);
-  return (db.select(db.cantieri)..orderBy([(c) => OrderingTerm.asc(c.name)])).watch();
+  return (db.select(
+    db.cantieri,
+  )..orderBy([(c) => OrderingTerm.asc(c.name)])).watch();
 });
 
 // ── Schedule assignment (ADR-0009) ─────────────────────────────────────────────
@@ -190,14 +224,13 @@ final allCantieriProvider = StreamProvider.autoDispose<List<CantieriData>>((ref)
 /// Kept separate from [Schedule] itself on purpose — see `app_database.dart`'s `Schedules` doc
 /// comment: `teamLeadId`/`staffIds`/`squadraId` were dropped from that table when assignment moved
 /// server-side to a set of rows, and this reads that same set rather than re-adding them.
-final scheduleAssigneesProvider = StreamProvider.autoDispose.family<List<ScheduleAssignee>, String>(
-  (ref, scheduleId) {
-    final db = ref.watch(appDatabaseProvider);
-    return (db.select(
-      db.scheduleAssignees,
-    )..where((a) => a.scheduleId.equals(scheduleId))).watch();
-  },
-);
+final scheduleAssigneesProvider = StreamProvider.autoDispose
+    .family<List<ScheduleAssignee>, String>((ref, scheduleId) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.scheduleAssignees,
+      )..where((a) => a.scheduleId.equals(scheduleId))).watch();
+    });
 
 /// Ids of every schedule that has at least one squadra-mediated assignee (`isTeam`).
 ///
@@ -205,16 +238,18 @@ final scheduleAssigneesProvider = StreamProvider.autoDispose.family<List<Schedul
 /// to the device (only `/api/schedules/{id}` resolves it, online-only), so a calendar view can
 /// show *that* a schedule is squadra-assigned without fabricating a name it does not have. See
 /// `calendario/views/*` — the four calendar views read this to render a team indicator.
-final teamAssignedScheduleIdsProvider = StreamProvider.autoDispose<Set<String>>((ref) {
-  final db = ref.watch(appDatabaseProvider);
-  final query = db.selectOnly(db.scheduleAssignees)
-    ..addColumns([db.scheduleAssignees.scheduleId])
-    ..where(db.scheduleAssignees.isTeam.equals(true));
-  return query
-      .map((row) => row.read(db.scheduleAssignees.scheduleId)!)
-      .watch()
-      .map((ids) => ids.toSet());
-});
+final teamAssignedScheduleIdsProvider = StreamProvider.autoDispose<Set<String>>(
+  (ref) {
+    final db = ref.watch(appDatabaseProvider);
+    final query = db.selectOnly(db.scheduleAssignees)
+      ..addColumns([db.scheduleAssignees.scheduleId])
+      ..where(db.scheduleAssignees.isTeam.equals(true));
+    return query
+        .map((row) => row.read(db.scheduleAssignees.scheduleId)!)
+        .watch()
+        .map((ids) => ids.toSet());
+  },
+);
 
 /// `scheduleId` → every `userId` on it, from the local `ScheduleAssignees` mirror — everyone,
 /// regardless of why they are on it (direct, lead, squadra member, legacy staff).
@@ -227,13 +262,14 @@ final teamAssignedScheduleIdsProvider = StreamProvider.autoDispose<Set<String>>(
 /// `teamAssignedScheduleIdsProvider`'s doc comment) but its *members* are known once fetched
 /// (`AdminApiClient.fetchSquadraDetail`), so the squadra filter intersects this map's per-schedule
 /// user sets against the fetched member ids.
-final scheduleAssigneeMapProvider = StreamProvider.autoDispose<Map<String, Set<String>>>((ref) {
-  final db = ref.watch(appDatabaseProvider);
-  return db.select(db.scheduleAssignees).watch().map((rows) {
-    final map = <String, Set<String>>{};
-    for (final row in rows) {
-      map.putIfAbsent(row.scheduleId, () => {}).add(row.userId);
-    }
-    return map;
-  });
-});
+final scheduleAssigneeMapProvider =
+    StreamProvider.autoDispose<Map<String, Set<String>>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      return db.select(db.scheduleAssignees).watch().map((rows) {
+        final map = <String, Set<String>>{};
+        for (final row in rows) {
+          map.putIfAbsent(row.scheduleId, () => {}).add(row.userId);
+        }
+        return map;
+      });
+    });

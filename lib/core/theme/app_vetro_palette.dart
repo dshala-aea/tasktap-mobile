@@ -140,7 +140,9 @@ class AppVetroPalette extends ThemeExtension<AppVetroPalette> {
   static const dark = AppVetroPalette(
     tint: Color(0xFF7C93FF),
     tintStrong: Color(0xFFA78BFA),
-    glassFill: Color(0x33FFFFFF), // white, 20% — a light film over dark reads; 68% would not
+    glassFill: Color(
+      0x33FFFFFF,
+    ), // white, 20% — a light film over dark reads; 68% would not
     glassBorder: Color(0x40FFFFFF),
     hairline: Color(0x1FFFFFFF), // white, 12%
     statusGood: Color(0xFF3DD866),
@@ -205,5 +207,6 @@ extension AppVetroPaletteContext on BuildContext {
   /// Falls back to [AppVetroPalette.light], same reasoning as [AppPaletteContext.colors]: a
   /// widget test that pumps a bare `MaterialApp` registers no extension, and rendering in the
   /// wrong colours is a better test failure than an exception.
-  AppVetroPalette get vetro => Theme.of(this).extension<AppVetroPalette>() ?? AppVetroPalette.light;
+  AppVetroPalette get vetro =>
+      Theme.of(this).extension<AppVetroPalette>() ?? AppVetroPalette.light;
 }

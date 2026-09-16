@@ -260,7 +260,8 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     final locationsAsync = ref.watch(allLocationsProvider);
     final locations = locationsAsync.valueOrNull ?? [];
 
-    String dateLabel(DateTime? d) => d != null ? DateFormat('dd/MM/yyyy').format(d) : 'Seleziona data';
+    String dateLabel(DateTime? d) =>
+        d != null ? DateFormat('dd/MM/yyyy').format(d) : 'Seleziona data';
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
@@ -281,190 +282,200 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
                 context.navClearance,
               ),
               children: [
-            AppTextField(
-              label: 'Nome *',
-              controller: _nameCtrl,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
+                AppTextField(
+                  label: 'Nome *',
+                  controller: _nameCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+                ),
+                const SizedBox(height: 16),
 
-            AppTextField(label: 'Codice', hint: 'Es. PROD-001', controller: _codiceCtrl),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Codice', hint: 'Es. PROD-001', controller: _codiceCtrl),
+                const SizedBox(height: 16),
 
-            AppFieldShell(
-              label: 'Cliente *',
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedCustomerId,
-                items: customers
-                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
-                    .toList(),
-                onChanged: _onCustomerChanged,
-                validator: (v) => v == null ? 'Campo obbligatorio' : null,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AppFieldShell(
-              label: 'Sede *',
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedLocationId,
-                items: locations
-                    .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedLocationId = v),
-                validator: (v) => v == null ? 'Campo obbligatorio' : null,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(child: AppTextField(label: 'Marca', controller: _marcaCtrl)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppLookupField(
-                    label: 'Modello',
-                    items: _modelliItems,
-                    initialText: _modello,
-                    onSelected: (id) => setState(() => _modello = id),
-                    onFreeText: (v) => setState(() => _modello = v),
+                AppFieldShell(
+                  label: 'Cliente *',
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedCustomerId,
+                    items: customers
+                        .map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName)))
+                        .toList(),
+                    onChanged: _onCustomerChanged,
+                    validator: (v) => v == null ? 'Campo obbligatorio' : null,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            Row(
-              children: [
-                Expanded(child: AppTextField(label: 'Categoria', controller: _categoriaCtrl)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppTextField(
-                    label: 'Unità di misura',
-                    hint: 'pz, kg, mt…',
-                    controller: _umCtrl,
+                AppFieldShell(
+                  label: 'Sede *',
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _selectedLocationId,
+                    items: locations
+                        .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedLocationId = v),
+                    validator: (v) => v == null ? 'Campo obbligatorio' : null,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-            Row(
-              children: [
-                Expanded(
-                  child: AppTextField(
-                    label: 'Prezzo acquisto (€)',
-                    controller: _prezzoAcquistoCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppTextField(
-                    label: 'Prezzo vendita (€)',
-                    controller: _prezzoVenditaCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(child: AppTextField(label: 'Tipo', controller: _tipoCtrl)),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: AppTextField(label: 'Numero di serie', controller: _serialNumberCtrl),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
-            const SizedBox(height: 16),
-
-            AdminDateField(
-              label: 'Scadenza garanzia',
-              value: dateLabel(_warrantyExpiryDate),
-              onTap: () => _pickDate(
-                _warrantyExpiryDate,
-                (d) => setState(() => _warrantyExpiryDate = d),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AdminDateField(
-              label: 'Data installazione',
-              value: dateLabel(_dataInstallazione),
-              onTap: () => _pickDate(
-                _dataInstallazione,
-                (d) => setState(() => _dataInstallazione = d),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AdminDateField(
-              label: 'Ultima manutenzione',
-              value: dateLabel(_ultimaManutenzione),
-              onTap: () => _pickDate(
-                _ultimaManutenzione,
-                (d) => setState(() => _ultimaManutenzione = d),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AdminDateField(
-              label: 'Prossima manutenzione',
-              value: dateLabel(_prossimaManutenzione),
-              onTap: () => _pickDate(
-                _prossimaManutenzione,
-                (d) => setState(() => _prossimaManutenzione = d),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(
-              label: 'ID gestionale',
-              hint: 'Identificativo del sistema legacy',
-              controller: _externalIdCtrl,
-            ),
-            const SizedBox(height: 16),
-
-            AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
-            const SizedBox(height: 16),
-
-            // ── Stato — edit mode only, mirrors admin_customer_form_screen.dart's own Gap 11
-            // convention: `createProdottoAssistenza` has no isActive param, every new prodotto
-            // starts active server-side, so there is nothing to toggle at creation.
-            if (_isEditing) ...[
-              AppCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.base,
-                  vertical: AppSpacing.xs,
-                ),
-                child: Row(
+                Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        'Attivo',
-                        style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                      child: AppTextField(label: 'Marca', controller: _marcaCtrl),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppLookupField(
+                        label: 'Modello',
+                        items: _modelliItems,
+                        initialText: _modello,
+                        onSelected: (id) => setState(() => _modello = id),
+                        onFreeText: (v) => setState(() => _modello = v),
                       ),
                     ),
-                    AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
                   ],
                 ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 16),
 
-            const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(label: 'Categoria', controller: _categoriaCtrl),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Unità di misura',
+                        hint: 'pz, kg, mt…',
+                        controller: _umCtrl,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
-            AppButton(
-              label: _isEditing ? 'Salva modifiche' : 'Crea prodotto',
-              onPressed: _isSaving ? null : _save,
-              isLoading: _isSaving,
-            ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Prezzo acquisto (€)',
+                        controller: _prezzoAcquistoCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Prezzo vendita (€)',
+                        controller: _prezzoVenditaCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppTextField(label: 'Tipo', controller: _tipoCtrl),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: AppTextField(label: 'Numero di serie', controller: _serialNumberCtrl),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Descrizione', controller: _descriptionCtrl, maxLines: 3),
+                const SizedBox(height: 16),
+
+                AdminDateField(
+                  label: 'Scadenza garanzia',
+                  value: dateLabel(_warrantyExpiryDate),
+                  onTap: () => _pickDate(
+                    _warrantyExpiryDate,
+                    (d) => setState(() => _warrantyExpiryDate = d),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                AdminDateField(
+                  label: 'Data installazione',
+                  value: dateLabel(_dataInstallazione),
+                  onTap: () =>
+                      _pickDate(_dataInstallazione, (d) => setState(() => _dataInstallazione = d)),
+                ),
+                const SizedBox(height: 16),
+
+                AdminDateField(
+                  label: 'Ultima manutenzione',
+                  value: dateLabel(_ultimaManutenzione),
+                  onTap: () => _pickDate(
+                    _ultimaManutenzione,
+                    (d) => setState(() => _ultimaManutenzione = d),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                AdminDateField(
+                  label: 'Prossima manutenzione',
+                  value: dateLabel(_prossimaManutenzione),
+                  onTap: () => _pickDate(
+                    _prossimaManutenzione,
+                    (d) => setState(() => _prossimaManutenzione = d),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                AppTextField(
+                  label: 'ID gestionale',
+                  hint: 'Identificativo del sistema legacy',
+                  controller: _externalIdCtrl,
+                ),
+                const SizedBox(height: 16),
+
+                AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+                const SizedBox(height: 16),
+
+                // ── Stato — edit mode only, mirrors admin_customer_form_screen.dart's own Gap 11
+                // convention: `createProdottoAssistenza` has no isActive param, every new prodotto
+                // starts active server-side, so there is nothing to toggle at creation.
+                if (_isEditing) ...[
+                  AppCard(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.base,
+                      vertical: AppSpacing.xs,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Attivo',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.ink,
+                            ),
+                          ),
+                        ),
+                        AppToggle(
+                          value: _isActive,
+                          onChanged: (v) => setState(() => _isActive = v),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                const SizedBox(height: 16),
+
+                AppButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea prodotto',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
+                ),
               ],
             ),
           ),

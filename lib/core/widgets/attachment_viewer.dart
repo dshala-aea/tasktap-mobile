@@ -42,12 +42,8 @@ Future<void> openAttachment(
   if (contentType.startsWith('image/')) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => _FullscreenImageViewer(
-          dio: dio,
-          fileName: fileName,
-          url: url,
-          localPath: localPath,
-        ),
+        builder: (_) =>
+            _FullscreenImageViewer(dio: dio, fileName: fileName, url: url, localPath: localPath),
       ),
     );
     return;
@@ -103,7 +99,10 @@ Future<void> openAttachment(
 }
 
 Future<List<int>> _fetchBytes(Dio dio, String url) async {
-  final response = await dio.get<List<int>>(url, options: Options(responseType: ResponseType.bytes));
+  final response = await dio.get<List<int>>(
+    url,
+    options: Options(responseType: ResponseType.bytes),
+  );
   final bytes = response.data;
   if (bytes == null) throw StateError('empty attachment response');
   return bytes;
@@ -125,7 +124,12 @@ Future<List<int>> _fetchBytes(Dio dio, String url) async {
 /// a remote attachment URL needs one (see [openAttachment]'s own doc comment). A local file
 /// needs no fetch at all and renders directly.
 class _FullscreenImageViewer extends StatelessWidget {
-  const _FullscreenImageViewer({required this.dio, required this.fileName, this.url, this.localPath});
+  const _FullscreenImageViewer({
+    required this.dio,
+    required this.fileName,
+    this.url,
+    this.localPath,
+  });
 
   final Dio dio;
   final String fileName;
@@ -179,7 +183,7 @@ class _FullscreenImageViewer extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Impossibile caricare l\'immagine',
-          style: TextStyle(color: AppColors.WHITE.withAlpha(200), fontFamily: 'Inter'),
+          style: TextStyle(color: AppColors.WHITE.withAlpha(200), fontFamily: 'Archivo'),
         ),
       ],
     );

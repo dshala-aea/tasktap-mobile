@@ -126,8 +126,7 @@ class _SquadraDetailBody extends ConsumerWidget {
                 icon: LucideIcons.calendarDays,
                 label: 'Pianificazioni squadra',
                 glass: true,
-                onTap: () =>
-                    context.push('/altro/pianificazioni', extra: squadra['id'] as String?),
+                onTap: () => context.push('/altro/pianificazioni', extra: squadra['id'] as String?),
               ),
               HeaderIconBtn(
                 icon: LucideIcons.pencil,
@@ -175,7 +174,9 @@ class _SquadraDetailBody extends ConsumerWidget {
             ),
           ),
         // ── Membri section ─────────────────────────────────────────────
-        SliverToBoxAdapter(child: SectionTitle(title: 'Membri', trailing: '${membri.length}')),
+        SliverToBoxAdapter(
+          child: SectionTitle(title: 'Membri', trailing: '${membri.length}'),
+        ),
         if (membri.isEmpty)
           SliverToBoxAdapter(
             child: EmptyState(
@@ -219,6 +220,7 @@ class _SquadraDetailBody extends ConsumerWidget {
                   subtitle: subtitle,
                   meta: IconButton(
                     icon: const Icon(LucideIcons.userMinus, size: 18),
+                    tooltip: 'Rimuovi dalla squadra',
                     onPressed: () => _removeMember(context, userId),
                   ),
                   showDivider: i < membri.length - 1,
@@ -318,9 +320,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
       if (mounted) {
         // Without this, the new member is invisible on the detail screen behind this sheet
         // until the admin leaves and re-enters it — nothing else refetches this provider.
-        ProviderScope.containerOf(
-          context,
-        ).invalidate(adminSquadraDetailProvider(widget.squadraId));
+        ProviderScope.containerOf(context).invalidate(adminSquadraDetailProvider(widget.squadraId));
         showAppToast(context, message: 'Membro aggiunto', tone: ToastTone.success);
         Navigator.of(context).pop();
       }

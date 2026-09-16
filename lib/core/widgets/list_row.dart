@@ -100,7 +100,7 @@ class ListRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo Narrow',
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: c.ink,
@@ -114,7 +114,7 @@ class ListRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 12,
                           color: c.inkMuted,
                         ),

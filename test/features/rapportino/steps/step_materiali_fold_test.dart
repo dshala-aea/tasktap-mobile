@@ -79,6 +79,24 @@ Widget _buildStep(ProviderContainer container) {
   );
 }
 
+/// Controlli moved out of [StepMaterialiFold] into its own compartment tile ([StepControlli]) —
+/// see that class's own doc comment. `ticketId` must match whatever `_buildContainer` seeded the
+/// report's own `ticketId` as: [StepControlli] takes it as an explicit constructor param (its
+/// parent, rapportino_form_screen.dart, reads it off `editorState.ticketId` itself), it does not
+/// read it back off provider state the way [StepMaterialiFold] used to.
+Widget _buildControlliStep(ProviderContainer container, {String? ticketId = _ticketId}) {
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: StepControlli(reportId: _reportId, ticketId: ticketId),
+        ),
+      ),
+    ),
+  );
+}
+
 void main() {
   setUpAll(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -148,7 +166,7 @@ void main() {
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       // Real labels from the template, not a free-text "ID" box.
@@ -157,10 +175,10 @@ void main() {
       // The old dialog is gone.
       expect(find.text('Aggiungi controllo'), findsNothing);
       expect(find.text('Nome controllo / ID'), findsNothing);
-      // A checkbox-type item renders a toggle, not a text box. (Two
-      // AppToggles total: the pre-existing "Nessun materiale utilizzato"
-      // toggle plus this checklist item's.)
-      expect(find.byType(AppToggle), findsNWidgets(2));
+      // A checkbox-type item renders a toggle, not a text box. StepControlli renders standalone
+      // now (Controlli moved out of StepMaterialiFold, see that class's own doc comment) — no
+      // sibling "Nessun materiale utilizzato" toggle to count alongside this checklist item's own.
+      expect(find.byType(AppToggle), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
 
@@ -203,7 +221,7 @@ void main() {
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       // .last: the checklist item's toggle, not the pre-existing "Nessun
@@ -258,7 +276,7 @@ void main() {
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), 'Tutto regolare');
@@ -312,7 +330,7 @@ void main() {
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), '62.5');
@@ -340,7 +358,7 @@ void main() {
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       expect(find.text('Nessun controllo previsto per questo intervento.'), findsOneWidget);
@@ -354,7 +372,7 @@ void main() {
     ) async {
       final container = _buildContainer(db: db, ticketId: null);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container, ticketId: null));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('non è collegato a nessun ticket'), findsOneWidget);
@@ -366,7 +384,7 @@ void main() {
     testWidgets('says plainly it is offline when nothing was ever cached', (tester) async {
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Controlli non disponibili offline'), findsOneWidget);
@@ -426,7 +444,7 @@ void main() {
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       final cached = await (db.select(
@@ -445,7 +463,7 @@ void main() {
 
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       // No offline error — the cache stands in for the network fetch.
@@ -470,7 +488,7 @@ void main() {
 
       final container = _buildContainer(db: db, isOnline: false);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byType(AppToggle).last);
@@ -495,7 +513,10 @@ void main() {
       await tester.tap(find.text('Aggiungi materiale'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Scansiona codice'), findsOneWidget);
+      // Icon-only now (see the add-material dialog's own "Altre opzioni"/scan simplification —
+      // critique P2 "Materiali add-dialog cognitive overload"), not a labeled TextButton.icon —
+      // the tooltip is the accessible name now, not visible text.
+      expect(find.byTooltip('Scansiona codice'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

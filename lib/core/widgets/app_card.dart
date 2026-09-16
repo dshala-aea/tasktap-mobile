@@ -53,7 +53,9 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final border = strapped ? AppColors.Y : (borderColor ?? context.colors.borderLight);
+    final border = strapped
+        ? AppColors.Y
+        : (borderColor ?? context.colors.borderLight);
     final content = Padding(padding: padding ?? _defaultPadding, child: child);
 
     return DecoratedBox(
@@ -67,7 +69,11 @@ class AppCard extends StatelessWidget {
           : Material(
               color: Colors.transparent,
               borderRadius: _radius,
-              child: InkWell(borderRadius: _radius, onTap: onTap, child: content),
+              child: InkWell(
+                borderRadius: _radius,
+                onTap: onTap,
+                child: content,
+              ),
             ),
     );
   }

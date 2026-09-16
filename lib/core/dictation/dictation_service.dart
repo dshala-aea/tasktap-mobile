@@ -17,10 +17,7 @@ abstract interface class IDictationService {
   /// Starts listening, emitting partial transcripts as they arrive.
   ///
   /// On-device only. Implementations must refuse rather than reach the network.
-  Future<void> start({
-    required ValueChanged<String> onTranscript,
-    required VoidCallback onDone,
-  });
+  Future<void> start({required ValueChanged<String> onTranscript, required VoidCallback onDone});
 
   Future<void> stop();
 

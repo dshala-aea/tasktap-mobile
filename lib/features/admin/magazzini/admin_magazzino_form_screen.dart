@@ -142,92 +142,98 @@ class _AdminMagazzinoFormScreenState extends ConsumerState<AdminMagazzinoFormScr
                 context.navClearance,
               ),
               children: [
-            AppTextField(
-              label: 'Nome *',
-              controller: _nomeCtrl,
-              validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
+                AppTextField(
+                  label: 'Nome *',
+                  controller: _nomeCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+                ),
+                const SizedBox(height: 16),
 
-            AppFieldShell(
-              label: 'Tipo *',
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _TipoChip(
-                      label: 'Sede',
-                      selected: _tipo == 'Sede',
-                      onTap: () => setState(() => _tipo = 'Sede'),
+                AppFieldShell(
+                  label: 'Tipo *',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _TipoChip(
+                          label: 'Sede',
+                          selected: _tipo == 'Sede',
+                          onTap: () => setState(() => _tipo = 'Sede'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _TipoChip(
+                          label: 'Furgone',
+                          selected: _tipo == 'Furgone',
+                          onTap: () => setState(() => _tipo = 'Furgone'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Only meaningful for a Furgone — a Sede is not "assigned" to a technician.
+                if (_tipo == 'Furgone') ...[
+                  AppFieldShell(
+                    label: 'Tecnico assegnato',
+                    child: DropdownButtonFormField<String>(
+                      // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                      value: technicians.any((t) => t['id'] == _assegnatoUserId)
+                          ? _assegnatoUserId
+                          : null,
+                      decoration: const InputDecoration(isDense: true, hintText: 'Nessuno'),
+                      isExpanded: true,
+                      items: [
+                        for (final t in technicians)
+                          DropdownMenuItem(
+                            value: t['id'] as String,
+                            child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _assegnatoUserId = v),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _TipoChip(
-                      label: 'Furgone',
-                      selected: _tipo == 'Furgone',
-                      onTap: () => setState(() => _tipo = 'Furgone'),
-                    ),
-                  ),
+                  const SizedBox(height: 16),
                 ],
-              ),
-            ),
-            const SizedBox(height: 16),
 
-            // Only meaningful for a Furgone — a Sede is not "assigned" to a technician.
-            if (_tipo == 'Furgone') ...[
-              AppFieldShell(
-                label: 'Tecnico assegnato',
-                child: DropdownButtonFormField<String>(
-                  // ignore: deprecated_member_use — controlled field, needs value not initialValue
-                  value: technicians.any((t) => t['id'] == _assegnatoUserId)
-                      ? _assegnatoUserId
-                      : null,
-                  decoration: const InputDecoration(isDense: true, hintText: 'Nessuno'),
-                  isExpanded: true,
-                  items: [
-                    for (final t in technicians)
-                      DropdownMenuItem(
-                        value: t['id'] as String,
-                        child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
-                      ),
-                  ],
-                  onChanged: (v) => setState(() => _assegnatoUserId = v),
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+                AppTextField(label: 'Indirizzo', controller: _indirizzoCtrl),
+                const SizedBox(height: 16),
 
-            AppTextField(label: 'Indirizzo', controller: _indirizzoCtrl),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
+                const SizedBox(height: 16),
 
-            AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
-            const SizedBox(height: 16),
-
-            if (_isEditing)
-              AppCard(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.base,
-                  vertical: AppSpacing.xs,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Attivo',
-                        style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
-                      ),
+                if (_isEditing)
+                  AppCard(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.base,
+                      vertical: AppSpacing.xs,
                     ),
-                    AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 32),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Attivo',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.ink,
+                            ),
+                          ),
+                        ),
+                        AppToggle(
+                          value: _isActive,
+                          onChanged: (v) => setState(() => _isActive = v),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 32),
 
-            AppButton(
-              label: _isEditing ? 'Salva modifiche' : 'Crea magazzino',
-              onPressed: _isSaving ? null : _save,
-              isLoading: _isSaving,
-            ),
+                AppButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea magazzino',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
+                ),
               ],
             ),
           ),

@@ -96,7 +96,8 @@ class _ScheduleDetailBody extends ConsumerWidget {
         .whereType<String>()
         .toList();
     final assigneeName =
-        directAssigneeName ?? (teamMemberNames.isEmpty ? null : 'Squadra: ${teamMemberNames.join(', ')}');
+        directAssigneeName ??
+        (teamMemberNames.isEmpty ? null : 'Squadra: ${teamMemberNames.join(', ')}');
     final locations = ref.watch(allLocationsProvider).valueOrNull ?? const [];
     final sedeName = _findLocationName(locations, schedule.locationId);
     final statusName = scheduleStatusName(schedule.statusId);

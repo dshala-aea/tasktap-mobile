@@ -55,7 +55,7 @@ class AppCompartmentTile extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: context.colors.ink,

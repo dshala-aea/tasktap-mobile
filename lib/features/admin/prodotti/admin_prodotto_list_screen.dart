@@ -162,7 +162,10 @@ class _ProdottoRow extends StatelessWidget {
     // Gap 4 of the feature audit: the row used to show only name + customer, with no way to tell
     // products apart by any commercial attribute on device — mirrors the materiale row's own
     // "codice · categoria" subtitle + price meta shape (admin_materiale_list_screen.dart).
-    final subtitleParts = [customerName, if (categoria != null && categoria!.isNotEmpty) categoria!];
+    final subtitleParts = [
+      customerName,
+      if (categoria != null && categoria!.isNotEmpty) categoria!,
+    ];
     final priceLabel = prezzoVendita != null ? '€${prezzoVendita!.toStringAsFixed(2)}' : null;
 
     return ListRow(
@@ -176,9 +179,10 @@ class _ProdottoRow extends StatelessWidget {
           if (priceLabel != null)
             Text(
               priceLabel,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: context.colors.ink, fontWeight: FontWeight.w600),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.colors.ink,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           // Only when inactive: an active product is the ordinary state of every row on this
           // list, and printing "Attivo" on all of them would be the pill making the same noise
@@ -187,7 +191,7 @@ class _ProdottoRow extends StatelessWidget {
           if (!isActive)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: StatusPill(stato: 'Inattivo', small: true, outlined: true),
+              child: StatusPill(stato: 'Inattivo', small: true),
             ),
         ],
       ),

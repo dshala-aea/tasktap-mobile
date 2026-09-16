@@ -210,7 +210,9 @@ void main() {
       await pump(tester);
 
       expect(find.byType(StatusPill), findsOneWidget);
-      expect(find.text('Aperto'), findsOneWidget);
+      // StatusPill renders through StatusStamp now, which uppercases per Il Documento's
+      // all-caps stamp spec — see status_pill_test.dart's own note on this.
+      expect(find.text('APERTO'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

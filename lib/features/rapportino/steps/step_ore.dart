@@ -438,11 +438,7 @@ class _StaffTileState extends State<_StaffTile> {
               onApply: () {
                 final s = widget.worklogSuggestion!;
                 widget.onUpdate(
-                  row.copyWith(
-                    hoursWorked: s.hours,
-                    startTime: s.startTime,
-                    endTime: s.endTime,
-                  ),
+                  row.copyWith(hoursWorked: s.hours, startTime: s.startTime, endTime: s.endTime),
                 );
               },
             ),
@@ -502,7 +498,11 @@ class _WorklogSuggestionChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.clock, size: 14, color: AppColors.Y),
+          // accentInk, not raw AppColors.Y: this chip's own translucent Y fill sits over the
+          // screen's flipping background, and raw Y text on top only clears 2.91:1 in dark mode
+          // (see AppPalette.accentInk's own doc comment). The border below stays raw Y — a 1px
+          // outline isn't held to the same text-contrast floor.
+          Icon(LucideIcons.clock, size: 14, color: context.colors.accentInk),
           const SizedBox(width: 6),
           Text(
             label,
@@ -511,7 +511,11 @@ class _WorklogSuggestionChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             '· Usa',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.Y),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: context.colors.accentInk,
+            ),
           ),
         ],
       ),
@@ -556,19 +560,30 @@ class _RunningTimerBadgeState extends State<_RunningTimerBadge>
     final mm = (elapsed.inMinutes % 60).toString().padLeft(2, '0');
     final ss = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
 
-    return AppTappable(
-      onTap: widget.onStop,
-      color: AppColors.Y.withAlpha(31),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: AppColors.Y),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Text(
-        '$hh:$mm:$ss',
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 14,
-          color: context.colors.ink,
-          fontFeatures: [FontFeature.tabularFigures()],
+    final label = '$hh:$mm:$ss';
+    return Semantics(
+      liveRegion: true,
+      button: true,
+      label: 'Timer in corso $label, tocca per fermare',
+      child: AppTappable(
+        onTap: widget.onStop,
+        color: AppColors.Y.withAlpha(31),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.Y),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: ExcludeSemantics(
+          // The tappable's own Semantics above already carries the label + liveRegion; excluding
+          // this Text keeps a screen reader from announcing the raw digits a second time.
+          child: Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'IBM Plex Mono',
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: context.colors.ink,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ),
       ),
     );
@@ -644,7 +659,7 @@ class _TotalOreCard extends StatelessWidget {
               Text(
                 'Totale ore',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   color: Colors.white.withAlpha(200),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
@@ -654,7 +669,7 @@ class _TotalOreCard extends StatelessWidget {
               Text(
                 '${totalOre.toStringAsFixed(1)} h',
                 style: const TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   color: Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
@@ -669,7 +684,7 @@ class _TotalOreCard extends StatelessWidget {
               Text(
                 'Tecnici',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   color: Colors.white.withAlpha(200),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
@@ -679,7 +694,7 @@ class _TotalOreCard extends StatelessWidget {
               Text(
                 '$staffCount',
                 style: const TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   color: Colors.white,
                   fontSize: 28,
                   fontWeight: FontWeight.w800,

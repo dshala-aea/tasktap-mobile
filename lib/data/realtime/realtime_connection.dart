@@ -131,9 +131,7 @@ class RealtimeConnection {
       final connection = HubConnectionBuilder()
           .withUrl(
             '${Env.apiBaseUrl}/api/hubs/notifications',
-            options: HttpConnectionOptions(
-              accessTokenFactory: () async => _accessTokenProvider(),
-            ),
+            options: HttpConnectionOptions(accessTokenFactory: () async => _accessTokenProvider()),
           )
           .withAutomaticReconnect()
           .build();

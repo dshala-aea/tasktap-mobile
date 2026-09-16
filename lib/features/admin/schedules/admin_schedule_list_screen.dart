@@ -65,13 +65,8 @@ class AdminScheduleFilters {
       technicianId == null &&
       squadraId == null;
 
-  int get activeCount => [
-    dateFrom,
-    dateTo,
-    statusId,
-    technicianId,
-    squadraId,
-  ].where((v) => v != null).length;
+  int get activeCount =>
+      [dateFrom, dateTo, statusId, technicianId, squadraId].where((v) => v != null).length;
 
   AdminScheduleFilters copyWith({
     DateTime? Function()? dateFrom,
@@ -282,7 +277,10 @@ class _AdminScheduleListBody extends ConsumerWidget {
           ),
           SliverToBoxAdapter(
             child: AppTabs(
-              tabs: const [AppTab(label: 'Calendario'), AppTab(label: 'Elenco')],
+              tabs: const [
+                AppTab(label: 'Calendario'),
+                AppTab(label: 'Elenco'),
+              ],
               selectedIndex: viewMode.index,
               onSelected: (i) => onViewModeChanged(_ViewMode.values[i]),
             ),
@@ -398,20 +396,14 @@ class _FilterButton extends StatelessWidget {
     return AppTappable(
       onTap: onTap,
       color: active ? tint : context.colors.surface,
-      border: Border.all(
-        color: active ? tint : context.colors.borderMedium,
-      ),
+      border: Border.all(color: active ? tint : context.colors.borderMedium),
       borderRadius: AppRack.insetShape,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       semanticLabel: 'Filtri${active ? ' ($activeCount attivi)' : ''}',
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            LucideIcons.filter,
-            size: 16,
-            color: active ? activeFg : context.colors.ink,
-          ),
+          Icon(LucideIcons.filter, size: 16, color: active ? activeFg : context.colors.ink),
           if (active) ...[
             const SizedBox(width: 6),
             Text(
@@ -495,8 +487,7 @@ class _CalendarSliver extends StatelessWidget {
     );
   }
 
-  static String _capitalise(String s) =>
-      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+  static String _capitalise(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 }
 
 class _FilterSheet extends ConsumerStatefulWidget {

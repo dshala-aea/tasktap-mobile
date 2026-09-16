@@ -14,13 +14,19 @@ class Pkce {
   final String verifier;
   final String challenge;
 
-  static const _unreserved = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  static const _unreserved =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
 
   static ({String verifier, String challenge}) generate() {
     final random = Random.secure();
     // 96 chars — comfortably inside RFC 7636's 43-128 char verifier range.
-    final verifier = List.generate(96, (_) => _unreserved[random.nextInt(_unreserved.length)]).join();
-    final challenge = base64Url.encode(sha256.convert(utf8.encode(verifier)).bytes).replaceAll('=', '');
+    final verifier = List.generate(
+      96,
+      (_) => _unreserved[random.nextInt(_unreserved.length)],
+    ).join();
+    final challenge = base64Url
+        .encode(sha256.convert(utf8.encode(verifier)).bytes)
+        .replaceAll('=', '');
     return (verifier: verifier, challenge: challenge);
   }
 }

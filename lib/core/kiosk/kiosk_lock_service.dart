@@ -47,7 +47,9 @@ abstract interface class IKioskLockService {
 /// probe/actuator, `MissingPluginException` (host side not registered — desktop, tests, a build
 /// that predates the channel) always reads as "not supported" rather than throwing.
 class PlatformKioskLockService implements IKioskLockService {
-  const PlatformKioskLockService([this._channel = const MethodChannel('tasktap/kiosk_lock')]);
+  const PlatformKioskLockService([
+    this._channel = const MethodChannel('tasktap/kiosk_lock'),
+  ]);
 
   final MethodChannel _channel;
 
@@ -67,7 +69,8 @@ class PlatformKioskLockService implements IKioskLockService {
     }
 
     try {
-      final locked = await _channel.invokeMethod<bool>('startLockTask') ?? false;
+      final locked =
+          await _channel.invokeMethod<bool>('startLockTask') ?? false;
       return locked ? KioskLockOutcome.locked : KioskLockOutcome.failed;
     } on PlatformException {
       return KioskLockOutcome.failed;

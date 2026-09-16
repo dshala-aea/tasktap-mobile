@@ -252,7 +252,8 @@ class TicketWorkLogDto {
   /// Falls back to the naive subtraction only when constructed directly without an explicit
   /// [duration] (tests, or a payload that genuinely omits `durationHours`) — correct for same-day
   /// sessions, which covers the fallback's only real callers.
-  Duration? get duration => endTime == null ? null : (_duration ?? endTime! - startTime);
+  Duration? get duration =>
+      endTime == null ? null : (_duration ?? endTime! - startTime);
 
   factory TicketWorkLogDto.fromJson(Map<String, dynamic> json) =>
       TicketWorkLogDto(
@@ -275,7 +276,9 @@ class TicketWorkLogDto {
 /// server-side. Null when absent (older/malformed payload) or when the entry is still running.
 Duration? _parseDurationHours(Object? value) {
   if (value == null) return null;
-  final hours = value is num ? value.toDouble() : double.tryParse(value.toString());
+  final hours = value is num
+      ? value.toDouble()
+      : double.tryParse(value.toString());
   if (hours == null) return null;
   return Duration(milliseconds: (hours * Duration.millisecondsPerHour).round());
 }

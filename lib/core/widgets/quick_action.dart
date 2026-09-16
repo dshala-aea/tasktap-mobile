@@ -52,7 +52,7 @@ class QuickAction extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   color: context.colors.ink,

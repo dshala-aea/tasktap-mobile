@@ -52,9 +52,15 @@ class SyncResultDto {
       customers: _list(j['customers'], CustomerDto.fromJson),
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),
-      ticketMateriali: _list(j['ticketMateriali'], SyncTicketMaterialeDto.fromJson),
+      ticketMateriali: _list(
+        j['ticketMateriali'],
+        SyncTicketMaterialeDto.fromJson,
+      ),
       materiali: _list(j['materiali'], MaterialeDto.fromJson),
-      materialiBarcodes: _list(j['materialiBarcodes'], MaterialeBarcodeDto.fromJson),
+      materialiBarcodes: _list(
+        j['materialiBarcodes'],
+        MaterialeBarcodeDto.fromJson,
+      ),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
@@ -73,8 +79,10 @@ class ColleagueDto {
 
   const ColleagueDto({required this.id, required this.displayName});
 
-  factory ColleagueDto.fromJson(Map<String, dynamic> j) =>
-      ColleagueDto(id: j['id'] as String, displayName: j['displayName'] as String? ?? '');
+  factory ColleagueDto.fromJson(Map<String, dynamic> j) => ColleagueDto(
+    id: j['id'] as String,
+    displayName: j['displayName'] as String? ?? '',
+  );
 }
 
 // ── Customer ───────────────────────────────────────────────────────────────────
@@ -368,19 +376,20 @@ class SyncTicketMaterialeDto {
     this.isAvailable = false,
   });
 
-  factory SyncTicketMaterialeDto.fromJson(Map<String, dynamic> j) => SyncTicketMaterialeDto(
-    id: j['id'] as String,
-    tenantId: j['tenantId'] as String,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: _dt(j['updatedAt']),
-    ticketId: j['ticketId'] as String,
-    materialeId: j['materialeId'] as String?,
-    freeTextName: j['freeTextName'] as String?,
-    quantity: _dbl(j['quantity']) ?? 0,
-    unitOfMeasure: j['unitOfMeasure'] as String?,
-    notes: j['notes'] as String?,
-    isAvailable: j['isAvailable'] as bool? ?? false,
-  );
+  factory SyncTicketMaterialeDto.fromJson(Map<String, dynamic> j) =>
+      SyncTicketMaterialeDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        ticketId: j['ticketId'] as String,
+        materialeId: j['materialeId'] as String?,
+        freeTextName: j['freeTextName'] as String?,
+        quantity: _dbl(j['quantity']) ?? 0,
+        unitOfMeasure: j['unitOfMeasure'] as String?,
+        notes: j['notes'] as String?,
+        isAvailable: j['isAvailable'] as bool? ?? false,
+      );
 }
 
 // ── MaterialeBarcode ─────────────────────────────────────────────────────────
@@ -409,16 +418,17 @@ class MaterialeBarcodeDto {
     this.isPrimary = false,
   });
 
-  factory MaterialeBarcodeDto.fromJson(Map<String, dynamic> j) => MaterialeBarcodeDto(
-    id: j['id'] as String,
-    tenantId: j['tenantId'] as String,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: _dt(j['updatedAt']),
-    materialeId: j['materialeId'] as String,
-    barcode: j['barcode'] as String,
-    barcodeType: j['barcodeType'] as String?,
-    isPrimary: j['isPrimary'] as bool? ?? false,
-  );
+  factory MaterialeBarcodeDto.fromJson(Map<String, dynamic> j) =>
+      MaterialeBarcodeDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        materialeId: j['materialeId'] as String,
+        barcode: j['barcode'] as String,
+        barcodeType: j['barcodeType'] as String?,
+        isPrimary: j['isPrimary'] as bool? ?? false,
+      );
 }
 
 // ── Cantiere ───────────────────────────────────────────────────────────────────
@@ -426,7 +436,11 @@ class MaterialeBarcodeDto {
 /// CantiereStatusEnum values, in the same order as the backend enum
 /// (`[JsonConverter(typeof(JsonStringEnumConverter))] enum CantiereStatusEnum`)
 /// and as the `Cantieri.status` Drift column (Active=0, Completed=1, Cancelled=2).
-const _cantiereStatusValues = <String, int>{'Active': 0, 'Completed': 1, 'Cancelled': 2};
+const _cantiereStatusValues = <String, int>{
+  'Active': 0,
+  'Completed': 1,
+  'Cancelled': 2,
+};
 
 /// Parses the wire enum string to the int the Drift column stores.
 /// Unknown/missing values default to Active — the safest fallback for a
@@ -653,14 +667,15 @@ class ScheduleAssigneeDto {
     this.isLegacyStaff = false,
   });
 
-  factory ScheduleAssigneeDto.fromJson(Map<String, dynamic> j) => ScheduleAssigneeDto(
-    userId: j['userId'] as String,
-    isUserActive: j['isUserActive'] as bool? ?? true,
-    isDirect: j['isDirect'] as bool? ?? false,
-    isLead: j['isLead'] as bool? ?? false,
-    isTeam: j['isTeam'] as bool? ?? false,
-    isLegacyStaff: j['isLegacyStaff'] as bool? ?? false,
-  );
+  factory ScheduleAssigneeDto.fromJson(Map<String, dynamic> j) =>
+      ScheduleAssigneeDto(
+        userId: j['userId'] as String,
+        isUserActive: j['isUserActive'] as bool? ?? true,
+        isDirect: j['isDirect'] as bool? ?? false,
+        isLead: j['isLead'] as bool? ?? false,
+        isTeam: j['isTeam'] as bool? ?? false,
+        isLegacyStaff: j['isLegacyStaff'] as bool? ?? false,
+      );
 }
 
 // ── Report (draft) ─────────────────────────────────────────────────────────────
@@ -738,7 +753,8 @@ class ReportDto {
     endedAt: _dt(j['endedAt']),
     documentTemplateId: j['documentTemplateId'] as String?,
     customerSignatureAllegatoId: j['customerSignatureAllegatoId'] as String?,
-    technicianSignatureAllegatoId: j['technicianSignatureAllegatoId'] as String?,
+    technicianSignatureAllegatoId:
+        j['technicianSignatureAllegatoId'] as String?,
     technicianNotes: j['technicianNotes'] as String?,
     closedAt: _dt(j['closedAt']),
     stato: j['stato'] as String? ?? 'Bozza',

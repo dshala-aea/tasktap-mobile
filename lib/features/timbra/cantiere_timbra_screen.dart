@@ -130,10 +130,7 @@ final cantiereHasPendingSyncProvider = Provider.autoDispose<bool>((ref) {
 ///
 /// Scoped to one cantiere (not a cross-cantiere daily total) — matches the screen's own context:
 /// "how much have I worked *here* today."
-final cantiereTodayHoursProvider = Provider.autoDispose.family<Duration, String>((
-  ref,
-  cantiereId,
-) {
+final cantiereTodayHoursProvider = Provider.autoDispose.family<Duration, String>((ref, cantiereId) {
   final events = ref.watch(todayCantiereEventsProvider).valueOrNull ?? [];
   CantierePunche? opener;
   var total = Duration.zero;
@@ -215,7 +212,14 @@ class _CantiereElapsedTickerState extends State<_CantiereElapsedTicker>
   @override
   Widget build(BuildContext context) {
     final elapsed = clampedElapsedSinceMidnight(widget.startTime, widget.clock());
-    return Text(formatHoursMinutes(elapsed), style: widget.style);
+    final label = formatHoursMinutes(elapsed);
+    // liveRegion: true — a screen reader gets no other signal that this text changes every
+    // second; PRODUCT.md commits to "live regions on running clocks" explicitly.
+    return Semantics(
+      liveRegion: true,
+      label: 'Tempo trascorso $label',
+      child: Text(label, style: widget.style),
+    );
   }
 }
 
@@ -272,7 +276,7 @@ class _CantiereTodayTotalState extends State<_CantiereTodayTotal>
     return Text(
       formatHoursMinutes(widget.closedHours + liveElapsed),
       style: TextStyle(
-        fontFamily: 'Inter',
+        fontFamily: 'Archivo Narrow',
         fontSize: 30,
         fontWeight: FontWeight.w800,
         letterSpacing: -0.8,
@@ -825,7 +829,7 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
               Text(
                 'Alcuni membri non sono stati avviati',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: ctx.colors.ink,
@@ -856,11 +860,14 @@ class _CantiereTimbraScreenState extends ConsumerState<CantiereTimbraScreen> {
                         child: Consumer(
                           builder: (context, ref, _) {
                             final name =
-                                ref.watch(colleagueNameProvider(f.userId)).valueOrNull ??
-                                f.userId;
+                                ref.watch(colleagueNameProvider(f.userId)).valueOrNull ?? f.userId;
                             return Text(
                               '$name: $reason',
-                              style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.ink),
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 14,
+                                color: ctx.colors.ink,
+                              ),
                             );
                           },
                         ),
@@ -1055,7 +1062,7 @@ class _CheckInBody extends ConsumerWidget {
           Text(
             'OGGI',
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
@@ -1066,7 +1073,7 @@ class _CheckInBody extends ConsumerWidget {
           Text(
             formatHoursMinutes(todayHours),
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 30,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.8,
@@ -1093,7 +1100,7 @@ class _CheckInBody extends ConsumerWidget {
                     child: Text(
                       'Collegato al ticket',
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: context.colors.ink,
@@ -1118,7 +1125,7 @@ class _CheckInBody extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
                 child: Text(
                   'Impossibile caricare il cantiere.',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: context.colors.red),
+                  style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: context.colors.red),
                 ),
               ),
               data: (c) => c == null
@@ -1127,7 +1134,7 @@ class _CheckInBody extends ConsumerWidget {
                       child: Text(
                         'Cantiere non trovato su questo dispositivo.',
                         style: TextStyle(
-                          fontFamily: 'Inter',
+                          fontFamily: 'Archivo',
                           fontSize: 13,
                           color: context.colors.red,
                         ),
@@ -1144,7 +1151,7 @@ class _CheckInBody extends ConsumerWidget {
                               child: Text(
                                 c.name,
                                 style: TextStyle(
-                                  fontFamily: 'Inter',
+                                  fontFamily: 'Archivo Narrow',
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: context.colors.ink,
@@ -1171,7 +1178,7 @@ class _CheckInBody extends ConsumerWidget {
             Text(
               'Per chi registri l\'ingresso?',
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: context.colors.inkMuted,
@@ -1203,7 +1210,7 @@ class _CheckInBody extends ConsumerWidget {
               const SizedBox(height: 6),
               Text(
                 'Scegli almeno una persona per avviare la timbratura.',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.amber),
+                style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.amber),
               ),
             ] else if (chiTimbra == _ChiTimbra.squadra) ...[
               const SizedBox(height: 6),
@@ -1212,7 +1219,7 @@ class _CheckInBody extends ConsumerWidget {
                     ? '1 persona selezionata'
                     : '$squadraSelectionCount persone selezionate',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo',
                   fontSize: 12,
                   color: context.colors.inkMuted,
                 ),
@@ -1252,7 +1259,7 @@ class _CheckInBody extends ConsumerWidget {
                     Text(
                       hasDetails ? 'Altri dettagli aggiunti' : 'Altri dettagli',
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: hasDetails ? context.colors.green : context.colors.inkMuted,
@@ -1293,10 +1300,13 @@ class _ChiTimbraPill extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontFamily: 'Inter',
+            fontFamily: 'Archivo',
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: selected ? AppColors.Y : context.colors.inkMuted,
+            // accentInk, not raw Y — this pill's border already flips (context.colors.borderLight
+            // above), so this isn't the permanently-dark punch surface; see AppPalette.accentInk's
+            // own doc comment for the dark-mode AA bug this avoids.
+            color: selected ? context.colors.accentInk : context.colors.inkMuted,
           ),
         ),
       ),
@@ -1458,7 +1468,7 @@ class _ActiveSessionBody extends ConsumerWidget {
           Text(
             'OGGI',
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo',
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.2,
@@ -1477,7 +1487,7 @@ class _ActiveSessionBody extends ConsumerWidget {
                 child: Text(
                   'TIMBRATURA ATTIVA',
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.6,
@@ -1491,10 +1501,7 @@ class _ActiveSessionBody extends ConsumerWidget {
                   child: Container(
                     width: 7,
                     height: 7,
-                    decoration: BoxDecoration(
-                      color: context.colors.amber,
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: BoxDecoration(color: context.colors.amber, shape: BoxShape.circle),
                   ),
                 ),
             ],
@@ -1505,7 +1512,7 @@ class _ActiveSessionBody extends ConsumerWidget {
                 ? '${_cantiereNameFor(ref, local.cantiereId)} · $ticketLabel'
                 : _cantiereNameFor(ref, local.cantiereId),
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 16,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -1517,11 +1524,13 @@ class _ActiveSessionBody extends ConsumerWidget {
           Center(
             child: _CantiereElapsedTicker(
               startTime: local.startTime,
+              // IBM Plex Mono, not Inter — Il Documento's "mono marks identity" rule names
+              // timestamps explicitly (frontend DESIGN.md); tabularFigures was already here.
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'IBM Plex Mono',
                 fontSize: 24,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.4,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -0.2,
                 color: context.colors.inkMuted,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
@@ -1564,7 +1573,7 @@ class TimbraErrorBanner extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 13,
                 color: context.colors.red,
                 fontWeight: FontWeight.w500,
@@ -1601,7 +1610,7 @@ class _ErrorBody extends StatelessWidget {
             Text(
               message,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 14,
                 color: context.colors.ink,
                 height: 1.5,

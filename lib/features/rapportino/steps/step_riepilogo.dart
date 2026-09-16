@@ -272,10 +272,19 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
 
               if (subState == DraftSubmissionState.submitted) {
-                return _StatusCard(
-                  color: context.colors.green,
-                  icon: LucideIcons.checkCircle2,
-                  title: 'Rapportino inviato con successo.',
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _StatusCard(
+                      color: context.colors.green,
+                      icon: LucideIcons.checkCircle2,
+                      title: 'Rapportino inviato con successo.',
+                    ),
+                    const SizedBox(height: 10),
+                    // The one moment worth a stamping entrance (see StatusStamp.animate's own
+                    // doc comment) — the report just became a real, submitted record.
+                    const StatusStamp(stato: 'Completato', animate: true),
+                  ],
                 );
               }
 
@@ -609,11 +618,7 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
       if (widget.isCustomer) {
         await notifier.saveCustomerSignature(allegatoId: id, bytes: bytes, localPath: file.path);
       } else {
-        await notifier.saveTechnicianSignature(
-          allegatoId: id,
-          bytes: bytes,
-          localPath: file.path,
-        );
+        await notifier.saveTechnicianSignature(allegatoId: id, bytes: bytes, localPath: file.path);
       }
     } finally {
       if (mounted) setState(() => _capturing = false);
@@ -653,7 +658,7 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
               Text(
                 'Salva firma',
                 style: TextStyle(
-                  fontFamily: 'Inter',
+                  fontFamily: 'Archivo Narrow',
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: ctx.colors.ink,
@@ -662,23 +667,17 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
               const SizedBox(height: 8),
               Text(
                 'Salva questa firma per la prossima volta?',
-                style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: ctx.colors.inkMuted),
+                style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: ctx.colors.inkMuted),
               ),
               const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
-                    child: AppButton.ghost(
-                      label: 'No',
-                      onPressed: () => Navigator.pop(ctx, false),
-                    ),
+                    child: AppButton.ghost(label: 'No', onPressed: () => Navigator.pop(ctx, false)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: AppButton(
-                      label: 'Sì',
-                      onPressed: () => Navigator.pop(ctx, true),
-                    ),
+                    child: AppButton(label: 'Sì', onPressed: () => Navigator.pop(ctx, true)),
                   ),
                 ],
               ),
@@ -804,7 +803,7 @@ class _TypedSigDialogState extends State<_TypedSigDialog> {
             Text(
               'Firma digitale',
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo Narrow',
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
                 color: context.colors.ink,
@@ -972,6 +971,7 @@ class _SigDialogState extends State<_SigDialog> {
             title: const Text('Acquisisci firma'),
             leading: IconButton(
               icon: const Icon(LucideIcons.x),
+              tooltip: 'Chiudi',
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
@@ -979,20 +979,31 @@ class _SigDialogState extends State<_SigDialog> {
                 onPressed: () => _ctrl.clear(),
                 child: Text('Cancella', style: TextStyle(color: context.colors.inkMuted)),
               ),
-              TextButton(
-                onPressed: () async {
-                  if (_ctrl.isEmpty) {
-                    Navigator.pop(context);
-                    return;
-                  }
-                  final bytes = await _ctrl.toPngBytes();
-                  if (context.mounted) {
-                    Navigator.pop(context, bytes);
-                  }
-                },
-                child: Text(
-                  'Conferma',
-                  style: TextStyle(color: AppColors.Y, fontWeight: FontWeight.bold),
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.sm),
+                child: TextButton(
+                  onPressed: () async {
+                    if (_ctrl.isEmpty) {
+                      Navigator.pop(context);
+                      return;
+                    }
+                    final bytes = await _ctrl.toPngBytes();
+                    if (context.mounted) {
+                      Navigator.pop(context, bytes);
+                    }
+                  },
+                  // Filled Y chip, not raw stamp-red text: Y as a text colour only clears 2.91:1 on
+                  // the dark theme's bg2 (see app_palette.dart:209-212's own documented residual) —
+                  // every other Y usage in the app is a filled surface with brandOn text on top
+                  // (AppButton.primary, AppFab, the active bottom-nav tab); this brings "Conferma"
+                  // in line instead of being the one raw-text exception that actually reaches a
+                  // flipping AppBar background.
+                  style: TextButton.styleFrom(
+                    backgroundColor: AppColors.Y,
+                    foregroundColor: context.colors.brandOn,
+                    shape: RoundedRectangleBorder(borderRadius: AppRack.insetShape),
+                  ),
+                  child: const Text('Conferma', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

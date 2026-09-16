@@ -78,7 +78,7 @@ class _ProdottoMultiPickerSheetContentState extends State<_ProdottoMultiPickerSh
                   child: Text(
                     'Asset coperti',
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo Narrow',
                       fontSize: 17,
                       fontWeight: FontWeight.w700,
                       color: ctx.colors.ink,
@@ -162,7 +162,7 @@ class _ProdottoMultiPickerSheetContentState extends State<_ProdottoMultiPickerSh
                                         child: Text(
                                           name,
                                           style: TextStyle(
-                                            fontFamily: 'Inter',
+                                            fontFamily: 'Archivo Narrow',
                                             fontSize: 14,
                                             fontWeight: FontWeight.w600,
                                             color: ctx.colors.ink,

@@ -90,7 +90,9 @@ class StepRiepilogoTicket extends ConsumerWidget {
                 KeyVal(label: 'Descrizione', value: state.description!),
               KeyVal(
                 label: 'Assegnato a',
-                value: state.assignedUserId != null ? 'Tecnico selezionato' : 'Nessuna assegnazione',
+                value: state.assignedUserId != null
+                    ? 'Tecnico selezionato'
+                    : 'Nessuna assegnazione',
                 showDivider: false,
               ),
             ],

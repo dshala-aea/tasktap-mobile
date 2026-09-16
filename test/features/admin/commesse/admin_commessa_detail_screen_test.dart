@@ -70,7 +70,9 @@ void main() {
 
     expect(find.text('Ristrutturazione impianto'), findsOneWidget);
     expect(find.textContaining('#4471'), findsOneWidget);
-    expect(find.text('Aperta'), findsOneWidget);
+    // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+    // status_pill_test.dart's own note on this rendering change.
+    expect(find.text('APERTA'), findsOneWidget);
     expect(find.textContaining('8400'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());

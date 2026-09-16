@@ -56,7 +56,7 @@ class EmptyState extends StatelessWidget {
                   title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo Narrow',
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: c.ink,
@@ -68,7 +68,7 @@ class EmptyState extends StatelessWidget {
                     body!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 13,
                       fontWeight: FontWeight.w400,
                       color: c.inkMuted,
@@ -82,7 +82,7 @@ class EmptyState extends StatelessWidget {
                     reason!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 12,
                       fontWeight: FontWeight.w400,
                       color: c.inkFaint,
@@ -227,7 +227,7 @@ class CompactEmptyState extends StatelessWidget {
                   label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: c.inkMuted,
@@ -239,7 +239,7 @@ class CompactEmptyState extends StatelessWidget {
                     reason!,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontFamily: 'Inter',
+                      fontFamily: 'Archivo',
                       fontSize: 12,
                       color: c.inkFaint,
                     ),

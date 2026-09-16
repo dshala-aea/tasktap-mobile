@@ -52,7 +52,8 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// is the wrong behavior for both, since neither is an authenticated-session request.
   final Dio _revocationHttpClient;
 
-  final StreamController<AuthUser?> _controller = StreamController<AuthUser?>.broadcast();
+  final StreamController<AuthUser?> _controller =
+      StreamController<AuthUser?>.broadcast();
 
   AuthUser? _current;
 
@@ -82,7 +83,10 @@ class ZitadelAuthRepository implements IAuthRepository {
         expiry: result.accessTokenExpirationDateTime,
       );
       if (user == null) {
-        return (user: null, failure: const UnknownAuthError('No tokens returned'));
+        return (
+          user: null,
+          failure: const UnknownAuthError('No tokens returned'),
+        );
       }
       await _persistRefreshToken(result.refreshToken);
       await _persistCachedIdentity(user);
@@ -116,25 +120,36 @@ class ZitadelAuthRepository implements IAuthRepository {
     try {
       final response = await _revocationHttpClient.post<dynamic>(
         '${Env.apiBaseUrl}/api/MobileAuth/login',
-        data: {'authRequestId': authRequestId, 'loginName': loginName, 'password': password},
+        data: {
+          'authRequestId': authRequestId,
+          'loginName': loginName,
+          'password': password,
+        },
         options: Options(contentType: Headers.jsonContentType),
       );
       final data = response.data;
       final rawCode = data is Map ? data['code'] : null;
       if (rawCode is! String || rawCode.isEmpty) {
-        return (user: null, failure: const UnknownAuthError('Malformed login response'));
+        return (
+          user: null,
+          failure: const UnknownAuthError('Malformed login response'),
+        );
       }
       code = rawCode;
     } on DioException catch (e) {
       final rawResponseData = e.response?.data;
-      final backendCode = rawResponseData is Map && rawResponseData['code'] is String
+      final backendCode =
+          rawResponseData is Map && rawResponseData['code'] is String
           ? rawResponseData['code'] as String
           : null;
-      return (user: null, failure: switch (backendCode) {
-        'additional_factor_required' => const AdditionalFactorRequired(),
-        'invalid_credentials' => const InvalidCredentials(),
-        _ => _mapError(e),
-      });
+      return (
+        user: null,
+        failure: switch (backendCode) {
+          'additional_factor_required' => const AdditionalFactorRequired(),
+          'invalid_credentials' => const InvalidCredentials(),
+          _ => _mapError(e),
+        },
+      );
     }
 
     try {
@@ -154,7 +169,10 @@ class ZitadelAuthRepository implements IAuthRepository {
         expiry: result.accessTokenExpirationDateTime,
       );
       if (user == null) {
-        return (user: null, failure: const UnknownAuthError('No tokens returned'));
+        return (
+          user: null,
+          failure: const UnknownAuthError('No tokens returned'),
+        );
       }
       await _persistRefreshToken(result.refreshToken);
       await _persistCachedIdentity(user);
@@ -271,7 +289,8 @@ class ZitadelAuthRepository implements IAuthRepository {
     // that name first, falling back to `authRequestId` in case a differently configured
     // environment (or a future Zitadel version) reverts to it.
     final redirectParams = Uri.parse(location).queryParameters;
-    final authRequestId = redirectParams['authRequest'] ?? redirectParams['authRequestId'];
+    final authRequestId =
+        redirectParams['authRequest'] ?? redirectParams['authRequestId'];
     if (authRequestId == null || authRequestId.isEmpty) {
       throw const UnknownAuthError('No authRequestId in authorize redirect');
     }
@@ -317,7 +336,9 @@ class ZitadelAuthRepository implements IAuthRepository {
         ),
       );
     } catch (e) {
-      debugPrint('Zitadel refresh-token revocation failed (best-effort, sign-out continues): $e');
+      debugPrint(
+        'Zitadel refresh-token revocation failed (best-effort, sign-out continues): $e',
+      );
     }
   }
 
@@ -391,7 +412,11 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// so a cold-start-offline session has something to display without ever
   /// putting a bearer token on disk.
   Future<void> _persistCachedIdentity(AuthUser user) async {
-    final json = jsonEncode({'id': user.id, 'email': user.email, 'displayName': user.displayName});
+    final json = jsonEncode({
+      'id': user.id,
+      'email': user.email,
+      'displayName': user.displayName,
+    });
     await _storage.write(key: _cachedIdentityKey, value: json);
   }
 
@@ -442,7 +467,9 @@ class ZitadelAuthRepository implements IAuthRepository {
       displayName: (claims['name'] ?? claims['preferred_username'])?.toString(),
       accessToken: accessToken,
       refreshToken: refreshToken ?? '',
-      expiresAt: (expiry ?? DateTime.now().toUtc().add(const Duration(hours: 1))).toUtc(),
+      expiresAt:
+          (expiry ?? DateTime.now().toUtc().add(const Duration(hours: 1)))
+              .toUtc(),
     );
   }
 
@@ -470,8 +497,10 @@ class ZitadelAuthRepository implements IAuthRepository {
     // which leaves `error` null and only sets a free-text `errorDescription`. Sniffing that text for
     // keywords is exactly what let a native SDK hiccup get misclassified as SessionExpired before.
     final structuredError = switch (e) {
-      FlutterAppAuthPlatformException(:final platformErrorDetails) => platformErrorDetails.error,
-      FlutterAppAuthUserCancelledException(:final platformErrorDetails) => platformErrorDetails.error,
+      FlutterAppAuthPlatformException(:final platformErrorDetails) =>
+        platformErrorDetails.error,
+      FlutterAppAuthUserCancelledException(:final platformErrorDetails) =>
+        platformErrorDetails.error,
       _ => null,
     };
     if (structuredError == FlutterAppAuthOAuthError.invalidGrant) {
@@ -492,7 +521,9 @@ class ZitadelAuthRepository implements IAuthRepository {
         msg.contains('host')) {
       return const NetworkError();
     }
-    if (msg.contains('invalid_grant') || msg.contains('refresh') || msg.contains('expired')) {
+    if (msg.contains('invalid_grant') ||
+        msg.contains('refresh') ||
+        msg.contains('expired')) {
       return const SessionExpired();
     }
     return UnknownAuthError(e.toString());

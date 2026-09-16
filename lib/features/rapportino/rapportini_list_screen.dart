@@ -158,11 +158,7 @@ class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
       if (!context.mounted) return;
       if (id == null) {
         // Refused rather than authored by a placeholder. See createLocalDraft.
-        showAppToast(
-          context,
-          message: 'Accedi per creare un rapportino.',
-          tone: ToastTone.warning,
-        );
+        showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
         return;
       }
       context.push(AppRoutes.rapportiniEditor(id));
@@ -353,7 +349,10 @@ class _RapportinoRow extends ConsumerWidget {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: AppSpacing.md,
+        ),
         decoration: BoxDecoration(
           border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
         ),
@@ -403,7 +402,7 @@ class _RapportinoRow extends ConsumerWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo',
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: context.colors.ink,
@@ -415,7 +414,11 @@ class _RapportinoRow extends ConsumerWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: context.colors.inkMuted),
+                      style: TextStyle(
+                        fontFamily: 'Archivo',
+                        fontSize: 12,
+                        color: context.colors.inkMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -426,7 +429,7 @@ class _RapportinoRow extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  StatusPill(stato: statusLabel, small: true, outlined: true),
+                  StatusPill(stato: statusLabel, small: true),
                   const SizedBox(height: 2),
                   Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
                 ],

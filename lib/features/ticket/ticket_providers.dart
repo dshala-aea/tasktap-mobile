@@ -108,7 +108,9 @@ final ticketAttachmentsProvider = FutureProvider.autoDispose
 /// [pendingTicketsProvider] sits beside the confirmed ticket list.
 final pendingTicketAttachmentsProvider = StreamProvider.autoDispose
     .family<List<PendingTicketAttachment>, String>((ref, ticketId) {
-      return ref.watch(pendingTicketAttachmentRepositoryProvider).watchForTicket(ticketId);
+      return ref
+          .watch(pendingTicketAttachmentRepositoryProvider)
+          .watchForTicket(ticketId);
     });
 
 /// A ticket's checklist, resolved from the maintenance-template version it
@@ -135,7 +137,8 @@ final ticketControlsProvider = FutureProvider.autoDispose
 final ticketMaterialiProvider = StreamProvider.autoDispose
     .family<List<TicketMaterialeDto>, String>((ref, ticketId) {
       final db = ref.watch(appDatabaseProvider);
-      final query = db.select(db.ticketMateriali)..where((m) => m.ticketId.equals(ticketId));
+      final query = db.select(db.ticketMateriali)
+        ..where((m) => m.ticketId.equals(ticketId));
       return query.watch().asyncMap((rows) async {
         final materialeIds = rows
             .where((r) => r.materialeId != null)
@@ -143,7 +146,9 @@ final ticketMaterialiProvider = StreamProvider.autoDispose
             .toSet();
         final catalog = materialeIds.isEmpty
             ? const <MaterialiData>[]
-            : await (db.select(db.materiali)..where((m) => m.id.isIn(materialeIds))).get();
+            : await (db.select(
+                db.materiali,
+              )..where((m) => m.id.isIn(materialeIds))).get();
         final catalogById = {for (final c in catalog) c.id: c};
 
         return [
@@ -151,14 +156,17 @@ final ticketMaterialiProvider = StreamProvider.autoDispose
             TicketMaterialeDto(
               id: r.id,
               materialeId: r.materialeId,
-              codice: r.materialeId != null ? catalogById[r.materialeId]?.code : null,
+              codice: r.materialeId != null
+                  ? catalogById[r.materialeId]?.code
+                  : null,
               // Free-text items name themselves; a catalog reference resolves through the
               // synced catalog — same precedence the online endpoint's own resolution used.
               nome: r.materialeId != null
                   ? (catalogById[r.materialeId]?.name ?? r.freeTextName ?? '')
                   : (r.freeTextName ?? ''),
               quantita: r.quantity,
-              unitaMisura: r.unitOfMeasure ?? catalogById[r.materialeId]?.unitOfMeasure,
+              unitaMisura:
+                  r.unitOfMeasure ?? catalogById[r.materialeId]?.unitOfMeasure,
               note: r.notes,
               disponibile: r.isAvailable,
             ),

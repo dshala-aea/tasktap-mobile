@@ -147,7 +147,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(StatusPill), findsWidgets);
-      expect(find.text('Inviata'), findsWidgets);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('INVIATA'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -464,7 +466,9 @@ void main() {
 
       expect(find.textContaining("L'ufficio ha respinto"), findsOneWidget);
       expect(find.text('Rilavora'), findsOneWidget);
-      expect(find.text('Respinta'), findsWidgets);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('RESPINTA'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

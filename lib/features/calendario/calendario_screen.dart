@@ -102,7 +102,8 @@ class CalendarioScreen extends ConsumerWidget {
                 // is a fixed month grid with none, so the gesture is a no-op there today, same as
                 // any other RefreshIndicator over non-scrolling content.
                 child: RefreshIndicator(
-                  onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+                  onRefresh: () =>
+                      ref.read(syncProvider.notifier).performSync(),
                   child: _CalendarioBody(
                     view: view,
                     selectedDate: selectedDate,
@@ -228,7 +229,7 @@ class _PeriodBar extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 color: context.colors.ink,
@@ -359,10 +360,15 @@ class _WeekDayScroller extends ConsumerWidget {
                     Text(
                       dayAbbr.format(day).toUpperCase(),
                       style: TextStyle(
-                        fontFamily: 'Inter',
+                        fontFamily: 'Archivo',
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: isSelected ? AppColors.Y : context.colors.inkMuted,
+                        // accentInk, not raw Y — this label sits on a flipping background; see
+                        // AppPalette.accentInk's own doc comment for the dark-mode AA bug this
+                        // avoids.
+                        color: isSelected
+                            ? context.colors.accentInk
+                            : context.colors.inkMuted,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -391,10 +397,12 @@ class _WeekDayScroller extends ConsumerWidget {
                           child: Text(
                             '${day.day}',
                             style: TextStyle(
-                              fontFamily: 'Inter',
+                              fontFamily: 'Archivo Narrow',
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: isSelected ? Colors.white : context.colors.ink,
+                              color: isSelected
+                                  ? Colors.white
+                                  : context.colors.ink,
                             ),
                           ),
                         ),
@@ -409,7 +417,9 @@ class _WeekDayScroller extends ConsumerWidget {
                         width: 5,
                         height: 5,
                         decoration: BoxDecoration(
-                          color: isSelected ? AppColors.Y : context.colors.amber,
+                          color: isSelected
+                              ? AppColors.Y
+                              : context.colors.amber,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -504,13 +514,16 @@ class _AsyncViewSwitcher<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final child = async.when(
-      data: (data) => KeyedSubtree(key: const ValueKey('data'), child: builder(data)),
+      data: (data) =>
+          KeyedSubtree(key: const ValueKey('data'), child: builder(data)),
       loading: () => const Center(
         key: ValueKey('loading'),
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
-      error: (e, _) =>
-          const Center(key: ValueKey('error'), child: Text('Errore nel caricamento')),
+      error: (e, _) => const Center(
+        key: ValueKey('error'),
+        child: Text('Errore nel caricamento'),
+      ),
     );
 
     return AnimatedSwitcher(
@@ -640,7 +653,8 @@ class _ListaBody extends ConsumerWidget {
 
     return _AsyncViewSwitcher(
       async: async,
-      builder: (schedules) => ListaView(schedules: schedules, onTapTicket: onTapTicket),
+      builder: (schedules) =>
+          ListaView(schedules: schedules, onTapTicket: onTapTicket),
     );
   }
 }
@@ -689,7 +703,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
           Text(
             schedule.title,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: 'Archivo Narrow',
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -698,15 +712,19 @@ class _ScheduleInfoSheet extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              StatusPill(stato: statusName, outlined: true),
+              StatusPill(stato: statusName),
               if (timeRange != null) ...[
                 const SizedBox(width: 12),
-                Icon(LucideIcons.clock, size: 14, color: context.colors.inkMuted),
+                Icon(
+                  LucideIcons.clock,
+                  size: 14,
+                  color: context.colors.inkMuted,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   timeRange,
                   style: TextStyle(
-                    fontFamily: 'Inter',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     color: context.colors.inkMuted,
                   ),
@@ -719,7 +737,7 @@ class _ScheduleInfoSheet extends StatelessWidget {
             Text(
               schedule.description,
               style: TextStyle(
-                fontFamily: 'Inter',
+                fontFamily: 'Archivo',
                 fontSize: 13,
                 color: context.colors.inkFaint,
                 height: 1.5,

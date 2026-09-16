@@ -47,6 +47,7 @@ class AppTextField extends StatelessWidget {
     this.focusNode,
     this.autofillHints,
     this.initialValue,
+    this.autofocus = false,
   });
 
   /// Multiline convenience constructor.
@@ -67,6 +68,7 @@ class AppTextField extends StatelessWidget {
     this.suffixIcon,
     this.focusNode,
     this.initialValue,
+    this.autofocus = false,
   }) : keyboardType = TextInputType.multiline,
        textInputAction = TextInputAction.newline,
        obscureText = false,
@@ -91,6 +93,7 @@ class AppTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final Iterable<String>? autofillHints;
   final String? initialValue;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -112,41 +115,41 @@ class AppTextField extends StatelessWidget {
     // used on essentially every form in the app, so every one of those forms inherits the fix.
     return MergeSemantics(
       child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AppFieldLabel(label: label, enabled: enabled),
-        const SizedBox(height: 6),
-        TextFormField(
-          controller: controller,
-          initialValue: initialValue,
-          focusNode: focusNode,
-          onChanged: onChanged,
-          onEditingComplete: onEditingComplete,
-          validator: validator,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          obscureText: obscureText,
-          enabled: enabled,
-          readOnly: readOnly,
-          maxLines: maxLines,
-          maxLength: maxLength,
-          inputFormatters: inputFormatters,
-          autofillHints: autofillHints,
-          style: AppTextStyles.bodyLarge,
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: prefixIcon,
-            suffixIcon: suffixIcon,
-            isDense: true,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppFieldLabel(label: label, enabled: enabled),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: controller,
+            initialValue: initialValue,
+            focusNode: focusNode,
+            autofocus: autofocus,
+            onChanged: onChanged,
+            onEditingComplete: onEditingComplete,
+            validator: validator,
+            keyboardType: keyboardType,
+            textInputAction: textInputAction,
+            obscureText: obscureText,
+            enabled: enabled,
+            readOnly: readOnly,
+            maxLines: maxLines,
+            maxLength: maxLength,
+            inputFormatters: inputFormatters,
+            autofillHints: autofillHints,
+            style: AppTextStyles.bodyLarge,
+            decoration: InputDecoration(
+              hintText: hint,
+              prefixIcon: prefixIcon,
+              suffixIcon: suffixIcon,
+              isDense: true,
+            ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
 }
-
 
 /// Puts a static label above any input widget — a dropdown, a date picker, a segmented control.
 ///
@@ -195,9 +198,11 @@ class AppFieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final required = label.trimRight().endsWith('*');
-    final text = required ? label.trimRight().substring(0, label.trimRight().length - 1).trim() : label;
+    final text = required
+        ? label.trimRight().substring(0, label.trimRight().length - 1).trim()
+        : label;
     final style = TextStyle(
-      fontFamily: 'Inter',
+      fontFamily: 'Archivo',
       fontSize: 11,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.6,
@@ -209,7 +214,12 @@ class AppFieldLabel extends StatelessWidget {
         text: text.toUpperCase(),
         style: style,
         children: required
-            ? [TextSpan(text: ' *', style: style.copyWith(color: context.colors.red))]
+            ? [
+                TextSpan(
+                  text: ' *',
+                  style: style.copyWith(color: context.colors.red),
+                ),
+              ]
             : null,
       ),
       maxLines: 1,

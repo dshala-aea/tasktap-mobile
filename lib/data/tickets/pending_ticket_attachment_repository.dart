@@ -61,7 +61,9 @@ class PendingTicketAttachmentRepository {
   Stream<List<PendingTicketAttachment>> watchForTicket(String ticketId) {
     return (_db.select(_db.pendingTicketAttachments)
           ..where((a) => a.ticketId.equals(ticketId))
-          ..where((a) => a.state.equals(PendingTicketAttachmentState.submitted.toPersistedString()).not())
+          ..where(
+            (a) => a.state.equals(PendingTicketAttachmentState.submitted.toPersistedString()).not(),
+          )
           ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
         .watch();
   }
