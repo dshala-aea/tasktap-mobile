@@ -20564,9 +20564,7 @@
       "KioskScanRequest": {
         "required": [
           "token",
-          "userId",
-          "locationId",
-          "customerId"
+          "userId"
         ],
         "type": "object",
         "properties": {
@@ -20574,14 +20572,6 @@
             "type": "string"
           },
           "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "locationId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "customerId": {
             "type": "string",
             "format": "uuid"
           }
@@ -23421,14 +23411,14 @@
       "RegisterKioskDeviceRequest": {
         "required": [
           "name",
-          "cantiereId"
+          "locationId"
         ],
         "type": "object",
         "properties": {
           "name": {
             "type": "string"
           },
-          "cantiereId": {
+          "locationId": {
             "type": [
               "null",
               "string"
@@ -23829,7 +23819,7 @@
               "number",
               "string"
             ],
-            "description": "Per-line unit price override. When null, Materiale.SalePrice is used for billing.",
+            "description": "Unit price billed for this line. For a catalog-linked row (Guid? ReportMateriale.MaterialeId set),\nthis is resolved server-side from that Materiale\u0027s SalePrice at save time \u2014\nsee ReportMaterialePriceResolver \u2014 never a value\nthe client (e.g. a technician filling in a rapportino) can set or override; whatever price\na save request sends for such a row is ignored. Only a free-text row (no\nGuid? ReportMateriale.MaterialeId, nothing in the catalog to derive a price from) keeps a\nclient-supplied value, which is why this remains nullable. When null and\nGuid? ReportMateriale.MaterialeId is set, Materiale.SalePrice is used for billing (see\n\u003Csee cref=\u0022!:TaskTapAPI.Application.Services.Billing.ReportFatturaXmlService\u0022 /\u003E\u0027s own\nfallback).",
             "format": "double"
           },
           "notes": {

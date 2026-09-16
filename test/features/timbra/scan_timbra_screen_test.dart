@@ -2,28 +2,21 @@
 //
 // Widget tests for ScanTimbraScreen (scan prompt only — driving the real camera isn't tested,
 // same convention as step_materiali_fold_test.dart's "shows the scan button") and
-// KioskConfirmTimbraScreen (the location-pick/confirm/error flow, fully testable since it takes
-// the scanned token as a plain constructor parameter — see scan_timbra_screen.dart's own header
-// comment for why it's split this way).
+// KioskConfirmTimbraScreen (the auto-submit/error/retry flow, fully testable since it takes the
+// scanned token as a plain constructor parameter — see scan_timbra_screen.dart's own header
+// comment for why it's split this way). No location/customer here: the backend now resolves the
+// kiosk device's own registered site server-side (WorkLogController.KioskScan), so this screen
+// has nothing to pick — it submits automatically on mount.
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/features/timbra/scan_timbra_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
-
-AppDatabase _makeDb() {
-  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
-  return AppDatabase(NativeDatabase.memory());
-}
 
 Future<void> _teardown(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox.shrink());
@@ -39,18 +32,8 @@ class _FakeWorklogApiClient extends WorklogApiClient {
   final List<Map<String, String>> calls = [];
 
   @override
-  Future<KioskScanResult> kioskScan({
-    required String token,
-    required String userId,
-    required String locationId,
-    required String customerId,
-  }) async {
-    calls.add({
-      'token': token,
-      'userId': userId,
-      'locationId': locationId,
-      'customerId': customerId,
-    });
+  Future<KioskScanResult> kioskScan({required String token, required String userId}) async {
+    calls.add({'token': token, 'userId': userId});
     if (error != null) throw error!;
     return result!;
   }
@@ -63,14 +46,12 @@ class _FakeWorklogApiClient extends WorklogApiClient {
 /// test (`!timersPending` framework invariant) — same class of Timer-lifecycle pitfall already
 /// documented against this app's toast, see app_toast.dart.
 Widget _buildConfirmScreen({
-  required AppDatabase db,
-  required _FakeWorklogApiClient client,
+  required WorklogApiClient client,
   String token = 'device-1:100:hmac',
   String? userId = 'user-1',
 }) {
   return ProviderScope(
     overrides: [
-      appDatabaseProvider.overrideWithValue(db),
       worklogApiClientProvider.overrideWithValue(client),
       internalUserIdProvider.overrideWith((ref) async => userId),
     ],
@@ -93,34 +74,16 @@ Widget _buildConfirmScreen({
   );
 }
 
+/// Pumps the marker+confirm-screen stack and pushes the confirm screen, so it starts with a
+/// real route to pop back to (see _buildConfirmScreen's own doc comment).
+Future<void> _pushConfirmScreen(WidgetTester tester, Widget tree) async {
+  await tester.pumpWidget(tree);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('MARKER-UNDERNEATH'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  setUpAll(() {
-    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
-  });
-
-  late AppDatabase db;
-  setUp(() => db = _makeDb());
-  tearDown(() async => db.close());
-
-  Future<void> seedLocation(
-    AppDatabase db, {
-    String id = 'loc-1',
-    String name = 'Sede Milano',
-    String customerId = 'cust-1',
-    String? city,
-  }) => db
-      .into(db.locations)
-      .insert(
-        LocationsCompanion.insert(
-          id: id,
-          tenantId: 'tenant-1',
-          createdAt: DateTime.utc(2026, 1, 1),
-          customerId: customerId,
-          name: name,
-          city: city == null ? const Value.absent() : Value(city),
-        ),
-      );
-
   group('ScanTimbraScreen', () {
     testWidgets('renders the header and the scan button', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: ScanTimbraScreen()));
@@ -133,144 +96,113 @@ void main() {
     });
   });
 
-  /// Pumps the marker+confirm-screen stack and pushes the confirm screen, so it starts with a
-  /// real route to pop back to (see _buildConfirmScreen's own doc comment).
-  Future<void> pushConfirmScreen(WidgetTester tester, Widget tree) async {
-    await tester.pumpWidget(tree);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('MARKER-UNDERNEATH'));
-    await tester.pumpAndSettle();
-  }
-
   group('KioskConfirmTimbraScreen', () {
-    testWidgets('shows an honest empty state when no sedi in cache', (tester) async {
-      await pushConfirmScreen(
-        tester,
-        _buildConfirmScreen(db: db, client: _FakeWorklogApiClient()),
-      );
-
-      expect(find.text('Non risultano sedi sincronizzate su questo dispositivo.'), findsOneWidget);
-
-      await _teardown(tester);
-    });
-
-    testWidgets('lists sedi from Drift and filters by search', (tester) async {
-      await seedLocation(db, id: 'loc-1', name: 'Sede Milano', city: 'Milano');
-      await seedLocation(db, id: 'loc-2', name: 'Sede Torino', city: 'Torino');
-      await pushConfirmScreen(
-        tester,
-        _buildConfirmScreen(db: db, client: _FakeWorklogApiClient()),
-      );
-
-      expect(find.text('Sede Milano'), findsOneWidget);
-      expect(find.text('Sede Torino'), findsOneWidget);
-
-      await tester.enterText(find.byType(TextField), 'Torino');
-      await tester.pumpAndSettle();
-
-      expect(find.text('Sede Torino'), findsOneWidget);
-      expect(find.text('Sede Milano'), findsNothing);
-
-      await _teardown(tester);
-    });
-
-    testWidgets('confirm is disabled until a sede is picked', (tester) async {
-      await seedLocation(db);
-      await pushConfirmScreen(
-        tester,
-        _buildConfirmScreen(db: db, client: _FakeWorklogApiClient()),
-      );
-
-      final button = tester.widget<AppButton>(
-        find.widgetWithText(AppButton, 'Conferma timbratura'),
-      );
-      expect(button.onPressed, isNull);
-
-      await tester.tap(find.text('Sede Milano'));
-      await tester.pumpAndSettle();
-
-      final buttonAfter = tester.widget<AppButton>(
-        find.widgetWithText(AppButton, 'Conferma timbratura'),
-      );
-      expect(buttonAfter.onPressed, isNotNull);
-
-      await _teardown(tester);
-    });
-
     testWidgets(
-      'confirm sends the picked sede\'s locationId/customerId and the caller\'s own userId, '
-      'then returns to the previous screen',
+      'submits automatically on mount with the token and the caller\'s own userId, '
+      'then returns to the previous screen on success',
       (tester) async {
-        await seedLocation(db, id: 'loc-1', name: 'Sede Milano', customerId: 'cust-milano');
         final client = _FakeWorklogApiClient(
           result: const KioskScanResult(action: 'in', workLogId: 'wl-1'),
         );
-        await pushConfirmScreen(
+        await _pushConfirmScreen(
           tester,
-          _buildConfirmScreen(db: db, client: client, token: 'dev-9:200:hmac', userId: 'user-9'),
+          _buildConfirmScreen(client: client, token: 'dev-9:200:hmac', userId: 'user-9'),
         );
 
-        await tester.tap(find.text('Sede Milano'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(AppButton, 'Conferma timbratura'));
-        await tester.pumpAndSettle();
-
         expect(client.calls, [
-          {
-            'token': 'dev-9:200:hmac',
-            'userId': 'user-9',
-            'locationId': 'loc-1',
-            'customerId': 'cust-milano',
-          },
+          {'token': 'dev-9:200:hmac', 'userId': 'user-9'},
         ]);
-        // Popped back to the marker screen on success.
+        // Popped back to the marker screen on success — no confirm button, no picker to tap.
         expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
 
         await _teardown(tester);
       },
     );
 
-    testWidgets('an expired-token error shows a "torna indietro" state, not the picker', (
-      tester,
-    ) async {
-      await seedLocation(db);
-      final client = _FakeWorklogApiClient(
-        error: const KioskScanException(KioskScanFailureReason.invalidOrExpiredToken, 'Token scaduto'),
+    testWidgets('shows a spinner while the call is in flight', (tester) async {
+      final completer = Future<KioskScanResult>.delayed(
+        const Duration(milliseconds: 50),
+        () => const KioskScanResult(action: 'in', workLogId: 'wl-1'),
       );
-      await pushConfirmScreen(tester, _buildConfirmScreen(db: db, client: client));
+      final client = _SlowFakeWorklogApiClient(completer);
+      await tester.pumpWidget(_buildConfirmScreen(client: client));
+      await tester.pump();
+      await tester.tap(find.text('MARKER-UNDERNEATH'));
+      await tester.pump();
 
-      await tester.tap(find.text('Sede Milano'));
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(AppButton, 'Conferma timbratura'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('Codice scaduto'), findsOneWidget);
-      expect(find.widgetWithText(AppButton, 'Torna indietro'), findsOneWidget);
-      // The picker is gone — nothing left to confirm against an invalid token.
-      expect(find.widgetWithText(AppButton, 'Conferma timbratura'), findsNothing);
-
       await _teardown(tester);
     });
 
-    testWidgets('a forbidden error keeps the picker up so the technician can retry', (
+    testWidgets(
+      'an expired-token error shows a "torna indietro" state with no retry',
+      (tester) async {
+        final client = _FakeWorklogApiClient(
+          error: const KioskScanException(
+            KioskScanFailureReason.invalidOrExpiredToken,
+            'Token scaduto',
+          ),
+        );
+        await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
+
+        expect(find.textContaining('Codice scaduto'), findsOneWidget);
+        expect(find.widgetWithText(AppButton, 'Torna indietro'), findsOneWidget);
+        expect(find.widgetWithText(AppButton, 'Riprova'), findsNothing);
+
+        await tester.tap(find.widgetWithText(AppButton, 'Torna indietro'));
+        await tester.pumpAndSettle();
+        expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
+        expect(client.calls, hasLength(1)); // did not retry
+
+        await _teardown(tester);
+      },
+    );
+
+    testWidgets('a forbidden error offers Riprova, which resubmits the same token', (
       tester,
     ) async {
-      await seedLocation(db);
-      final client = _FakeWorklogApiClient(
-        error: const KioskScanException(KioskScanFailureReason.forbidden),
-      );
-      await pushConfirmScreen(tester, _buildConfirmScreen(db: db, client: client));
-
-      await tester.tap(find.text('Sede Milano'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(AppButton, 'Conferma timbratura'));
-      await tester.pumpAndSettle();
+      var callCount = 0;
+      final client = _CountingFakeWorklogApiClient(() {
+        callCount++;
+        if (callCount == 1) {
+          throw const KioskScanException(KioskScanFailureReason.forbidden);
+        }
+        return const KioskScanResult(action: 'in', workLogId: 'wl-1');
+      });
+      await _pushConfirmScreen(tester, _buildConfirmScreen(client: client));
 
       expect(find.textContaining('Non hai i permessi'), findsOneWidget);
-      // Unlike the expired-token case, this isn't a dead token — the picker/confirm stays up.
-      expect(find.widgetWithText(AppButton, 'Conferma timbratura'), findsOneWidget);
+      expect(find.widgetWithText(AppButton, 'Riprova'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(AppButton, 'Riprova'));
+      await tester.pumpAndSettle();
+
+      expect(callCount, 2);
+      // Second attempt succeeded — popped back to the marker screen.
+      expect(find.text('MARKER-UNDERNEATH'), findsOneWidget);
 
       await _teardown(tester);
     });
   });
+}
+
+class _SlowFakeWorklogApiClient extends WorklogApiClient {
+  _SlowFakeWorklogApiClient(this.pending) : super(Dio());
+
+  final Future<KioskScanResult> pending;
+
+  @override
+  Future<KioskScanResult> kioskScan({required String token, required String userId}) => pending;
+}
+
+class _CountingFakeWorklogApiClient extends WorklogApiClient {
+  _CountingFakeWorklogApiClient(this.onCall) : super(Dio());
+
+  final KioskScanResult Function() onCall;
+
+  @override
+  Future<KioskScanResult> kioskScan({required String token, required String userId}) async =>
+      onCall();
 }

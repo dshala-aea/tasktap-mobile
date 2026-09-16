@@ -278,24 +278,19 @@ class WorklogApiClient {
   /// (`dioProvider`'s bearer token) — this is the technician's phone scanning the wall tablet,
   /// not the kiosk device's own `X-Api-Key` credential [KioskApiClient] uses.
   ///
+  /// No location/customer here on purpose: the kiosk device carries its own fixed site
+  /// (registered once on the web admin's "Dispositivi kiosk" page), and
+  /// `WorkLogController.KioskScan` resolves it server-side from the device — the scanning phone
+  /// is never asked, and couldn't override it if it tried.
+  ///
   /// [userId] must be the caller's own internal db id (`internalUserIdProvider`) —
   /// `WorkLogController.KioskScan`'s Check 5 rejects anything else, by design (no
   /// buddy-punching).
-  Future<KioskScanResult> kioskScan({
-    required String token,
-    required String userId,
-    required String locationId,
-    required String customerId,
-  }) async {
+  Future<KioskScanResult> kioskScan({required String token, required String userId}) async {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/worklog/kiosk/scan',
-        data: {
-          'token': token,
-          'userId': userId,
-          'locationId': locationId,
-          'customerId': customerId,
-        },
+        data: {'token': token, 'userId': userId},
       );
       final data = response.data ?? const <String, dynamic>{};
       return KioskScanResult(

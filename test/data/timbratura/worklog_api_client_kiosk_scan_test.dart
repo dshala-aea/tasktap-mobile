@@ -51,14 +51,9 @@ Dio _dioRejectingWithType(DioExceptionType type) {
 }
 
 void main() {
-  const args = (
-    token: 'device-1:100:hmac',
-    userId: 'user-1',
-    locationId: 'loc-1',
-    customerId: 'cust-1',
-  );
+  const args = (token: 'device-1:100:hmac', userId: 'user-1');
 
-  test('kioskScan sends the four fields and parses a clock-in response', () async {
+  test('kioskScan sends token+userId and parses a clock-in response', () async {
     Map<String, dynamic>? captured;
     final dio = Dio(BaseOptions(baseUrl: 'https://api.test'));
     dio.interceptors.add(
@@ -77,19 +72,9 @@ void main() {
     );
     final client = WorklogApiClient(dio);
 
-    final result = await client.kioskScan(
-      token: args.token,
-      userId: args.userId,
-      locationId: args.locationId,
-      customerId: args.customerId,
-    );
+    final result = await client.kioskScan(token: args.token, userId: args.userId);
 
-    expect(captured, {
-      'token': args.token,
-      'userId': args.userId,
-      'locationId': args.locationId,
-      'customerId': args.customerId,
-    });
+    expect(captured, {'token': args.token, 'userId': args.userId});
     expect(result.action, 'in');
     expect(result.workLogId, 'wl-1');
     expect(result.endTime, isNull);
@@ -105,12 +90,7 @@ void main() {
       }),
     );
 
-    final result = await client.kioskScan(
-      token: args.token,
-      userId: args.userId,
-      locationId: args.locationId,
-      customerId: args.customerId,
-    );
+    final result = await client.kioskScan(token: args.token, userId: args.userId);
 
     expect(result.action, 'out');
     expect(result.endTime, DateTime.parse('2026-09-16T17:00:00Z'));
@@ -120,12 +100,7 @@ void main() {
     final client = WorklogApiClient(_dioRejectingWithStatus(402));
 
     await expectLater(
-      client.kioskScan(
-        token: args.token,
-        userId: args.userId,
-        locationId: args.locationId,
-        customerId: args.customerId,
-      ),
+      client.kioskScan(token: args.token, userId: args.userId),
       throwsA(
         isA<KioskScanException>().having(
           (e) => e.reason,
@@ -140,12 +115,7 @@ void main() {
     final client = WorklogApiClient(_dioRejectingWithStatus(403));
 
     await expectLater(
-      client.kioskScan(
-        token: args.token,
-        userId: args.userId,
-        locationId: args.locationId,
-        customerId: args.customerId,
-      ),
+      client.kioskScan(token: args.token, userId: args.userId),
       throwsA(
         isA<KioskScanException>().having(
           (e) => e.reason,
@@ -164,12 +134,7 @@ void main() {
     final client = WorklogApiClient(_dioRejectingWithStatus(400, data: 'Token scaduto'));
 
     await expectLater(
-      client.kioskScan(
-        token: args.token,
-        userId: args.userId,
-        locationId: args.locationId,
-        customerId: args.customerId,
-      ),
+      client.kioskScan(token: args.token, userId: args.userId),
       throwsA(
         isA<KioskScanException>()
             .having((e) => e.reason, 'reason', KioskScanFailureReason.invalidOrExpiredToken)
@@ -182,12 +147,7 @@ void main() {
     final client = WorklogApiClient(_dioRejectingWithStatus(400, data: 'Kiosk non piu attivo'));
 
     await expectLater(
-      client.kioskScan(
-        token: args.token,
-        userId: args.userId,
-        locationId: args.locationId,
-        customerId: args.customerId,
-      ),
+      client.kioskScan(token: args.token, userId: args.userId),
       throwsA(
         isA<KioskScanException>().having(
           (e) => e.reason,
@@ -202,12 +162,7 @@ void main() {
     final client = WorklogApiClient(_dioRejectingWithType(DioExceptionType.connectionError));
 
     await expectLater(
-      client.kioskScan(
-        token: args.token,
-        userId: args.userId,
-        locationId: args.locationId,
-        customerId: args.customerId,
-      ),
+      client.kioskScan(token: args.token, userId: args.userId),
       throwsA(
         isA<KioskScanException>().having(
           (e) => e.reason,
@@ -222,12 +177,7 @@ void main() {
     final client = WorklogApiClient(_dioRejectingWithStatus(500));
 
     await expectLater(
-      client.kioskScan(
-        token: args.token,
-        userId: args.userId,
-        locationId: args.locationId,
-        customerId: args.customerId,
-      ),
+      client.kioskScan(token: args.token, userId: args.userId),
       throwsA(
         isA<KioskScanException>().having(
           (e) => e.reason,
