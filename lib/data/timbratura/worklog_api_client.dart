@@ -102,6 +102,55 @@ class TodayWorkLogDto {
   );
 }
 
+// ── Kiosk scan (POST /api/worklog/kiosk/scan) ─────────────────────────────────
+
+/// Why a `kioskScan` call failed, mirroring the 5-check authorization formula
+/// `WorkLogController.KioskScan` enforces server-side (see that action's own doc comment).
+enum KioskScanFailureReason {
+  /// The scanned token is malformed, unrecognized, or has already rotated past its 60s window
+  /// by the time this request reached the server — rescan.
+  invalidOrExpiredToken,
+
+  /// The kiosk device behind this token has been revoked from the admin's "Dispositivi kiosk"
+  /// page since the QR was generated.
+  deviceRevoked,
+
+  /// The tenant no longer holds the Kiosk module entitlement (402 from `EntitlementMiddleware`).
+  notEntitled,
+
+  /// The scanning technician isn't allowed to clock in/out here at all — wrong tenant's kiosk,
+  /// or (should never happen from this screen, which always sends the caller's own id) a
+  /// mismatched UserId.
+  forbidden,
+
+  /// No usable response reached us (offline, DNS, timeout).
+  network,
+
+  /// Anything else (5xx, malformed body, ...).
+  unknown,
+}
+
+class KioskScanException implements Exception {
+  const KioskScanException(this.reason, [this.message]);
+
+  final KioskScanFailureReason reason;
+  final String? message;
+
+  @override
+  String toString() => 'KioskScanException($reason${message != null ? ': $message' : ''})';
+}
+
+/// Result of a successful kiosk scan — same shape `ClockResultToActionResult` returns for both
+/// this endpoint and the sibling reverse-scan one.
+class KioskScanResult {
+  const KioskScanResult({required this.action, required this.workLogId, this.endTime});
+
+  /// "in" or "out".
+  final String action;
+  final String workLogId;
+  final DateTime? endTime;
+}
+
 // ── Giornata (GET /api/WorkLog/today) ─────────────────────────────────────────
 
 /// One action the server may offer, and why it does not (backend ADR-0013 §C.5).
@@ -222,6 +271,69 @@ class WorklogApiClient {
     return GiornataDto.fromJson(data);
   }
 
+  /// POST /api/worklog/kiosk/scan
+  ///
+  /// Clocks [userId] in or out (toggle, same as [GiornataDto]'s server-decided semantics) using
+  /// a kiosk device's rotating QR [token]. Runs over the caller's own authenticated session
+  /// (`dioProvider`'s bearer token) — this is the technician's phone scanning the wall tablet,
+  /// not the kiosk device's own `X-Api-Key` credential [KioskApiClient] uses.
+  ///
+  /// [userId] must be the caller's own internal db id (`internalUserIdProvider`) —
+  /// `WorkLogController.KioskScan`'s Check 5 rejects anything else, by design (no
+  /// buddy-punching).
+  Future<KioskScanResult> kioskScan({
+    required String token,
+    required String userId,
+    required String locationId,
+    required String customerId,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/worklog/kiosk/scan',
+        data: {
+          'token': token,
+          'userId': userId,
+          'locationId': locationId,
+          'customerId': customerId,
+        },
+      );
+      final data = response.data ?? const <String, dynamic>{};
+      return KioskScanResult(
+        action: data['action'] as String? ?? 'in',
+        workLogId: data['workLogId'] as String? ?? '',
+        endTime: data['endTime'] != null ? DateTime.parse(data['endTime'] as String) : null,
+      );
+    } on DioException catch (e) {
+      throw _mapKioskScanError(e);
+    }
+  }
+
+  KioskScanException _mapKioskScanError(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 402) return const KioskScanException(KioskScanFailureReason.notEntitled);
+    if (status == 403) return const KioskScanException(KioskScanFailureReason.forbidden);
+    if (status == 400) {
+      // WorkLogController's kiosk/scan 400s are plain `BadRequest("...")` results, not
+      // ProblemDetails — [ApiController]'s automatic problem-details filter only rewrites
+      // results with a null Value, and these all set one, so the body is the raw string itself
+      // (JSON-serialized, e.g. `"Kiosk non piu attivo"`), never a {detail, title} object.
+      final body = e.response?.data;
+      final message = body is String ? body : (body is Map ? body['title'] as String? : null);
+      if (message != null && message.contains('non piu attivo')) {
+        return KioskScanException(KioskScanFailureReason.deviceRevoked, message);
+      }
+      return KioskScanException(KioskScanFailureReason.invalidOrExpiredToken, message);
+    }
+    switch (e.type) {
+      case DioExceptionType.connectionError:
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.sendTimeout:
+        return const KioskScanException(KioskScanFailureReason.network);
+      default:
+        return KioskScanException(KioskScanFailureReason.unknown, e.message);
+    }
+  }
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────

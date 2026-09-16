@@ -1,9 +1,11 @@
 // dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
@@ -123,7 +125,17 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
       body: SafeArea(
         child: Column(
           children: [
-            ScreenHeader(title: 'Timbra', subtitle: _formatDateLabel()),
+            ScreenHeader(
+              title: 'Timbra',
+              subtitle: _formatDateLabel(),
+              actions: [
+                HeaderIconBtn(
+                  icon: Icons.qr_code_scanner,
+                  label: 'Timbra con QR',
+                  onTap: () => context.push(AppRoutes.timbraQr),
+                ),
+              ],
+            ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(

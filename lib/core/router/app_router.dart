@@ -20,6 +20,7 @@ import '../../presentation/providers/kiosk_providers.dart';
 import '../../features/calendario/calendario_screen.dart';
 import '../../features/timbra/timbra_screen.dart';
 import '../../features/timbra/seleziona_cantiere_screen.dart';
+import '../../features/timbra/scan_timbra_screen.dart';
 import '../../presentation/screens/profilo/profilo_screen.dart';
 import '../../features/admin/customers/admin_customer_detail_screen.dart';
 import '../../features/admin/customers/admin_customer_form_screen.dart';
@@ -85,6 +86,11 @@ abstract final class AppRoutes {
   static String ticketDetailPath(String id) => '/ticket/$id';
 
   static const String timbra = '/timbra';
+
+  /// Scan-to-clock-in via a kiosk totem's rotating QR (POST /api/worklog/kiosk/scan) — reached
+  /// from TimbraScreen's header action, not the dashboard: this is a variant of the personal
+  /// punch, not a third "start something" tile.
+  static const String timbraQr = '/timbra-qr';
 
   /// Technician-facing cantieri (worksites) list — the Cantieri tab.
   static const String cantieri = '/cantieri';
@@ -280,6 +286,13 @@ GoRouter buildRouter(WidgetRef ref) {
         path: AppRoutes.timbra,
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const TimbraScreen(),
+      ),
+
+      // ── Scan-to-timbra (pushed from TimbraScreen's header action) ────────────
+      GoRoute(
+        path: AppRoutes.timbraQr,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const ScanTimbraScreen(),
       ),
 
       // ── New ticket form (pushed from ticket list FAB) ─────────────────────
