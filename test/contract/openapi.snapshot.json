@@ -24065,6 +24065,7 @@
           },
           "data": {
             "type": "string",
+            "description": "The Rome-local activity date/time (naive \u2014 no timezone info). Kept for backward\ncompatibility and for display of the date itself; a client reconstructing a real instant\nfrom this plus OraInizio/OraFine has no way to know\nwhat UTC offset was in effect (CET vs CEST) \u2014 use StartAtUtc/\nEndAtUtc instead for anything that needs an actual instant (formatting a\ndisplay time, sorting/comparing across timezones, drag-drop math, etc).",
             "format": "date-time"
           },
           "oraInizio": {
@@ -24127,6 +24128,22 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "startAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The real UTC instant this event starts (ADR-0015 \u00A7E step 2), DST-correct. Null only for a\nlegacy row written before every write path populated it. This is what a client should use to\nderive a display time \u2014 never Data/OraInizio with a\nmanually appended \u0022Z\u0022, which falsely claims a Rome-local wall-clock value is already UTC.",
+            "format": "date-time"
+          },
+          "endAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Counterpart to StartAtUtc, from the activity\u0027s end time.",
+            "format": "date-time"
           }
         },
         "description": "One schedule item on the planning calendar."
