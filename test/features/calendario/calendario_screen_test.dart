@@ -93,6 +93,32 @@ Future<void> seedSchedules(AppDatabase db) async {
       );
 }
 
+/// Seeds a single all-day schedule into the DB, today, with no ticketId (so tapping its
+/// GiornoView block opens `_ScheduleInfoSheet` rather than navigating to a ticket).
+Future<void> seedAllDaySchedule(AppDatabase db) async {
+  final today = DateTime.now();
+  final todayUtc = DateTime(today.year, today.month, today.day).toUtc();
+
+  await db
+      .into(db.schedules)
+      .insert(
+        SchedulesCompanion.insert(
+          id: 'sched-allday',
+          tenantId: 'tenant-1',
+          createdAt: todayUtc,
+          activityDate: todayUtc,
+          timeStartMinutes: 0,
+          timeEndMinutes: 1439,
+          userId: 'u1',
+          statusId: 2, // In corso
+          locationId: 'loc-1',
+          allDay: const Value(true),
+          title: 'Evento tutto il giorno',
+          description: 'Descrizione evento',
+        ),
+      );
+}
+
 // ── Test setup ─────────────────────────────────────────────────────────────────
 
 void main() {
@@ -353,6 +379,45 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets('all-day event block shows no time range', (tester) async {
+      // Regression: an all-day schedule's timeStartMinutes/timeEndMinutes are placeholder
+      // bounds used only to position the block, not a real range — the block must not format
+      // and display them.
+      await seedAllDaySchedule(db);
+      final today = DateTime.now();
+      await pump(
+        tester,
+        view: CalendarioView.giorno,
+        date: DateTime(today.year, today.month, today.day),
+      );
+      expect(find.text('Evento tutto il giorno'), findsOneWidget);
+      expect(find.text('00:00 – 23:59'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping an all-day event opens the info sheet with no time', (tester) async {
+      await seedAllDaySchedule(db);
+      final today = DateTime.now();
+      await pump(
+        tester,
+        view: CalendarioView.giorno,
+        date: DateTime(today.year, today.month, today.day),
+      );
+
+      await tester.tap(find.text('Evento tutto il giorno'));
+      await tester.pumpAndSettle();
+
+      // The sheet re-renders the title; the clock icon (only ever shown alongside a time
+      // range) and the formatted range itself must both be absent.
+      expect(find.text('Evento tutto il giorno'), findsWidgets);
+      expect(find.byIcon(LucideIcons.clock), findsNothing);
+      expect(find.text('00:00 – 23:59'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   // ── Settimana view ─────────────────────────────────────────────────────────
@@ -458,6 +523,16 @@ void main() {
       await pump(tester, view: CalendarioView.lista);
 
       expect(find.byIcon(LucideIcons.users), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('all-day schedule row shows no time-range subtitle', (tester) async {
+      await seedAllDaySchedule(db);
+      await pump(tester, view: CalendarioView.lista);
+
+      expect(find.text('Evento tutto il giorno'), findsOneWidget);
+      expect(find.text('00:00 – 23:59'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

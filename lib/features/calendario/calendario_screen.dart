@@ -654,8 +654,13 @@ class _ScheduleInfoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeRange =
-        '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
+    // An all-day schedule has no meaningful time-of-day to show — timeStartMinutes/
+    // timeEndMinutes on an all-day row are placeholder bounds, not a real range. Gate on
+    // `allDay`, not on the minute values, so neither the visible text nor its layout implies
+    // a time exists.
+    final timeRange = schedule.allDay
+        ? null
+        : '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
     final statusName = scheduleStatusName(schedule.statusId);
 
     return Padding(
@@ -694,17 +699,19 @@ class _ScheduleInfoSheet extends StatelessWidget {
           Row(
             children: [
               StatusPill(stato: statusName, outlined: true),
-              const SizedBox(width: 12),
-              Icon(LucideIcons.clock, size: 14, color: context.colors.inkMuted),
-              const SizedBox(width: 4),
-              Text(
-                timeRange,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 13,
-                  color: context.colors.inkMuted,
+              if (timeRange != null) ...[
+                const SizedBox(width: 12),
+                Icon(LucideIcons.clock, size: 14, color: context.colors.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  timeRange,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    color: context.colors.inkMuted,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
           if (schedule.description.isNotEmpty) ...[

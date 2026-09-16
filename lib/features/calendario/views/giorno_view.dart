@@ -222,18 +222,23 @@ class _EventBlock extends StatelessWidget {
             // No height gate on the time: the 44dp floor makes the old `height > 36` test
             // always true, and a block that shows a title without its hours is worth less than
             // the space it saves.
-            Text(
-              '${formatMinutes(schedule.timeStartMinutes)} – '
-              '${formatMinutes(schedule.timeEndMinutes)}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: pair.foreground.withAlpha(179),
+            //
+            // An all-day schedule has no meaningful time-of-day, though — its
+            // timeStartMinutes/timeEndMinutes are just placeholder bounds used to position the
+            // block in this grid, not a real range worth reading back to the user.
+            if (!schedule.allDay)
+              Text(
+                '${formatMinutes(schedule.timeStartMinutes)} – '
+                '${formatMinutes(schedule.timeEndMinutes)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: pair.foreground.withAlpha(179),
+                ),
               ),
-            ),
             if (schedule.ticketId != null && height > 52)
               Icon(
                 LucideIcons.link,

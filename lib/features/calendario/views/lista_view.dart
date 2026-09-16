@@ -107,8 +107,11 @@ class _ScheduleListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeRange =
-        '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
+    // An all-day schedule has no meaningful time-of-day to show as a subtitle — see the same
+    // gate in `_ScheduleInfoSheet` (calendario_screen.dart) and `_EventBlock` (giorno_view.dart).
+    final timeRange = schedule.allDay
+        ? null
+        : '${formatMinutes(schedule.timeStartMinutes)} – ${formatMinutes(schedule.timeEndMinutes)}';
     final statusName = scheduleStatusName(schedule.statusId);
     final statusPair = statusColor(context, statusName);
 
