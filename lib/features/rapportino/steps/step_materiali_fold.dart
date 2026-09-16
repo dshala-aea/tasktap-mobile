@@ -667,7 +667,7 @@ class _MaterialeLookupField extends ConsumerWidget {
 
 // ── Qty stepper card ──────────────────────────────────────────────────────────
 
-class _MaterialeQtyStepper extends StatelessWidget {
+class _MaterialeQtyStepper extends ConsumerWidget {
   const _MaterialeQtyStepper({
     required this.row,
     required this.onQtyChanged,
@@ -679,7 +679,16 @@ class _MaterialeQtyStepper extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // A catalog pick (materialeId set, no free text) only carries the raw id on this row — the
+    // name lives in the local materiali mirror, same resolver used by rapportino_view_screen.dart
+    // and _MaterialeLookupField in this same file. Without this, a technician sees a bare GUID
+    // for every catalog material until the report reloads.
+    final resolvedName = row.freeTextName != null || row.materialeId == null
+        ? null
+        : ref.watch(materialeNameProvider(row.materialeId!)).valueOrNull;
+    final displayName = row.freeTextName ?? resolvedName ?? row.materialeId ?? '';
+
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
       child: Row(
@@ -691,7 +700,7 @@ class _MaterialeQtyStepper extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  row.displayName,
+                  displayName,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
