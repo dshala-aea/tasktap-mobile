@@ -499,9 +499,20 @@ class _WorklogSuggestionChip extends StatelessWidget {
           // outline isn't held to the same text-contrast floor.
           Icon(LucideIcons.clock, size: 14, color: context.colors.accentInk),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: context.colors.ink),
+          // Flexible, not a bare Text: a Row with mainAxisSize.min has no flexible child to
+          // absorb overflow, and this label is a formatted string ("Da worklog: 12,5h
+          // (08:00–17:30)") that can run long at large accessibility text scale on a narrow phone.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                color: context.colors.ink,
+              ),
+            ),
           ),
           const SizedBox(width: 6),
           Text(

@@ -30,7 +30,11 @@ class CalendarioScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
+      // bottom: false — Giorno/Settimana/Lista/Mese each already add context.navClearance
+      // themselves (which folds in the device's own bottom inset); a default SafeArea here would
+      // subtract that inset a second time before they ever see it.
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             // ── Header ──────────────────────────────────────────────────────

@@ -745,6 +745,8 @@ class _MaterialeQtyStepper extends ConsumerWidget {
               children: [
                 Text(
                   displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,

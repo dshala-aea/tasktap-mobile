@@ -173,8 +173,13 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
       body: SafeArea(
         child: Stack(
           children: [
+            // SingleChildScrollView, not a bare Center: this is meant to run unattended on a
+            // wall-mounted tablet, so a short/landscape viewport — or the error + platform-warning
+            // text both showing at once — must not throw an unrecoverable overflow here.
             Center(
-              child: Column(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
@@ -237,6 +242,7 @@ class _KioskDisplayScreenState extends ConsumerState<KioskDisplayScreen> {
                     ),
                   ],
                 ],
+                ),
               ),
             ),
 

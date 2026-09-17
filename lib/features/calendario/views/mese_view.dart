@@ -102,8 +102,11 @@ class MeseView extends ConsumerWidget {
         const SizedBox(height: 4),
         // Day cells
         Expanded(
+          // Mese has no scrollable to give a bottom-padding trick to like its Giorno/Settimana/
+          // Lista siblings — it's a fixed flex grid, so it must instead give up navClearance's
+          // worth of its own height so the last week row doesn't render under the floating nav.
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            padding: EdgeInsets.fromLTRB(AppSpacing.sm, 0, AppSpacing.sm, context.navClearance),
             child: Column(
               children: List.generate(weekCount, (row) {
                 return Expanded(

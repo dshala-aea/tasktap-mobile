@@ -335,7 +335,9 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
-        MediaQuery.of(context).viewInsets.bottom + 19,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

@@ -540,7 +540,11 @@ class _ContactFormSheetState extends State<_ContactFormSheet> {
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
-        MediaQuery.of(context).viewInsets.bottom + 19,
+        // + viewPadding.bottom: the keyboard-inset term alone leaves the button flush against
+        // the home indicator/gesture bar once the keyboard is closed.
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -786,7 +790,9 @@ class _AddAssignmentSheetState extends State<_AddAssignmentSheet> {
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
-        MediaQuery.of(context).viewInsets.bottom + 19,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

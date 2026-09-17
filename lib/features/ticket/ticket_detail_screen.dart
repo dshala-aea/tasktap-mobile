@@ -435,7 +435,7 @@ class _TicketDetailBody extends ConsumerWidget {
                   ),
                 ),
 
-                SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+                SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
               ],
             ),
           ),

@@ -69,44 +69,49 @@ class AdminMagazzinoDetailScreen extends ConsumerWidget {
           },
         ),
       ),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: ScreenHeader(title: mag.nome, subtitle: mag.tipo, showBack: true),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!mag.isActive)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.base),
-                      child: StatusPill(stato: 'Inattivo'),
+      // `ScreenHeader` (unlike `ScreenHeaderBar`) never applies its own top inset — every sibling
+      // admin detail screen wraps its body in SafeArea for that reason; this one had been missed,
+      // so its header/back-chevron drew under the status bar.
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: ScreenHeader(title: mag.nome, subtitle: mag.tipo, showBack: true),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!mag.isActive)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.base),
+                        child: StatusPill(stato: 'Inattivo'),
+                      ),
+                    AppCard(
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                      child: Column(
+                        children: [
+                          KeyVal(label: 'Nome', value: mag.nome),
+                          KeyVal(label: 'Tipo', value: mag.tipo),
+                          if (mag.isFurgone)
+                            KeyVal(
+                              label: 'Assegnato a',
+                              value: assegnatoNome ?? mag.assegnatoUserId ?? '—',
+                            ),
+                          KeyVal(label: 'Indirizzo', value: mag.indirizzo ?? '—'),
+                          KeyVal(label: 'Note', value: mag.note ?? '—', showDivider: false),
+                        ],
+                      ),
                     ),
-                  AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
-                    child: Column(
-                      children: [
-                        KeyVal(label: 'Nome', value: mag.nome),
-                        KeyVal(label: 'Tipo', value: mag.tipo),
-                        if (mag.isFurgone)
-                          KeyVal(
-                            label: 'Assegnato a',
-                            value: assegnatoNome ?? mag.assegnatoUserId ?? '—',
-                          ),
-                        KeyVal(label: 'Indirizzo', value: mag.indirizzo ?? '—'),
-                        KeyVal(label: 'Note', value: mag.note ?? '—', showDivider: false),
-                      ],
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
-        ],
+            SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
+          ],
+        ),
       ),
     );
   }

@@ -186,7 +186,9 @@ class _ProdottoMultiPickerSheetContentState extends State<_ProdottoMultiPickerSh
               AppSpacing.pagePadding,
               AppSpacing.sm,
               AppSpacing.pagePadding,
-              AppSpacing.base + MediaQuery.of(ctx).viewInsets.bottom,
+              AppSpacing.base +
+                  MediaQuery.of(ctx).viewInsets.bottom +
+                  MediaQuery.of(ctx).viewPadding.bottom,
             ),
             child: AppButton(
               label: 'Conferma (${_selected.length})',

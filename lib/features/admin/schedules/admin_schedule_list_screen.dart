@@ -539,7 +539,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
         AppSpacing.pagePadding,
-        MediaQuery.of(context).viewInsets.bottom + 19,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
       ),
       child: SingleChildScrollView(
         child: Column(

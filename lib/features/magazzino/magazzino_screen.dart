@@ -177,7 +177,7 @@ class _MagazzinoBody extends ConsumerWidget {
             _MagazzinoTab.giacenze => _giacenzeSlivers(context, ref),
             _MagazzinoTab.movimenti => _movimentiSlivers(context, ref),
           },
-          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
         ],
       ),
     );

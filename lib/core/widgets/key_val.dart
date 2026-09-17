@@ -75,6 +75,7 @@ class KeyVal extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.end,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: 'Archivo',
@@ -100,7 +101,10 @@ class KeyVal extends StatelessWidget {
       // the 44pt/48dp floor every other control in the app enforces (see the status pill's own
       // ConstrainedBox on ticket detail) — this is the shared shape every tappable KeyVal on
       // ticket/rapportino detail goes through, so the fix belongs here, once.
-      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 44), child: row),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Center(child: row),
+      ),
     );
   }
 

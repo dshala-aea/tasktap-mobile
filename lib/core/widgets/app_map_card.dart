@@ -79,24 +79,26 @@ class _NavigaButton extends StatelessWidget {
         onTap: () => openMapsForAddress(address),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(LucideIcons.mapPin, size: 14, color: Colors.white),
-                SizedBox(width: 6),
-                Text(
-                  'Naviga',
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(LucideIcons.mapPin, size: 14, color: Colors.white),
+                  SizedBox(width: 6),
+                  Text(
+                    'Naviga',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

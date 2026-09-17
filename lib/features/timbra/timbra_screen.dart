@@ -147,7 +147,11 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                   AppSpacing.pagePadding,
                   AppSpacing.lg,
                   AppSpacing.pagePadding,
-                  context.navClearance,
+                  // fabSafeBottom, not navClearance: this route is pushed full-screen
+                  // (rootNavigatorKey), so the pill nav is never drawn here — and the difference
+                  // isn't just wasted space, since this padding shrinks the height LayoutBuilder
+                  // compares against _kFixedLayoutMinHeight just below.
+                  context.fabSafeBottom,
                 ),
                 // Fixed when there is room, scrolling when there is not — see
                 // _kFixedLayoutMinHeight.

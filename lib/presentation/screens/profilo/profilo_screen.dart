@@ -22,56 +22,73 @@ class ProfiloScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: context.colors.bg1,
       appBar: ScreenHeaderBar(title: 'Profilo', showBack: true),
-      body: Padding(
-        padding: EdgeInsets.fromLTRB(
-          AppSpacing.pagePadding,
-          AppSpacing.pagePadding,
-          AppSpacing.pagePadding,
-          context.navClearance,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── User card ────────────────────────────────────────────────
-            if (user != null) ...[
-              AppCard(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Avatar
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: AppColors.Y,
-                      child: Text(
-                        _initials(user.displayName ?? user.email),
-                        style: AppTextStyles.titleLarge.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+      // A `Spacer()`-based fixed Column (no scroll) overflows the moment a long display name
+      // wraps to 2 lines or the viewport is short (small phone, split-screen, large system font)
+      // — every other detail screen in the app scrolls; this one didn't. The card now scrolls on
+      // its own and the logout button stays pinned below it via Expanded, instead of `Spacer`
+      // requiring the whole Column to fit exactly.
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── User card ────────────────────────────────────────────────
+                  if (user != null)
+                    AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Avatar
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: AppColors.Y,
+                            child: Text(
+                              _initials(user.displayName ?? user.email),
+                              style: AppTextStyles.titleLarge.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.base),
+
+                          if (user.displayName != null) ...[
+                            Text(user.displayName!, style: AppTextStyles.titleMedium),
+                            const SizedBox(height: AppSpacing.xs),
+                          ],
+
+                          Text(
+                            user.email,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: context.colors.inkFaint,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.base),
-
-                    if (user.displayName != null) ...[
-                      Text(user.displayName!, style: AppTextStyles.titleMedium),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
-
-                    Text(
-                      user.email,
-                      style: AppTextStyles.bodyMedium.copyWith(color: context.colors.inkFaint),
-                    ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+            ),
+          ),
 
-            const Spacer(),
-
-            // ── Logout ───────────────────────────────────────────────────
-            AppButton.danger(
+          // ── Logout ───────────────────────────────────────────────────
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              context.navClearance,
+            ),
+            child: AppButton.danger(
               label: 'Disconnetti',
               icon: const Icon(LucideIcons.logOut, size: 18),
               onPressed: () async {
@@ -83,10 +100,8 @@ class ProfiloScreen extends ConsumerWidget {
                 }
               },
             ),
-
-            const SizedBox(height: AppSpacing.lg),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

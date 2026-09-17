@@ -207,7 +207,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                   AppSpacing.pagePadding,
                   AppSpacing.lg,
                   AppSpacing.pagePadding,
-                  context.navClearance,
+                  // fabSafeBottom, not navClearance: this route is pushed full-screen
+                  // (rootNavigatorKey) — the shell's floating pill nav is never drawn here.
+                  context.fabSafeBottom,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

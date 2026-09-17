@@ -265,13 +265,20 @@ class AppButton extends StatelessWidget {
           highlightColor: _fg(context).withAlpha(15),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: _hPad, vertical: _vPad),
-            child: DefaultTextStyle(
-              style: textStyle.copyWith(
-                color: onPressed == null && !isLoading
-                    ? fgDisabled
-                    : _fg(context),
+            // Center: the ≥44pt ConstrainedBox below forces this Padding to grow past its
+            // natural content height on sm/md sizes, but RenderPadding always places its child at
+            // (padding.left, padding.top) rather than redistributing the extra space — without
+            // Center the label sits top-aligned in the enforced touch target instead of centered.
+            child: Center(
+              child: DefaultTextStyle(
+                style: textStyle.copyWith(
+                  color: onPressed == null && !isLoading
+                      ? fgDisabled
+                      : _fg(context),
+                ),
+                textAlign: TextAlign.center,
+                child: content,
               ),
-              child: content,
             ),
           ),
         ),

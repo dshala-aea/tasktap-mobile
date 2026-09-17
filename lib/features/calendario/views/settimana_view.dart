@@ -107,27 +107,37 @@ class SettimanaView extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Event chips
-                ...daySchedules.map(
-                  (s) => _WeekEventChip(
-                    schedule: s,
-                    onTap: () => onEventTap?.call(s),
-                    isTeam: teamScheduleIds.contains(s.id),
-                  ),
-                ),
-                if (daySchedules.isEmpty)
-                  SizedBox(
-                    height: 32,
-                    child: Center(
-                      child: Text(
-                        '–',
-                        style: TextStyle(
-                          color: context.colors.inkDisabled,
-                          fontSize: 12,
+                // Event chips — a day with more chips than fit the column's height scrolls on its
+                // own axis rather than overflowing the Row's cross-axis (the outer scroller only
+                // moves horizontally, between days).
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ...daySchedules.map(
+                          (s) => _WeekEventChip(
+                            schedule: s,
+                            onTap: () => onEventTap?.call(s),
+                            isTeam: teamScheduleIds.contains(s.id),
+                          ),
                         ),
-                      ),
+                        if (daySchedules.isEmpty)
+                          SizedBox(
+                            height: 32,
+                            child: Center(
+                              child: Text(
+                                '–',
+                                style: TextStyle(
+                                  color: context.colors.inkDisabled,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
+                ),
               ],
             ),
           );

@@ -188,7 +188,7 @@ class _CommessaDetailBody extends ConsumerWidget {
           },
         ),
 
-        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }
