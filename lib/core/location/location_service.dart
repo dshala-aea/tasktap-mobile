@@ -17,6 +17,23 @@ import 'package:geolocator/geolocator.dart';
 /// the device didn't report one).
 typedef GpsCoords = ({double lat, double lng, double? accuracy});
 
+/// Coarse permission status — enough for a caller to tell "already granted" apart from
+/// "permanently denied" before ever showing a dialog. [willPromptForPermission] intentionally
+/// can't answer this: its own doc comment explains why collapsing those two cases to `false` is
+/// correct for its one existing caller. This is for a caller — onboarding — that needs to render
+/// three different states instead of deciding whether to show one purpose sheet.
+enum GpsPermissionStatus {
+  /// Not yet asked, or asked and still allowed to ask again.
+  notDetermined,
+  granted,
+
+  /// The OS will not show the dialog again; only the device's own Settings can change this now.
+  deniedForever,
+
+  /// Location services are off at the OS level entirely, independent of this app's permission.
+  serviceDisabled,
+}
+
 /// Contract for obtaining the device's current GPS position.
 abstract class ILocationService {
   /// Const so the two implementations below can stay const singletons.
@@ -40,6 +57,10 @@ abstract class ILocationService {
   /// Concrete rather than abstract so the test fakes and [DisabledLocationService] inherit the
   /// honest answer (they never prompt) instead of each having to restate it.
   Future<bool> willPromptForPermission() async => false;
+
+  /// See [GpsPermissionStatus]. Concrete so every fake and [DisabledLocationService] gets the
+  /// honest "never asked" answer without restating it.
+  Future<GpsPermissionStatus> permissionStatus() async => GpsPermissionStatus.notDetermined;
 }
 
 // ── Real implementation ───────────────────────────────────────────────────────
@@ -57,6 +78,24 @@ class LocationService extends ILocationService {
       return await Geolocator.checkPermission() == LocationPermission.denied;
     } catch (_) {
       return false;
+    }
+  }
+
+  @override
+  Future<GpsPermissionStatus> permissionStatus() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return GpsPermissionStatus.serviceDisabled;
+      }
+      return switch (await Geolocator.checkPermission()) {
+        LocationPermission.always ||
+        LocationPermission.whileInUse => GpsPermissionStatus.granted,
+        LocationPermission.deniedForever => GpsPermissionStatus.deniedForever,
+        LocationPermission.denied ||
+        LocationPermission.unableToDetermine => GpsPermissionStatus.notDetermined,
+      };
+    } catch (_) {
+      return GpsPermissionStatus.notDetermined;
     }
   }
 
