@@ -115,15 +115,31 @@ void main() {
       expect(find.text('Disabled'), findsOneWidget);
     });
 
-    testWidgets('minimum touch target is at least 44pt', (tester) async {
+    testWidgets('md/lg minimum touch target is at least 44pt', (tester) async {
+      for (final size in [AppButtonSize.md, AppButtonSize.lg]) {
+        await tester.pumpWidget(
+          _wrap(AppButton(label: 'X', onPressed: () {}, size: size, fullWidth: false)),
+        );
+        final constraints = tester.widget<ConstrainedBox>(
+          find.descendant(of: find.byType(AppButton), matching: find.byType(ConstrainedBox)).first,
+        );
+        expect(constraints.constraints.minHeight, greaterThanOrEqualTo(44));
+        expect(constraints.constraints.minWidth, greaterThanOrEqualTo(44));
+      }
+    });
+
+    testWidgets('sm gets a smaller 32pt floor, not the full 44pt', (tester) async {
+      // sm exists specifically for tight inline-row contexts (a status row's "Prendi in carico",
+      // a timer bar's Avvia/Ferma) — forcing the same 44pt floor as md/lg made it read as
+      // stretched/oversized next to the compact pills and chips those rows already run at.
       await tester.pumpWidget(
         _wrap(AppButton(label: 'X', onPressed: () {}, size: AppButtonSize.sm, fullWidth: false)),
       );
       final constraints = tester.widget<ConstrainedBox>(
         find.descendant(of: find.byType(AppButton), matching: find.byType(ConstrainedBox)).first,
       );
-      expect(constraints.constraints.minHeight, greaterThanOrEqualTo(44));
-      expect(constraints.constraints.minWidth, greaterThanOrEqualTo(44));
+      expect(constraints.constraints.minHeight, 32);
+      expect(constraints.constraints.minWidth, 32);
     });
 
     testWidgets('backward-compat: AppButton.danger named constructor', (tester) async {

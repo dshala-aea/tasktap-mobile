@@ -112,7 +112,11 @@ class ListRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (meta != null) ...[const SizedBox(width: 12), meta!],
+              // Center, not the bare widget: `stretch` above is for the leading stripe, which
+              // genuinely needs the row's full height — a `meta` badge/stamp (StatusPill, a LEAD
+              // AppBadge) has its own compact intrinsic height and doesn't want that stretch, but
+              // still inherits it as any other Row child would without this.
+              if (meta != null) ...[const SizedBox(width: 12), Center(child: meta!)],
               if (onTap != null) ...[
                 const SizedBox(width: 6),
                 Icon(LucideIcons.chevronRight, size: 16, color: c.inkDisabled),

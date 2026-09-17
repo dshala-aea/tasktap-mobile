@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Button variant.
@@ -145,6 +146,17 @@ class AppButton extends StatelessWidget {
     AppButtonSize.sm => 12,
   };
 
+  /// `sm`'s own padding (vPad 6, fontSize 10) is deliberately tiny — it exists for exactly the
+  /// tight inline-row contexts (a status row's "Prendi in carico", a timer bar's Avvia/Ferma) that
+  /// a blanket 44pt floor defeats outright: forced to the same height as `lg`, `sm` reads as
+  /// stretched/oversized next to the compact pills and chips those rows already run at. 32
+  /// (AppSpacing.xxl) still clears WCAG's 24px AA minimum; `md`/`lg` keep the full AAA 44pt floor
+  /// since those are primary, standalone actions.
+  double get _minTapSize => switch (size) {
+    AppButtonSize.sm => AppSpacing.xxl,
+    AppButtonSize.md || AppButtonSize.lg => 44,
+  };
+
   // ── Colour tokens ────────────────────────────────────────────────────────
 
   /// Solid fill for every variant, including [primary] — DESIGN.md has no gradient fills
@@ -285,9 +297,9 @@ class AppButton extends StatelessWidget {
       ),
     );
 
-    // ≥44pt minimum touch target (accessibility)
+    // Minimum touch target — see _minTapSize's own doc comment on why `sm` gets a smaller floor.
     button = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+      constraints: BoxConstraints(minHeight: _minTapSize, minWidth: _minTapSize),
       child: button,
     );
 
