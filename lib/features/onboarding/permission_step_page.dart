@@ -39,6 +39,7 @@ class PermissionStepPage extends StatefulWidget {
     required this.checkStatus,
     required this.request,
     required this.onDone,
+    this.onOpenSettings,
   });
 
   final IconData icon;
@@ -61,6 +62,12 @@ class PermissionStepPage extends StatefulWidget {
   /// Called when this step's decision is final — a skip ("Non ora"), a granted/unavailable state
   /// the technician has acknowledged, or (via the auto-advance below) shortly after granting.
   final VoidCallback onDone;
+
+  /// Opens the OS's app-settings page, when the permission is permanently denied. Defaults to
+  /// [onDone] (treat "open settings" the same as "move on") for a step where opening settings
+  /// isn't meaningful — none of onboarding's four steps take that default; each supplies a real
+  /// settings-opening callback.
+  final VoidCallback? onOpenSettings;
 
   @override
   State<PermissionStepPage> createState() => _PermissionStepPageState();
@@ -162,7 +169,11 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
         ];
       case _Ui.deniedForever:
         return [
-          AppButton(label: 'Apri impostazioni', onPressed: widget.onDone, size: AppButtonSize.lg),
+          AppButton(
+            label: 'Apri impostazioni',
+            onPressed: widget.onOpenSettings ?? widget.onDone,
+            size: AppButtonSize.lg,
+          ),
           const SizedBox(height: AppSpacing.sm),
           AppButton.secondary(label: 'Non ora', onPressed: widget.onDone, size: AppButtonSize.lg),
         ];
