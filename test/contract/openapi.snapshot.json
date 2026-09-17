@@ -968,7 +968,7 @@
           "Billing"
         ],
         "summary": "The tiers that can be bought, so a client need not hardcode them.",
-        "description": "     This is the same list Task\u0026lt;IActionResult\u0026gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct) validates against \u2014 read from the catalog\n     constants rather than restated \u2014 because the alternative was a UI carrying its own copy of\n     \u0022starter, pro, business\u0022 and going stale independently of the one that already exists here.\n\n     No prices. They live in Stripe, keyed by the lookup keys below, and a copy here\nwould be a third place for them to disagree \u2014 the one that shows a customer a number\nbefore they reach Checkout. A client that needs to display prices should read them from\nStripe with these keys, so what is quoted and what is charged come from one source.",
+        "description": "     This is the same list Task\u0026lt;IActionResult\u0026gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct) validates against \u2014 both read\n     IReadOnlyCollection\u0026lt;string\u0026gt; SeatPricing.Tiers rather than restating it \u2014 because the alternative was a UI\n     carrying its own copy of \u0022starter, pro, business\u0022 and going stale independently of the one\n     that already exists in the catalog.\n\n     No prices. They live in Stripe, and a copy here would be a third place for them to\ndisagree \u2014 the one that shows a customer a number before they reach Checkout.",
         "responses": {
           "200": {
             "description": "OK",
@@ -22708,42 +22708,18 @@
       },
       "PlanCatalogueDto": {
         "required": [
-          "tiers",
-          "officeSeat",
-          "fieldSeat"
+          "tiers"
         ],
         "type": "object",
         "properties": {
           "tiers": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PlanOptionDto"
+              "type": "string"
             }
-          },
-          "officeSeat": {
-            "$ref": "#/components/schemas/PlanOptionDto"
-          },
-          "fieldSeat": {
-            "$ref": "#/components/schemas/PlanOptionDto"
           }
         },
-        "description": "What can be bought. Prices are deliberately absent \u2014 see the endpoint\u0027s remarks."
-      },
-      "PlanOptionDto": {
-        "required": [
-          "key",
-          "priceLookupKey"
-        ],
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "priceLookupKey": {
-            "type": "string"
-          }
-        },
-        "description": "A buyable thing and the Stripe price lookup key to quote it from."
+        "description": "What can be bought. Prices are deliberately absent \u2014 Stripe quotes them, not this\n    app (see the endpoint\u0027s original remarks). As of the seat-tier-pricing redesign, seat/tier\n    lookup keys are absent too: nothing in this app\u0027s own UI ever read them (confirmed \u2014 see\n    docs/superpowers/specs/2026-09-17-seat-tier-pricing-design.md), and a single lookup key per\n    seat type stopped being a coherent concept once seat price became tier-specific."
       },
       "ProblemDetails": {
         "type": "object",
