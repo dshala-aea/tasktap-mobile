@@ -64,12 +64,18 @@ import '../../features/cantiere/cantieri_list_screen.dart';
 import '../../features/cantiere/cantiere_detail_screen.dart';
 import '../../features/altro/forbidden_screen.dart';
 import '../../data/entitlements/entitlement_providers.dart';
+import '../../features/onboarding/onboarding_provider.dart';
 import 'route_requirement.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Route path constants.
 abstract final class AppRoutes {
   static const String login = '/login';
+
+  /// Shown once per account, right after first login, before Dashboard — see the router's
+  /// `redirect` callback for the gate, and `docs/superpowers/specs/2026-09-17-onboarding-flow-design.md`
+  /// for why this exists and why it's per-account rather than per-device.
+  static const String onboarding = '/onboarding';
 
   /// Where the `redirect` callback's route-requirement guard (see [RouteRequirement] and
   /// `_routeRequirements` below) sends a request for a route whose module/capability requirement
@@ -236,6 +242,11 @@ final _routeRequirements = <(String pathPrefix, RouteRequirement requirement)>[
 /// - AsyncLoading: return null (stay on current route while determining state).
 /// - null user (unauthenticated): redirect to /login.
 /// - non-null user (authenticated): redirect away from /login to /dashboard.
+///
+/// Onboarding guard: runs only once a user is confirmed authenticated (ahead of the
+/// route-requirement guard below), reading [onboardingCompletedProvider] keyed by that user's id.
+/// - Not completed, not already on /onboarding: redirect to /onboarding.
+/// - Completed, still on /onboarding: redirect to /dashboard.
 GoRouter buildRouter(WidgetRef ref) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -262,6 +273,7 @@ GoRouter buildRouter(WidgetRef ref) {
 
       final authAsync = ref.read(authStateProvider);
       final isOnLogin = state.matchedLocation == AppRoutes.login;
+      final isOnOnboarding = state.matchedLocation == AppRoutes.onboarding;
 
       return authAsync.when(
         // While Supabase is restoring the session, stay put.
@@ -272,6 +284,23 @@ GoRouter buildRouter(WidgetRef ref) {
           final isAuthenticated = user != null;
           if (!isAuthenticated && !isOnLogin) return AppRoutes.login;
           if (isAuthenticated && isOnLogin) return AppRoutes.dashboard;
+          if (!isAuthenticated) return null; // unauthenticated and already on /login
+
+          // Onboarding gate — evaluated only once we know who's signed in, and before the
+          // route-requirement guard below: an account that hasn't finished onboarding gets sent
+          // there regardless of what module/capability the destination route would otherwise
+          // require, rather than being bounced to /forbidden first.
+          final onboardingAsync = ref.read(onboardingCompletedProvider(user.id));
+          final onboardingRedirect = onboardingAsync.when(
+            loading: () => null,
+            error: (err, stack) => null,
+            data: (completed) {
+              if (!completed && !isOnOnboarding) return AppRoutes.onboarding;
+              if (completed && isOnOnboarding) return AppRoutes.dashboard;
+              return null;
+            },
+          );
+          if (onboardingRedirect != null) return onboardingRedirect;
 
           // Route-requirement guard — runs only once auth is confirmed and isn't itself
           // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
@@ -293,11 +322,12 @@ GoRouter buildRouter(WidgetRef ref) {
         },
       );
     },
-    // Rebuild router on auth state, kiosk mode, OR entitlement cache changes so redirects are
-    // applied to all three.
+    // Rebuild router on auth state, kiosk mode, onboarding-completion, OR entitlement cache
+    // changes so redirects are applied to all four.
     refreshListenable: Listenable.merge([
       _AuthStateListenable(ref),
       _KioskStateListenable(ref),
+      _OnboardingStateListenable(ref),
       _EntitlementStateListenable(ref),
     ]),
     routes: [
@@ -874,6 +904,40 @@ class _AuthStateListenable extends ChangeNotifier {
 class _KioskStateListenable extends ChangeNotifier {
   _KioskStateListenable(WidgetRef ref) {
     ref.listenManual(kioskModeProvider, (prev, next) => notifyListeners());
+  }
+}
+
+/// [Listenable] that notifies go_router whenever the signed-in user's onboarding-completion
+/// status resolves or changes, so the redirect callback's onboarding gate (see [buildRouter])
+/// re-runs once the async `SharedPreferences` read completes — it starts as loading, same as the
+/// kiosk/auth gates do at cold start — and immediately when
+/// `OnboardingCompletedNotifier.markCompleted` flips it.
+///
+/// Unlike [_AuthStateListenable]/[_KioskStateListenable], the provider being watched here is a
+/// *family* keyed by user id, which isn't known until [authStateProvider] resolves — so this
+/// listens to auth first, then (re)subscribes to the onboarding provider for whichever user is
+/// currently signed in, tearing the old subscription down if the user changes.
+class _OnboardingStateListenable extends ChangeNotifier {
+  _OnboardingStateListenable(WidgetRef ref) {
+    ref.listenManual(authStateProvider, (previous, next) {
+      final userId = next.valueOrNull?.id;
+      _subscription?.close();
+      _subscription = userId == null
+          ? null
+          : ref.listenManual(
+              onboardingCompletedProvider(userId),
+              (prev, next) => notifyListeners(),
+            );
+      notifyListeners();
+    }, fireImmediately: true);
+  }
+
+  ProviderSubscription<AsyncValue<bool>>? _subscription;
+
+  @override
+  void dispose() {
+    _subscription?.close();
+    super.dispose();
   }
 }
 
