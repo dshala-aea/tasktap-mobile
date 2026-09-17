@@ -23,8 +23,14 @@ class OnboardingCompletedNotifier extends FamilyAsyncNotifier<bool, String> {
   /// provider on the next rebuild it triggers (see `_OnboardingStateListenable` in
   /// `app_router.dart`) and stops sending this user back here.
   Future<void> markCompleted() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_key(arg), true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_key(arg), true);
+    } catch (_) {
+      // A failed local write is not worth trapping the technician on this screen forever —
+      // the worst case is onboarding shows again next login, which is recoverable; getting
+      // stuck here is not.
+    }
     state = const AsyncData(true);
   }
 

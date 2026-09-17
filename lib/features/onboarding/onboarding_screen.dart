@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:io' show Platform;
+
 import 'package:firebase_messaging/firebase_messaging.dart' show AuthorizationStatus;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -96,14 +98,26 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               ctaLabel: 'Attiva le notifiche',
               checkStatus: () async {
                 if (!NotificationService.isAvailable) return PermissionStepStatus.unavailable;
-                return _fromAuthorization(await NotificationService.instance.authorizationStatus());
+                final status = await NotificationService.instance.authorizationStatus();
+                if (status == AuthorizationStatus.authorized ||
+                    status == AuthorizationStatus.provisional) {
+                  return PermissionStepStatus.granted;
+                }
+                // Android's areNotificationsEnabled() check collapses "never asked" and
+                // "explicitly denied" to the same `denied` value — only iOS can report
+                // notDetermined here — so `denied` from a status CHECK (not yet asked) can't be
+                // treated as final on Android.
+                return Platform.isAndroid
+                    ? PermissionStepStatus.notDetermined
+                    : _fromAuthorization(status);
               },
               request: () async {
                 if (!NotificationService.isAvailable) return PermissionStepStatus.unavailable;
                 final granted = await NotificationService.instance.ensurePermission();
-                return granted
-                    ? PermissionStepStatus.granted
-                    : _fromAuthorization(await NotificationService.instance.authorizationStatus());
+                // An actual ask just happened (or the OS silently declined to show one) — denied
+                // here is final on both platforms, unlike the ambiguous pre-ask status check
+                // above.
+                return granted ? PermissionStepStatus.granted : PermissionStepStatus.deniedForever;
               },
               onDone: _next,
               onOpenSettings: () => openAppSettings(),
@@ -165,7 +179,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     // together) — see step_dettagli.dart's own capability() call for the other consumer of this.
     final micCapability = await ref.read(dictationServiceProvider).capability();
     final micStatus = await Permission.microphone.status;
-    if (cameraResult.isGranted && micCapability.microphoneGranted) {
+    if (cameraResult.isGranted && (micCapability.microphoneGranted || micStatus.isGranted)) {
       return PermissionStepStatus.granted;
     }
     if (cameraResult.isPermanentlyDenied || micStatus.isPermanentlyDenied) {
@@ -176,8 +190,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   PermissionStepStatus _fromGps(GpsPermissionStatus status) => switch (status) {
     GpsPermissionStatus.granted => PermissionStepStatus.granted,
-    GpsPermissionStatus.deniedForever => PermissionStepStatus.deniedForever,
-    GpsPermissionStatus.serviceDisabled ||
+    GpsPermissionStatus.deniedForever ||
+    GpsPermissionStatus.serviceDisabled => PermissionStepStatus.deniedForever,
     GpsPermissionStatus.notDetermined => PermissionStepStatus.notDetermined,
   };
 
