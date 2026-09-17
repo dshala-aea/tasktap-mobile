@@ -45,7 +45,9 @@ class _ClientiListScreenState extends State<ClientiListScreen> {
       // a second, unrouted "Clienti" list screen that this shell never builds. An office user
       // reaching Clienti from the Altro hub had no way to add a customer from the phone at all.
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
         child: AppFab(
           tooltip: 'Nuovo cliente',
           onPressed: () => context.push('/altro/clienti/nuovo'),

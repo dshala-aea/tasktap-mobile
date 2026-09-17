@@ -68,6 +68,13 @@ class StatusStamp extends StatelessWidget {
       ),
     };
 
+    // The inner ring of a double-ring stamp is drawn at (ringGap + 1.5) inset from the container
+    // edge — for the single-ring families that inset is 0, so `vPad` alone is the text's real gap
+    // from the border. For a double-ring family (Fatturato/Approvato/Verificato/Non valido),
+    // `vPad` was being measured from the *outer* edge while the *inner* ring — the one the text
+    // actually sits next to — already ate most of it, leaving text nearly touching the inner rule.
+    final ringInset = style.doubleRing ? metrics.ringGap + 1.5 : 0.0;
+
     Widget stamp = Transform.rotate(
       angle: _stampAngleFor(stato),
       child: CustomPaint(
@@ -80,7 +87,7 @@ class StatusStamp extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: metrics.hPad,
-            vertical: metrics.vPad,
+            vertical: metrics.vPad + ringInset,
           ),
           decoration: BoxDecoration(
             color: style.fill,

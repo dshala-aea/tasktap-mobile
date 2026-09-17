@@ -37,7 +37,9 @@ class AdminProdottoListScreen extends ConsumerWidget {
         ),
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
         child: AppFab(
           tooltip: 'Nuovo prodotto',
           onPressed: () => context.push('/altro/prodotti/nuovo'),

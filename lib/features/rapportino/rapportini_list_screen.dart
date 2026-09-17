@@ -81,7 +81,9 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
       // clearance sweep because it is a custom widget rather than a bare AppFab, and HomeShell
       // sets extendBody: true — so the app's primary create-rapportino action sat under the pill.
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
         child: _NewRapportinoFab(),
       ),
     );

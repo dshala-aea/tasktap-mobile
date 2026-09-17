@@ -72,7 +72,9 @@ class _TicketListScreenState extends State<TicketListScreen> {
         ),
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.navClearance - AppRack.navGap),
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
         child: AppFab(
           tooltip: 'Nuovo ticket',
           onPressed: () async {

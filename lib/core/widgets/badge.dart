@@ -100,27 +100,33 @@ class AppChip extends StatelessWidget {
       letterSpacing: 0.1,
     );
 
+    final chip = AppTappable(
+      onTap: onTap,
+      color: bg,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: borderColor, width: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Center(
+        child: icon == null
+            ? Text(label, style: textStyle)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 14, color: fg),
+                  const SizedBox(width: 4),
+                  Text(label, style: textStyle),
+                ],
+              ),
+      ),
+    );
+
+    // The 44pt touch-target floor only makes sense when this chip actually answers a tap — a
+    // read-only label (e.g. a ticket's type chip, no onTap) forced into a 44px box next to a
+    // normal-height StatusPill read as two mismatched, misaligned boxes on the same row.
+    if (onTap == null) return chip;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-      child: AppTappable(
-        onTap: onTap,
-        color: bg,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor, width: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Center(
-          child: icon == null
-              ? Text(label, style: textStyle)
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 14, color: fg),
-                    const SizedBox(width: 4),
-                    Text(label, style: textStyle),
-                  ],
-                ),
-        ),
-      ),
+      child: chip,
     );
   }
 }
