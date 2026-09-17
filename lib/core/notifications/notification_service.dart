@@ -8,9 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/env.dart';
 import '../router/app_router.dart';
 
-/// Background message handler — must be a top-level function.
+/// Background message handler — must be a top-level function, registered by main.dart via
+/// `FirebaseMessaging.onBackgroundMessage` before `runApp`.
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Background messages are handled by the OS notification tray.
   // No in-app processing needed here.
   debugPrint('FCM background message: ${message.messageId}');

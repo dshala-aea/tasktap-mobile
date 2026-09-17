@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Runtime-requestable on Android 13+ (API 33) — without this declared, FCM notifications
+         cannot be posted at all on those devices, and NotificationService.ensurePermission()'s
+         requestPermission() call has nothing to actually grant. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- mobile_scanner (materiali barcode lookup) uses CameraX directly, unlike image_picker's
          intent-based capture, so this needs declaring explicitly. -->
     <uses-permission android:name="android.permission.CAMERA"/>
@@ -63,6 +67,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- FCM default notification channel — without this, the plugin creates one named
+             "Miscellaneous" on first push, which is what a technician would see in system
+             settings if they ever went looking to mute/configure it. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="tasktap_default_channel" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

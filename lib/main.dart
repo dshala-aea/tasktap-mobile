@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -80,6 +81,11 @@ Future<void> runTaskTapApp() async {
       // google-services.json/GoogleService-Info.plist alone works on Android today but silently
       // has nothing to find on a platform whose native config file isn't present.
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      // Must be registered here, before runApp, and with a top-level/static function — the OS
+      // can spawn a fresh isolate to run this handler while the app is backgrounded/terminated,
+      // which has no access to anything set up after this point. It was defined but never
+      // actually wired to FirebaseMessaging, so background/terminated pushes never reached it.
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       await NotificationService.instance.initialize();
       NotificationService.isAvailable = true;
     } catch (e) {
