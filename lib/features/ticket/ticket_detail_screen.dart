@@ -22,6 +22,7 @@ import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
+import '../dashboard/active_trackers_provider.dart' show nowProvider, formatElapsed;
 import '../rapportino/create_draft.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
@@ -1556,6 +1557,12 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
     final running = ref.watch(runningTicketWorklogProvider(widget.ticketId));
     final isRunning = running != null;
 
+    // Only watched while a clock is actually going — an idle ticket detail screen ticks nothing.
+    final elapsed = isRunning
+        ? (ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc())
+              .difference(running.workDate.add(running.startTime))
+        : null;
+
     return AppCard(
       child: Row(
         children: [
@@ -1580,6 +1587,21 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
               ),
             ),
           ),
+          if (elapsed != null) ...[
+            Text(
+              formatElapsed(elapsed),
+              style: TextStyle(
+                fontFamily: 'Archivo Narrow',
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: c.ink,
+                // Tabular figures: without them the row shifts width every second as digit
+                // widths change, the same reasoning active_tracker_strip.dart's clock uses.
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
           if (_busy)
             const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
           else if (isRunning)
