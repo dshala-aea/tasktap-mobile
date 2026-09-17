@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/app_button.dart';
+import '../../core/widgets/app_tappable.dart';
 import '../../core/widgets/permission_purpose_card.dart';
 
 /// Outcome of checking or requesting one permission, coarse enough to drive one shared UI for
@@ -156,9 +157,13 @@ class _PermissionStepPageState extends State<PermissionStepPage> {
         return const [];
       case _Ui.granted:
         return [
-          GestureDetector(
+          AppTappable(
             onTap: widget.onDone,
-            child: const Text('Consentito', textAlign: TextAlign.center),
+            semanticLabel: 'Consentito',
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: Text('Consentito', textAlign: TextAlign.center),
+            ),
           ),
         ];
       case _Ui.unavailable:

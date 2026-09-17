@@ -65,6 +65,7 @@ import '../../features/cantiere/cantiere_detail_screen.dart';
 import '../../features/altro/forbidden_screen.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../features/onboarding/onboarding_provider.dart';
+import '../../features/onboarding/onboarding_screen.dart';
 import 'route_requirement.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -345,6 +346,16 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.onboarding,
+        builder: (context, state) {
+          final userId = ref.read(authStateProvider).valueOrNull?.id;
+          // The redirect gate never lands here without an authenticated user (see the
+          // onboarding gate above), so this is unreachable in practice — the empty-string
+          // fallback just satisfies the type system rather than crashing if it somehow were.
+          return OnboardingScreen(userId: userId ?? '');
+        },
       ),
 
       // ── Cantiere timbra (pushed from cantiere detail, or from the picker below) ──
