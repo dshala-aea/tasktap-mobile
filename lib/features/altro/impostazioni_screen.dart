@@ -8,9 +8,9 @@ import '../../core/config/app_info_provider.dart';
 import '../../core/dictation/dictation_service.dart';
 import '../../core/notifications/notification_service.dart';
 import '../../core/router/app_router.dart';
-import '../../core/security/biometric_service.dart';
 import '../../core/widgets/widgets.dart';
 import '../../presentation/providers/auth_providers.dart';
+import 'biometric_setup.dart';
 import 'impostazioni_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -343,36 +343,7 @@ Future<void> _toggleBiometrics(
     return;
   }
 
-  final service = ref.read(biometricServiceProvider);
-
-  if (!await service.isAvailable()) {
-    if (!context.mounted) return;
-    showAppToast(
-      context,
-      message:
-          'Nessuna impronta o Face ID configurati su questo dispositivo. '
-          'Aggiungili nelle impostazioni del telefono, poi riprova.',
-      tone: ToastTone.warning,
-    );
-    return;
-  }
-
-  // Prove it works before relying on it.
-  final ok = await service.authenticate(
-    reason: 'Conferma la tua identità per attivare il blocco biometrico',
-  );
-
-  if (!ok) {
-    if (!context.mounted) return;
-    showAppToast(
-      context,
-      message: 'Verifica non riuscita. Blocco biometrico non attivato.',
-      tone: ToastTone.error,
-    );
-    return;
-  }
-
-  notifier.toggle(key: 'autenticazioneBiometrica');
+  await enableBiometricLock(context, ref);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

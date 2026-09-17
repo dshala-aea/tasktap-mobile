@@ -33,6 +33,17 @@ class _FakeLocationServiceThrows extends ILocationService {
   }
 }
 
+class _FakeLocationServiceWithStatus extends ILocationService {
+  const _FakeLocationServiceWithStatus(this._status);
+  final GpsPermissionStatus _status;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => null;
+
+  @override
+  Future<GpsPermissionStatus> permissionStatus() async => _status;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -78,6 +89,20 @@ void main() {
     test('GpsCoords accuracy is null when the device reports none', () {
       const GpsCoords coords = (lat: 10.0, lng: 20.0, accuracy: null);
       expect(coords.accuracy, isNull);
+    });
+
+    test('permissionStatus defaults to notDetermined on the base contract', () async {
+      // The base class gives every existing fake (and DisabledLocationService) an honest default
+      // without each having to restate it — same trick willPromptForPermission already uses.
+      const service = _FakeLocationServiceReturnsNull();
+      expect(await service.permissionStatus(), GpsPermissionStatus.notDetermined);
+    });
+
+    test('permissionStatus can report every state a caller needs to branch on', () async {
+      for (final status in GpsPermissionStatus.values) {
+        final service = _FakeLocationServiceWithStatus(status);
+        expect(await service.permissionStatus(), status);
+      }
     });
   });
 }

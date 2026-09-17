@@ -365,4 +365,36 @@ void main() {
       );
     });
   });
+
+  group('onboarding redirect rule', () {
+    // Mirrors app_router.dart's redirect callback's onboarding branch: given an authenticated
+    // user and their onboarding-completion status, what should the redirect target be?
+    String? onboardingRedirect({
+      required bool isOnOnboarding,
+      required bool completed,
+    }) {
+      if (!completed && !isOnOnboarding) return '/onboarding';
+      if (completed && isOnOnboarding) return '/dashboard';
+      return null;
+    }
+
+    test('not completed, not already there → sent to onboarding', () {
+      expect(
+        onboardingRedirect(isOnOnboarding: false, completed: false),
+        '/onboarding',
+      );
+    });
+
+    test('not completed, already on onboarding → stays put', () {
+      expect(onboardingRedirect(isOnOnboarding: true, completed: false), isNull);
+    });
+
+    test('completed, on onboarding → sent to dashboard', () {
+      expect(onboardingRedirect(isOnOnboarding: true, completed: true), '/dashboard');
+    });
+
+    test('completed, elsewhere → stays put', () {
+      expect(onboardingRedirect(isOnOnboarding: false, completed: true), isNull);
+    });
+  });
 }

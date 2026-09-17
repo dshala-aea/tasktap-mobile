@@ -113,6 +113,15 @@ class NotificationService {
         status == AuthorizationStatus.provisional;
   }
 
+  /// Raw OS authorization status, for a caller that needs to tell "never asked" apart from "said
+  /// no" — [hasPermission] deliberately collapses both to `false` for its one existing caller
+  /// ("can I skip the purpose sheet"), which is correct there and not enough for onboarding's own
+  /// three-state UI.
+  Future<AuthorizationStatus> authorizationStatus() async {
+    final settings = await _messaging.getNotificationSettings();
+    return settings.authorizationStatus;
+  }
+
   /// Asks the OS, once the caller has already explained why.
   ///
   /// Returns whether notifications can now be delivered. **Do not call this without showing
