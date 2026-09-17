@@ -62,11 +62,20 @@ import '../../features/rapportino/rapportino_view_screen.dart';
 import '../../features/timbra/cantiere_timbra_screen.dart';
 import '../../features/cantiere/cantieri_list_screen.dart';
 import '../../features/cantiere/cantiere_detail_screen.dart';
+import '../../features/altro/forbidden_screen.dart';
+import '../../data/entitlements/entitlement_providers.dart';
+import 'route_requirement.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Route path constants.
 abstract final class AppRoutes {
   static const String login = '/login';
+
+  /// Where the `redirect` callback's route-requirement guard (see [RouteRequirement] and
+  /// `_routeRequirements` below) sends a request for a route whose module/capability requirement
+  /// is not held. Must never itself appear as a `_routeRequirements` prefix — that would
+  /// self-redirect-loop.
+  static const String forbidden = '/forbidden';
 
   /// Where a device that has never been activated as a kiosk goes to redeem the credential the
   /// web admin issued (see `KioskActivationScreen`). Reached only via the hidden long-press on
@@ -186,6 +195,35 @@ abstract final class AppRoutes {
 /// Global navigator key — use for imperative navigation outside widget tree.
 final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
+/// Path prefix → what's required to reach any route beneath it, checked centrally in
+/// `buildRouter`'s `redirect` rather than per-screen. A path with no matching prefix here has no
+/// route-level requirement beyond the auth check.
+///
+/// This is a list of `(prefix, requirement)` pairs matched via [String.startsWith], NOT a
+/// `Map<String, RouteRequirement>` keyed on the literal route pattern. GoRouter substitutes a
+/// dynamic segment (e.g. `:id`) with the real value in `state.matchedLocation` for an actual
+/// visit, so an exact-string map keyed on `'/altro/pianificazioni/:id'` would never match a real
+/// navigation there — a plain map is the wrong data structure for a route subtree that has
+/// dynamic children. `'/altro/pianificazioni'` as a prefix covers all four admin schedule routes
+/// (list, `nuova`, `:id`, `:id/modifica`) in one entry, since no sibling route under
+/// [AppRoutes.altro] shares that prefix (verified against the route tree below: `rapportini`,
+/// `profilo`, `impostazioni`, `notifiche`, `i-miei-dati`, `ferie`, `clienti`, `commesse/:id`,
+/// `cantieri`, `sedi`, `magazzino`, `prodotti`, `contratti`, `squadre`, `rapportini-admin`,
+/// `non-disponibile` — none begin with `pianificazioni`).
+///
+/// [AppRoutes.forbidden] itself must NEVER be prefix-matched by an entry here — that would
+/// self-redirect-loop back onto itself. It isn't: the only prefix below is
+/// `/altro/pianificazioni`, which `/forbidden` does not start with.
+///
+/// The mobile Admin surface (`/altro/...` admin CRUD screens) is dispatcher-only — a narrower,
+/// genuinely different audience than "anyone who can use the module at all" — so this checks the
+/// finer-grained `pianificazione.schedule.write` *capability*, not just the `pianificazione`
+/// module. That's deliberately stricter than the web guard for the end-user Presenze/
+/// Pianificazione routes, which only checks module entitlement.
+final _routeRequirements = <(String pathPrefix, RouteRequirement requirement)>[
+  ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write')),
+];
+
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///
 /// Kiosk guard runs BEFORE the auth guard: a device with `kioskModeProvider.active == true` is
@@ -234,14 +272,33 @@ GoRouter buildRouter(WidgetRef ref) {
           final isAuthenticated = user != null;
           if (!isAuthenticated && !isOnLogin) return AppRoutes.login;
           if (isAuthenticated && isOnLogin) return AppRoutes.dashboard;
+
+          // Route-requirement guard — runs only once auth is confirmed and isn't itself
+          // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
+          // own doc comment on why that would self-redirect-loop).
+          if (state.matchedLocation != AppRoutes.forbidden) {
+            for (final (prefix, requirement) in _routeRequirements) {
+              if (state.matchedLocation.startsWith(prefix)) {
+                final satisfied = requirement.isSatisfied(ref);
+                // satisfied == null: entitlement cache still loading — stay put, don't redirect
+                // yet (same "don't know yet" treatment as kioskState.loading/authAsync.loading
+                // above).
+                if (satisfied == false) return AppRoutes.forbidden;
+                break;
+              }
+            }
+          }
+
           return null;
         },
       );
     },
-    // Rebuild router on auth state OR kiosk mode changes so redirects are applied to both.
+    // Rebuild router on auth state, kiosk mode, OR entitlement cache changes so redirects are
+    // applied to all three.
     refreshListenable: Listenable.merge([
       _AuthStateListenable(ref),
       _KioskStateListenable(ref),
+      _EntitlementStateListenable(ref),
     ]),
     routes: [
       // ── Kiosk ───────────────────────────────────────────────────────────
@@ -306,6 +363,12 @@ GoRouter buildRouter(WidgetRef ref) {
       GoRoute(
         path: '/ticket/new',
         builder: (context, state) => const NewTicketFormScreen(),
+      ),
+
+      // ── Forbidden (route-requirement guard's redirect target) ────────────
+      GoRoute(
+        path: AppRoutes.forbidden,
+        builder: (context, state) => const ForbiddenScreen(),
       ),
 
       // ── Main Shell (5-tab pill bottom nav) ───────────────────────────────
@@ -811,5 +874,21 @@ class _AuthStateListenable extends ChangeNotifier {
 class _KioskStateListenable extends ChangeNotifier {
   _KioskStateListenable(WidgetRef ref) {
     ref.listenManual(kioskModeProvider, (prev, next) => notifyListeners());
+  }
+}
+
+/// [Listenable] that notifies go_router whenever the cached entitlement resolves or changes, so
+/// the route-requirement guard (`_routeRequirements`, see [buildRouter]) re-runs once an answer
+/// is known.
+///
+/// Without this, a cold-started deep link straight into a guarded route (the exact scenario this
+/// guard exists to close) would see `RouteRequirement.isSatisfied` return null while the cache is
+/// still loading, correctly stay put per that null case's contract — and then never get
+/// re-checked, since nothing else would tell go_router to re-run `redirect` once the cache
+/// actually resolved. Mirrors [_AuthStateListenable]/[_KioskStateListenable], the two other
+/// async-loading signals `redirect` already depends on.
+class _EntitlementStateListenable extends ChangeNotifier {
+  _EntitlementStateListenable(WidgetRef ref) {
+    ref.listenManual(cachedEntitlementProvider, (prev, next) => notifyListeners());
   }
 }
