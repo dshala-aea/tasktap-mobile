@@ -8682,6 +8682,17 @@
             }
           },
           {
+            "name": "stati",
+            "in": "query",
+            "description": "Filter by \u0022stato is one of these\u0022 (repeatable, e.g. \u0060?stati=Controllato\u0026amp;stati=Fatturato\u0060) \u2014\nlets a caller match multiple statuses in one call, which stato cannot\nexpress. When non-empty this takes precedence over stato rather than\nbeing ANDed with it. stato is unchanged and still supported for every\nexisting caller that only needs a single value.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/ReportStatoEnum"
+              }
+            }
+          },
+          {
             "name": "dateFrom",
             "in": "query",
             "description": "Filter by start date.",
@@ -24039,7 +24050,8 @@
           "tecnicoId",
           "interventoId",
           "sede",
-          "sedeId"
+          "sedeId",
+          "isAssenza"
         ],
         "type": "object",
         "properties": {
@@ -24106,6 +24118,10 @@
             ],
             "format": "uuid"
           },
+          "isAssenza": {
+            "type": "boolean",
+            "description": "True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved,\nnot because someone scheduled real work. Plain \u0060bool\u0060, not the backend\u0027s raw\n\u0060OwnedByAbsenceRequestId\u0060 \u2014 the client only ever needs \u0022is this an absence\u0022, never the\nspecific request id. An approved absence still creates a completely normal \u0060Schedule\u0060\nrow (same assignment writer as a real appointment), so without this flag the calendar could\nnot tell the two apart and rendered an absence as a draggable, reassignable, editable\nappointment \u2014 which it is not."
+          },
           "squadra": {
             "type": [
               "null",
@@ -24134,6 +24150,12 @@
             ],
             "description": "Counterpart to StartAtUtc, from the activity\u0027s end time.",
             "format": "date-time"
+          },
+          "tecnicoColor": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -26283,6 +26305,13 @@
           "isClosed": {
             "type": "boolean",
             "description": "Indicates if this status represents a closed ticket."
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional tenant-defined badge color for this status, as a hex string (e.g. \u0022#3B82F6\u0022).\nNull means no override \u2014 the frontend falls back to its default status color mapping."
           }
         },
         "description": "Represents a ticket status (StatoIntervento)."
@@ -26298,6 +26327,12 @@
           },
           "isClosed": {
             "type": "boolean"
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
