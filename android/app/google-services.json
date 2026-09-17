@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "999817307523",
+    "project_id": "tasktap-mobile",
+    "storage_bucket": "tasktap-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:999817307523:android:48ae67b397005430d582b6",
+        "android_client_info": {
+          "package_name": "com.advantedge.tasktap.tasktap_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDvRqQHH3hLEn66aMpS3mGyrrRAR3H3Oy8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

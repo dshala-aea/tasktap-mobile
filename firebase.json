@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"tasktap-mobile","appId":"1:999817307523:android:48ae67b397005430d582b6","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"tasktap-mobile","configurations":{"android":"1:999817307523:android:48ae67b397005430d582b6","ios":"1:999817307523:ios:a14c84da534434ffd582b6"}}}}}}

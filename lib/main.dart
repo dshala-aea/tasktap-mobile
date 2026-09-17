@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/location/location_service.dart';
@@ -74,7 +75,11 @@ Future<void> runTaskTapApp() async {
   );
   if (firebaseEnabled == 'true') {
     try {
-      await Firebase.initializeApp();
+      // Explicit options, not native-config auto-discovery: DefaultFirebaseOptions is what
+      // `flutterfire configure` actually generated and keeps in sync going forward; relying on
+      // google-services.json/GoogleService-Info.plist alone works on Android today but silently
+      // has nothing to find on a platform whose native config file isn't present.
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
       await NotificationService.instance.initialize();
       NotificationService.isAvailable = true;
     } catch (e) {
