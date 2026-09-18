@@ -1,4 +1,8 @@
 // dart format width=100
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -351,8 +355,13 @@ void main() {
 
     test(
       'passes capturedLatitude/capturedLongitude/capturedAt through to uploadAttachment '
-      'when the local allegato row carries them (signature captured with a known GPS fix)',
+      'for a plain (non-FK-linked) allegato that happens to carry GPS/timestamp',
       () async {
+        // Note: this allegato is NOT linked via draft.customerSignatureAllegatoId, so despite
+        // its signature-styled file name it is routed as a plain upload — same as any photo
+        // carrying GPS/timestamp. A REAL signature is identified by that FK (see the
+        // 'signature allegati route to firma-cliente/firma-tecnico' group below), never by
+        // matching its file name.
         await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-gps');
 
         final capturedAt = DateTime.utc(2026, 9, 5, 12, 30);
@@ -461,6 +470,257 @@ void main() {
       // photoAllegatoIds now contains the SERVER id, not the local one
       expect(capturedRequest!.photoAllegatoIds, contains('server-allegato-99'));
       expect(capturedRequest!.photoAllegatoIds, isNot(contains('allegato-local-report-1')));
+    });
+  });
+
+  group('SubmissionQueue — signature allegati route to firma-cliente/firma-tecnico', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('submission_queue_test');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    /// Writes [bytes] to a real file on disk and returns its path — signCustomer/signTechnician
+    /// base64-encode the file's on-disk bytes, so the mocked client needs a real file to read.
+    String writeLocalFile(String name, List<int> bytes) {
+      final file = File('${tempDir.path}/$name');
+      file.writeAsBytesSync(bytes);
+      return file.path;
+    }
+
+    test(
+      'a customer-signature allegato (identified via the draft header FK, not its file name) '
+      'goes through signCustomer, not uploadAttachment',
+      () async {
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-sig-cust');
+        final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]);
+        final path = writeLocalFile('firma_cliente.png', bytes);
+        final capturedAt = DateTime.utc(2026, 9, 18, 10, 30);
+
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'sig-cust-local',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                fileName: 'firma_cliente.png',
+                contentType: 'image/png',
+                sizeBytes: bytes.length,
+                storagePath: path,
+                url: path,
+                entityType: 1,
+                entityId: 'report-1',
+                uploadedByUserId: 'user-1',
+                isPendingUpload: const Value(true),
+                capturedLatitude: const Value(45.4642),
+                capturedLongitude: const Value(9.19),
+                capturedAt: Value(capturedAt),
+              ),
+            );
+        // The FK is what marks this allegato as the customer signature — set after the fact,
+        // same as saveSignature does at capture time.
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: true,
+          serverAllegatoId: 'sig-cust-local',
+        );
+
+        when(
+          () => mockApiClient.signCustomer(
+            reportId: any(named: 'reportId'),
+            signatureBase64: any(named: 'signatureBase64'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        ).thenAnswer((_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-sig-c'));
+
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+        );
+
+        await queue.processAll();
+
+        verify(
+          () => mockApiClient.signCustomer(
+            reportId: 'report-1',
+            signatureBase64: base64Encode(bytes),
+            capturedLatitude: 45.4642,
+            capturedLongitude: 9.19,
+            capturedAt: capturedAt,
+          ),
+        ).called(1);
+        verifyNever(
+          () => mockApiClient.uploadAttachment(
+            reportId: any(named: 'reportId'),
+            localPath: any(named: 'localPath'),
+            fileName: any(named: 'fileName'),
+            contentType: any(named: 'contentType'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        );
+
+        // Draft header's customerSignatureAllegatoId is updated to the SERVER id.
+        final draft = await repo.getDraft('report-1');
+        expect(draft!.customerSignatureAllegatoId, 'server-sig-c');
+      },
+    );
+
+    test(
+      'a technician-signature allegato goes through signTechnician, not uploadAttachment',
+      () async {
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-sig-tech');
+        final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x01]);
+        final path = writeLocalFile('firma_tecnico.png', bytes);
+
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'sig-tech-local',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                fileName: 'firma_tecnico.png',
+                contentType: 'image/png',
+                sizeBytes: bytes.length,
+                storagePath: path,
+                url: path,
+                entityType: 1,
+                entityId: 'report-1',
+                uploadedByUserId: 'user-1',
+                isPendingUpload: const Value(true),
+              ),
+            );
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: false,
+          serverAllegatoId: 'sig-tech-local',
+        );
+
+        when(
+          () => mockApiClient.signTechnician(
+            reportId: any(named: 'reportId'),
+            signatureBase64: any(named: 'signatureBase64'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        ).thenAnswer((_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-sig-t'));
+
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+        );
+
+        await queue.processAll();
+
+        verify(
+          () => mockApiClient.signTechnician(
+            reportId: 'report-1',
+            signatureBase64: base64Encode(bytes),
+            // No GPS captured this time — the two fields must reach the call as null rather
+            // than being dropped or defaulted.
+            capturedLatitude: null,
+            capturedLongitude: null,
+            capturedAt: null,
+          ),
+        ).called(1);
+        verifyNever(
+          () => mockApiClient.uploadAttachment(
+            reportId: any(named: 'reportId'),
+            localPath: any(named: 'localPath'),
+            fileName: any(named: 'fileName'),
+            contentType: any(named: 'contentType'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        );
+
+        final draft = await repo.getDraft('report-1');
+        expect(draft!.technicianSignatureAllegatoId, 'server-sig-t');
+      },
+    );
+
+    test('a plain photo allegato still goes through uploadAttachment, unaffected', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-photo',
+        isPendingAllegato: true,
+      );
+
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      ).thenAnswer((_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-photo'));
+
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
+
+      await queue.processAll();
+
+      verify(
+        () => mockApiClient.uploadAttachment(
+          reportId: 'report-1',
+          localPath: '/local/photo.jpg',
+          fileName: 'photo.jpg',
+          contentType: 'image/jpeg',
+          capturedLatitude: null,
+          capturedLongitude: null,
+          capturedAt: null,
+        ),
+      ).called(1);
+      verifyNever(
+        () => mockApiClient.signCustomer(
+          reportId: any(named: 'reportId'),
+          signatureBase64: any(named: 'signatureBase64'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      );
+      verifyNever(
+        () => mockApiClient.signTechnician(
+          reportId: any(named: 'reportId'),
+          signatureBase64: any(named: 'signatureBase64'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      );
     });
   });
 

@@ -8953,7 +8953,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAttachmentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAttachmentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAttachmentResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -8997,7 +9014,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAttachmentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAttachmentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportAttachmentResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -19948,6 +19982,34 @@
           "signatureBase64": {
             "type": "string",
             "description": "Base64-encoded PNG data URL (with or without data:image/png;base64, prefix)."
+          },
+          "capturedLatitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "GPS latitude captured alongside the signature, if the device provided it.",
+            "format": "double"
+          },
+          "capturedLongitude": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "GPS longitude captured alongside the signature, if the device provided it.",
+            "format": "double"
+          },
+          "capturedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Device UTC timestamp at signature capture, if the client provided it.",
+            "format": "date-time"
           }
         },
         "description": "Request for saving the customer signature as a base64 PNG."
@@ -25672,7 +25734,8 @@
           "repeat",
           "createdAt",
           "updatedAt",
-          "assignees"
+          "assignees",
+          "isAssenza"
         ],
         "type": "object",
         "properties": {
@@ -25762,6 +25825,10 @@
             "items": {
               "$ref": "#/components/schemas/SyncScheduleAssigneeDto"
             }
+          },
+          "isAssenza": {
+            "type": "boolean",
+            "description": "True when this row exists because an absence request (Ferie/Permesso/Malattia) was approved,\nnot because someone scheduled real work. Plain \u0060bool\u0060, not the backend\u0027s raw\n\u0060OwnedByAbsenceRequestId\u0060 \u2014 the client only ever needs \u0022is this an absence\u0022, never the\nspecific request id. An approved absence still creates a completely normal \u0060Schedule\u0060\nrow (same assignment writer as a real appointment), so without this flag the mobile client\ncould not tell an absence-owned schedule apart from a real appointment and rendered it\ndraggable/reassignable/editable \u2014 which it is not (the backend rejects any write to an\nabsence-owned schedule with \u0060DomainRuleException(\u0022absence_schedule_read_only\u0022)\u0060)."
           }
         },
         "description": "A schedule as the device sees it.\n\nThe sync payload used to serialise Schedule entities directly, which is how an\ninternal schema change was able to break a client: dropping the assignment columns (ADR-0009)\nremoved \u0060userId\u0060 from the wire, and the Flutter client casts it non-nullably. An entity is\na storage shape and will keep changing; this DTO is the contract, and it changes only when the\ncontract is meant to.\n\nGuid SyncScheduleDto.UserId is preserved as the directly assigned technician \u2014 the same value the\ndropped column held \u2014 so the existing client keeps working unchanged.\nIReadOnlyList\u0026lt;SyncScheduleAssigneeDto\u0026gt; SyncScheduleDto.Assignees is what it should move to: it carries everyone on the schedule,\nincluding squadra-mediated members the old column could never express."

@@ -12,6 +12,7 @@ import 'package:tasktap_mobile/data/settings/notification_settings_api_client.da
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/data/magazzino/magazzino_api_client.dart';
+import 'package:tasktap_mobile/data/reports/report_submit_api_client.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
@@ -422,6 +423,37 @@ void main() {
           start: const Duration(hours: 8),
           end: const Duration(hours: 12),
           description: 'intervento',
+        ),
+      );
+    });
+  });
+
+  // Signatures go through the dedicated firma-cliente/firma-tecnico endpoints rather than the
+  // generic (unguarded, multipart) attachments endpoint — see ReportSubmitApiClient's header
+  // comment — so the server classifies them as Kind=SystemArtifact instead of Kind=UserUpload.
+  group('report signatures', () {
+    contractTest('the customer signature matches the server', () {
+      final client = ReportSubmitApiClient(dio);
+      return capture(
+        () => client.signCustomer(
+          reportId: _id(58),
+          signatureBase64: 'data:image/png;base64,iVBORw0KGgo=',
+          capturedLatitude: 45.4642,
+          capturedLongitude: 9.19,
+          capturedAt: DateTime.utc(2026, 9, 18, 10, 30),
+        ),
+      );
+    });
+
+    contractTest('the technician signature matches the server', () {
+      final client = ReportSubmitApiClient(dio);
+      return capture(
+        () => client.signTechnician(
+          reportId: _id(59),
+          signatureBase64: 'data:image/png;base64,iVBORw0KGgo=',
+          capturedLatitude: 45.4642,
+          capturedLongitude: 9.19,
+          capturedAt: DateTime.utc(2026, 9, 18, 10, 30),
         ),
       );
     });
