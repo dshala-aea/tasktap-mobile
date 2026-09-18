@@ -54,10 +54,49 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
       .read(draftReportRepositoryProvider)
       .watchDraft(widget.reportId);
 
+  // Separate subscription from the StreamBuilder above (Drift query streams are broadcast, so
+  // both can listen at once): drives the one-shot "toast + close the sheet" side effect once the
+  // draft's submissionState genuinely reaches `submitted`. Not folded into the StreamBuilder
+  // itself — that builder only renders UI, and a Navigator.pop from inside build() would run
+  // during the widget tree's build phase, which Flutter disallows.
+  StreamSubscription<DraftReport?>? _submitCompletionSub;
+  bool _hasHandledSubmitSuccess = false;
+
   @override
   void initState() {
     super.initState();
     unawaited(_maybePrefillTechnicianSignature());
+    _submitCompletionSub = _draftStream.listen(_handleDraftUpdateForNavigation);
+  }
+
+  @override
+  void dispose() {
+    _submitCompletionSub?.cancel();
+    super.dispose();
+  }
+
+  /// Once the draft's persisted submission state genuinely reaches `submitted` (the same source
+  /// of truth the StreamBuilder below already renders a success card for), shows a confirmation
+  /// toast and closes this Riepilogo sheet — mirrors `NewTicketFormScreen._onSubmit`'s
+  /// toast-then-pop idiom, which this screen never had: submitting used to leave the technician
+  /// staring at a static success card with no way back except manually dismissing the sheet.
+  ///
+  /// Keyed off the stream (not the `_onInvia` call directly): `queue.processAll()` returning
+  /// does not itself mean the report reached the server — offline it only enqueues — so the
+  /// StreamBuilder's `submitted` state is the only honest "this is actually done" signal. The
+  /// `_hasHandledSubmitSuccess` guard makes this fire exactly once per sheet lifetime even though
+  /// the stream may re-emit afterward (e.g. other draft fields still autosaving).
+  void _handleDraftUpdateForNavigation(DraftReport? draft) {
+    if (_hasHandledSubmitSuccess) return;
+    final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
+    if (subState != DraftSubmissionState.submitted) return;
+
+    _hasHandledSubmitSuccess = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showAppToast(context, message: 'Rapportino inviato con successo', tone: ToastTone.success);
+      Navigator.of(context).pop();
+    });
   }
 
   /// Pre-fills "Firma tecnico" from the technician's own saved signature (see

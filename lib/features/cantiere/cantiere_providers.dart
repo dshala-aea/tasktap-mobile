@@ -11,7 +11,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/location/geocoding_service.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart' show appDatabaseProvider;
+import '../../data/timbratura/cantiere_worklog_api_client.dart';
 
 /// A single cantiere by id, or null if none is synced locally with that id. Not filtered by
 /// status (unlike `cantieriProvider`) — a cantiere reached via a ticket's link may be
@@ -87,3 +89,21 @@ final cantiereGeocodedLocationProvider = FutureProvider.autoDispose.family<Geoco
   );
   return point;
 });
+
+/// A user's CantiereWorkLog entries on one cantiere, most recent first — the cantiere-tier
+/// equivalent of `ticketWorklogsProvider` (features/ticket/ticket_providers.dart), same
+/// online-only posture and for the same reason: a live network call, not a locally-synced
+/// table, so there is nothing to cache-then-refresh here. Backs StepOre's cantiere-tier hours
+/// suggestion, which only applies when the report has no ticket (or the ticket tier found
+/// nothing) but does have a cantiereId.
+///
+/// Returns an empty list while offline rather than throwing: every call site here only ever
+/// reads `.valueOrNull` and treats "nothing" and "couldn't ask" identically (no suggestion is
+/// not an error state), so there is nothing for a thrown exception to communicate that an empty
+/// list doesn't already.
+final cantiereWorklogsProvider = FutureProvider.autoDispose
+    .family<List<CantiereWorkLogDto>, ({String userId, String cantiereId})>((ref, key) async {
+      if (!ref.watch(isOnlineProvider)) return const [];
+      final api = ref.watch(cantiereWorklogApiClientProvider);
+      return api.fetchForCantiere(userId: key.userId, cantiereId: key.cantiereId);
+    });
