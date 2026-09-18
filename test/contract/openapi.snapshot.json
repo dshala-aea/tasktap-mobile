@@ -11568,6 +11568,94 @@
         }
       }
     },
+    "/api/Smtp": {
+      "get": {
+        "tags": [
+          "Smtp"
+        ],
+        "summary": "Reads the tenant\u0027s SMTP config. Never echoes the password back \u2014 only whether one\n    is set. Returns a 200 with a null body when the tenant has no config yet (mirrors\n    Task\u0026lt;IActionResult\u0026gt; AiController.GetSettings(CancellationToken ct)-style \u0022no config yet\u0022 GETs in this codebase).",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Smtp"
+        ],
+        "summary": "Creates or replaces the tenant\u0027s SMTP config. string? UpsertTenantSmtpConfigRequest.Password\n    is optional on write: omitted/null keeps the existing encrypted password unchanged on an\n    update, and is required the first time a tenant configures SMTP (there is no existing\n    password to keep).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTenantSmtpConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTenantSmtpConfigRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertTenantSmtpConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Smtp"
+        ],
+        "summary": "Removes the tenant\u0027s SMTP config, so \u0060ReportsController.SendEmail\u0060 falls back\n    to the platform\u0027s global SMTP config.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Smtp/test": {
+      "post": {
+        "tags": [
+          "Smtp"
+        ],
+        "summary": "Sends a real test email using the tenant\u0027s currently-saved SMTP config (the same\n    ITenantSmtpProviderFactory Task 5 wired into \u0060ReportsController.SendEmail\u0060),\n    so an admin can confirm the server actually works before relying on it. Never returns the\n    underlying mailer\u0027s own exception text \u2014 mirrors \u0060ReportsController.SendEmail\u0060\u0027s\n    \u0022log real exception server-side, throw a generic typed exception\u0022 discipline.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmtpTestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SmtpTestRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SmtpTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Squadre": {
       "get": {
         "tags": [
@@ -24207,6 +24295,16 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "assignedUserIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -24698,6 +24796,18 @@
           }
         },
         "description": "Whether each signature block prints, as exposed over the wire."
+      },
+      "SmtpTestRequest": {
+        "required": [
+          "recipientEmail"
+        ],
+        "type": "object",
+        "properties": {
+          "recipientEmail": {
+            "type": "string"
+          }
+        },
+        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; SmtpController.Test(SmtpTestRequest request, CancellationToken ct) \u2014 the address to send the test\n    email to."
       },
       "Squadra": {
         "type": "object",
@@ -28606,6 +28716,56 @@
         },
         "description": "Request model for one staff entry in a bulk upsert. Relocated from\n\u0060ReportStaffController\u0060 (W3 Task 3 thinning)."
       },
+      "UpsertTenantSmtpConfigRequest": {
+        "required": [
+          "host",
+          "port",
+          "username",
+          "password",
+          "fromAddress",
+          "fromName",
+          "enableSsl"
+        ],
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fromAddress": {
+            "type": "string"
+          },
+          "fromName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enableSsl": {
+            "type": "boolean"
+          }
+        },
+        "description": "Request body for creating/updating the tenant\u0027s SMTP config. string? UpsertTenantSmtpConfigRequest.Password is\n    optional: omitted/null keeps the existing encrypted password unchanged on an update."
+      },
       "User": {
         "type": "object",
         "properties": {
@@ -29238,6 +29398,9 @@
     },
     {
       "name": "Signup"
+    },
+    {
+      "name": "Smtp"
     },
     {
       "name": "Squadre"
