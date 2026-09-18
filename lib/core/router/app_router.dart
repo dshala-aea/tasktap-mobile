@@ -120,7 +120,6 @@ abstract final class AppRoutes {
 
   static const String calendario = '/calendario';
   static const String altro = '/altro';
-  static const String altroProfilo = '/altro/profilo';
   static const String altroRapportini = '/altro/rapportini';
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';

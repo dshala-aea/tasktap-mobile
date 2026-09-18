@@ -271,35 +271,6 @@ class _SistemaSection extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: Column(
         children: [
-          // Notifiche — unread badge
-          ListRow(
-            leading: _sistemaTileIcon(LucideIcons.bell, context.colors.blue),
-            title: 'Notifiche',
-            subtitle: 'Avvisi e aggiornamenti',
-            meta: ref.watch(notificheUnreadCountProvider) > 0
-                ? AppBadge(
-                    label: '${ref.watch(notificheUnreadCountProvider)}',
-                    bgColor: context.colors.red,
-                  )
-                : null,
-            showDivider: true,
-            onTap: () => context.push(AppRoutes.altroNotifiche),
-          ),
-          // Audit log
-          ListRow(
-            leading: _sistemaTileIcon(LucideIcons.clipboardCheck, context.colors.green),
-            title: 'Audit log',
-            subtitle: 'Cronologia attività',
-            showDivider: true,
-            onTap: () => context.push(
-              AppRoutes.altroNonDisponibile,
-              extra: (
-                titolo: 'Audit log',
-                motivo:
-                    "Il backend registra un log di controllo (/api/admin/audit-log) ma il client mobile non lo scarica ancora.",
-              ),
-            ),
-          ),
           // I miei dati — the subject-access surface. Above Impostazioni rather than buried in it:
           // it is not a preference, it is the answer to "what do you know about me", and the
           // backend has served it since before this app shipped with nothing on the client asking.
@@ -317,21 +288,6 @@ class _SistemaSection extends ConsumerWidget {
             subtitle: 'App, notifiche, account',
             showDivider: true,
             onTap: () => context.push(AppRoutes.altroImpostazioni),
-          ),
-          // Ruoli e permessi
-          ListRow(
-            leading: _sistemaTileIcon(LucideIcons.shieldCheck, context.colors.amber),
-            title: 'Ruoli e permessi',
-            subtitle: 'Gestione accessi',
-            showDivider: false,
-            onTap: () => context.push(
-              AppRoutes.altroNonDisponibile,
-              extra: (
-                titolo: 'Ruoli e permessi',
-                motivo:
-                    "La matrice ruoli/permessi esiste lato server (/api/admin/role-permissions) ma la sua gestione non è ancora stata costruita nel client mobile.",
-              ),
-            ),
           ),
         ],
       ),

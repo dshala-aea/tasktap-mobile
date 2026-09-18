@@ -77,12 +77,6 @@ class DashboardScreen extends ConsumerWidget {
                     showDot: unreadNotifiche > 0,
                     onTap: () => context.push(AppRoutes.altroNotifiche),
                   ),
-                  HeaderIconBtn(
-                    icon: LucideIcons.user,
-                    label: 'Profilo',
-                    glass: true,
-                    onTap: () => context.push(AppRoutes.altroProfilo),
-                  ),
                 ],
                 // What is actually running — or, idle, the one thing to do about that.
                 //
