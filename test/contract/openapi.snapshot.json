@@ -24132,6 +24132,19 @@
               "null",
               "string"
             ]
+          },
+          "customerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "One schedule item on the planning calendar."
