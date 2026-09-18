@@ -194,12 +194,20 @@ class CantiereWorkLogDto {
     required this.startTime,
     this.endTime,
     this.description,
-  });
+    // Defaulted, not required: existing call sites (getActive()'s current-user-only flow, and
+    // two tests that construct this directly) never needed a userId — getActive() never filters
+    // by it, and this DTO never carried one. Adding it as `required` would break both without
+    // giving them anything they use. `fetchForCantiere` (the one caller that DOES need it, for
+    // matching a suggestion to a specific StepOre staff row) always parses it from the response.
+    this.userId = '',
+    Duration? duration,
+  }) : _duration = duration;
 
   final String id;
   final String cantiereId;
   final String customerId;
   final String? ticketId;
+  final String userId;
   final DateTime workDate;
 
   /// StartTime from backend (TimeSpan → string "HH:mm:ss").
@@ -210,17 +218,34 @@ class CantiereWorkLogDto {
 
   final String? description;
 
+  /// The backend's own computed duration (`CantiereWorkLog.DurationHours`), when known — same
+  /// "trust the server's overnight-aware computation, don't re-derive it" reasoning as
+  /// `TicketWorkLogDto._duration`/`duration`.
+  final Duration? _duration;
+
   bool get isActive => endTime == null;
+
+  /// Elapsed time for a closed entry, or null while still open. See
+  /// `TicketWorkLogDto.duration`'s own doc comment — same fallback-to-null-while-running
+  /// contract, same preference for the server's own `durationHours` over a naive subtraction.
+  Duration? get duration => endTime == null ? null : _duration;
 
   factory CantiereWorkLogDto.fromJson(Map<String, dynamic> json) => CantiereWorkLogDto(
     id: json['id'] as String,
     cantiereId: json['cantiereId'] as String,
     customerId: json['customerId'] as String,
     ticketId: json['ticketId'] as String?,
+    userId: json['userId'] as String? ?? '',
     workDate: DateTime.parse(json['workDate'] as String),
     startTime: json['startTime'] as String,
     endTime: json['endTime'] as String?,
     description: json['description'] as String?,
+    duration: json['durationHours'] == null
+        ? null
+        : Duration(
+            milliseconds: (((json['durationHours'] as num).toDouble()) * Duration.millisecondsPerHour)
+                .round(),
+          ),
   );
 }
 
@@ -410,6 +435,30 @@ class CantiereWorklogApiClient {
         .map(CantiereWorkLogDto.fromJson)
         .where((log) => log.isActive)
         .toList();
+  }
+
+  /// GET /api/cantiereworklog?userId=&cantiereId=
+  ///
+  /// Every CantiereWorkLog entry — open or closed — for [userId] on [cantiereId], most recent
+  /// first (the backend's own default sort when `sort` is omitted: WorkDate desc, then
+  /// StartTime desc — see `CantiereWorkLogController.GetAll`). Distinct from [getActive]: that
+  /// one is unfiltered by cantiere and only ever returns the current user's still-open session.
+  /// Backs the cantiere-tier hours suggestion in StepOre (`cantiereWorklogsProvider`). Throws
+  /// [DioException] on network/server error — the caller decides what offline means here.
+  Future<List<CantiereWorkLogDto>> fetchForCantiere({
+    required String userId,
+    required String cantiereId,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/cantiereworklog',
+      queryParameters: {'userId': userId, 'cantiereId': cantiereId, 'pageSize': 50, 'page': 1},
+    );
+
+    final data = response.data;
+    if (data == null) return [];
+
+    final raw = data['items'] as List<dynamic>? ?? [];
+    return raw.cast<Map<String, dynamic>>().map(CantiereWorkLogDto.fromJson).toList();
   }
 
   /// GET /api/cantieri/{id}/assegnazioni

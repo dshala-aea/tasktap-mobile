@@ -7,9 +7,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../data/sync/connectivity_provider.dart';
+import '../../../data/timbratura/cantiere_worklog_api_client.dart' show CantiereWorkLogDto;
+import '../../../data/timbratura/worklog_api_client.dart'
+    show UserWorkLogDto, worklogApiClientProvider;
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../cantiere/cantiere_providers.dart' show cantiereWorklogsProvider;
 import '../../ticket/ticket_providers.dart' show ticketWorklogsProvider;
 import '../../ticket/ticket_workflow_api_client.dart' show TicketWorkLogDto;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -43,6 +48,12 @@ class StepOre extends ConsumerWidget {
         ? ref.watch(ticketWorklogsProvider(ticketId)).valueOrNull
         : null;
 
+    // Cantiere tier: only relevant when this report has no ticket-tier suggestion to offer
+    // (either no ticketId at all, or the fetch hasn't turned up anything for a given row — see
+    // the per-row tiering below) — a cantiere-linked report has no server-tracked ticket
+    // sessions of its own, and the office wants the same "suggest, don't silently fill" idiom.
+    final cantiereId = state.cantiereId;
+
     // A Column, not a ListView: this sits inside the compartment sheet's own ambient
     // SingleChildScrollView now, not a screen-height-bounded Expanded body — an inner scrollable
     // here would fight the outer one for an unbounded height and crash on layout.
@@ -70,21 +81,44 @@ class StepOre extends ConsumerWidget {
               ),
             )
           else
-            ...state.staffRows.map(
-              (row) => Padding(
+            ...state.staffRows.map((row) {
+              // Tiered fallback, ticket → cantiere → plain timbratura. Each tier's own provider
+              // is watched independently (Riverpod resolves them in parallel, not sequentially —
+              // there is no reason to wait on one before asking the next), but only a tier whose
+              // fetch has actually come back with a match wins: an earlier tier that is still
+              // loading or genuinely has nothing correctly falls through to the next one below.
+              var suggestion = worklogEntries == null
+                  ? null
+                  : _worklogSuggestionFor(worklogEntries, row);
+
+              if (suggestion == null && cantiereId != null) {
+                final cantiereEntries = ref
+                    .watch(cantiereWorklogsProvider((userId: row.userId, cantiereId: cantiereId)))
+                    .valueOrNull;
+                if (cantiereEntries != null) {
+                  suggestion = _cantiereWorklogSuggestionFor(cantiereEntries, row);
+                }
+              }
+
+              if (suggestion == null) {
+                final recentEntries = ref.watch(recentWorkLogProvider(row.userId)).valueOrNull;
+                if (recentEntries != null) {
+                  suggestion = _recentWorkLogSuggestionFor(recentEntries, row);
+                }
+              }
+
+              return Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: _StaffTile(
                   row: row,
-                  worklogSuggestion: worklogEntries == null
-                      ? null
-                      : _worklogSuggestionFor(worklogEntries, row),
+                  worklogSuggestion: suggestion,
                   onUpdate: (updated) => notifier.updateStaff(updated),
                   onRemove: () => notifier.removeStaff(row.id),
                   onStartTimer: () => notifier.startTimer(row.id),
                   onStopTimer: () => notifier.stopTimer(row.id),
                 ),
-              ),
-            ),
+              );
+            }),
 
           // Add staff button
           AppButton.secondary(
@@ -294,6 +328,87 @@ WorklogHoursSuggestion? _worklogSuggestionFor(List<TicketWorkLogDto> entries, St
   final totalMinutes = completed.fold<int>(0, (sum, e) => sum + e.duration!.inMinutes);
   return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
 }
+
+/// Combines a calendar day with a backend "HH:mm:ss" time-of-day string into one [DateTime] —
+/// [CantiereWorkLogDto.startTime]/[UserWorkLogDto.startTime] carry the same bare TimeSpan shape
+/// `TicketWorkLogDto` moved away from (see that class's own [Duration]-typed `startTime`), so
+/// this is the cantiere/plain-tier equivalent of `e.workDate.add(e.startTime)` above.
+DateTime _combineWorkDateAndHms(DateTime workDate, String hms) {
+  final parts = hms.split(':');
+  final hours = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 0;
+  final minutes = int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0;
+  final seconds = int.tryParse(parts.elementAtOrNull(2) ?? '') ?? 0;
+  return workDate.add(Duration(hours: hours, minutes: minutes, seconds: seconds));
+}
+
+/// Cantiere tier — same matching/summing shape as [_worklogSuggestionFor], against this
+/// cantiere's own CantiereWorkLog sessions instead of a ticket's. Only reached (see the tiering
+/// in `StepOre.build`) when the ticket tier found nothing for this row.
+WorklogHoursSuggestion? _cantiereWorklogSuggestionFor(
+  List<CantiereWorkLogDto> entries,
+  StaffRow row,
+) {
+  final completed = entries
+      .where((e) => e.userId == row.userId && !e.isActive && e.duration != null)
+      .toList();
+  if (completed.isEmpty) return null;
+
+  if (completed.length == 1) {
+    final e = completed.single;
+    final start = _combineWorkDateAndHms(e.workDate, e.startTime);
+    final end = start.add(e.duration!);
+    return WorklogHoursSuggestion(
+      hours: e.duration!.inMinutes / 60.0,
+      startTime: start,
+      endTime: end,
+    );
+  }
+
+  if (row.startTime != null || row.endTime != null) return null;
+  final totalMinutes = completed.fold<int>(0, (sum, e) => sum + e.duration!.inMinutes);
+  return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
+}
+
+/// Plain-timbratura tier — the last resort, offered only when neither the ticket nor the
+/// cantiere tier suggested anything for this row. Unlike the two tiers above, this never sums:
+/// a plain WorkLog carries no ticket/cantiere in common to justify combining several unrelated
+/// days into one figure, so only the single most recent completed entry is ever suggested.
+WorklogHoursSuggestion? _recentWorkLogSuggestionFor(List<UserWorkLogDto> entries, StaffRow row) {
+  final completed = entries
+      .where((e) => e.userId == row.userId && e.endTime != null && e.duration != null)
+      .toList();
+  if (completed.isEmpty) return null;
+
+  completed.sort(
+    (a, b) => _combineWorkDateAndHms(
+      b.workDate,
+      b.startTime,
+    ).compareTo(_combineWorkDateAndHms(a.workDate, a.startTime)),
+  );
+  final e = completed.first;
+  final start = _combineWorkDateAndHms(e.workDate, e.startTime);
+  final end = start.add(e.duration!);
+  return WorklogHoursSuggestion(hours: e.duration!.inMinutes / 60.0, startTime: start, endTime: end);
+}
+
+/// The plain-timbratura fallback provider (StepOre's third tier) — same online-only posture as
+/// [ticketWorklogsProvider]/`cantiereWorklogsProvider`, for the same reason: a live network call
+/// against a table this device does not otherwise sync. 30 days back is generous enough to catch
+/// "last time this person logged hours" without pulling a user's entire history for a single
+/// suggestion chip.
+final recentWorkLogProvider = FutureProvider.autoDispose.family<List<UserWorkLogDto>, String>((
+  ref,
+  userId,
+) async {
+  if (!ref.watch(isOnlineProvider)) return const [];
+  final api = ref.watch(worklogApiClientProvider);
+  final now = DateTime.now();
+  return api.fetchForUser(
+    userId: userId,
+    dateFrom: now.subtract(const Duration(days: 30)),
+    dateTo: now,
+  );
+});
 
 class _StaffTile extends StatefulWidget {
   const _StaffTile({

@@ -75,6 +75,49 @@ class UpsertSessionResponse {
   );
 }
 
+/// One entry from `GET /api/WorkLog` — plain timbratura hours, no ticket/cantiere scope. Backs
+/// StepOre's last-resort hours suggestion (`recentWorkLogProvider`), distinct from
+/// [TodayWorkLogDto] (today only, `mobile/today`, no `userId`/`durationHours`).
+class UserWorkLogDto {
+  const UserWorkLogDto({
+    required this.id,
+    required this.userId,
+    required this.workDate,
+    required this.startTime,
+    this.endTime,
+    this.duration,
+  });
+
+  final String id;
+  final String userId;
+  final DateTime workDate;
+
+  /// StartTime from backend (TimeSpan → string "HH:mm:ss").
+  final String startTime;
+
+  /// EndTime — null when the session is still open.
+  final String? endTime;
+
+  /// The backend's own computed duration (`WorkLog.DurationHours`) — null while still open. Same
+  /// "trust the server's overnight-aware computation" reasoning as `TicketWorkLogDto.duration`.
+  final Duration? duration;
+
+  factory UserWorkLogDto.fromJson(Map<String, dynamic> json) => UserWorkLogDto(
+    id: json['id'] as String,
+    userId: json['userId'] as String? ?? '',
+    workDate: DateTime.parse(json['workDate'] as String),
+    startTime: json['startTime'] as String,
+    endTime: json['endTime'] as String?,
+    duration: json['endTime'] == null || json['durationHours'] == null
+        ? null
+        : Duration(
+            milliseconds:
+                (((json['durationHours'] as num).toDouble()) * Duration.millisecondsPerHour)
+                    .round(),
+          ),
+  );
+}
+
 class TodayWorkLogDto {
   const TodayWorkLogDto({
     required this.id,
@@ -251,6 +294,43 @@ class WorklogApiClient {
     final list = response.data ?? [];
     return list.cast<Map<String, dynamic>>().map(TodayWorkLogDto.fromJson).toList();
   }
+
+  /// GET /api/WorkLog?userId=&dateFrom=&dateTo=
+  ///
+  /// This user's own plain WorkLog entries (no ticket/cantiere scope) between [dateFrom] and
+  /// [dateTo] inclusive, most recent first — the backend's own default sort when `sort` is
+  /// omitted (`WorkLogService.ResolveSort`: WorkDate desc). Backs StepOre's last-resort hours
+  /// suggestion, offered only when neither the ticket tier nor the cantiere tier found anything.
+  /// Distinct from [getToday] (today only, `mobile/today`, a different DTO shape) and
+  /// [getGiornata] (aggregate status, not individual entries). Throws [DioException] on
+  /// network/server error — the caller decides what offline means for this call site.
+  Future<List<UserWorkLogDto>> fetchForUser({
+    required String userId,
+    required DateTime dateFrom,
+    required DateTime dateTo,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/WorkLog',
+      queryParameters: {
+        'userId': userId,
+        'dateFrom': _dateOnly(dateFrom),
+        'dateTo': _dateOnly(dateTo),
+        'pageSize': 20,
+        'page': 1,
+      },
+    );
+
+    final data = response.data;
+    if (data == null) return [];
+
+    final raw = data['items'] as List<dynamic>? ?? [];
+    return raw.cast<Map<String, dynamic>>().map(UserWorkLogDto.fromJson).toList();
+  }
+
+  static String _dateOnly(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   /// GET /api/WorkLog/today
   ///
