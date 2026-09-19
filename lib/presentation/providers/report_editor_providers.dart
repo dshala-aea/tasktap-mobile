@@ -1,7 +1,10 @@
 // dart format width=100
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/reports/draft_report_repository.dart';
 import '../../data/sync/sync_service.dart';
@@ -81,13 +84,24 @@ class StaffRow {
     );
   }
 
-  /// Effective hours from timer (start→end minus pauses), or hoursWorked.
+  /// Effective hours: `hoursWorked` when set, else the timer's start→end span minus pauses.
+  ///
+  /// `hoursWorked` wins whenever it's set — not just as a no-timer fallback — for two reasons:
+  /// [ReportEditorNotifier.stopTimer] already accumulates it per-segment (each stop adds just
+  /// that run's duration), so once a timer has been stopped at least once, the raw
+  /// startTime→endTime span covers every segment PLUS any idle gap between a stop and a later
+  /// restart (startTime is pinned to the very first start; only [pauseMinutes] — never surfaced
+  /// in the UI — could subtract it). And a manual "Ore" edit after using the timer only ever
+  /// touches `hoursWorked` (see step_ore.dart) — if the span won instead, that edit would render
+  /// in the field but be silently ignored everywhere it's actually used (the total, the DB save,
+  /// the submit payload).
   double get effectiveHours {
+    if (hoursWorked != null) return hoursWorked!;
     if (startTime != null && endTime != null) {
       final worked = endTime!.difference(startTime!).inMinutes - pauseMinutes;
       return worked / 60.0;
     }
-    return hoursWorked ?? 0.0;
+    return 0.0;
   }
 }
 
@@ -101,6 +115,7 @@ class MaterialeRow {
     required this.quantity,
     this.unitOfMeasure,
     this.notes,
+    this.magazzinoId,
   });
 
   final String id;
@@ -111,6 +126,12 @@ class MaterialeRow {
   final String? unitOfMeasure;
   final String? notes;
 
+  /// Which warehouse this line was taken from — required for the server's
+  /// `StockMovementService` to actually deplete stock on submit (it silently
+  /// no-ops when this is null). Defaults to the technician's assigned
+  /// furgone; see `_showAddMaterialeDialog` in step_materiali_fold.dart.
+  final String? magazzinoId;
+
   String get displayName => freeTextName ?? materialeId ?? '';
 
   MaterialeRow copyWith({
@@ -119,6 +140,7 @@ class MaterialeRow {
     double? quantity,
     String? unitOfMeasure,
     String? notes,
+    String? magazzinoId,
   }) {
     return MaterialeRow(
       id: id,
@@ -128,6 +150,7 @@ class MaterialeRow {
       quantity: quantity ?? this.quantity,
       unitOfMeasure: unitOfMeasure ?? this.unitOfMeasure,
       notes: notes ?? this.notes,
+      magazzinoId: magazzinoId ?? this.magazzinoId,
     );
   }
 }
@@ -141,6 +164,7 @@ class ControlloRow {
     this.stringValue,
     this.boolValue,
     this.dateValue,
+    this.numberValue,
   });
 
   final String id;
@@ -149,11 +173,13 @@ class ControlloRow {
   final String? stringValue;
   final bool? boolValue;
   final DateTime? dateValue;
+  final double? numberValue;
 
   ControlloRow copyWith({
     String? stringValue,
     bool? boolValue,
     DateTime? dateValue,
+    double? numberValue,
   }) {
     return ControlloRow(
       id: id,
@@ -162,6 +188,7 @@ class ControlloRow {
       stringValue: stringValue ?? this.stringValue,
       boolValue: boolValue ?? this.boolValue,
       dateValue: dateValue ?? this.dateValue,
+      numberValue: numberValue ?? this.numberValue,
     );
   }
 }
@@ -209,15 +236,18 @@ class ReportEditorState {
     this.materialeRows = const [],
     this.controlloRows = const [],
     this.materialiNotRequired = false,
+    this.isAiAssisted = false,
     this.customerSignatureLocalPath,
     this.customerSignatureAllegatoId,
     this.technicianSignatureLocalPath,
     this.technicianSignatureAllegatoId,
+    this.technicianSignaturePrefillSuppressed = false,
     this.allegatoRows = const [],
     this.isSaving = false,
     this.saveError,
     this.tenantId = '',
     this.insertedUserId = '',
+    this.isLoading = false,
   });
 
   final String reportId;
@@ -248,11 +278,24 @@ class ReportEditorState {
   final List<ControlloRow> controlloRows;
   final bool materialiNotRequired;
 
+  /// Whether text produced by the AI draft is still in this rapportino.
+  ///
+  /// One-way: set when a draft is applied, and never cleared. Clearing it when the technician
+  /// edits the text afterwards would be wrong — editing a generated paragraph is still working
+  /// from a generated paragraph, and it would make the marker trivially removable by typing a
+  /// character. The honest claim is "a model was involved in producing this", not "this is
+  /// verbatim model output".
+  final bool isAiAssisted;
+
   // Step 5 — Firme
   final String? customerSignatureLocalPath;
   final String? customerSignatureAllegatoId;
   final String? technicianSignatureLocalPath;
   final String? technicianSignatureAllegatoId;
+
+  /// See `DraftReports.technicianSignaturePrefillSuppressed`'s doc comment — persisted so it
+  /// survives `StepRiepilogo`/this notifier being recreated on sheet close+reopen.
+  final bool technicianSignaturePrefillSuppressed;
 
   // Step 6 — Allegati (photos)
   final List<AllegatoRow> allegatoRows;
@@ -263,50 +306,61 @@ class ReportEditorState {
   final String tenantId;
   final String insertedUserId;
 
+  /// True until the notifier has finished loading an existing draft's saved data from Drift.
+  ///
+  /// Defaults to `false` — a manually-constructed `ReportEditorState` (every widget test that
+  /// overrides `reportEditorProvider` with hand-built data) is "already loaded" by definition.
+  /// `ReportEditorNotifier`'s own constructor flips this to `true` for exactly as long as its
+  /// real hydration read takes.
+  final bool isLoading;
+
   // ── Validation ────────────────────────────────────────────────────────────
 
   DraftValidationResult get validation => validateDraft(
-        draft: _syntheticDraft,
-        staffCount: staffRows.length,
-        materialiCount: materialeRows.length,
-        customerFreeText: customerFreeText,
-      );
+    draft: _syntheticDraft,
+    staffCount: staffRows.length,
+    materialiCount: materialeRows.length,
+    customerFreeText: customerFreeText,
+  );
 
   bool get isReadyToSubmit => validation.isValid;
 
   /// Build a synthetic DraftReport for validation without hitting Drift.
   DraftReport get _syntheticDraft => DraftReport(
-        id: reportId,
-        tenantId: tenantId,
-        createdAt: createdAt ?? DateTime.now().toUtc(),
-        updatedAt: null,
-        title: title,
-        scheduleId: scheduleId,
-        ticketId: ticketId,
-        customerId: customerId,
-        details: details.isEmpty ? null : details,
-        insertedUserId: insertedUserId,
-        locationId: locationId ?? '',
-        startedAt: null,
-        endedAt: null,
-        documentTemplateId: null,
-        customerSignatureAllegatoId: customerSignatureAllegatoId,
-        technicianSignatureAllegatoId: technicianSignatureAllegatoId,
-        technicianNotes: null,
-        closedAt: null,
-        stato: 'Bozza',
-        inviatoAt: null,
-        controllatoAt: null,
-        controllatoDa: null,
-        fatturatoAt: null,
-        materialiNotRequired: materialiNotRequired,
-        customerSignoffText: null,
-        customerSignoffAt: null,
-        isLocalOnly: true,
-        submissionState: 'draft',
-        idempotencyKey: null,
-        submissionError: null,
-      );
+    id: reportId,
+    tenantId: tenantId,
+    createdAt: createdAt ?? DateTime.now().toUtc(),
+    updatedAt: null,
+    isAiAssisted: isAiAssisted,
+    title: title,
+    scheduleId: scheduleId,
+    ticketId: ticketId,
+    customerId: customerId,
+    details: details.isEmpty ? null : details,
+    metadataJson: null, // not consulted by validateDraft
+    insertedUserId: insertedUserId,
+    locationId: locationId ?? '',
+    startedAt: null,
+    endedAt: null,
+    documentTemplateId: null,
+    customerSignatureAllegatoId: customerSignatureAllegatoId,
+    technicianSignatureAllegatoId: technicianSignatureAllegatoId,
+    technicianSignaturePrefillSuppressed: technicianSignaturePrefillSuppressed,
+    technicianNotes: null,
+    closedAt: null,
+    stato: 'Bozza',
+    inviatoAt: null,
+    controllatoAt: null,
+    controllatoDa: null,
+    fatturatoAt: null,
+    materialiNotRequired: materialiNotRequired,
+    customerSignoffText: null,
+    customerSignoffAt: null,
+    isLocalOnly: true,
+    submissionState: 'draft',
+    idempotencyKey: null,
+    submissionError: null,
+  );
 
   ReportEditorState copyWith({
     RapportinoStep? currentStep,
@@ -329,15 +383,18 @@ class ReportEditorState {
     List<MaterialeRow>? materialeRows,
     List<ControlloRow>? controlloRows,
     bool? materialiNotRequired,
+    bool? isAiAssisted,
     String? customerSignatureLocalPath,
     String? customerSignatureAllegatoId,
     String? technicianSignatureLocalPath,
     String? technicianSignatureAllegatoId,
+    bool? technicianSignaturePrefillSuppressed,
     List<AllegatoRow>? allegatoRows,
     bool? isSaving,
     String? saveError,
     String? tenantId,
     String? insertedUserId,
+    bool? isLoading,
     bool clearCustomerId = false,
     bool clearLocationId = false,
     bool clearTicketId = false,
@@ -356,21 +413,14 @@ class ReportEditorState {
       title: title ?? this.title,
       details: details ?? this.details,
       customerId: clearCustomerId ? null : (customerId ?? this.customerId),
-      customerFreeText: clearCustomerFreeText
-          ? null
-          : (customerFreeText ?? this.customerFreeText),
+      customerFreeText: clearCustomerFreeText ? null : (customerFreeText ?? this.customerFreeText),
       workAddress: workAddress ?? this.workAddress,
       locationId: clearLocationId ? null : (locationId ?? this.locationId),
-      locationFreeText: clearLocationFreeText
-          ? null
-          : (locationFreeText ?? this.locationFreeText),
+      locationFreeText: clearLocationFreeText ? null : (locationFreeText ?? this.locationFreeText),
       ticketId: clearTicketId ? null : (ticketId ?? this.ticketId),
-      ticketFreeText:
-          clearTicketFreeText ? null : (ticketFreeText ?? this.ticketFreeText),
+      ticketFreeText: clearTicketFreeText ? null : (ticketFreeText ?? this.ticketFreeText),
       cantiereId: clearCantiereId ? null : (cantiereId ?? this.cantiereId),
-      cantiereFreeText: clearCantiereFreeText
-          ? null
-          : (cantiereFreeText ?? this.cantiereFreeText),
+      cantiereFreeText: clearCantiereFreeText ? null : (cantiereFreeText ?? this.cantiereFreeText),
       scheduleId: scheduleId ?? this.scheduleId,
       gpsLatitude: gpsLatitude ?? this.gpsLatitude,
       gpsLongitude: gpsLongitude ?? this.gpsLongitude,
@@ -379,6 +429,7 @@ class ReportEditorState {
       materialeRows: materialeRows ?? this.materialeRows,
       controlloRows: controlloRows ?? this.controlloRows,
       materialiNotRequired: materialiNotRequired ?? this.materialiNotRequired,
+      isAiAssisted: isAiAssisted ?? this.isAiAssisted,
       customerSignatureLocalPath: clearCustomerSignature
           ? null
           : (customerSignatureLocalPath ?? this.customerSignatureLocalPath),
@@ -390,13 +441,15 @@ class ReportEditorState {
           : (technicianSignatureLocalPath ?? this.technicianSignatureLocalPath),
       technicianSignatureAllegatoId: clearTechnicianSignature
           ? null
-          : (technicianSignatureAllegatoId ??
-              this.technicianSignatureAllegatoId),
+          : (technicianSignatureAllegatoId ?? this.technicianSignatureAllegatoId),
+      technicianSignaturePrefillSuppressed:
+          technicianSignaturePrefillSuppressed ?? this.technicianSignaturePrefillSuppressed,
       allegatoRows: allegatoRows ?? this.allegatoRows,
       isSaving: isSaving ?? this.isSaving,
       saveError: clearSaveError ? null : (saveError ?? this.saveError),
       tenantId: tenantId ?? this.tenantId,
       insertedUserId: insertedUserId ?? this.insertedUserId,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
@@ -409,10 +462,180 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   ReportEditorNotifier({
     required ReportEditorState initialState,
     required DraftReportRepository repo,
-  })  : _repo = repo,
-        super(initialState);
+    ILocationService? locationService,
+  }) : _repo = repo,
+       _locationService = locationService ?? const DisabledLocationService(),
+       super(initialState) {
+    ready = _hydrate();
+  }
 
   final DraftReportRepository _repo;
+  final ILocationService _locationService;
+
+  /// Resolves once hydration has either applied the draft's saved data or given up.
+  ///
+  /// Production code doesn't need this: `state.isLoading` drives the UI reactively (see
+  /// RapportinoFormScreen's spinner). It exists for callers that need a stable starting state
+  /// before doing anything else — every test in report_editor_providers_test.dart awaits this
+  /// before calling setters, so a test's own state changes can't race hydration and get
+  /// silently reverted by it.
+  late final Future<void> ready;
+
+  // ── Hydration ─────────────────────────────────────────────────────────────
+  //
+  // `initialState` is a placeholder, not the draft's actual saved data — the family provider has
+  // no way to read Drift synchronously at construction time. Without this, every reopened draft
+  // (leave the screen and come back, or restart the app) started from a blank editor, and the
+  // very next autosave — `_buildHeaderCompanion()` writes every column from `state` — overwrote
+  // the real row's tenantId/ticketId/customerId/cantiereId/locationId/title back to blank. This
+  // was silent: nothing crashed, nothing errored, a rapportino just quietly lost the ticket/
+  // cantiere it was linked to and the customer it was for.
+  //
+  // `createLocalDraft` always inserts the row before navigating here, so a missing row (`draft ==
+  // null`) only happens in tests that construct a `ReportEditorState` by hand with no matching
+  // DB row — hydration is a no-op then, leaving that hand-built state exactly as given.
+  //
+  // Guarded by `mounted` throughout and never lets an exception escape: `.autoDispose` can tear
+  // this notifier down mid-read (the screen closed before the load finished), and a database can
+  // close mid-test — either would otherwise throw from a bare `state = ...` after disposal, or an
+  // unhandled async error that fails a test that never even touches this notifier.
+  Future<void> _hydrate() async {
+    try {
+      await _hydrateBody();
+    } catch (_) {
+      // Best-effort load. A failed hydration leaves `initialState` in place rather than crashing
+      // the editor — the same "don't lose the session over a background read" reasoning as
+      // `_autosaveHeader`'s own swallowed catch.
+      if (mounted && state.isLoading) state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> _hydrateBody() async {
+    final draft = await _repo.getDraft(state.reportId);
+    if (!mounted) return;
+    if (draft == null) {
+      // No matching row: either a test-constructed state with nothing seeded (leave it exactly
+      // as given), or — defensively — a reportId nothing ever created. Either way, stop spinning.
+      if (state.isLoading) state = state.copyWith(isLoading: false);
+      return;
+    }
+
+    final staff = await _repo.getStaff(draft.id);
+    final materiali = await _repo.getMateriali(draft.id);
+    final controlli = await _repo.getControlli(draft.id);
+    final allegati = await _repo.getAllegati(draft.id);
+    final signatureIds = {
+      draft.customerSignatureAllegatoId,
+      draft.technicianSignatureAllegatoId,
+    }.whereType<String>().toSet();
+    // The signature blob itself lives on disk, not in the draft row — only its allegatoId is
+    // persisted there. Without re-deriving the local path from the matching allegato here, every
+    // (re)open of this editor restores allegatoId but leaves localPath null, and
+    // _SignatureBlock's `captured` check (localPath != null && allegatoId != null) reverts to
+    // "not captured" even though the file and DB row both still exist.
+    final customerSignatureRows = allegati
+        .where((a) => a.id == draft.customerSignatureAllegatoId)
+        .toList();
+    final technicianSignatureRows = allegati
+        .where((a) => a.id == draft.technicianSignatureAllegatoId)
+        .toList();
+    final customerSignatureLocalPath = customerSignatureRows.isNotEmpty
+        ? customerSignatureRows.first.storagePath
+        : null;
+    final technicianSignatureLocalPath = technicianSignatureRows.isNotEmpty
+        ? technicianSignatureRows.first.storagePath
+        : null;
+    final metadata = _parseMetadataJson(draft.metadataJson);
+    if (!mounted) return;
+
+    state = state.copyWith(
+      title: draft.title,
+      details: draft.details ?? '',
+      customerId: draft.customerId,
+      locationId: draft.locationId,
+      ticketId: draft.ticketId,
+      cantiereId: draft.cantiereId,
+      scheduleId: draft.scheduleId,
+      customerFreeText: metadata['customerFreeText'] as String?,
+      locationFreeText: metadata['locationFreeText'] as String?,
+      ticketFreeText: metadata['ticketFreeText'] as String?,
+      cantiereFreeText: metadata['cantiereFreeText'] as String?,
+      workAddress: metadata['workAddress'] as String?,
+      gpsLatitude: (metadata['gpsLatitude'] as num?)?.toDouble(),
+      gpsLongitude: (metadata['gpsLongitude'] as num?)?.toDouble(),
+      createdAt: draft.createdAt,
+      staffRows: [
+        for (final s in staff)
+          StaffRow(
+            id: s.id,
+            userId: s.userId,
+            hoursWorked: s.hoursWorked,
+            kmTraveled: s.kmTraveled,
+            vehicle: s.vehicle,
+            notes: s.notes,
+            startTime: s.startTime,
+            endTime: s.endTime,
+            pauseMinutes: s.pauseMinutes,
+          ),
+      ],
+      materialeRows: [
+        for (final m in materiali)
+          MaterialeRow(
+            id: m.id,
+            reportId: m.reportId,
+            materialeId: m.materialeId,
+            freeTextName: m.freeTextName,
+            quantity: m.quantity,
+            unitOfMeasure: m.unitOfMeasure,
+            notes: m.notes,
+            magazzinoId: m.magazzinoId,
+          ),
+      ],
+      controlloRows: [
+        for (final c in controlli)
+          ControlloRow(
+            id: c.id,
+            reportId: c.reportId,
+            controlId: c.controlId,
+            stringValue: c.stringValue,
+            boolValue: c.boolValue,
+            dateValue: c.dateValue,
+            numberValue: c.numberValue,
+          ),
+      ],
+      allegatoRows: [
+        for (final a in allegati)
+          AllegatoRow(
+            id: a.id,
+            localPath: a.storagePath,
+            fileName: a.fileName,
+            contentType: a.contentType,
+            sizeBytes: a.sizeBytes,
+            isSignature: signatureIds.contains(a.id),
+          ),
+      ],
+      materialiNotRequired: draft.materialiNotRequired,
+      isAiAssisted: draft.isAiAssisted,
+      customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
+      customerSignatureLocalPath: customerSignatureLocalPath,
+      technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
+      technicianSignatureLocalPath: technicianSignatureLocalPath,
+      technicianSignaturePrefillSuppressed: draft.technicianSignaturePrefillSuppressed,
+      tenantId: draft.tenantId,
+      insertedUserId: draft.insertedUserId,
+      isLoading: false,
+    );
+  }
+
+  static Map<String, dynamic> _parseMetadataJson(String? json) {
+    if (json == null || json.isEmpty) return const {};
+    try {
+      return jsonDecode(json) as Map<String, dynamic>;
+    } catch (_) {
+      // Malformed metadata is not worth losing the rest of the draft over.
+      return const {};
+    }
+  }
 
   // ── Step navigation ────────────────────────────────────────────────────────
 
@@ -450,18 +673,12 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> setCustomerFromCache(String customerId) async {
-    state = state.copyWith(
-      customerId: customerId,
-      clearCustomerFreeText: true,
-    );
+    state = state.copyWith(customerId: customerId, clearCustomerFreeText: true);
     await _autosave();
   }
 
   Future<void> setCustomerFreeText(String name) async {
-    state = state.copyWith(
-      customerFreeText: name,
-      clearCustomerId: true,
-    );
+    state = state.copyWith(customerFreeText: name, clearCustomerId: true);
     await _autosave();
   }
 
@@ -471,18 +688,12 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> setLocationFromCache(String locationId) async {
-    state = state.copyWith(
-      locationId: locationId,
-      clearLocationFreeText: true,
-    );
+    state = state.copyWith(locationId: locationId, clearLocationFreeText: true);
     await _autosave();
   }
 
   Future<void> setLocationFreeText(String name) async {
-    state = state.copyWith(
-      locationFreeText: name,
-      clearLocationId: true,
-    );
+    state = state.copyWith(locationFreeText: name, clearLocationId: true);
     await _autosave();
   }
 
@@ -542,9 +753,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> updateStaff(StaffRow row) async {
-    final updated = [
-      for (final r in state.staffRows) r.id == row.id ? row : r,
-    ];
+    final updated = [for (final r in state.staffRows) r.id == row.id ? row : r];
     state = state.copyWith(staffRows: updated);
     await _repo.upsertStaff(_staffToCompanion(row, state.reportId, state.tenantId));
   }
@@ -574,10 +783,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     final stopped = row.copyWith(
       timerRunning: false,
       endTime: now,
-      hoursWorked: row.effectiveHours +
-          (row.timerStartedAt != null
-              ? now.difference(row.timerStartedAt!).inMinutes / 60.0
-              : 0.0),
+      hoursWorked:
+          row.effectiveHours +
+          (row.timerStartedAt != null ? now.difference(row.timerStartedAt!).inMinutes / 60.0 : 0.0),
       clearTimer: true,
     );
     await updateStaff(stopped);
@@ -593,16 +801,13 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
   }
 
   Future<void> updateMateriale(MaterialeRow row) async {
-    final updated = [
-      for (final r in state.materialeRows) r.id == row.id ? row : r,
-    ];
+    final updated = [for (final r in state.materialeRows) r.id == row.id ? row : r];
     state = state.copyWith(materialeRows: updated);
     await _repo.upsertMateriale(_materialeToCompanion(row, state.tenantId));
   }
 
   Future<void> removeMateriale(String materialeId) async {
-    final updated =
-        state.materialeRows.where((r) => r.id != materialeId).toList();
+    final updated = state.materialeRows.where((r) => r.id != materialeId).toList();
     state = state.copyWith(materialeRows: updated);
     await _repo.deleteMateriale(materialeId);
     await _autosaveHeader();
@@ -610,6 +815,15 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   Future<void> setMaterialiNotRequired(bool value) async {
     state = state.copyWith(materialiNotRequired: value);
+    await _autosave();
+  }
+
+  /// Records that an AI draft was applied to this rapportino.
+  ///
+  /// No matching "unset": provenance is not a preference. See [ReportEditorState.isAiAssisted].
+  Future<void> markAiAssisted() async {
+    if (state.isAiAssisted) return;
+    state = state.copyWith(isAiAssisted: true);
     await _autosave();
   }
 
@@ -630,11 +844,49 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   // ── Step 5: Firme ──────────────────────────────────────────────────────────
 
+  /// Best-effort GPS capture for a signature. Mirrors `PunchNotifier._captureGpsSilently`:
+  /// never prompts (a mid-signature system permission dialog with no explanation would be worse
+  /// than no position) and never throws — a denied/unavailable position simply comes back null,
+  /// and the signature is saved anyway. GPS must never block signature capture.
+  Future<GpsCoords?> _captureGpsSilently() async {
+    try {
+      if (await _locationService.willPromptForPermission()) return null;
+      return await _locationService.getCurrentPosition();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Best-effort, no-prompt GPS capture for the report itself — same silent-only-if-already-decided
+  /// contract as [_captureGpsSilently] (never surfaces the OS permission dialog, never throws), but
+  /// also applies a successful fix to the draft via [setGps] so callers don't have to unpack coords
+  /// themselves. Used for automatic acquisition on entering Dettagli — see `StepDettagli.initState`.
+  Future<GpsCoords?> captureGpsSilently() async {
+    final coords = await _captureGpsSilently();
+    if (coords != null) setGps(coords.lat, coords.lng);
+    return coords;
+  }
+
+  /// Saves a customer signature.
+  ///
+  /// [stampCapture] defaults to `true` — the real drawn/typed capture paths (see
+  /// `_SignatureBlock._captureSig`) always want a live GPS position + timestamp, per
+  /// [_captureGpsSilently]'s doc comment. There is currently no customer-side pre-fill (only the
+  /// technician's own signature is reused across rapportini — see
+  /// `StepRiepilogo._maybePrefillTechnicianSignature`), but the parameter exists here too so both
+  /// signature roles share one honest contract if that ever changes.
   Future<void> saveCustomerSignature({
     required String allegatoId,
     required Uint8List bytes,
     required String localPath,
+    bool stampCapture = true,
   }) async {
+    GpsCoords? coords;
+    DateTime? capturedAt;
+    if (stampCapture) {
+      coords = await _captureGpsSilently();
+      capturedAt = DateTime.now().toUtc();
+    }
     await _repo.saveSignature(
       reportId: state.reportId,
       allegatoId: allegatoId,
@@ -643,6 +895,9 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       bytes: bytes,
       localPath: localPath,
       isCustomer: true,
+      capturedLatitude: coords?.lat,
+      capturedLongitude: coords?.lng,
+      capturedAt: capturedAt,
     );
     state = state.copyWith(
       customerSignatureLocalPath: localPath,
@@ -651,11 +906,32 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _autosave();
   }
 
+  /// Saves a technician signature.
+  ///
+  /// [stampCapture] gates whether this save claims a live GPS position + capture timestamp, per
+  /// [_captureGpsSilently]'s doc comment. The real drawn/typed capture path (`_captureSig`) always
+  /// passes the default `true` — a technician standing in front of the customer actually just
+  /// signed. `StepRiepilogo._maybePrefillTechnicianSignature` is the one caller that passes
+  /// `false`: it silently reuses a *previously* saved signature to pre-fill a brand-new
+  /// rapportino with no signing act at all, so stamping it with "here, right now" GPS + a fresh
+  /// timestamp would misrepresent it as freshly captured. See that method's own doc comment.
+  ///
+  /// Also resets [ReportEditorState.technicianSignaturePrefillSuppressed] to `false` — a real
+  /// signature (drawn or typed) is itself a fresh, deliberate signing act, so any earlier
+  /// Cancella-driven suppression no longer applies to it. See
+  /// `DraftReports.technicianSignaturePrefillSuppressed`'s own doc comment.
   Future<void> saveTechnicianSignature({
     required String allegatoId,
     required Uint8List bytes,
     required String localPath,
+    bool stampCapture = true,
   }) async {
+    GpsCoords? coords;
+    DateTime? capturedAt;
+    if (stampCapture) {
+      coords = await _captureGpsSilently();
+      capturedAt = DateTime.now().toUtc();
+    }
     await _repo.saveSignature(
       reportId: state.reportId,
       allegatoId: allegatoId,
@@ -664,10 +940,14 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       bytes: bytes,
       localPath: localPath,
       isCustomer: false,
+      capturedLatitude: coords?.lat,
+      capturedLongitude: coords?.lng,
+      capturedAt: capturedAt,
     );
     state = state.copyWith(
       technicianSignatureLocalPath: localPath,
       technicianSignatureAllegatoId: allegatoId,
+      technicianSignaturePrefillSuppressed: false,
     );
     await _autosave();
   }
@@ -680,11 +960,24 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _autosave();
   }
 
+  /// Clears the technician signature, and — unlike the customer side — also marks the pre-fill
+  /// suppressed on this draft.
+  ///
+  /// Without this, the field going back to `null` would be indistinguishable from a rapportino
+  /// that never had a technician signature at all: `StepRiepilogo`'s pre-fill logic checks exactly
+  /// that field, and `StepRiepilogo` itself is recreated (fresh `initState`) every time its
+  /// containing bottom sheet is closed and reopened. Closing and reopening after a deliberate
+  /// Cancella would otherwise silently re-fetch and reinstate the exact signature just removed —
+  /// see `DraftReports.technicianSignaturePrefillSuppressed`'s own doc comment for why this needs
+  /// to be a persisted column rather than in-memory state.
   Future<void> clearTechnicianSignature() async {
     if (state.technicianSignatureAllegatoId != null) {
       await _repo.deleteAllegato(state.technicianSignatureAllegatoId!);
     }
-    state = state.copyWith(clearTechnicianSignature: true);
+    state = state.copyWith(
+      clearTechnicianSignature: true,
+      technicianSignaturePrefillSuppressed: true,
+    );
     await _autosave();
   }
 
@@ -749,21 +1042,34 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       title: Value(state.title),
       scheduleId: Value(state.scheduleId),
       ticketId: Value(state.ticketId),
+      cantiereId: Value(state.cantiereId),
       customerId: Value(state.customerId),
-      details: Value(_buildDetailsJson()),
+      // The technician's actual typed description — NOT the GPS/free-text metadata blob. These
+      // used to collide in this same column (see `metadataJson` doc comment on
+      // DraftReports): every autosave overwrote whatever the technician had typed with a JSON
+      // blob that never included it, and that blob is what reached the backend/customer PDF as
+      // "Descrizione". `details` and `metadataJson` are independent columns now.
+      details: Value(state.details.isEmpty ? null : state.details),
+      metadataJson: Value(_buildMetadataJson()),
       insertedUserId: Value(state.insertedUserId),
       locationId: Value(state.locationId ?? ''),
       materialiNotRequired: Value(state.materialiNotRequired),
+      isAiAssisted: Value(state.isAiAssisted),
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
+      technicianSignaturePrefillSuppressed: Value(state.technicianSignaturePrefillSuppressed),
       stato: const Value('Bozza'),
       isLocalOnly: const Value(true),
     );
   }
 
-  /// Pack free-text / GPS fields into the `details` JSON column so they survive
-  /// round-trips without requiring extra schema columns.
-  String? _buildDetailsJson() {
+  /// Pack free-text / GPS fields into the `metadataJson` column so they survive round-trips.
+  ///
+  /// Was packed into `details` — the same column the technician's typed description lives in
+  /// (see `setDetails`) — which meant every autosave clobbered the typed text with this blob and
+  /// the two never coexisted. `metadataJson` is its own column now (schema v14); this no longer
+  /// touches `details` at all.
+  String? _buildMetadataJson() {
     final parts = <String>[];
     if (state.customerFreeText?.isNotEmpty ?? false) {
       parts.add('"customerFreeText":"${state.customerFreeText}"');
@@ -814,10 +1120,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     );
   }
 
-  static ReportMaterialiCompanion _materialeToCompanion(
-    MaterialeRow row,
-    String tenantId,
-  ) {
+  static ReportMaterialiCompanion _materialeToCompanion(MaterialeRow row, String tenantId) {
     return ReportMaterialiCompanion(
       id: Value(row.id),
       tenantId: Value(tenantId),
@@ -829,13 +1132,11 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       quantity: Value(row.quantity),
       unitOfMeasure: Value(row.unitOfMeasure),
       notes: Value(row.notes),
+      magazzinoId: Value(row.magazzinoId),
     );
   }
 
-  static ReportControlliCompanion _controlloToCompanion(
-    ControlloRow row,
-    String tenantId,
-  ) {
+  static ReportControlliCompanion _controlloToCompanion(ControlloRow row, String tenantId) {
     return ReportControlliCompanion(
       id: Value(row.id),
       tenantId: Value(tenantId),
@@ -846,6 +1147,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       stringValue: Value(row.stringValue),
       boolValue: Value(row.boolValue),
       dateValue: Value(row.dateValue),
+      numberValue: Value(row.numberValue),
     );
   }
 }
@@ -877,12 +1179,11 @@ class ReportEditorArgs {
 
 /// StateNotifierProvider.family keyed by report id string.
 final reportEditorProvider = StateNotifierProvider.autoDispose
-    .family<ReportEditorNotifier, ReportEditorState, String>(
-  (ref, reportId) {
-    final repo = ref.watch(draftReportRepositoryProvider);
-    return ReportEditorNotifier(
-      initialState: ReportEditorState(reportId: reportId),
-      repo: repo,
-    );
-  },
-);
+    .family<ReportEditorNotifier, ReportEditorState, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return ReportEditorNotifier(
+        initialState: ReportEditorState(reportId: reportId, isLoading: true),
+        repo: repo,
+        locationService: ref.watch(locationServiceProvider),
+      );
+    });

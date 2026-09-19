@@ -33,6 +33,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData atSign = IconData(
+    0xf170,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData bell = IconData(
     0xf19c,
     fontFamily: 'Lucide',
@@ -95,6 +100,11 @@ class LucideIcons {
   );
   static const IconData checkCircle2 = IconData(
     0xf1f1,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+  static const IconData chevronDown = IconData(
+    0xf1f5,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
@@ -248,6 +258,11 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData mail = IconData(
+    0xf3b4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
   static const IconData mapPin = IconData(
     0xf3c0,
     fontFamily: 'Lucide',
@@ -278,6 +293,18 @@ class LucideIcons {
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );
+  static const IconData mic = IconData(
+    0xf3d2,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  static const IconData micOff = IconData(
+    0xf3d4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
   static const IconData package = IconData(
     0xf414,
     fontFamily: 'Lucide',
@@ -330,6 +357,49 @@ class LucideIcons {
   );
   static const IconData search = IconData(
     0xf4ad,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// A search that matched nothing — distinct from [search], which invites one.
+  static const IconData searchX = IconData(
+    0xf4b1,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// Barcode/QR scan trigger, wherever the materiali catalog can be searched.
+  static const IconData scanLine = IconData(
+    0xf4a4,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// Send a downloaded file through the OS share sheet — the two-arrow variant (share2), not the
+  /// three-dot android glyph (share).
+  static const IconData share2 = IconData(
+    0xf4bd,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// Stock in: a carico movement.
+  static const IconData arrowDownToLine = IconData(
+    0xf14b,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// Stock out: a scarico movement.
+  static const IconData arrowUpFromLine = IconData(
+    0xf162,
+    fontFamily: 'Lucide',
+    fontPackage: 'lucide_icons',
+  );
+
+  /// Stock moved between warehouses: a trasferimento.
+  static const IconData arrowLeftRight = IconData(
+    0xf152,
     fontFamily: 'Lucide',
     fontPackage: 'lucide_icons',
   );

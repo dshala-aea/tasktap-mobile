@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -8,6 +9,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import 'clienti_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 class ClientiListScreen extends StatefulWidget {
   const ClientiListScreen({super.key});
@@ -35,6 +37,20 @@ class _ClientiListScreenState extends State<ClientiListScreen> {
           query: _query,
           searchCtrl: _searchCtrl,
           onQueryChanged: (q) => setState(() => _query = q),
+        ),
+      ),
+      // The only entry point to `/altro/clienti/nuovo` in the whole app: that route has
+      // resolved to a working AdminCustomerFormScreen since before this pass, but nothing
+      // rendered a control that pushed it — the FAB that did lived on AdminCustomerListScreen,
+      // a second, unrouted "Clienti" list screen that this shell never builds. An office user
+      // reaching Clienti from the Altro hub had no way to add a customer from the phone at all.
+      floatingActionButton: Padding(
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
+        child: AppFab(
+          tooltip: 'Nuovo cliente',
+          onPressed: () => context.push('/altro/clienti/nuovo'),
         ),
       ),
     );
@@ -84,7 +100,7 @@ class _ClientiListBody extends ConsumerWidget {
           const SliverToBoxAdapter(
             child: Center(
               child: Padding(
-                padding: EdgeInsets.all(48),
+                padding: EdgeInsets.all(AppSpacing.xxxl),
                 child: CircularProgressIndicator(),
               ),
             ),
@@ -99,36 +115,29 @@ class _ClientiListBody extends ConsumerWidget {
           )
         else
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final customer = filtered[i];
-                return _ClienteRow(
-                  customer: customer,
-                  isLast: i == filtered.length - 1,
-                );
-              },
-              childCount: filtered.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, i) {
+              final customer = filtered[i];
+              return _ClienteRow(
+                customer: customer,
+                isLast: i == filtered.length - 1,
+              );
+            }, childCount: filtered.length),
           ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }
 }
 
 class _ClienteRow extends ConsumerWidget {
-  const _ClienteRow({
-    required this.customer,
-    required this.isLast,
-  });
+  const _ClienteRow({required this.customer, required this.isLast});
 
   final Customer customer;
   final bool isLast;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final countAsync =
-        ref.watch(ticketCountForCustomerProvider(customer.id));
+    final countAsync = ref.watch(ticketCountForCustomerProvider(customer.id));
     final ticketCount = countAsync.valueOrNull ?? 0;
 
     final cityLabel = customer.city ?? '—';

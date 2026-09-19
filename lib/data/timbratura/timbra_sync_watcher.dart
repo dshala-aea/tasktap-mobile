@@ -16,9 +16,14 @@ import 'timbra_sync_service.dart';
 
 /// Call once on app start (e.g. in HomeShell.initState via addPostFrameCallback).
 /// Registers the offline→online reconnect hook for timbra syncing.
-void initTimbraSyncWatcher(WidgetRef ref) {
+///
+/// Returns the cancel function `onReconnect` hands back — the caller (HomeShell) must invoke it
+/// from `dispose()`. Without that, a widget remount (e.g. forced sign-out → re-login) leaves the
+/// old closure's `ref` in the listener list forever; the next reconnect throws "Cannot use ref
+/// after the widget was disposed" on that stale entry.
+VoidCallback initTimbraSyncWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() {
+  final cancel = connectivity.onReconnect(() {
     ref.read(timbraSyncServiceProvider).syncNow();
   });
 
@@ -27,4 +32,6 @@ void initTimbraSyncWatcher(WidgetRef ref) {
   Future.microtask(() {
     ref.read(timbraSyncServiceProvider).syncNow();
   });
+
+  return cancel;
 }

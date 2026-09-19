@@ -1,6 +1,8 @@
 // dart format width=100
-import 'package:drift/drift.dart' show Value;
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -9,10 +11,14 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -20,19 +26,20 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Filter chips for the rapportini list.
 ///
-/// Pagata / Annullato show empty until the backend syncs the full report
-/// lifecycle back to the device.
-// TODO(backend): sync submitted-report lifecycle for Pagata/Annullato states.
-enum _RapportinoFilter { tutti, bozza, inviata, pagata, annullato }
+/// All of them (bar Tutti/Bozza) reflect the real server lifecycle now — SyncService's
+/// `submittedReports` upsert (sync_service.dart) keeps `stato` current, including
+/// Respinto/Fatturato/Annullato, which used to never reach the device at all.
+enum _RapportinoFilter { tutti, bozza, inviata, respinta, pagata, annullato }
 
 extension _FilterLabel on _RapportinoFilter {
   String get label => switch (this) {
-        _RapportinoFilter.tutti => 'Tutti',
-        _RapportinoFilter.bozza => 'Bozza',
-        _RapportinoFilter.inviata => 'Inviata',
-        _RapportinoFilter.pagata => 'Pagata',
-        _RapportinoFilter.annullato => 'Annullato',
-      };
+    _RapportinoFilter.tutti => 'Tutti',
+    _RapportinoFilter.bozza => 'Bozza',
+    _RapportinoFilter.inviata => 'Inviata',
+    _RapportinoFilter.respinta => 'Respinta',
+    _RapportinoFilter.pagata => 'Pagata',
+    _RapportinoFilter.annullato => 'Annullato',
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -62,7 +69,7 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
-        child: _RapportiniListBody(
+        child: _RapportiniListRefresh(
           filter: _filter,
           query: _query,
           searchCtrl: _searchCtrl,
@@ -70,7 +77,50 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: _NewRapportinoFab(),
+      // Lifted over the floating nav like every other FAB in the app. This one was missed in the
+      // clearance sweep because it is a custom widget rather than a bare AppFab, and HomeShell
+      // sets extendBody: true — so the app's primary create-rapportino action sat under the pill.
+      floatingActionButton: Padding(
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
+        child: _NewRapportinoFab(),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Pull-to-refresh wrapper — same RefreshIndicator+performSync() pattern as
+// ticket_list_screen.dart / cantieri_list_screen.dart / ferie_permessi_list_screen.dart.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _RapportiniListRefresh extends ConsumerWidget {
+  const _RapportiniListRefresh({
+    required this.filter,
+    required this.query,
+    required this.searchCtrl,
+    required this.onFilterChanged,
+    required this.onQueryChanged,
+  });
+
+  final _RapportinoFilter filter;
+  final String query;
+  final TextEditingController searchCtrl;
+  final ValueChanged<_RapportinoFilter> onFilterChanged;
+  final ValueChanged<String> onQueryChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+      child: _RapportiniListBody(
+        filter: filter,
+        query: query,
+        searchCtrl: searchCtrl,
+        onFilterChanged: onFilterChanged,
+        onQueryChanged: onQueryChanged,
+      ),
     );
   }
 }
@@ -79,32 +129,43 @@ class _RapportiniListScreenState extends State<RapportiniListScreen> {
 // FAB — creates a draft and navigates to the editor
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _NewRapportinoFab extends ConsumerWidget {
+class _NewRapportinoFab extends ConsumerStatefulWidget {
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return AppFab(
-      tooltip: 'Nuovo rapportino',
-      onPressed: () => _createNewDraft(context, ref),
+  ConsumerState<_NewRapportinoFab> createState() => _NewRapportinoFabState();
+}
+
+class _NewRapportinoFabState extends ConsumerState<_NewRapportinoFab> {
+  // Guards against a rapid double-tap firing two overlapping `createLocalDraft` calls, which
+  // created two drafts from one tap. AppFab has no busy/disabled state of its own, so this wraps
+  // it with an IgnorePointer + dimmed opacity for the duration of the create call rather than
+  // adding that state to the shared widget.
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: _busy,
+      child: Opacity(
+        opacity: _busy ? 0.6 : 1,
+        child: AppFab(tooltip: 'Nuovo rapportino', onPressed: () => _createNewDraft(context, ref)),
+      ),
     );
   }
 
   Future<void> _createNewDraft(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(draftReportRepositoryProvider);
-    final id = 'draft-${DateTime.now().millisecondsSinceEpoch}';
-    await repo.createDraft(
-      DraftReportsCompanion.insert(
-        id: id,
-        tenantId: 'local',
-        createdAt: DateTime.now().toUtc(),
-        title: 'Nuovo rapportino',
-        insertedUserId: 'local-user',
-        locationId: '',
-        isLocalOnly: const Value(true),
-        stato: const Value('Bozza'),
-      ),
-    );
-    if (context.mounted) {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await createLocalDraft(ref, title: 'Nuovo rapportino');
+      if (!context.mounted) return;
+      if (id == null) {
+        // Refused rather than authored by a placeholder. See createLocalDraft.
+        showAppToast(context, message: 'Accedi per creare un rapportino.', tone: ToastTone.warning);
+        return;
+      }
       context.push(AppRoutes.rapportiniEditor(id));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 }
@@ -140,29 +201,21 @@ class _RapportiniListBody extends ConsumerWidget {
         _RapportinoFilter.tutti => true,
         _RapportinoFilter.bozza => label == 'bozza',
         _RapportinoFilter.inviata => label == 'inviata',
-        // Pagata/Annullato: no local data yet — always empty until backend sync.
-        _RapportinoFilter.pagata => false,
-        _RapportinoFilter.annullato => false,
+        _RapportinoFilter.respinta => label == 'respinta',
+        _RapportinoFilter.pagata => label == 'pagata',
+        _RapportinoFilter.annullato => label == 'annullato',
       };
-      final matchQuery = query.isEmpty ||
-          d.title.toLowerCase().contains(query.toLowerCase());
+      final matchQuery = query.isEmpty || d.title.toLowerCase().contains(query.toLowerCase());
       return matchFilter && matchQuery;
     }).toList();
 
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Rapportini',
-            subtitle: '${allDrafts.length} totali',
-            actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.filter,
-                label: 'Filtra rapportini',
-                onTap: () {},
-              ),
-            ],
-          ),
+          // The filter chips below already do the filtering — this used to carry a second,
+          // dead filter icon (`onTap: () {}`) doing nothing beside them. Same fix as the ticket
+          // list: a control that looks tappable and isn't teaches distrust of the one that works.
+          child: ScreenHeader(title: 'Rapportini', subtitle: '${allDrafts.length} totali'),
         ),
         SliverToBoxAdapter(
           child: AppSearchBar(
@@ -173,13 +226,18 @@ class _RapportiniListBody extends ConsumerWidget {
         ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: _RapportinoFilter.values.map((f) {
                   return Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
                     child: AppChip(
                       label: f.label,
                       active: filter == f,
@@ -195,9 +253,19 @@ class _RapportiniListBody extends ConsumerWidget {
           const SliverToBoxAdapter(
             child: Center(
               child: Padding(
-                padding: EdgeInsets.all(48),
+                padding: EdgeInsets.all(AppSpacing.xxxl),
                 child: CircularProgressIndicator(),
               ),
+            ),
+          )
+        // A load failure used to fall straight into the "no drafts" empty state below,
+        // indistinguishable from genuinely having none. Give it its own message.
+        else if (draftsAsync.hasError && filtered.isEmpty)
+          SliverToBoxAdapter(
+            child: EmptyState(
+              icon: LucideIcons.wifiOff,
+              title: 'Impossibile caricare i rapportini',
+              body: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
             ),
           )
         else if (filtered.isEmpty)
@@ -210,17 +278,11 @@ class _RapportiniListBody extends ConsumerWidget {
           )
         else
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                return _RapportinoRow(
-                  draft: filtered[i],
-                  isLast: i == filtered.length - 1,
-                );
-              },
-              childCount: filtered.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, i) {
+              return _RapportinoRow(draft: filtered[i], isLast: i == filtered.length - 1);
+            }, childCount: filtered.length),
           ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
       ],
     );
   }
@@ -230,38 +292,49 @@ class _RapportiniListBody extends ConsumerWidget {
 // Row
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// Vetro (module #3). Was a [ListRow] — Cassetta's shared rack-cell primitive, used at 28 call
+/// sites app-wide, not touched here or anywhere else in this pass (see every other Vetro module's
+/// own note on this). Rebuilt in the same flat-row-with-stripe shape the ticket list already
+/// established: no [VetroGlass] blur, this list can run long and a per-row backdrop filter during
+/// scroll is a real cost, not a style choice (see `_TicketRow`'s own doc comment).
+///
+/// The stripe replaces `strapped` — Cassetta's brand-accent ledge for "still needs finishing" —
+/// with the same Vetro tint used everywhere else for "this one needs you," so a technician reads
+/// one accent language across the whole app, not the safety-orange strap on this list and the
+/// indigo tint on Tickets.
 class _RapportinoRow extends ConsumerWidget {
-  const _RapportinoRow({
-    required this.draft,
-    required this.isLast,
-  });
+  const _RapportinoRow({required this.draft, required this.isLast});
 
   final DraftReport draft;
   final bool isLast;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final staffAsync = ref.watch(rapportinoStaffProvider(draft.id));
-    final materialiAsync = ref.watch(rapportinoMaterialiProvider(draft.id));
-    final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
+    final summary = ref.watch(rapportinoRowSummaryProvider(draft.id));
 
-    final staffCount = staffAsync.valueOrNull?.length ?? 0;
-    final materialiCount = materialiAsync.valueOrNull?.length ?? 0;
+    final staffCount = summary.staffCount;
+    final materialiCount = summary.materialiCount;
+    final oreLabel = summary.oreLabel;
 
     final statusLabel = rapportinoStatusLabel(draft);
     final isSubmitted = rapportinoIsSubmitted(draft);
-    final hasBothSigs = draft.customerSignatureAllegatoId != null &&
-        draft.technicianSignatureAllegatoId != null;
+    // Item 13: edit/delete now follow the backend's own "before office review" boundary
+    // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
+    final canEditOrDelete = rapportinoCanEditOrDelete(draft);
+    final hasBothSigs =
+        draft.customerSignatureAllegatoId != null && draft.technicianSignatureAllegatoId != null;
 
-    final dateLabel = DateFormat('dd/MM/yy', 'it').format(
-      (draft.updatedAt ?? draft.createdAt).toLocal(),
-    );
+    final dateLabel = DateFormat(
+      'dd/MM/yy',
+      'it',
+    ).format((draft.updatedAt ?? draft.createdAt).toLocal());
 
-    // Short id for display
-    final shortId =
-        draft.id.length > 8 ? draft.id.substring(0, 8) : draft.id;
-
-    // Subtitle: tecnico count · ore · materiali count
+    // Subtitle: tecnico count · ore · materiali count.
+    //
+    // Used to lead with `#$shortId` — eight hex characters of the draft's own row id, the same
+    // "identifier a human cannot recognise" bug already fixed on the ticket list. A rapportino
+    // has no `numero` synced locally (unlike a ticket), so there is nothing real to show in its
+    // place; the title and this summary carry the row on their own, same as a numberless ticket.
     final subParts = <String>[
       if (staffCount > 0) '$staffCount tecnico',
       oreLabel,
@@ -269,65 +342,163 @@ class _RapportinoRow extends ConsumerWidget {
     ];
     final subtitle = subParts.join(' · ');
 
-    return ListRow(
-      leading: Stack(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.colors.bg3,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              LucideIcons.fileText,
-              size: 20,
-              color: context.colors.inkMuted,
-            ),
-          ),
-          if (hasBothSigs)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: context.colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: context.colors.surface, width: 1.5),
-                ),
-                child: Icon(
-                  LucideIcons.penTool,
-                  size: 8,
-                  color: AppColors.WHITE,
-                ),
-              ),
-            ),
-        ],
-      ),
-      title: draft.title,
-      subtitle: '#$shortId · $subtitle',
-      meta: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          StatusPill(stato: statusLabel, small: true),
-          const SizedBox(height: 2),
-          Text(
-            dateLabel,
-            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
-          ),
-        ],
-      ),
-      showDivider: !isLast,
+    final row = InkWell(
       onTap: () {
-        if (isSubmitted) {
-          context.push(AppRoutes.rapportiniView(draft.id));
-        } else {
+        if (canEditOrDelete) {
           context.push(AppRoutes.rapportiniEditor(draft.id));
+        } else {
+          context.push(AppRoutes.rapportiniView(draft.id));
         }
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
+        ),
+        // IntrinsicHeight for the stripe — same reasoning as `_TicketRow`'s own comment: this row
+        // sits in a SliverChildBuilderDelegate item with no bounded height for a bare
+        // `crossAxisAlignment: stretch` to stretch into.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 3,
+                margin: const EdgeInsets.only(right: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: isSubmitted ? context.colors.inkDisabled : AppColors.Y,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              Stack(
+                children: [
+                  const RowIconTile(icon: LucideIcons.fileText),
+                  if (hasBothSigs)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: context.colors.green,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: context.colors.surface, width: 1.5),
+                        ),
+                        child: Icon(LucideIcons.penTool, size: 8, color: AppColors.WHITE),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      draft.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Archivo',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: context.colors.ink,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Archivo',
+                        fontSize: 12,
+                        color: context.colors.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  StatusPill(stato: statusLabel, small: true),
+                  const SizedBox(height: 2),
+                  Text(dateLabel, style: TextStyle(fontSize: 10, color: context.colors.inkMuted)),
+                ],
+              ),
+              // A swipe is the only way a mouse/keyboard/TalkBack/VoiceOver user cannot perform —
+              // this button reaches the exact same delete path (_confirmDeleteDraft) so both ways
+              // to delete a draft agree on what "delete" does, not just on how you trigger it.
+              if (canEditOrDelete)
+                IconButton(
+                  icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.inkMuted),
+                  tooltip: 'Elimina',
+                  onPressed: () => _confirmDeleteDraft(context, ref, draft),
+                ),
+              const SizedBox(width: 6),
+              Icon(LucideIcons.chevronRight, size: 16, color: context.colors.inkDisabled),
+            ],
+          ),
+        ),
+      ),
     );
+
+    // Only a report still before office review can be deleted here — one already reviewed goes
+    // through the office Annulla workflow instead (ReportsController.Delete/ReportStateMachine.
+    // CanEditOrDelete reject anything Controllato onward, or Annullato/NonFatturabile).
+    if (!canEditOrDelete) return row;
+
+    return Dismissible(
+      key: ValueKey('rapportino-${draft.id}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: AppSpacing.xl),
+        child: Icon(LucideIcons.trash2, color: context.colors.red),
+      ),
+      confirmDismiss: (_) => _confirmDeleteDraft(context, ref, draft),
+      child: row,
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Delete (Bozza only)
+// ══════════════════════════════════════════════════════════════════════════════
+
+Future<bool> _confirmDeleteDraft(BuildContext context, WidgetRef ref, DraftReport draft) async {
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il rapportino?',
+    message: '"${draft.title}" verrà eliminato definitivamente.',
+  );
+  if (!confirmed) return false;
+
+  await ref.read(draftReportRepositoryProvider).deleteDraft(draft.id);
+
+  // Best-effort, not awaited by the dismiss animation: the draft may or may not exist
+  // server-side yet (an attachment upload can create the row before Invia does) — either way
+  // local state is authoritative for a Bozza the technician is still working on, so a failure
+  // here (offline, already gone, 404) is not worth surfacing.
+  unawaited(_bestEffortServerDelete(ref, draft.id));
+
+  return true;
+}
+
+Future<void> _bestEffortServerDelete(WidgetRef ref, String reportId) async {
+  try {
+    await ref.read(dioProvider).delete<void>('/api/reports/$reportId');
+  } catch (_) {
+    // See _confirmDeleteDraft's doc comment.
   }
 }

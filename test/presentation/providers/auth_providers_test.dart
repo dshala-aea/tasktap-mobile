@@ -1,8 +1,13 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
@@ -15,17 +20,18 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 AuthUser _fakeUser({String id = 'user-1', String token = 'tok'}) => AuthUser(
-      id: id,
-      email: 'tech@tasktap.io',
-      accessToken: token,
-      refreshToken: 'refresh',
-      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
+  id: id,
+  email: 'tech@tasktap.io',
+  accessToken: token,
+  refreshToken: 'refresh',
+  expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+);
 
-ProviderContainer _makeContainer(MockAuthRepository repo) {
+ProviderContainer _makeContainer(MockAuthRepository repo, {AppDatabase? db}) {
   return ProviderContainer(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
+      if (db != null) appDatabaseProvider.overrideWithValue(db),
     ],
   );
 }
@@ -35,11 +41,11 @@ void main() {
   late StreamController<AuthUser?> authStreamController;
 
   setUp(() {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    SharedPreferences.setMockInitialValues({});
     repo = MockAuthRepository();
     authStreamController = StreamController<AuthUser?>.broadcast();
-    when(() => repo.authStateChanges).thenAnswer(
-      (_) => authStreamController.stream,
-    );
+    when(() => repo.authStateChanges).thenAnswer((_) => authStreamController.stream);
     when(() => repo.currentUser).thenReturn(null);
   });
 
@@ -148,9 +154,7 @@ void main() {
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container
-          .read(loginProvider.notifier)
-          .signIn();
+      await container.read(loginProvider.notifier).signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -158,16 +162,14 @@ void main() {
     });
 
     test('signIn sets failure on InvalidCredentials', () async {
-      when(() => repo.signIn()).thenAnswer(
-            (_) async => (user: null, failure: const InvalidCredentials()),
-          );
+      when(
+        () => repo.signIn(),
+      ).thenAnswer((_) async => (user: null, failure: const InvalidCredentials()));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container
-          .read(loginProvider.notifier)
-          .signIn();
+      await container.read(loginProvider.notifier).signIn();
 
       final state = container.read(loginProvider);
       expect(state.isLoading, isFalse);
@@ -175,16 +177,14 @@ void main() {
     });
 
     test('clearError resets failure to null', () async {
-      when(() => repo.signIn()).thenAnswer(
-            (_) async => (user: null, failure: const NetworkError()),
-          );
+      when(
+        () => repo.signIn(),
+      ).thenAnswer((_) async => (user: null, failure: const NetworkError()));
 
       final container = _makeContainer(repo);
       addTearDown(container.dispose);
 
-      await container
-          .read(loginProvider.notifier)
-          .signIn();
+      await container.read(loginProvider.notifier).signIn();
 
       expect(container.read(loginProvider).failure, isA<NetworkError>());
 
@@ -195,12 +195,120 @@ void main() {
     test('signOut calls repository signOut', () async {
       when(() => repo.signOut()).thenAnswer((_) async {});
 
-      final container = _makeContainer(repo);
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final container = _makeContainer(repo, db: db);
       addTearDown(container.dispose);
 
       await container.read(loginProvider.notifier).signOut();
 
       verify(() => repo.signOut()).called(1);
+    });
+
+    // Regression: sign-out used to leave the entire local Drift DB and every SharedPreferences
+    // key in place — on this shared/rotating-device field-service app, the next person to sign in
+    // (possibly a different tenant) would see the previous account's full cached dataset until an
+    // eventual sync happened to overwrite it. Both must be genuinely empty afterward, not just
+    // "not obviously broken."
+    test('signOut wipes the local database and clears SharedPreferences', () async {
+      when(() => repo.signOut()).thenAnswer((_) async {});
+
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      await db.into(db.customers).insert(
+        CustomersCompanion.insert(
+          id: 'cust-1',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          companyName: 'Acme Srl',
+        ),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('autenticazioneBiometrica', true);
+
+      final container = _makeContainer(repo, db: db);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signOut();
+
+      expect(await db.select(db.customers).get(), isEmpty);
+      expect(prefs.getBool('autenticazioneBiometrica'), isNull);
+    });
+
+    // Regression: logout used to never unregister this device's FCM token, so a signed-out
+    // device kept receiving push for an account it was no longer signed in on. The fix reads
+    // `currentUser?.accessToken` and calls `NotificationService.instance.unregisterDeviceToken`
+    // BEFORE `repo.signOut()` runs (the token is gone the moment sign-out completes) — but that
+    // call is guarded on `NotificationService.isAvailable`, which is false in every widget/unit
+    // test (Firebase is never initialized here; see the identical guard/precedent this mirrors in
+    // impostazioni_screen_test.dart, "tapping push toggle... does not crash"). So the assertion
+    // this test can make is exactly that one: with a logged-in user (a real, non-empty access
+    // token — the thing that would reach the vulnerable `NotificationService.instance` line if
+    // the guard didn't hold), signOut() still completes and still calls repo.signOut(), rather
+    // than throwing `[core/no-app]` out of the FCM unregister step.
+    test(
+      'signOut does not crash and still signs out when a real access token is present '
+      '(Firebase unavailable in test — the isAvailable guard is what is under test)',
+      () async {
+        when(() => repo.currentUser).thenReturn(_fakeUser(token: 'real-token'));
+        when(() => repo.signOut()).thenAnswer((_) async {});
+
+        final db = AppDatabase(NativeDatabase.memory());
+        addTearDown(db.close);
+        final container = _makeContainer(repo, db: db);
+        addTearDown(container.dispose);
+
+        await container.read(loginProvider.notifier).signOut();
+
+        verify(() => repo.signOut()).called(1);
+      },
+    );
+
+    test('signInWithPassword success clears loading and failure state', () async {
+      final user = _fakeUser();
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct'))
+          .thenAnswer((_) async => (user: user, failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
+
+      final state = container.read(loginProvider);
+      expect(state.isLoading, isFalse);
+      expect(state.failure, isNull);
+    });
+
+    test('signInWithPassword wrong credentials surfaces InvalidCredentials, does not call signIn', () async {
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'wrong')).thenAnswer(
+        (_) async => (user: null, failure: const InvalidCredentials()),
+      );
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'wrong');
+
+      final state = container.read(loginProvider);
+      expect(state.failure, isA<InvalidCredentials>());
+      verifyNever(() => repo.signIn());
+    });
+
+    test('signInWithPassword AdditionalFactorRequired falls back to signIn() automatically', () async {
+      when(() => repo.signInWithPassword('tech@tasktap.io', 'correct')).thenAnswer(
+        (_) async => (user: null, failure: const AdditionalFactorRequired()),
+      );
+      when(() => repo.signIn()).thenAnswer((_) async => (user: null, failure: null));
+
+      final container = _makeContainer(repo);
+      addTearDown(container.dispose);
+
+      await container.read(loginProvider.notifier).signInWithPassword('tech@tasktap.io', 'correct');
+
+      verify(() => repo.signIn()).called(1);
+      // Verify that the fallback successfully clears the failure state,
+      // not leaving the stale AdditionalFactorRequired behind.
+      expect(container.read(loginProvider).failure, isNull);
     });
   });
 
@@ -210,10 +318,7 @@ void main() {
     // These tests encode the redirect rules used in app_router.dart without
     // spinning up a real router — they verify the decision function directly.
 
-    String? routeRedirect({
-      required AsyncValue<AuthUser?> authAsync,
-      required bool isOnLogin,
-    }) {
+    String? routeRedirect({required AsyncValue<AuthUser?> authAsync, required bool isOnLogin}) {
       return authAsync.when(
         loading: () => null,
         error: (err, stack) => isOnLogin ? null : '/login',
@@ -227,70 +332,69 @@ void main() {
     }
 
     test('loading → no redirect (stay on current route)', () {
-      expect(
-        routeRedirect(authAsync: const AsyncLoading(), isOnLogin: false),
-        isNull,
-      );
+      expect(routeRedirect(authAsync: const AsyncLoading(), isOnLogin: false), isNull);
     });
 
     test('unauthenticated on protected route → /login', () {
-      expect(
-        routeRedirect(
-          authAsync: const AsyncData(null),
-          isOnLogin: false,
-        ),
-        equals('/login'),
-      );
+      expect(routeRedirect(authAsync: const AsyncData(null), isOnLogin: false), equals('/login'));
     });
 
     test('unauthenticated already on /login → no redirect', () {
-      expect(
-        routeRedirect(
-          authAsync: const AsyncData(null),
-          isOnLogin: true,
-        ),
-        isNull,
-      );
+      expect(routeRedirect(authAsync: const AsyncData(null), isOnLogin: true), isNull);
     });
 
     test('authenticated on /login → /oggi', () {
-      expect(
-        routeRedirect(
-          authAsync: AsyncData(_fakeUser()),
-          isOnLogin: true,
-        ),
-        equals('/oggi'),
-      );
+      expect(routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: true), equals('/oggi'));
     });
 
     test('authenticated on protected route → no redirect', () {
-      expect(
-        routeRedirect(
-          authAsync: AsyncData(_fakeUser()),
-          isOnLogin: false,
-        ),
-        isNull,
-      );
+      expect(routeRedirect(authAsync: AsyncData(_fakeUser()), isOnLogin: false), isNull);
     });
 
     test('error state on protected route → /login', () {
       expect(
-        routeRedirect(
-          authAsync: AsyncError(Exception('boom'), StackTrace.empty),
-          isOnLogin: false,
-        ),
+        routeRedirect(authAsync: AsyncError(Exception('boom'), StackTrace.empty), isOnLogin: false),
         equals('/login'),
       );
     });
 
     test('error state already on /login → no redirect', () {
       expect(
-        routeRedirect(
-          authAsync: AsyncError(Exception('boom'), StackTrace.empty),
-          isOnLogin: true,
-        ),
+        routeRedirect(authAsync: AsyncError(Exception('boom'), StackTrace.empty), isOnLogin: true),
         isNull,
       );
+    });
+  });
+
+  group('onboarding redirect rule', () {
+    // Mirrors app_router.dart's redirect callback's onboarding branch: given an authenticated
+    // user and their onboarding-completion status, what should the redirect target be?
+    String? onboardingRedirect({
+      required bool isOnOnboarding,
+      required bool completed,
+    }) {
+      if (!completed && !isOnOnboarding) return '/onboarding';
+      if (completed && isOnOnboarding) return '/dashboard';
+      return null;
+    }
+
+    test('not completed, not already there → sent to onboarding', () {
+      expect(
+        onboardingRedirect(isOnOnboarding: false, completed: false),
+        '/onboarding',
+      );
+    });
+
+    test('not completed, already on onboarding → stays put', () {
+      expect(onboardingRedirect(isOnOnboarding: true, completed: false), isNull);
+    });
+
+    test('completed, on onboarding → sent to dashboard', () {
+      expect(onboardingRedirect(isOnOnboarding: true, completed: true), '/dashboard');
+    });
+
+    test('completed, elsewhere → stays put', () {
+      expect(onboardingRedirect(isOnOnboarding: false, completed: true), isNull);
     });
   });
 }

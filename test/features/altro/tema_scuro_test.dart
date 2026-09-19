@@ -20,20 +20,20 @@ void main() {
 
   /// A stand-in for main.dart's MaterialApp: same wiring, no router or Firebase.
   Widget app() => Consumer(
-        builder: (context, ref, _) {
-          final dark = ref.watch(impostazioniProvider.select((s) => s.temaScuro));
-          return MaterialApp(
-            theme: buildAppTheme(),
-            darkTheme: buildAppTheme(brightness: Brightness.dark),
-            themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-            home: Builder(
-              builder: (context) => Scaffold(
-                body: Text('x', style: TextStyle(color: context.colors.ink)),
-              ),
-            ),
-          );
-        },
+    builder: (context, ref, _) {
+      final dark = ref.watch(impostazioniProvider.select((s) => s.temaScuro));
+      return MaterialApp(
+        theme: buildAppTheme(),
+        darkTheme: buildAppTheme(brightness: Brightness.dark),
+        themeMode: dark ? ThemeMode.dark : ThemeMode.light,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Text('x', style: TextStyle(color: context.colors.ink)),
+          ),
+        ),
       );
+    },
+  );
 
   /// Warms the SharedPreferences plugin before the widget tree exists.
   ///
@@ -63,20 +63,27 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: app()));
     await tester.pumpAndSettle();
 
-    expect(paletteOf(tester), AppPalette.dark,
-        reason: 'the setting was saved on a previous run and must survive a restart');
+    expect(
+      paletteOf(tester),
+      AppPalette.dark,
+      reason: 'the setting was saved on a previous run and must survive a restart',
+    );
   });
 
   testWidgets('toggling repaints without a restart', (tester) async {
     SharedPreferences.setMockInitialValues({});
     late WidgetRef capturedRef;
 
-    await tester.pumpWidget(ProviderScope(
-      child: Consumer(builder: (context, ref, _) {
-        capturedRef = ref;
-        return app();
-      }),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        child: Consumer(
+          builder: (context, ref, _) {
+            capturedRef = ref;
+            return app();
+          },
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(paletteOf(tester), AppPalette.light);
 
@@ -86,8 +93,9 @@ void main() {
     expect(paletteOf(tester), AppPalette.dark);
   });
 
-  testWidgets('the rendered text colour actually changes, not just the theme object',
-      (tester) async {
+  testWidgets('the rendered text colour actually changes, not just the theme object', (
+    tester,
+  ) async {
     SharedPreferences.setMockInitialValues({'settings.tema_scuro': true});
     await warmPrefs(tester);
     await tester.pumpWidget(ProviderScope(child: app()));
@@ -105,11 +113,20 @@ void main() {
   test('main.dart wires themeMode to the setting', () {
     final source = File('lib/main.dart').readAsStringSync();
 
-    expect(source, contains('impostazioniProvider'),
-        reason: 'MaterialApp must read the persisted preference');
-    expect(source, contains('darkTheme: buildAppTheme(brightness: Brightness.dark)'),
-        reason: 'a themeMode with no darkTheme silently renders light');
-    expect(source, contains('themeMode:'),
-        reason: 'without themeMode the setting reaches nothing — the defect this replaced');
+    expect(
+      source,
+      contains('impostazioniProvider'),
+      reason: 'MaterialApp must read the persisted preference',
+    );
+    expect(
+      source,
+      contains('darkTheme: buildAppTheme(brightness: Brightness.dark)'),
+      reason: 'a themeMode with no darkTheme silently renders light',
+    );
+    expect(
+      source,
+      contains('themeMode:'),
+      reason: 'without themeMode the setting reaches nothing — the defect this replaced',
+    );
   });
 }

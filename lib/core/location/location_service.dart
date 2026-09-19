@@ -13,20 +13,91 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
-/// Result record: latitude + longitude.
-typedef GpsCoords = ({double lat, double lng});
+/// Result record: latitude + longitude + the device-reported accuracy radius (meters, null when
+/// the device didn't report one).
+typedef GpsCoords = ({double lat, double lng, double? accuracy});
+
+/// Coarse permission status — enough for a caller to tell "already granted" apart from
+/// "permanently denied" before ever showing a dialog. [willPromptForPermission] intentionally
+/// can't answer this: its own doc comment explains why collapsing those two cases to `false` is
+/// correct for its one existing caller. This is for a caller — onboarding — that needs to render
+/// three different states instead of deciding whether to show one purpose sheet.
+enum GpsPermissionStatus {
+  /// Not yet asked, or asked and still allowed to ask again.
+  notDetermined,
+  granted,
+
+  /// The OS will not show the dialog again; only the device's own Settings can change this now.
+  deniedForever,
+
+  /// Location services are off at the OS level entirely, independent of this app's permission.
+  serviceDisabled,
+}
 
 /// Contract for obtaining the device's current GPS position.
 abstract class ILocationService {
+  /// Const so the two implementations below can stay const singletons.
+  ///
+  /// This is `extends`, not `implements`, precisely so [willPromptForPermission] can carry a
+  /// default: Dart's `implements` demands every member be restated, which would have put the same
+  /// `=> false` in four test fakes.
+  const ILocationService();
+
   /// Returns the current GPS position, or null if unavailable/denied.
   /// Never throws — failures are silently absorbed.
   Future<GpsCoords?> getCurrentPosition();
+
+  /// Whether calling [getCurrentPosition] would put an OS permission dialog on screen.
+  ///
+  /// Exists so the UI can state the purpose *before* the system asks. The prompt used to appear
+  /// inside an "Acquisisci" button with nothing saying what the coordinate was for or what happened
+  /// if they refused — and on iOS the dialog cannot be shown again, so the first ask is the only
+  /// one there is.
+  ///
+  /// Concrete rather than abstract so the test fakes and [DisabledLocationService] inherit the
+  /// honest answer (they never prompt) instead of each having to restate it.
+  Future<bool> willPromptForPermission() async => false;
+
+  /// See [GpsPermissionStatus]. Concrete so every fake and [DisabledLocationService] gets the
+  /// honest "never asked" answer without restating it.
+  Future<GpsPermissionStatus> permissionStatus() async => GpsPermissionStatus.notDetermined;
 }
 
 // ── Real implementation ───────────────────────────────────────────────────────
 
-class LocationService implements ILocationService {
+class LocationService extends ILocationService {
   const LocationService();
+
+  /// Only `denied` produces a dialog. `deniedForever` never asks again — there the honest move is
+  /// to let the call fail and tell the technician where the system setting lives, not to open a
+  /// purpose sheet that leads nowhere.
+  @override
+  Future<bool> willPromptForPermission() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return false;
+      return await Geolocator.checkPermission() == LocationPermission.denied;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<GpsPermissionStatus> permissionStatus() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return GpsPermissionStatus.serviceDisabled;
+      }
+      return switch (await Geolocator.checkPermission()) {
+        LocationPermission.always ||
+        LocationPermission.whileInUse => GpsPermissionStatus.granted,
+        LocationPermission.deniedForever => GpsPermissionStatus.deniedForever,
+        LocationPermission.denied ||
+        LocationPermission.unableToDetermine => GpsPermissionStatus.notDetermined,
+      };
+    } catch (_) {
+      return GpsPermissionStatus.notDetermined;
+    }
+  }
 
   @override
   Future<GpsCoords?> getCurrentPosition() async {
@@ -52,7 +123,7 @@ class LocationService implements ILocationService {
           timeLimit: Duration(seconds: 10),
         ),
       );
-      return (lat: pos.latitude, lng: pos.longitude);
+      return (lat: pos.latitude, lng: pos.longitude, accuracy: pos.accuracy);
     } catch (_) {
       // Any platform exception or timeout → gracefully return null.
       return null;
@@ -60,9 +131,40 @@ class LocationService implements ILocationService {
   }
 }
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// ── Disabled implementation ───────────────────────────────────────────────────
+
+/// What the app uses when the technician has turned "Geolocalizzazione" off.
+///
+/// Returns null exactly as the real service does on a denial, so every call site already handles
+/// it — the position is simply absent, and no record claims one was taken.
+class DisabledLocationService extends ILocationService {
+  const DisabledLocationService();
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => null;
+}
+
+// ── Providers ─────────────────────────────────────────────────────────────────
+
+/// Whether the technician has allowed the app to record position.
+///
+/// Declared here, in core, and overridden in `main.dart` from the Impostazioni setting. Core must
+/// not import a feature, and the alternative — having every call site remember to check a setting
+/// — is how the setting came to control nothing in the first place.
+///
+/// Defaults to true so a test, or any scope that does not override it, behaves like the app did
+/// before the setting was honoured.
+final gpsPreferenceProvider = Provider<bool>((ref) => true);
 
 /// Provides the [ILocationService]. Override in tests with a fake.
+///
+/// The gate lives here rather than at the call sites. "Geolocalizzazione — Posizione GPS per i
+/// rapportini" was a switch wired to nothing: it wrote a bool that no code ever read, while
+/// `cantiere_timbra_screen` captured a position on every clock-in regardless. A settings toggle
+/// that reports a choice it does not enforce is worse than no toggle, and under a consent audit it
+/// is worse still.
 final locationServiceProvider = Provider<ILocationService>((ref) {
-  return const LocationService();
+  return ref.watch(gpsPreferenceProvider)
+      ? const LocationService()
+      : const DisabledLocationService();
 });

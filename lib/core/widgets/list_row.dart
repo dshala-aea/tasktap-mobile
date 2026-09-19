@@ -1,22 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
-/// List row — 12/19 padding, gap 12, bottom 1 px BL divider; leading slot;
-/// Manrope 600/14 title + Manrope 12 MUTED subtitle (both ellipsis); meta slot
-/// (right); trailing chevron (16, DIS) when tappable.
+/// A row in a list — flat, hairline-separated, full-bleed.
 ///
-/// ```dart
-/// ListRow(
-///   leading: AppAvatar(name: 'Mario Rossi'),
-///   title: 'Sostituzione caldaia',
-///   subtitle: 'Via Roma 12',
-///   meta: StatusPill(stato: 'In corso'),
-///   onTap: () {},
-/// );
-/// ```
+/// Was a bordered "drawer front" cell (RackCell) on its own pitch of vertical gap between rows.
+/// Replaced with the shape ticket_list_screen's `_TicketRow` and rapportini_list_screen's
+/// `_RapportinoRow` already proved out for real content: no per-row card, border or radius — a
+/// bottom hairline (`context.colors.borderLight`) between rows, same as Files, Settings, and every
+/// other flat list these two screens were themselves modeled on. A per-row glass card was
+/// considered and rejected for the same reason those two screens rejected it: a list can run to
+/// dozens of rows, and a blur sigma per row is a real, measured cost a flat row with one border
+/// paint is not.
+///
+/// [strapped]/[ledgeColor] keep their meaning — "this one needs you" / a state that is neither
+/// ordinary nor live — but the mechanism moves from a recolored cell border to the same 3px
+/// leading stripe `_TicketRow`'s priority marker and `_RapportinoRow`'s draft marker already use,
+/// tinted with the one accent (`AppColors.Y`) rather than invented separately for this widget.
+///
+/// [showDivider] used to be a no-op, kept only for call-site compatibility with the cell-gap
+/// layout that made a divider redundant. It is live again now that a divider is genuinely what
+/// separates one row from the next — callers already pass it correctly (typically `false` on a
+/// list's last row), so this needed no call-site changes to take effect.
 class ListRow extends StatelessWidget {
   const ListRow({
     super.key,
@@ -26,6 +34,8 @@ class ListRow extends StatelessWidget {
     this.meta,
     this.onTap,
     this.showDivider = true,
+    this.strapped = false,
+    this.ledgeColor,
   });
 
   final Widget? leading;
@@ -33,73 +43,88 @@ class ListRow extends StatelessWidget {
   final String? subtitle;
   final Widget? meta;
   final VoidCallback? onTap;
+
+  /// Whether this row draws the hairline separating it from the next one — pass `false` on a
+  /// list's last row.
   final bool showDivider;
+
+  /// Selected, priority, or still-needs-finishing — turns the leading stripe the one accent. Not
+  /// for a live/running state: see `LiveDot`.
+  final bool strapped;
+
+  /// For a row whose state is neither ordinary nor live: overdue, rejected, queued.
+  final Color? ledgeColor;
 
   @override
   Widget build(BuildContext context) {
-    final row = Container(
-      constraints: const BoxConstraints(minHeight: 44),
-      padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
-      decoration: BoxDecoration(
-        border: showDivider
-            ? Border(bottom: BorderSide(color: context.colors.borderLight))
-            : null,
-      ),
-      child: Row(
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.manrope(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.ink,
-                  ),
-                ),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.manrope(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                      color: context.colors.inkMuted,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (meta != null) ...[
-            const SizedBox(width: 12),
-            meta!,
-          ],
-          if (onTap != null) ...[
-            const SizedBox(width: 8),
-            Icon(
-              LucideIcons.chevronRight,
-              size: 16,
-              color: context.colors.inkDisabled,
-            ),
-          ],
-        ],
-      ),
-    );
+    final c = context.colors;
+    final stripeColor = strapped ? AppColors.Y : (ledgeColor ?? Colors.transparent);
 
-    if (onTap == null) return row;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(onTap: onTap, child: row),
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 11),
+        decoration: BoxDecoration(
+          border: showDivider ? Border(bottom: BorderSide(color: c.borderLight)) : null,
+        ),
+        // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: a caller may size
+        // this row from a SliverChildBuilderDelegate item with no bounded height for `stretch` to
+        // stretch the leading stripe into — same reasoning as `_TicketRow`'s own comment.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 3,
+                margin: const EdgeInsets.only(right: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: stripeColor,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              if (leading != null) ...[leading!, const SizedBox(width: 12)],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Archivo Narrow',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: c.ink,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkMuted),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              // Center, not the bare widget: `stretch` above is for the leading stripe, which
+              // genuinely needs the row's full height — a `meta` badge/stamp (StatusPill, a LEAD
+              // AppBadge) has its own compact intrinsic height and doesn't want that stretch, but
+              // still inherits it as any other Row child would without this.
+              if (meta != null) ...[const SizedBox(width: 12), Center(child: meta!)],
+              if (onTap != null) ...[
+                const SizedBox(width: 6),
+                Icon(LucideIcons.chevronRight, size: 16, color: c.inkDisabled),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

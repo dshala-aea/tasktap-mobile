@@ -43,7 +43,8 @@ void main() {
       expect(
         placeholder,
         isNotNull,
-        reason: 'android/app/build.gradle.kts must set the appAuthRedirectScheme placeholder — '
+        reason:
+            'android/app/build.gradle.kts must set the appAuthRedirectScheme placeholder — '
             'without it the sign-in callback reaches no activity and login hangs',
       );
       expect(placeholder!.group(1), scheme);
@@ -62,19 +63,20 @@ void main() {
     /// claiming this one's task. It cannot stay while AppAuth is in use, and giving AppAuth the
     /// same empty affinity does not rescue it — emptiness is what breaks singleTask.
     test('MainActivity does not strip the task affinity AppAuth needs', () {
-      final element = RegExp(r'<activity[\s\S]*?android:name="\.MainActivity"[\s\S]*?>')
-          .firstMatch(manifest);
+      final element = RegExp(
+        r'<activity[\s\S]*?android:name="\.MainActivity"[\s\S]*?>',
+      ).firstMatch(manifest);
       expect(element, isNotNull, reason: 'MainActivity must be declared');
 
-      final affinity =
-          RegExp(r'android:taskAffinity="([^"]*)"').firstMatch(element!.group(0)!);
+      final affinity = RegExp(r'android:taskAffinity="([^"]*)"').firstMatch(element!.group(0)!);
 
       if (affinity == null) return; // Default affinity — the application id. Correct.
 
       expect(
         affinity.group(1),
         isNotEmpty,
-        reason: 'an empty taskAffinity puts AppAuth\'s singleTask activity in a new task every '
+        reason:
+            'an empty taskAffinity puts AppAuth\'s singleTask activity in a new task every '
             'time, so the sign-in response arrives where no request is stored',
       );
 

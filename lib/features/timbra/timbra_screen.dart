@@ -1,30 +1,67 @@
 // dart format width=100
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_vetro_palette.dart';
+import '../../core/widgets/app_button.dart';
+import '../../core/widgets/app_card.dart';
+import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/row_icon_tile.dart';
+import '../../core/widgets/screen_header.dart';
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
+import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TimbraScreen
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Dark clock-in / clock-out screen.
+/// Clock-in / clock-out screen.
 ///
-/// Layout:
-///   - Date label (uppercase, Manrope 13 muted)
-///   - Live clock (Sora 72 thin, yellow, ticking every second)
-///   - Circular punch button (radial yellow gradient)
-///   - Pause/resume pill (only while on shift)
-///   - "Sessioni di oggi" card (session rows + running total)
+///   - (2026-08-26 redesign, module #1; hero restructured 2026-08-30, "Status-First Hero"; chrome
+///     removed 2026-08-30, "Hybrid Card Hero"; hero card dropped entirely 2026-08-30, full flip;
+///     flat Documento material, no more gradients, 2026-09-04 — see below.)
+///   - The screen used to be permanently dark, top to bottom, with its own fixed `ScreenHeader`
+///     plate. A first pass narrowed that to one dark "hero card" wrapping just the punch control
+///     (the sun-glare argument for a dark, high-contrast surface was real — see the git history on
+///     this file). That card didn't land: on a real device it read as a second, disconnected
+///     surface rather than part of the page, and its fixed 156dp circular button and generous
+///     internal padding left the top of a tall phone looking sparse against a big session-list gap
+///     below it. This pass drops the card: every surface on this page, including the punch/pause
+///     controls, now reads `context.colors`/`context.vetro` and flips with the app theme like
+///     every other screen. The sun-glare property is kept differently — the punch/pause buttons
+///     are still a saturated flat fill with white text/icon, which stays legible regardless of
+///     the surrounding theme, without needing a dedicated dark ground under them.
+///   - `ScreenHeader` was dropped for a plain inline title + date (2026-09-04, see above) — every
+///     other timbra screen (`chiudi_turno_screen.dart`, `seleziona_cantiere_screen.dart`,
+///     `cantiere_timbra_screen.dart`) already used the shared header, and the divergence bought
+///     this root-tab screen nothing the header itself doesn't already support (no back chevron,
+///     no actions — both optional on `ScreenHeader`). Reinstated 2026-09-15 for that consistency;
+///     the date now rides as the header's own `subtitle`.
+///   - Punch/pause are now full-width rounded-rect buttons, not a floating disc/small pill — more
+///     touch target, no wasted side margins, and closer in shape to `AppButton`'s own full-width
+///     convention used everywhere else in the app.
+///   - "Invia ore" (day-level submit-for-approval) removed entirely — the approval workflow it
+///     fed had no real consumer (payroll already reads a raw Excel export, ignoring approval
+///     status; the office edits/deletes hours directly). Removed from mobile only for now; the
+///     backend/web-frontend side of the same workflow is a tracked follow-up, not done here.
+///   - Punch failures used to render as inline red text under the button — now routed through
+///     [showAppToast], the same shared feedback surface every other screen in the app uses, so
+///     the layout doesn't shift to make room for an error line.
+///   - The punch button gets a brief `AnimatedScale` press-down instead of an ink splash (a splash
+///     over a saturated fill read as a smudge, not a press — still true, still avoided), and its
+///     fill/state crossfades on tap instead of snapping; the status badge crossfades on state
+///     change; the guard banner animates its own height in/out instead of popping.
 class TimbraScreen extends ConsumerStatefulWidget {
   const TimbraScreen({super.key});
 
@@ -32,11 +69,7 @@ class TimbraScreen extends ConsumerStatefulWidget {
   ConsumerState<TimbraScreen> createState() => _TimbraScreenState();
 }
 
-class _TimbraScreenState extends ConsumerState<TimbraScreen>
-    with TickerProviderStateMixin {
-  late Timer _clockTimer;
-  DateTime _now = DateTime.now();
-
+class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProviderStateMixin {
   // Pulse animation for the clock dot while on shift.
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
@@ -44,22 +77,18 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
   @override
   void initState() {
     super.initState();
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
-    });
-
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
+    _pulseAnim = Tween<double>(
+      begin: 0.85,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
   }
 
   @override
   void dispose() {
-    _clockTimer.cancel();
     _pulseController.dispose();
     super.dispose();
   }
@@ -82,151 +111,406 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen>
     final sessionsAsync = ref.watch(todaySessionsProvider);
     final punchState = ref.watch(punchNotifierProvider);
     final total = ref.watch(totalWorkedTodayProvider);
+    final clockInMethod = ref.watch(effectiveClockInMethodProvider);
 
     _updatePulse(shiftState.isOnShift);
 
+    // A failed punch used to render as red text wedged under the button, shifting everything
+    // below it. Routed through the shared toast instead, same as every other transient-feedback
+    // site in the app now.
+    ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
+      if (next is AsyncError) {
+        showAppToast(
+          context,
+          message: 'Errore durante la timbratura. Riprova.',
+          tone: ToastTone.error,
+        );
+      }
+    });
+
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: context.colors.bg2,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // ── Date ──────────────────────────────────────────────────────
-              _DateLabel(now: _now),
-              const SizedBox(height: 8),
-
-              // ── Live clock ────────────────────────────────────────────────
-              _LiveClock(now: _now, pulseAnim: _pulseAnim),
-              const SizedBox(height: 40),
-
-              // ── Punch button ──────────────────────────────────────────────
-              _PunchButton(
-                shiftState: shiftState,
-                isLoading: punchState is AsyncLoading,
-                guard: ref.watch(punchGuardProvider),
-                onTap: () {
-                  ref.read(punchNotifierProvider.notifier).punch(shiftState);
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // ── Error snack (shown inline below button) ───────────────────
-              if (punchState is AsyncError<void>)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Errore: ${punchState.error}',
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
+        child: Column(
+          children: [
+            ScreenHeader(
+              title: 'Timbra',
+              subtitle: _formatDateLabel(),
+              // ButtonOnly: no server endpoint would accept a kiosk-QR punch anyway (backend
+              // Task 4's EnsureClockInMethodAllowedAsync), so the entry point is hidden rather
+              // than shown-but-doomed.
+              actions: clockInMethod == 'ButtonOnly'
+                  ? const []
+                  : [
+                      HeaderIconBtn(
+                        icon: Icons.qr_code_scanner,
+                        label: 'Timbra con QR',
+                        onTap: () => context.push(AppRoutes.timbraQr),
+                      ),
+                    ],
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.lg,
+                  AppSpacing.pagePadding,
+                  // fabSafeBottom, not navClearance: this route is pushed full-screen
+                  // (rootNavigatorKey), so the pill nav is never drawn here — and the difference
+                  // isn't just wasted space, since this padding shrinks the height LayoutBuilder
+                  // compares against _kFixedLayoutMinHeight just below.
+                  context.fabSafeBottom,
                 ),
+                // Fixed when there is room, scrolling when there is not — see
+                // _kFixedLayoutMinHeight.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fits = constraints.maxHeight >= _kFixedLayoutMinHeight;
+                    final punchGuard = ref.watch(punchGuardProvider);
+                    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-              // ── Pause / resume (only meaningful while on shift) ───────────
-              if (shiftState.isOnShift) ...[
-                const SizedBox(height: 16),
-                _PauseButton(
-                  shiftState: shiftState,
-                  isLoading: punchState is AsyncLoading,
-                  guard: ref.watch(pauseGuardProvider),
-                  onTap: () {
-                    ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                    final content = <Widget>[
+                      _HeroStatus(shiftState: shiftState, total: total, pulseAnim: _pulseAnim),
+                      const SizedBox(height: 24),
+                      // The blocked reason used to be conditionally inserted into the Column
+                      // outright — an abrupt pop. AnimatedSize gives it a height transition
+                      // in/out instead, without needing to know its own content's height up
+                      // front.
+                      AnimatedSize(
+                        duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 200),
+                        alignment: Alignment.topCenter,
+                        curve: Curves.easeInOut,
+                        child: punchGuard.blocked && punchGuard.reason != null
+                            ? Column(
+                                children: [
+                                  _GuardBanner(reason: punchGuard.reason!),
+                                  const SizedBox(height: 16),
+                                ],
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                      if (clockInMethod == 'QrOnly') ...[
+                        const _QrRequiredNotice(),
+                      ] else ...[
+                        _PunchButton(
+                          shiftState: shiftState,
+                          isLoading: punchState is AsyncLoading,
+                          guard: punchGuard,
+                          onTap: () {
+                            ref.read(punchNotifierProvider.notifier).punch(shiftState);
+                          },
+                        ),
+                        if (shiftState.isOnShift) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          _PauseButton(
+                            shiftState: shiftState,
+                            isLoading: punchState is AsyncLoading,
+                            guard: ref.watch(pauseGuardProvider),
+                            onTap: () {
+                              ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                            },
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: AppSpacing.xl),
+                    ];
+
+                    final sessions = sessionsAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (e, _) => Text(
+                        'Errore sessioni: $e',
+                        style: TextStyle(color: context.colors.red, fontSize: 12),
+                      ),
+                      data: (list) => _SessionsCard(
+                        sessions: list,
+                        total: total,
+                        hasPendingSync: ref.watch(hasPendingSyncProvider),
+                        fillHeight: fits,
+                      ),
+                    );
+
+                    if (!fits) {
+                      return SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [...content, sessions],
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ...content,
+                        Expanded(child: sessions),
+                      ],
+                    );
                   },
                 ),
-              ],
-
-              const SizedBox(height: 40),
-
-              // ── Sessioni di oggi ─────────────────────────────────────────
-              sessionsAsync.when(
-                loading: () => const SizedBox.shrink(),
-                error: (e, _) => Text(
-                  'Errore sessioni: $e',
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                ),
-                data: (sessions) => _SessionsCard(
-                  sessions: sessions,
-                  total: total,
-                  now: _now,
-                  hasPendingSync: ref.watch(hasPendingSyncProvider),
-                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
+/// Below this the controls alone would leave the session list unreadable, so the page scrolls.
+const double _kFixedLayoutMinHeight = 640;
+
 // ══════════════════════════════════════════════════════════════════════════════
-// _DateLabel
+// Date label
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _DateLabel extends StatelessWidget {
-  const _DateLabel({required this.now});
-  final DateTime now;
-
-  @override
-  Widget build(BuildContext context) {
-    // Use locale-neutral format to avoid requiring initializeDateFormatting.
-    // Displays as e.g. "LUN 22 GIU 2026"
-    final dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
-    final monthNames = [
-      'GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU',
-      'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC',
-    ];
-    final day = dayNames[now.weekday - 1];
-    final month = monthNames[now.month - 1];
-    final formatted = '$day ${now.day} $month ${now.year}';
-    return Text(
-      formatted,
-      style: TextStyle(
-        fontFamily: 'Manrope',
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-        color: context.colors.inkMuted,
-      ),
-      textAlign: TextAlign.center,
-    );
-  }
+/// The calendar date, not the clock — this never needs the per-second tick `_SmallClock` does, so
+/// it reads `DateTime.now()` once per build rather than watching `nowProvider`. Feeds
+/// `ScreenHeader`'s `subtitle`.
+///
+/// Locale-neutral format to avoid requiring `initializeDateFormatting`. Renders as e.g.
+/// "LUN 22 GIU 2026".
+String _formatDateLabel() {
+  final now = DateTime.now();
+  const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
+  const monthNames = [
+    'GEN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAG',
+    'GIU',
+    'LUG',
+    'AGO',
+    'SET',
+    'OTT',
+    'NOV',
+    'DIC',
+  ];
+  final day = dayNames[now.weekday - 1];
+  final month = monthNames[now.month - 1];
+  return '$day ${now.day} $month ${now.year}';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// _LiveClock
+// Shared duration formatting
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _LiveClock extends StatelessWidget {
-  const _LiveClock({required this.now, required this.pulseAnim});
-  final DateTime now;
+String _formatHoursMinutes(Duration d) {
+  final h = d.inHours;
+  final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+  return '${h}h ${m}m';
+}
+
+String _formatHoursMinutesSeconds(Duration d) {
+  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '${_formatHoursMinutes(d)} ${s}s';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _HeroStatus  — state badge + elapsed time + small live clock
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// What the technician actually glances at this screen to answer: not "what time is it" (the
+/// status bar already says that), but "am I clocked in, and for how long." That question is the
+/// hero — a state badge and the elapsed-today reading, both far larger than the clock, which sits
+/// underneath as a small secondary readout.
+///
+/// [total] is [totalWorkedTodayProvider] — the same "worked so far today" value [_TotalRow] has
+/// always shown, not a new computation. It only recomputes on a data change (a punch, pause, or
+/// resume) — it does not tick live, and does not need to: a number that changes at most a few
+/// times an hour does not need to visibly age in real time.
+class _HeroStatus extends StatelessWidget {
+  const _HeroStatus({required this.shiftState, required this.total, required this.pulseAnim});
+
+  final TimbraState shiftState;
+  final Duration total;
   final Animation<double> pulseAnim;
 
   @override
   Widget build(BuildContext context) {
+    final v = context.vetro;
+    final (String label, Color color, Color? bg) = switch (shiftState) {
+      TimbraState(isOnShift: true, isOnPause: true) => ('IN PAUSA', v.statusWarn, v.statusWarnBg),
+      TimbraState(isOnShift: true) => ('IN TURNO', v.statusGood, v.statusGoodBg),
+      // Not on shift: no saturated colour — Vetro reserves that for something active, and
+      // nothing is active right now. Same inkMuted the rest of this screen's quiet text uses.
+      _ => ('FUORI TURNO', context.colors.inkMuted, null),
+    };
+
+    return Column(
+      children: [
+        AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
+          child: Semantics(
+            key: ValueKey(label),
+            label: 'Stato: $label',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: AppSpacing.xs),
+              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // The pulse moves here — a small dot is a truer "this is live" cue than
+                  // pulsing an eight-digit number, and it sits directly next to the state it is
+                  // confirming rather than next to the time of day.
+                  ScaleTransition(
+                    scale: pulseAnim,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        // The app's one running clock nobody could not see, and until now the one liveRegion
+        // nobody added — a screen reader had no signal this number changes every minute.
+        // accentInk, not raw AppColors.Y: this Scaffold's `bg2` flips with the theme (unlike the
+        // permanently-dark punch surfaces elsewhere), and Y-as-text only clears 2.91:1 in dark
+        // mode — under even the relaxed 3:1 large-text floor at this size.
+        Semantics(
+          liveRegion: true,
+          label: 'Ore lavorate oggi ${_formatHoursMinutes(total)}',
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              _formatHoursMinutes(total),
+              style: TextStyle(
+                fontFamily: 'IBM Plex Mono',
+                fontSize: 52,
+                fontWeight: FontWeight.w600,
+                color: context.colors.accentInk,
+                letterSpacing: -1,
+                height: 1.0,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _SmallClock(),
+      ],
+    );
+  }
+}
+
+/// Small secondary clock under [_HeroStatus]'s elapsed reading — the confirm-the-phone's-right
+/// glance at the weight that question actually needs now that "am I clocked in" is the hero. The
+/// one per-second-ticking widget on this screen — only this rebuilds on the tick, not the whole
+/// card or page.
+class _SmallClock extends ConsumerWidget {
+  const _SmallClock();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(nowProvider).valueOrNull?.toLocal() ?? DateTime.now();
     final timeStr = DateFormat('HH:mm:ss').format(now);
     return Semantics(
       label: 'Ora corrente $timeStr',
       liveRegion: true,
-      child: ScaleTransition(
-        scale: pulseAnim,
-        child: Text(
-          timeStr,
-          style: GoogleFonts.sora(
-            fontSize: 72,
-            // w300, not w100. This is the number a technician checks at arm's length, outdoors,
-            // to decide whether they are on the clock. Hairline strokes at 72px look elegant on a
-            // desk monitor and disappear under sun glare on a scratched screen — the one viewing
-            // condition this screen is actually used in. Still light enough to stay display type.
-            fontWeight: FontWeight.w300,
-            color: AppColors.Y,
-            letterSpacing: -2,
-            height: 1.0,
-          ),
-          textAlign: TextAlign.center,
+      child: Text(
+        timeStr,
+        style: TextStyle(
+          fontFamily: 'IBM Plex Mono',
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          color: context.colors.inkMuted,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _GuardBanner
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Full-width, seen-before-the-tap treatment for a punch refusal the device already knows about
+/// (closed payroll period, a shift another device opened). Reuses `context.vetro.statusWarn`/
+/// `statusWarnBg` — the same "needs attention" pair [_HeroStatus] uses for "IN PAUSA", not a
+/// fresh colour invented for this one banner.
+class _GuardBanner extends StatelessWidget {
+  const _GuardBanner({required this.reason});
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: v.statusWarnBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: v.statusWarn.withAlpha(80)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.alertTriangle, size: 15, color: v.statusWarn),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              reason,
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 12,
+                height: 1.35,
+                color: v.statusWarn,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _QrRequiredNotice
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Shown instead of the punch/pause controls when the effective clock-in method is QrOnly — the
+/// server would reject a button punch anyway (WorkLogService.EnsureClockInMethodAllowedAsync), so
+/// this avoids a round trip to a state the client already knows about.
+class _QrRequiredNotice extends StatelessWidget {
+  const _QrRequiredNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          'La tua azienda richiede la timbratura con QR.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AppButton(
+          label: 'Scansiona QR',
+          icon: const Icon(Icons.qr_code_scanner, size: 18),
+          onPressed: () => context.push(AppRoutes.timbraQr),
+        ),
+      ],
     );
   }
 }
@@ -235,7 +519,29 @@ class _LiveClock extends StatelessWidget {
 // _PunchButton
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _PunchButton extends StatelessWidget {
+// TODO(design-consistency): _PunchButton (and _PauseButton below) hand-roll their own
+// loading/press states instead of using the shared `AppButton`/`AppButton.danger` this same
+// feature uses elsewhere (chiudi_turno_screen.dart's "Conferma uscita", cantiere_timbra_screen.
+// dart's "Inizia timbratura"/"Timbra uscita cantiere"). Deliberately NOT migrated — audited and
+// judged a case where `AppButton` cannot express the same behaviour without a real regression,
+// not just a style mismatch:
+//   - Colour: this button's fill is `AppColors.Y`/`AppColors.stopDark` — fixed, theme-invariant
+//     hex values, not one of `AppButton`'s five enum-selected variants. That's not an arbitrary
+//     choice: this class's own header comment (above, "sun-glare property") explains why a
+//     flipping token pair (e.g. `AppButtonVariant.danger`'s `redSoft`/`red`) fails contrast in one
+//     theme or the other for fixed-white icon/text on top of it, while `AppColors.Y`/`stopDark`
+//     clear >7:1 regardless of theme. `AppButton` has no variant, or any way to pass a custom
+//     fill, that reproduces this.
+//   - Press feedback: this button deliberately has NO ink splash (see the tap handler below) — a
+//     splash over a saturated flat fill read as a smudge on a real device, replaced with an
+//     `AnimatedScale` press-down instead. `AppButton` always wraps its content in a Material
+//     `InkWell` with a splash; adopting it would reintroduce exactly the smudge this screen's own
+//     redesign moved away from.
+//   - `_PauseButton` similarly needs an accent colour that changes with state (cyan on resume,
+//     amber on pause) — again outside `AppButton`'s fixed variant palette.
+// If `AppButton` grows a custom-fill-colour escape hatch and/or a no-splash press mode, this pair
+// is the one caller left that should migrate onto it.
+class _PunchButton extends StatefulWidget {
   const _PunchButton({
     required this.shiftState,
     required this.isLoading,
@@ -248,119 +554,111 @@ class _PunchButton extends StatelessWidget {
   final VoidCallback onTap;
 
   /// A refusal the server already told us about — a closed payroll period, a shift another
-  /// device opened. Blocking here turns a rejection the user would otherwise meet after a
-  /// silent sync into one they see at the moment of the tap.
+  /// device opened. The reason text itself is not rendered here — the parent promotes it to
+  /// [_GuardBanner], above the button, before the tap is even attempted; this only governs the
+  /// dimmed/inert visuals.
   final TimbraGuard guard;
 
   @override
+  State<_PunchButton> createState() => _PunchButtonState();
+}
+
+class _PunchButtonState extends State<_PunchButton> {
+  // Drives a brief AnimatedScale press-down — see this class's own historical note on why the
+  // button has no InkWell splash instead.
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final isOnShift = shiftState.isOnShift;
+    final isOnShift = widget.shiftState.isOnShift;
     final label = isOnShift ? 'FINE TURNO' : 'INIZIA TURNO';
     final icon = isOnShift ? LucideIcons.square : LucideIcons.play;
-    final blocked = guard.blocked;
+    final blocked = widget.guard.blocked;
+    final enabled = !widget.isLoading && !blocked;
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
 
-    // Radial gradient: yellow centre → dark rim (or red-ish when ending)
-    final gradient = isOnShift
-        ? const RadialGradient(
-            center: Alignment(0, -0.3),
-            radius: 0.85,
-            colors: [Color(0xFFFF6B6B), Color(0xFFCC3333)],
-          )
-        : const RadialGradient(
-            center: Alignment(0, -0.3),
-            radius: 0.85,
-            colors: [AppColors.Y, AppColors.YDark],
-          );
+    // Flat fill (no gradient — DESIGN.md's flat Documento material has none), checked against a
+    // simulated direct-sunlight wash before being kept — reads clearly against either app theme
+    // on its own, without needing a dedicated dark ground under it. AppColors.Y for "starting",
+    // the same theme-invariant brand-accent exception every other primary fill in the app reads;
+    // AppColors.stopDark for "ending" — not a flipping `context.colors.red`/`redSoft` pair,
+    // because the white icon/text on top of this fill has to stay legible under BOTH themes, and
+    // those two tokens are tuned to flip (`redSoft` goes near-white in light mode, `red` goes a
+    // light salmon in dark mode — either one under fixed white text fails contrast in one theme
+    // or the other). `stopDark` alone clears >7:1 against white regardless of theme, which is the
+    // same "does not flip, does not belong in AppPalette" reasoning `AppColors`'s own "Punch
+    // clock (theme-invariant)" section already documents this pair for.
+    final fillColor = isOnShift ? AppColors.stopDark : AppColors.Y;
 
     // Dimmed and inert rather than hidden: a button that disappears leaves the user with no
-    // idea what happened, and the reason is printed underneath so it is readable without a
-    // long-press or a tooltip this platform would not show anyway.
-    final button = Semantics(
+    // idea what happened, and the reason is shown above via _GuardBanner.
+    return Semantics(
       button: true,
       enabled: !blocked,
-      label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
-      // The one press target deliberately left without a splash. It is a 180dp gradient disc
-      // with a coloured glow; ink over that reads as a smudge rather than a press, and the
-      // control answers a tap within the frame anyway — it swaps to a spinner while the
-      // timbratura is recorded. The secondary pause button below it did get converted, because
-      // it is flat and its own state change is a small icon swap.
+      label: blocked && widget.guard.reason != null ? '$label — ${widget.guard.reason}' : label,
+      // The press target deliberately has no splash. It is a full-width saturated fill with a
+      // coloured glow; ink over that reads as a smudge rather than a press, and the control
+      // already answers a tap within the frame by swapping to a spinner. AnimatedScale gives it
+      // a tactile press-down instead, with no smudge risk. The secondary pause button below it
+      // did get a real splash, because it is flat and its own state change is a small icon swap.
       child: GestureDetector(
-        onTap: isLoading || blocked ? null : onTap,
-        child: Opacity(
-          opacity: blocked ? 0.4 : 1,
-          child: Container(
-          width: 180,
-          height: 180,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: gradient,
-            boxShadow: [
-              BoxShadow(
-                color: isOnShift
-                    ? const Color(0xFFCC3333).withAlpha(100)
-                    : AppColors.Y.withAlpha(80),
-                blurRadius: 32,
-                spreadRadius: 4,
-              ),
-            ],
-          ),
-          child: isLoading
-              ? const Center(
-                  child: SizedBox(
-                    width: 36,
-                    height: 36,
-                    child: CircularProgressIndicator(
-                      color: Color(0xFF1A1A1A),
-                      strokeWidth: 3,
-                    ),
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        onTap: widget.isLoading || blocked ? null : widget.onTap,
+        child: AnimatedScale(
+          scale: _pressed ? 0.97 : 1.0,
+          duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: Opacity(
+            opacity: blocked ? 0.4 : 1,
+            child: AnimatedContainer(
+              duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+              width: double.infinity,
+              // 76 — full-width rounded rect instead of a floating disc: more touch target, no
+              // wasted side margins, and closer to AppButton's own full-width shape.
+              height: 76,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: fillColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: fillColor.withAlpha(110),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
                   ),
-                )
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      icon,
-                      size: 36,
-                      color: isOnShift ? Colors.white : const Color(0xFF1A1A1A),
+                ],
+              ),
+              child: widget.isLoading
+                  ? const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(color: AppColors.WHITE, strokeWidth: 3),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // White on both fills — both AppColors.Y and stopDark are dark/saturated
+                        // enough that white reads clearly on either.
+                        Icon(icon, size: 24, color: AppColors.WHITE),
+                        const SizedBox(width: 10),
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: AppColors.WHITE,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontFamily: 'Manrope',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.0,
-                        color:
-                            isOnShift ? Colors.white : const Color(0xFF1A1A1A),
-                      ),
-                    ),
-                  ],
-                ),
+            ),
           ),
         ),
       ),
-    );
-
-    if (!blocked || guard.reason == null) return button;
-
-    return Column(
-      children: [
-        button,
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            guard.reason!,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              color: context.colors.inkMuted,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -373,6 +671,15 @@ class _PunchButton extends StatelessWidget {
 ///
 /// Deliberately understated next to [_PunchButton]: starting/ending the shift is the
 /// primary action, pause/resume is a secondary one that happens mid-shift.
+///
+/// Full-width to match [_PunchButton]'s shape, not the pill shape this used when it floated as a
+/// small centered chip. `AppCard`'s own default fill/border already flip with the app theme like
+/// the rest of the page now that this screen isn't a fixed-dark ground anymore — same
+/// `context.colors.surface`/`borderLight` pair `VetroGlass`'s own defaults used to read here.
+///
+/// Not migrated onto `AppButton` either — see the TODO on [_PunchButton] above (same accent-colour
+/// constraint applies here: cyan on resume vs. amber on pause, outside `AppButton`'s fixed variant
+/// palette).
 class _PauseButton extends StatelessWidget {
   const _PauseButton({
     required this.shiftState,
@@ -402,14 +709,14 @@ class _PauseButton extends StatelessWidget {
       label: blocked && guard.reason != null ? '$label — ${guard.reason}' : label,
       child: Opacity(
         opacity: blocked ? 0.4 : 1,
-        child: AppTappable(
-          onTap: isLoading || blocked ? null : onTap,
-          color: Colors.white.withAlpha(13),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: accent.withAlpha(120)),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Row(
-              mainAxisSize: MainAxisSize.min,
+        child: SizedBox(
+          width: double.infinity,
+          height: 64,
+          child: AppCard(
+            onTap: isLoading || blocked ? null : onTap,
+            padding: EdgeInsets.zero,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (isLoading)
                   SizedBox(
@@ -418,20 +725,21 @@ class _PauseButton extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2, color: accent),
                   )
                 else
-                  Icon(icon, size: 16, color: accent),
-                const SizedBox(width: 8),
+                  Icon(icon, size: 18, color: accent),
+                const SizedBox(width: 10),
                 Text(
                   label,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
-                    fontSize: 12,
+                    fontFamily: 'Archivo Narrow',
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.0,
+                    letterSpacing: 0.8,
                     color: accent,
                   ),
                 ),
               ],
             ),
+          ),
         ),
       ),
     );
@@ -443,14 +751,10 @@ class _PauseButton extends StatelessWidget {
         button,
         const SizedBox(height: 8),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
           child: Text(
             guard.reason!,
-            style: TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 12,
-              color: context.colors.inkMuted,
-            ),
+            style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: context.colors.inkMuted),
             textAlign: TextAlign.center,
           ),
         ),
@@ -467,81 +771,107 @@ class _SessionsCard extends StatelessWidget {
   const _SessionsCard({
     required this.sessions,
     required this.total,
-    required this.now,
     required this.hasPendingSync,
+    required this.fillHeight,
   });
 
   final List<WorkSession> sessions;
   final Duration total;
-  final DateTime now;
   final bool hasPendingSync;
+
+  /// True when the card was given a bounded box to fill, so its rows scroll inside it. False in
+  /// the scrolling fallback, where the card is its natural height and the page moves instead.
+  final bool fillHeight;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(13), // ~5% white — translucent card
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withAlpha(25)),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Section title + optional pending-sync indicator
-          Row(
-            children: [
-              Text(
-                'SESSIONI DI OGGI',
-                style: TextStyle(
-                  fontFamily: 'Manrope',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.4,
-                  color: context.colors.inkMuted,
+      // A normal flipping AppCard now — the frame around the dark hero reads as the rest of
+      // the app, not a permanently-dark plate matching a header that no longer exists.
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          // Matches the empty-state Expanded below: a min-sized Column asked to also host a flex
+          // child is an unstable combination (its own reported size and the flex child's allocated
+          // space can disagree), and `fillHeight` already tells this widget exactly which sizing it
+          // was actually given — max when the parent handed it a bounded box to fill, min when it's
+          // sitting in a scrolling fallback with unbounded height and must size to its own content.
+          mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Section title + optional pending-sync indicator
+            Row(
+              children: [
+                Text(
+                  'SESSIONI DI OGGI',
+                  style: TextStyle(
+                    fontFamily: 'Archivo',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.4,
+                    color: context.colors.inkMuted,
+                  ),
                 ),
-              ),
-              if (hasPendingSync) ...[
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Non sincronizzato',
-                  child: Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      color: context.colors.amber,
-                      shape: BoxShape.circle,
+                if (hasPendingSync) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Non sincronizzato',
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: context.colors.amber,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-          const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 16),
 
-          if (sessions.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  'Nessuna timbratura oggi',
-                  style: TextStyle(
-                    color: context.colors.inkMuted,
-                    fontSize: 13,
-                    fontFamily: 'Manrope',
-                  ),
+            // The heading and the running total are pinned; only the rows between them move. A
+            // long shift with many pauses used to push the day's total off the bottom, which is
+            // the one number on this card anybody is looking for.
+            if (sessions.isEmpty)
+              if (fillHeight) const Expanded(child: _NoSessionsYet()) else const _NoSessionsYet()
+            else
+              Flexible(
+                fit: FlexFit.loose,
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  physics: fillHeight
+                      ? const ClampingScrollPhysics()
+                      : const NeverScrollableScrollPhysics(),
+                  itemCount: sessions.length,
+                  itemBuilder: (context, i) => _SessionRow(session: sessions[i]),
                 ),
               ),
-            )
-          else ...[
-            ...sessions.map((s) => _SessionRow(session: s)),
-            const Divider(color: Colors.white12, height: 24),
-          ],
+            if (sessions.isNotEmpty) Divider(color: context.colors.divider, height: 24),
 
-          // Total row
-          _TotalRow(total: total),
-        ],
+            // Total row
+            _TotalRow(total: total),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoSessionsYet extends StatelessWidget {
+  const _NoSessionsYet();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.base),
+        child: Text(
+          'Nessuna timbratura oggi',
+          style: TextStyle(color: context.colors.inkMuted, fontSize: 13, fontFamily: 'Archivo'),
+        ),
       ),
     );
   }
@@ -604,31 +934,30 @@ class _SessionRow extends StatelessWidget {
     final color = _color(context, session.eventType);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         children: [
-          Icon(_icon(session.eventType), size: 16, color: color),
-          const SizedBox(width: 10),
+          // Tinted at low alpha with the row's own event colour — the same "icon-coloured tile"
+          // pattern every other list row in the app uses, rather than one flat fill for every
+          // event type regardless of what it means.
+          RowIconTile(
+            size: 32,
+            color: color.withAlpha(26),
+            child: Icon(_icon(session.eventType), size: 16, color: color),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               _label(session.eventType),
               style: TextStyle(
-                fontFamily: 'Manrope',
+                fontFamily: 'Archivo',
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
-                color: Colors.white.withAlpha(220),
+                color: context.colors.ink.withAlpha(220),
               ),
             ),
           ),
-          Text(
-            timeStr,
-            style: const TextStyle(
-              fontFamily: 'Manrope',
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
+          Text(timeStr, style: AppTextStyles.titleMedium.copyWith(color: context.colors.ink)),
         ],
       ),
     );
@@ -641,34 +970,37 @@ class _TotalRow extends StatelessWidget {
   const _TotalRow({required this.total});
   final Duration total;
 
-  String _format(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '${h}h ${m}m ${s}s';
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Two unconstrained Texts in a spaceBetween Row overflowed the card on any narrow phone —
+    // 55dp at 320 and still 15dp at 360, the commonest Android width there is. The label yields,
+    // because the number is the reason the row exists.
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Totale ore',
-          style: const TextStyle(
-            fontFamily: 'Manrope',
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+        Flexible(
+          child: Text(
+            'Totale ore',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: 'Archivo Narrow',
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: context.colors.ink,
+            ),
           ),
         ),
+        const SizedBox(width: 12),
         Text(
-          _format(total),
-          style: const TextStyle(
-            fontFamily: 'Manrope',
+          _formatHoursMinutesSeconds(total),
+          style: TextStyle(
+            fontFamily: 'Archivo Narrow',
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppColors.Y,
+            // accentInk, not raw Y — the sibling label above uses context.colors.ink, confirming
+            // this card sits on a flipping background, not a permanently-dark surface; see
+            // AppPalette.accentInk's own doc comment for the dark-mode AA bug this avoids.
+            color: context.colors.accentInk,
           ),
         ),
       ],

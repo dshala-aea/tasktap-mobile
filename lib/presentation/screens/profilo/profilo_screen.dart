@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_rack.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/app_button.dart';
 import '../../providers/auth_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
@@ -20,65 +21,74 @@ class ProfiloScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg1,
-      appBar: AppBar(
-        title: Text('Profilo', style: AppTextStyles.titleLarge),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── User card ────────────────────────────────────────────────
-            if (user != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                decoration: BoxDecoration(
-                  color: context.colors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.colors.borderMedium),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Avatar
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: AppColors.brand,
-                      child: Text(
-                        _initials(user.displayName ?? user.email),
-                        style: AppTextStyles.titleLarge.copyWith(
-                          color: context.colors.brandOn,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.base),
-
-                    if (user.displayName != null) ...[
-                      Text(
-                        user.displayName!,
-                        style: AppTextStyles.titleMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                    ],
-
-                    Text(
-                      user.email,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: context.colors.inkFaint,
-                      ),
-                    ),
-                  ],
-                ),
+      appBar: ScreenHeaderBar(title: 'Profilo', showBack: true),
+      // A `Spacer()`-based fixed Column (no scroll) overflows the moment a long display name
+      // wraps to 2 lines or the viewport is short (small phone, split-screen, large system font)
+      // — every other detail screen in the app scrolls; this one didn't. The card now scrolls on
+      // its own and the logout button stays pinned below it via Expanded, instead of `Spacer`
+      // requiring the whole Column to fit exactly.
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
               ),
-              const SizedBox(height: AppSpacing.xxl),
-            ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── User card ────────────────────────────────────────────────
+                  if (user != null)
+                    AppCard(
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Avatar
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: AppColors.Y,
+                            child: Text(
+                              _initials(user.displayName ?? user.email),
+                              style: AppTextStyles.titleLarge.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.base),
 
-            const Spacer(),
+                          if (user.displayName != null) ...[
+                            Text(user.displayName!, style: AppTextStyles.titleMedium),
+                            const SizedBox(height: AppSpacing.xs),
+                          ],
 
-            // ── Logout ───────────────────────────────────────────────────
-            AppButton.danger(
+                          Text(
+                            user.email,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: context.colors.inkFaint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Logout ───────────────────────────────────────────────────
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              context.navClearance,
+            ),
+            child: AppButton.danger(
               label: 'Disconnetti',
               icon: const Icon(LucideIcons.logOut, size: 18),
               onPressed: () async {
@@ -90,10 +100,8 @@ class ProfiloScreen extends ConsumerWidget {
                 }
               },
             ),
-
-            const SizedBox(height: AppSpacing.lg),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -105,29 +113,10 @@ class ProfiloScreen extends ConsumerWidget {
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
-  Future<bool> _confirmLogout(BuildContext context) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Disconnetti'),
-        content: const Text(
-          'Sei sicuro di voler uscire dall\'account?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: context.colors.red,
-            ),
-            child: const Text('Disconnetti'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
+  Future<bool> _confirmLogout(BuildContext context) => confirmDeleteDialog(
+    context,
+    title: 'Disconnetti',
+    message: 'Sei sicuro di voler uscire dall\'account?',
+    confirmLabel: 'Disconnetti',
+  );
 }

@@ -19,6 +19,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -29,13 +30,46 @@ import 'package:tasktap_mobile/presentation/providers/report_editor_providers.da
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
+/// Fake location service returning a fixed coordinate, never prompting — same shape as
+/// timbra_providers_test.dart's `_FakeLocationService`.
+class _FakeLocationService extends ILocationService {
+  const _FakeLocationService(this._coords);
+  final GpsCoords? _coords;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => _coords;
+}
+
+/// Pins the "never prompts mid-signature" contract — same shape as
+/// timbra_providers_test.dart's `_WouldPromptLocationService`. `getCurrentPosition()` throws if
+/// ever called, so a test reaching past it without throwing is the assertion that
+/// `_captureGpsSilently` short-circuited on `willPromptForPermission()` instead of prompting.
+class _WouldPromptLocationService extends ILocationService {
+  const _WouldPromptLocationService();
+
+  @override
+  Future<bool> willPromptForPermission() async => true;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async {
+    throw StateError('must not be called when willPromptForPermission() is true');
+  }
+}
+
 /// Build an editor notifier backed by an in-memory DB.
-(ReportEditorNotifier notifier, DraftReportRepository repo) _makeEditor(
+///
+/// Awaits [ReportEditorNotifier.ready] before returning: the notifier's constructor kicks off an
+/// async hydration read from Drift (loads an existing draft's saved data, if any — see
+/// ReportEditorNotifier._hydrate's own doc comment), and every test in this file calls setter
+/// methods immediately after construction. Without waiting, hydration completing later than a
+/// test's own setter calls would silently revert them back to whatever was already in the DB.
+Future<(ReportEditorNotifier notifier, DraftReportRepository repo)> _makeEditor(
   AppDatabase db, {
   String reportId = 'draft-1',
   String tenantId = 'tenant-1',
   String userId = 'user-1',
-}) {
+  ILocationService? locationService,
+}) async {
   final repo = DraftReportRepository(db);
   final state = ReportEditorState(
     reportId: reportId,
@@ -43,13 +77,20 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
     insertedUserId: userId,
     createdAt: DateTime.utc(2026, 6, 21, 10),
   );
-  final notifier = ReportEditorNotifier(initialState: state, repo: repo);
+  final notifier = ReportEditorNotifier(
+    initialState: state,
+    repo: repo,
+    locationService: locationService,
+  );
+  await notifier.ready;
   return (notifier, repo);
 }
 
 /// Insert a draft header before the notifier autosaves.
 Future<void> _seedDraft(AppDatabase db, String reportId) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: reportId,
           tenantId: 'tenant-1',
@@ -78,7 +119,7 @@ void main() {
   group('autosave — dati step', () {
     test('setTitle persists title to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.setTitle('Manutenzione pompa');
 
@@ -87,18 +128,23 @@ void main() {
       expect(draft!.title, 'Manutenzione pompa');
     });
 
-    test('setDetails persists details', () async {
+    test('setDetails persists details to Drift verbatim (not the metadata blob)', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.setDetails('Intervento ordinario');
 
       expect(notifier.state.details, 'Intervento ordinario');
+      // Regression: the persisted `details` column used to be overwritten by
+      // `_buildMetadataJson()` (GPS/free-text metadata) on every autosave, never the text actually
+      // typed here. See the "rapportino data-loss regression" group below.
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, 'Intervento ordinario');
     });
 
     test('setCustomerFromCache sets customerId and clears freeText', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setCustomerFreeText('vecchio nome');
       await notifier.setCustomerFromCache('cust-42');
@@ -109,7 +155,7 @@ void main() {
 
     test('setCustomerFreeText sets freeText and clears customerId', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setCustomerFromCache('cust-old');
       await notifier.setCustomerFreeText('ACME Srl (non in lista)');
@@ -120,7 +166,7 @@ void main() {
 
     test('setWorkAddress persists address', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setWorkAddress('Via Roma 10, Milano');
 
@@ -129,7 +175,7 @@ void main() {
 
     test('setTicketFromCache clears cantiere fields', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setCantiereFromCache('cant-1');
       await notifier.setTicketFromCache('ticket-99');
@@ -140,7 +186,7 @@ void main() {
 
     test('setCantiereFromCache clears ticket fields', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setTicketFromCache('ticket-1');
       await notifier.setCantiereFromCache('cant-99');
@@ -151,7 +197,7 @@ void main() {
 
     test('setGps stores lat/lng in state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       notifier.setGps(45.4654, 9.1859);
 
@@ -165,15 +211,17 @@ void main() {
   group('staff step', () {
     test('addStaff adds a row and persists to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(const StaffRow(
-        id: 's-1',
-        userId: 'user-2',
-        displayName: 'Mario Rossi',
-        hoursWorked: 6.0,
-        kmTraveled: 80.0,
-      ));
+      await notifier.addStaff(
+        const StaffRow(
+          id: 's-1',
+          userId: 'user-2',
+          displayName: 'Mario Rossi',
+          hoursWorked: 6.0,
+          kmTraveled: 80.0,
+        ),
+      );
 
       expect(notifier.state.staffRows.length, 1);
       expect(notifier.state.staffRows.first.userId, 'user-2');
@@ -185,14 +233,9 @@ void main() {
 
     test('updateStaff updates the row in state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      const original = StaffRow(
-        id: 's-1',
-        userId: 'user-2',
-        hoursWorked: 4.0,
-        kmTraveled: 40.0,
-      );
+      const original = StaffRow(id: 's-1', userId: 'user-2', hoursWorked: 4.0, kmTraveled: 40.0);
       await notifier.addStaff(original);
       await notifier.updateStaff(original.copyWith(hoursWorked: 8.0));
 
@@ -205,10 +248,9 @@ void main() {
 
     test('removeStaff removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
       await notifier.removeStaff('s-1');
 
       expect(notifier.state.staffRows, isEmpty);
@@ -217,14 +259,11 @@ void main() {
 
     test('multiple staff rows all persisted', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
-      await notifier.addStaff(
-          const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0));
-      await notifier.addStaff(
-          const StaffRow(id: 's-3', userId: 'u-3', hoursWorked: 8.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addStaff(const StaffRow(id: 's-2', userId: 'u-2', hoursWorked: 6.0));
+      await notifier.addStaff(const StaffRow(id: 's-3', userId: 'u-3', hoursWorked: 8.0));
 
       expect(notifier.state.staffRows.length, 3);
       expect((await repo.getStaff('draft-1')).length, 3);
@@ -255,6 +294,27 @@ void main() {
       expect(row.effectiveHours, 5.5);
     });
 
+    test(
+      'effectiveHours prefers hoursWorked over the startTime/endTime span once both are set '
+      '(a resumed timer\'s span includes the idle gap between stop and restart, but hoursWorked '
+      'is accumulated per-segment by stopTimer and must win — same reason a manual "Ore" edit '
+      'after using the timer must not be silently overridden by the stale span)',
+      () {
+        final start = DateTime.utc(2026, 6, 21, 8, 0);
+        final end = DateTime.utc(2026, 6, 21, 16, 0); // 8h span if taken naively
+
+        final row = StaffRow(
+          id: 's-1',
+          userId: 'u-1',
+          startTime: start,
+          endTime: end,
+          hoursWorked: 3.0, // the actually-accumulated (or manually corrected) value
+        );
+
+        expect(row.effectiveHours, 3.0);
+      },
+    );
+
     test('effectiveHours returns 0 when neither timer nor hoursWorked set', () {
       const row = StaffRow(id: 's-1', userId: 'u-1');
 
@@ -263,10 +323,9 @@ void main() {
 
     test('startTimer sets timerRunning=true and records startTime', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
       await notifier.startTimer('s-1');
 
       final row = notifier.state.staffRows.first;
@@ -277,10 +336,9 @@ void main() {
 
     test('stopTimer sets timerRunning=false and endTime', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 0.0));
       await notifier.startTimer('s-1');
       await notifier.stopTimer('s-1');
 
@@ -295,15 +353,17 @@ void main() {
   group('materiali step', () {
     test('addMateriale with free-text persists to Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-1',
-        reportId: 'draft-1',
-        freeTextName: 'Cavo coassiale',
-        quantity: 5.0,
-        unitOfMeasure: 'm',
-      ));
+      await notifier.addMateriale(
+        const MaterialeRow(
+          id: 'm-1',
+          reportId: 'draft-1',
+          freeTextName: 'Cavo coassiale',
+          quantity: 5.0,
+          unitOfMeasure: 'm',
+        ),
+      );
 
       expect(notifier.state.materialeRows.length, 1);
       final dbRows = await repo.getMateriali('draft-1');
@@ -314,30 +374,77 @@ void main() {
 
     test('addMateriale with cache materialeId persists correctly', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-2',
-        reportId: 'draft-1',
-        materialeId: 'mat-42',
-        quantity: 2.0,
-      ));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-2', reportId: 'draft-1', materialeId: 'mat-42', quantity: 2.0),
+      );
 
       final dbRows = await repo.getMateriali('draft-1');
       expect(dbRows.first.materialeId, 'mat-42');
       expect(dbRows.first.freeTextName, isNull);
     });
 
+    // Gap 1 (feature audit, module #7): a material line with no magazzinoId reaches the server
+    // fine but silently never depletes stock — StockMovementService no-ops on a null MagazzinoId.
+    test('addMateriale persists magazzinoId to Drift', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addMateriale(
+        const MaterialeRow(
+          id: 'm-3',
+          reportId: 'draft-1',
+          materialeId: 'mat-1',
+          quantity: 2.0,
+          magazzinoId: 'furgone-1',
+        ),
+      );
+
+      final dbRows = await repo.getMateriali('draft-1');
+      expect(dbRows.first.magazzinoId, 'furgone-1');
+    });
+
+    test('a materiale row with no magazzinoId persists it as null, not lost silently', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-4', reportId: 'draft-1', materialeId: 'mat-1', quantity: 1.0),
+      );
+
+      final dbRows = await repo.getMateriali('draft-1');
+      expect(dbRows.first.magazzinoId, isNull);
+    });
+
+    test('updateMateriale (quantity change via the qty stepper) preserves magazzinoId', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.addMateriale(
+        const MaterialeRow(
+          id: 'm-5',
+          reportId: 'draft-1',
+          materialeId: 'mat-1',
+          quantity: 1.0,
+          magazzinoId: 'furgone-1',
+        ),
+      );
+      final row = notifier.state.materialeRows.first;
+      await notifier.updateMateriale(row.copyWith(quantity: 3.0));
+
+      final dbRows = await repo.getMateriali('draft-1');
+      expect(dbRows.first.quantity, 3.0);
+      expect(dbRows.first.magazzinoId, 'furgone-1');
+    });
+
     test('removeMateriale removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-1',
-        reportId: 'draft-1',
-        freeTextName: 'Test',
-        quantity: 1.0,
-      ));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Test', quantity: 1.0),
+      );
       await notifier.removeMateriale('m-1');
 
       expect(notifier.state.materialeRows, isEmpty);
@@ -346,7 +453,7 @@ void main() {
 
     test('setMaterialiNotRequired updates state and autosaves', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
       await notifier.setMaterialiNotRequired(true);
 
@@ -358,11 +465,61 @@ void main() {
 
   // ── Signatures ────────────────────────────────────────────────────────────
 
-  group('signature attachment', () {
-    test('saveCustomerSignature sets customerSignatureAllegatoId in state',
-        () async {
+  group('captureGpsSilently — automatic GPS acquisition', () {
+    // Backs StepDettagli's auto-acquire-on-entry behavior (step_dettagli.dart's initState):
+    // unlike the button-driven `_GpsCapture._captureGps`, this path must never prompt and must
+    // apply a successful fix straight to the draft via setGps, so the caller doesn't have to.
+    test('applies a successful fix to state via setGps', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+      final (notifier, repo) = await _makeEditor(
+        db,
+        locationService: const _FakeLocationService(coords),
+      );
+
+      final result = await notifier.captureGpsSilently();
+
+      expect(result, coords);
+      expect(notifier.state.gpsLatitude, 45.4642);
+      expect(notifier.state.gpsLongitude, 9.19);
+
+      final draft = await repo.getDraft('draft-1');
+      expect(draft?.metadataJson, contains('gpsLatitude'));
+    });
+
+    test('leaves gps unset in state when no position is available', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(db, locationService: const _FakeLocationService(null));
+
+      final result = await notifier.captureGpsSilently();
+
+      expect(result, isNull);
+      expect(notifier.state.gpsLatitude, isNull);
+      expect(notifier.state.gpsLongitude, isNull);
+    });
+
+    test('never prompts for location permission — short-circuits instead of calling '
+        'getCurrentPosition', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(
+        db,
+        locationService: const _WouldPromptLocationService(),
+      );
+
+      // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching past
+      // this call without throwing is the assertion that captureGpsSilently short-circuited on
+      // willPromptForPermission() instead of prompting.
+      final result = await notifier.captureGpsSilently();
+
+      expect(result, isNull);
+      expect(notifier.state.gpsLatitude, isNull);
+    });
+  });
+
+  group('signature attachment', () {
+    test('saveCustomerSignature sets customerSignatureAllegatoId in state', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
       final bytes = Uint8List.fromList([0, 1, 2, 3]);
 
       await notifier.saveCustomerSignature(
@@ -382,10 +539,9 @@ void main() {
       expect(allegati.any((a) => a.id == 'sig-cust-1'), isTrue);
     });
 
-    test('saveTechnicianSignature sets technicianSignatureAllegatoId in state',
-        () async {
+    test('saveTechnicianSignature sets technicianSignatureAllegatoId in state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
       final bytes = Uint8List.fromList([10, 20, 30]);
 
       await notifier.saveTechnicianSignature(
@@ -399,9 +555,168 @@ void main() {
       expect(draft?.technicianSignatureAllegatoId, 'sig-tech-1');
     });
 
+    test(
+      'saveCustomerSignature persists the device GPS position and a capture timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        final before = DateTime.now().toUtc();
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-gps',
+          bytes: Uint8List.fromList([0, 1, 2, 3]),
+          localPath: '/tmp/sig-cust-gps.png',
+        );
+        final after = DateTime.now().toUtc();
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-gps');
+        expect(row.capturedLatitude, 45.4642);
+        expect(row.capturedLongitude, 9.19);
+        expect(row.capturedAt, isNotNull);
+        // 1s slack: drift's default DateTime storage has whole-second precision (truncates
+        // toward the epoch), so a capture within the same wall-clock second as `before` can
+        // legitimately round-trip to a value a few hundred ms earlier than `before` itself.
+        expect(row.capturedAt!.isBefore(before.subtract(const Duration(seconds: 1))), isFalse);
+        expect(row.capturedAt!.isAfter(after.add(const Duration(seconds: 1))), isFalse);
+      },
+    );
+
+    test(
+      'saveTechnicianSignature persists the device GPS position and a capture timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-gps',
+          bytes: Uint8List.fromList([10, 20, 30]),
+          localPath: '/tmp/sig-tech-gps.png',
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-tech-gps');
+        expect(row.capturedLatitude, 41.9);
+        expect(row.capturedLongitude, 12.5);
+        expect(row.capturedAt, isNotNull);
+      },
+    );
+
+    test(
+      'saveCustomerSignature saves a null position (never blocks) when GPS is unavailable, '
+      'but still stamps a capture timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(null),
+        );
+
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-no-gps',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-cust-no-gps.png',
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-no-gps');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNotNull);
+      },
+    );
+
+    test(
+      'saveCustomerSignature never prompts for location permission mid-signature',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _WouldPromptLocationService(),
+        );
+
+        // _WouldPromptLocationService.getCurrentPosition() throws if ever called — reaching past
+        // this call without throwing is the assertion that _captureGpsSilently short-circuited on
+        // willPromptForPermission() instead of prompting.
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-would-prompt',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-cust-would-prompt.png',
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-would-prompt');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNotNull);
+      },
+    );
+
+    test(
+      'saveTechnicianSignature with stampCapture:false records no GPS position or capture '
+      'timestamp, even when a real position is available — this is what the technician-signature '
+      'pre-fill uses, since nothing was actually just signed',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 41.9, lng: 12.5, accuracy: 8.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-prefill',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-tech-prefill.png',
+          stampCapture: false,
+        );
+
+        expect(notifier.state.technicianSignatureAllegatoId, 'sig-tech-prefill');
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-tech-prefill');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNull);
+      },
+    );
+
+    test(
+      'saveCustomerSignature with stampCapture:false records no GPS position or capture '
+      'timestamp',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        const coords = (lat: 45.4642, lng: 9.19, accuracy: 5.0);
+        final (notifier, repo) = await _makeEditor(
+          db,
+          locationService: const _FakeLocationService(coords),
+        );
+
+        await notifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-prefill',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-cust-prefill.png',
+          stampCapture: false,
+        );
+
+        final allegati = await repo.getAllegati('draft-1');
+        final row = allegati.firstWhere((a) => a.id == 'sig-cust-prefill');
+        expect(row.capturedLatitude, isNull);
+        expect(row.capturedLongitude, isNull);
+        expect(row.capturedAt, isNull);
+      },
+    );
+
     test('clearCustomerSignature removes allegatoId from state', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
       final bytes = Uint8List.fromList([0]);
 
       await notifier.saveCustomerSignature(
@@ -413,6 +728,94 @@ void main() {
 
       expect(notifier.state.customerSignatureAllegatoId, isNull);
     });
+
+    test(
+      'reopening the editor (a fresh notifier against the same draft) restores both '
+      'signature local paths, not just their allegatoIds',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (firstNotifier, _) = await _makeEditor(db);
+
+        await firstNotifier.saveCustomerSignature(
+          allegatoId: 'sig-cust-1',
+          bytes: Uint8List.fromList([0, 1, 2]),
+          localPath: '/tmp/sig-cust-1.png',
+        );
+        await firstNotifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: Uint8List.fromList([3, 4, 5]),
+          localPath: '/tmp/sig-tech-1.png',
+        );
+
+        // Simulates app restart / navigating away and back: a brand-new notifier instance
+        // hydrating from the same persisted draft, not the same in-memory state.
+        final (reopenedNotifier, _) = await _makeEditor(db);
+
+        expect(reopenedNotifier.state.customerSignatureAllegatoId, 'sig-cust-1');
+        expect(reopenedNotifier.state.customerSignatureLocalPath, '/tmp/sig-cust-1.png');
+        expect(reopenedNotifier.state.technicianSignatureAllegatoId, 'sig-tech-1');
+        expect(reopenedNotifier.state.technicianSignatureLocalPath, '/tmp/sig-tech-1.png');
+      },
+    );
+
+    test(
+      'clearTechnicianSignature marks technicianSignaturePrefillSuppressed, and it survives '
+      'a fresh notifier instance against the same draft (simulates closing/reopening the '
+      'Riepilogo sheet after an explicit Cancella)',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (firstNotifier, _) = await _makeEditor(db);
+
+        await firstNotifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: Uint8List.fromList([1, 2, 3]),
+          localPath: '/tmp/sig-tech-1.png',
+        );
+        expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isFalse);
+
+        await firstNotifier.clearTechnicianSignature();
+        expect(firstNotifier.state.technicianSignatureAllegatoId, isNull);
+        expect(firstNotifier.state.technicianSignaturePrefillSuppressed, isTrue);
+
+        // Simulates app restart / closing+reopening the bottom sheet: a brand-new notifier
+        // instance hydrating from the same persisted draft, not the same in-memory state —
+        // exactly what `StepRiepilogo`'s pre-fill guard needs to survive.
+        final (reopenedNotifier, _) = await _makeEditor(db);
+
+        expect(reopenedNotifier.state.technicianSignatureAllegatoId, isNull);
+        expect(
+          reopenedNotifier.state.technicianSignaturePrefillSuppressed,
+          isTrue,
+          reason: 'must survive a fresh notifier instance, not just live in memory',
+        );
+      },
+    );
+
+    test(
+      'saveTechnicianSignature resets technicianSignaturePrefillSuppressed after a fresh, '
+      'real signature',
+      () async {
+        await _seedDraft(db, 'draft-1');
+        final (notifier, _) = await _makeEditor(db);
+
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-1',
+          bytes: Uint8List.fromList([1]),
+          localPath: '/tmp/sig-tech-1.png',
+        );
+        await notifier.clearTechnicianSignature();
+        expect(notifier.state.technicianSignaturePrefillSuppressed, isTrue);
+
+        // A genuine new signing act (drawn/typed) is itself a deliberate decision that
+        // supersedes any earlier Cancella-driven suppression.
+        await notifier.saveTechnicianSignature(
+          allegatoId: 'sig-tech-2',
+          bytes: Uint8List.fromList([2]),
+          localPath: '/tmp/sig-tech-2.png',
+        );
+        expect(notifier.state.technicianSignaturePrefillSuppressed, isFalse);
+      },
+    );
   });
 
   // ── Photo allegati ────────────────────────────────────────────────────────
@@ -420,15 +823,17 @@ void main() {
   group('photo allegati', () {
     test('addAllegato stores photo path in state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addAllegato(const AllegatoRow(
-        id: 'photo-1',
-        localPath: '/sdcard/photo1.jpg',
-        fileName: 'photo1.jpg',
-        contentType: 'image/jpeg',
-        sizeBytes: 102400,
-      ));
+      await notifier.addAllegato(
+        const AllegatoRow(
+          id: 'photo-1',
+          localPath: '/sdcard/photo1.jpg',
+          fileName: 'photo1.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 102400,
+        ),
+      );
 
       expect(notifier.state.allegatoRows.length, 1);
       final dbRows = await repo.getAllegati('draft-1');
@@ -438,15 +843,17 @@ void main() {
 
     test('removeAllegato removes from state and Drift', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, repo) = _makeEditor(db);
+      final (notifier, repo) = await _makeEditor(db);
 
-      await notifier.addAllegato(const AllegatoRow(
-        id: 'photo-del',
-        localPath: '/tmp/x.jpg',
-        fileName: 'x.jpg',
-        contentType: 'image/jpeg',
-        sizeBytes: 1024,
-      ));
+      await notifier.addAllegato(
+        const AllegatoRow(
+          id: 'photo-del',
+          localPath: '/tmp/x.jpg',
+          fileName: 'x.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 1024,
+        ),
+      );
       await notifier.removeAllegato('photo-del');
 
       expect(notifier.state.allegatoRows, isEmpty);
@@ -459,14 +866,14 @@ void main() {
   group('step navigation', () {
     test('starts on dati step', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       expect(notifier.state.currentStep, RapportinoStep.dati);
     });
 
     test('nextStep advances to staff', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.nextStep();
 
@@ -475,7 +882,7 @@ void main() {
 
     test('nextStep cycles through all steps', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       final steps = RapportinoStep.values;
       for (var i = 1; i < steps.length; i++) {
@@ -486,7 +893,7 @@ void main() {
 
     test('prevStep goes back to dati from staff', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.nextStep(); // → staff
       await notifier.prevStep(); // → dati
@@ -496,7 +903,7 @@ void main() {
 
     test('prevStep does nothing when already on dati', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.prevStep();
 
@@ -505,7 +912,7 @@ void main() {
 
     test('goToStep jumps directly to any step', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.goToStep(RapportinoStep.firme);
 
@@ -517,35 +924,26 @@ void main() {
 
   group('state.validation — mirrors server state machine', () {
     test('isReadyToSubmit=false for empty draft', () async {
-      await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      // No _seedDraft here, deliberately: it seeds title: 'init', which is a title. A genuinely
+      // titleless draft is one with no DB row at all yet — hydration finds nothing and leaves
+      // the notifier's own blank initialState exactly as constructed.
+      final (notifier, _) = await _makeEditor(db);
 
-      // Fresh draft: no title, no customer, no staff, no materiali, no firme
       expect(notifier.state.isReadyToSubmit, isFalse);
-      expect(
-        notifier.state.validation.issues,
-        contains(DraftValidationIssue.missingTitle),
-      );
+      expect(notifier.state.validation.issues, contains(DraftValidationIssue.missingTitle));
     });
 
     test('isReadyToSubmit=true when all requirements met', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setTitle('Test');
       await notifier.setCustomerFromCache('cust-1');
 
-      await notifier.addStaff(const StaffRow(
-        id: 's-1',
-        userId: 'u-1',
-        hoursWorked: 4.0,
-      ));
-      await notifier.addMateriale(const MaterialeRow(
-        id: 'm-1',
-        reportId: 'draft-1',
-        freeTextName: 'Cavo',
-        quantity: 1.0,
-      ));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Cavo', quantity: 1.0),
+      );
       await notifier.saveCustomerSignature(
         allegatoId: 'sig-c',
         bytes: Uint8List.fromList([1]),
@@ -563,12 +961,11 @@ void main() {
 
     test('noMateriali not flagged when materialiNotRequired=true', () async {
       await _seedDraft(db, 'draft-1');
-      final (notifier, _) = _makeEditor(db);
+      final (notifier, _) = await _makeEditor(db);
 
       await notifier.setTitle('T');
       await notifier.setCustomerFromCache('c');
-      await notifier.addStaff(
-          const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 1.0));
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 1.0));
       await notifier.setMaterialiNotRequired(true);
       await notifier.saveCustomerSignature(
         allegatoId: 'sc',
@@ -592,10 +989,11 @@ void main() {
     // then call notifier methods to populate the editor state.
     // We verify the notifier correctly stores the prefilled values.
 
-    test('can be prefilled with schedule title, customer, location, ticket',
-        () async {
+    test('can be prefilled with schedule title, customer, location, ticket', () async {
       // Simulate a cached schedule + linked entities in the DB
-      await db.into(db.customers).insert(
+      await db
+          .into(db.customers)
+          .insert(
             CustomersCompanion.insert(
               id: 'cust-sched',
               tenantId: 'tenant-1',
@@ -604,7 +1002,9 @@ void main() {
             ),
           );
 
-      await db.into(db.tickets).insert(
+      await db
+          .into(db.tickets)
+          .insert(
             TicketsCompanion.insert(
               id: 'ticket-sched',
               tenantId: 'tenant-1',
@@ -617,7 +1017,9 @@ void main() {
             ),
           );
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'sched-1',
               tenantId: 'tenant-1',
@@ -635,13 +1037,12 @@ void main() {
           );
 
       await _seedDraft(db, 'draft-prefill');
-      final (notifier, _) =
-          _makeEditor(db, reportId: 'draft-prefill');
+      final (notifier, _) = await _makeEditor(db, reportId: 'draft-prefill');
 
       // Simulate prefill: caller reads schedule and calls notifier methods
-      final sched = await (db.select(db.schedules)
-            ..where((s) => s.id.equals('sched-1')))
-          .getSingle();
+      final sched = await (db.select(
+        db.schedules,
+      )..where((s) => s.id.equals('sched-1'))).getSingle();
 
       await notifier.setTitle(sched.title);
       await notifier.setLocationFromCache(sched.locationId);
@@ -657,7 +1058,7 @@ void main() {
 
     test('prefill sets scheduleId', () async {
       await _seedDraft(db, 'draft-prefill2');
-      final (notifier, _) = _makeEditor(db, reportId: 'draft-prefill2');
+      final (notifier, _) = await _makeEditor(db, reportId: 'draft-prefill2');
 
       // Directly test setTitle with schedule info
       await notifier.setTitle('Da schedule');
@@ -672,9 +1073,7 @@ void main() {
 
   group('Riverpod provider integration', () {
     test('draftReportRepositoryProvider wires to appDatabaseProvider', () async {
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
       final repo = container.read(draftReportRepositoryProvider);
@@ -682,9 +1081,7 @@ void main() {
     });
 
     test('reportEditorProvider.family returns unique notifier per id', () async {
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
       final state1 = container.read(reportEditorProvider('report-a'));
@@ -692,6 +1089,78 @@ void main() {
 
       expect(state1.reportId, 'report-a');
       expect(state2.reportId, 'report-b');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Regression: rapportino data-loss bug.
+  //
+  // `_buildHeaderCompanion()` used to write `_buildDetailsJson()` (GPS/free-text metadata) into
+  // the `details` column — the same column `setDetails` puts the technician's typed description
+  // into — on every autosave. Metadata always won the last write, so the typed description never
+  // reached Drift, the backend, or the customer-facing PDF. `details` and `metadataJson` are
+  // separate columns now (schema v14); see submission_queue_test.dart for the full
+  // typing→submit-payload version of this regression.
+  // ══════════════════════════════════════════════════════════════════════════════
+  group('rapportino data-loss regression — details vs metadata', () {
+    test('a description typed then autosaved is preserved, not overwritten by metadata', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      // Metadata (GPS + free-text) captured first, as it often is on-site before the technician
+      // writes up what they did.
+      await notifier.setWorkAddress('Via Roma 10, Milano');
+      notifier.setGps(45.4654, 9.1859);
+      await notifier.setCustomerFreeText('ACME Srl (non in lista)');
+
+      // Then the technician types the actual description, which autosaves.
+      await notifier.setDetails('Sostituita guarnizione bruciatore');
+
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, 'Sostituita guarnizione bruciatore');
+      expect(draft.details, isNot(contains('gpsLatitude')));
+      expect(draft.details, isNot(contains('workAddress')));
+      // The metadata is not lost either — it lives in its own column.
+      expect(draft.metadataJson, contains('workAddress'));
+      expect(draft.metadataJson, contains('customerFreeText'));
+    });
+
+    test('metadata captured after the description does not clobber it on a later autosave', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      // The order that actually triggered the bug: description typed first, metadata captured
+      // afterwards (e.g. GPS acquired at the end of the visit) — every autosave in between,
+      // including the ones after the GPS capture, used to overwrite `details` with metadata-only
+      // JSON that contained no trace of the typed text.
+      await notifier.setDetails('Sostituita guarnizione bruciatore');
+      await notifier.setWorkAddress('Via Roma 10, Milano');
+      notifier.setGps(45.4654, 9.1859);
+      await notifier.setCantiereFreeText('Cantiere Nord');
+
+      expect(notifier.state.details, 'Sostituita guarnizione bruciatore');
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, 'Sostituita guarnizione bruciatore');
+    });
+
+    test('a realistic keystroke-by-keystroke typing sequence survives every intermediate autosave', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      const typed = 'Verificata pressione impianto, nessuna anomalia riscontrata';
+      // Mirrors StepDettagli's AppTextField.onChanged, which calls setDetails (and therefore
+      // autosaves) on every keystroke.
+      for (var i = 1; i <= typed.length; i++) {
+        await notifier.setDetails(typed.substring(0, i));
+      }
+      // GPS captured mid-typing, as the "Acquisisci" button allows at any point in the flow.
+      notifier.setGps(45.4654, 9.1859);
+      await notifier.setDetails(typed); // one more keystroke-driven autosave after GPS
+
+      expect(notifier.state.details, typed);
+      final draft = await repo.getDraft('draft-1');
+      expect(draft!.details, typed);
+      expect(draft.metadataJson, contains('gpsLatitude'));
     });
   });
 }

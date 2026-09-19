@@ -1,9 +1,8 @@
+// dart format width=100
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import '../theme/app_palette.dart';
 
 /// A single stepper step.
 class StepperStep {
@@ -12,97 +11,126 @@ class StepperStep {
   final String label;
 }
 
-/// Numbered horizontal stepper (rapportino form).
+/// Progress through a multi-step form: where you are, how far is left, and a way back.
 ///
-/// Spec: numbered circles (22) Y (done/current) / BS (upcoming), check icon
-/// when done, Sora 600/10 labels, 2 px connector lines Y/BS.
+/// Replaces numbered circles joined by connector lines. That pattern cost two rows — 22dp discs
+/// plus a caption under each — to say "step 2 of 4", printed four step names at 10px so none of
+/// them was readable, and had to shrink every label to fit a phone.
 ///
-/// ```dart
-/// AppStepper(
-///   steps: const [StepperStep(label: 'Dati'), StepperStep(label: 'Firme')],
-///   currentIndex: 0,
-/// );
-/// ```
+/// Sat on a fixed-CHARCOAL plate under the header for one round of this project's recurring
+/// fixed-dark-surface bug and was painted with `onDark`/`onDarkMuted` to match. That plate is
+/// gone — every screen using this now sits directly on the page's own flipping background — so
+/// this reads `context.colors` like everything else around it.
+///
+/// Steps already visited are tappable. A technician who wants to correct the cliente from the
+/// summary should not have to press Indietro three times.
 class AppStepper extends StatelessWidget {
   const AppStepper({
     super.key,
     required this.steps,
     required this.currentIndex,
+    this.onStepSelected,
   });
 
   final List<StepperStep> steps;
   final int currentIndex;
 
+  /// Called with the index of a step the user has already been through. Null disables the jump.
+  final ValueChanged<int>? onStepSelected;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (var i = 0; i < steps.length; i++) ...[
-          Expanded(
-            child: Column(
-              children: [
-                _Circle(index: i, currentIndex: currentIndex),
-                const SizedBox(height: 4),
-                Text(
-                  steps[i].label,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.sora(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: i <= currentIndex ? context.colors.ink : context.colors.inkMuted,
-                  ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                steps[currentIndex].label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.ink,
                 ),
-              ],
-            ),
-          ),
-          if (i < steps.length - 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Container(
-                width: 16,
-                height: 2,
-                color: i < currentIndex ? AppColors.Y : context.colors.borderStrong,
               ),
             ),
-        ],
+            Text(
+              '${currentIndex + 1} di ${steps.length}',
+              style: TextStyle(
+                fontFamily: 'Archivo',
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                color: context.colors.inkMuted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < steps.length; i++) ...[
+              if (i > 0) const SizedBox(width: 4),
+              Expanded(
+                child: _Segment(
+                  step: steps[i],
+                  index: i,
+                  currentIndex: currentIndex,
+                  onTap: onStepSelected != null && i < currentIndex
+                      ? () => onStepSelected!(i)
+                      : null,
+                ),
+              ),
+            ],
+          ],
+        ),
       ],
     );
   }
 }
 
-class _Circle extends StatelessWidget {
-  const _Circle({required this.index, required this.currentIndex});
+class _Segment extends StatelessWidget {
+  const _Segment({required this.step, required this.index, required this.currentIndex, this.onTap});
 
+  final StepperStep step;
   final int index;
   final int currentIndex;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final done = index < currentIndex;
-    final current = index == currentIndex;
-    final filled = done || current;
+    final reached = index <= currentIndex;
 
-    return Container(
-      width: 22,
-      height: 22,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: filled ? AppColors.Y : context.colors.borderStrong,
-        shape: BoxShape.circle,
-      ),
-      child: done
-          ? Icon(LucideIcons.check, size: 12, color: context.colors.brandOn)
-          : Text(
-              '${index + 1}',
-              style: GoogleFonts.sora(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: filled ? context.colors.brandOn : context.colors.ink,
-              ),
+    return Semantics(
+      button: onTap != null,
+      selected: index == currentIndex,
+      label: '${step.label}, passo ${index + 1}',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        // The bar is 4dp but the target is a finger. Transparent padding rather than a taller
+        // bar, so the chrome stays thin and the tap still lands. 22 a side (not the original 10,
+        // which only reached ~24px total — half the 44pt/48dp floor for the control that jumps
+        // back to an earlier wizard step) makes the full hit target 48dp; the visible bar itself
+        // is unchanged.
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 22),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            height: 4,
+            decoration: BoxDecoration(
+              color: reached ? AppColors.Y : context.colors.borderMedium,
+              borderRadius: BorderRadius.circular(2),
             ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// Floating action button — 56 px circle, Y bg, large shadow
-/// (0 8px 20px rgba(0,0,0,0.18)), plus icon (24, DARK).
+/// Floating action button — 56 px circle, flat stamp-red fill, white icon.
+///
+/// Same flat `AppColors.Y` fill `AppButton.primary`/`AppBottomNav`'s active tab use — the one
+/// accent in the app means the same thing everywhere. Retired: the flat orange fill, the "ledge"
+/// bottom-edge border (a van-racking cue — the FAB is no longer part of that metaphor). Keeps its
+/// shadow — unlike a static in-flow surface, this is a genuinely floating control (see
+/// `AppButton`'s doc comment distinguishing the two).
 ///
 /// ```dart
 /// AppFab(onPressed: () {});
@@ -39,16 +43,19 @@ class AppFab extends StatelessWidget {
             height: 56,
             decoration: BoxDecoration(
               color: AppColors.Y,
+              // A true circle, not a 12px-cornered square — the doc comment above already
+              // promised one; AppRack.freeShape (the app's general card-corner radius) never
+              // delivered it at this size.
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(46), // ~0.18 opacity
-                  offset: const Offset(0, 8),
-                  blurRadius: 20,
+                  color: AppColors.Y.withAlpha(90),
+                  offset: const Offset(0, 4),
+                  blurRadius: 16,
                 ),
               ],
             ),
-            child: Icon(icon, size: 24, color: context.colors.ink),
+            child: Icon(icon, size: 24, color: Colors.white),
           ),
         ),
       ),

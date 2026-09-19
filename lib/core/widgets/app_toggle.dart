@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Branded toggle switch — 38×22 track, Y (on) / BM (off), 16 white knob, 200 ms.
@@ -14,11 +14,7 @@ import 'package:tasktap_mobile/core/theme/app_palette.dart';
 /// );
 /// ```
 class AppToggle extends StatelessWidget {
-  const AppToggle({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
+  const AppToggle({super.key, required this.value, required this.onChanged});
 
   final bool value;
   final ValueChanged<bool>? onChanged;

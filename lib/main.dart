@@ -1,5 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'core/location/location_service.dart';
+import 'core/security/biometric_lock.dart';
+import 'data/sync/sync_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -12,6 +18,7 @@ import 'core/notifications/notification_service.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/suspended_banner.dart';
 import 'presentation/providers/auth_providers.dart';
 import 'features/altro/impostazioni_provider.dart';
 
@@ -69,7 +76,16 @@ Future<void> runTaskTapApp() async {
   );
   if (firebaseEnabled == 'true') {
     try {
-      await Firebase.initializeApp();
+      // Explicit options, not native-config auto-discovery: DefaultFirebaseOptions is what
+      // `flutterfire configure` actually generated and keeps in sync going forward; relying on
+      // google-services.json/GoogleService-Info.plist alone works on Android today but silently
+      // has nothing to find on a platform whose native config file isn't present.
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      // Must be registered here, before runApp, and with a top-level/static function — the OS
+      // can spawn a fresh isolate to run this handler while the app is backgrounded/terminated,
+      // which has no access to anything set up after this point. It was defined but never
+      // actually wired to FirebaseMessaging, so background/terminated pushes never reached it.
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       await NotificationService.instance.initialize();
       NotificationService.isAvailable = true;
     } catch (e) {
@@ -99,9 +115,32 @@ Future<void> runTaskTapApp() async {
   // FCM device-token registration is driven off the Riverpod auth state inside
   // TaskTapApp (a listener needs the ProviderScope, created below).
 
+  // Portrait only — every screen is designed and tested for it; a rotated layout is unsupported,
+  // not merely untested, and would break the bottom-nav pill / stepper layouts.
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   runApp(
-    const ProviderScope(
-      child: TaskTapApp(),
+    ProviderScope(
+      overrides: [
+        // Bind the core GPS gate to the Impostazioni setting. Declared in core so
+        // core/location does not import a feature; bound here, once, so no call site has to
+        // remember the setting exists — which is exactly how it ended up controlling nothing.
+        gpsPreferenceProvider.overrideWith(
+          (ref) =>
+              ref.watch(impostazioniProvider.select((s) => s.geoLocazione)),
+        ),
+        // Impostazioni → "Modalità offline" ("Sincronizza dati in background"). Same defect as
+        // the dark-theme toggle used to be: persisted, read nowhere. Binds to HomeShell's
+        // automatic background sync (60s foreground poll + resume sync) — see
+        // backgroundSyncPreferenceProvider's own doc comment for what stays on regardless.
+        backgroundSyncPreferenceProvider.overrideWith(
+          (ref) => ref.watch(impostazioniProvider.select((s) => s.syncOffline)),
+        ),
+      ],
+      child: const TaskTapApp(),
     ),
   );
 }
@@ -139,8 +178,8 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // into the local mirror so the badge and the list update without waiting for the technician
     // to open the Notifiche screen. Nothing polled before this, despite a comment claiming it did.
     if (NotificationService.isAvailable) {
-      NotificationService.instance.onForegroundMessage =
-          () => ref.read(notificheProvider.notifier).refresh();
+      NotificationService.instance.onForegroundMessage = () =>
+          ref.read(notificheProvider.notifier).refresh();
     }
 
     // Check for pending deep-links from notification taps.
@@ -160,7 +199,13 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     // nothing read it — so it has been reporting a preference the app never honoured. It drives
     // themeMode now. Explicit light/dark rather than ThemeMode.system: the setting is a choice the
     // technician made, and silently overriding it with the phone's would be the same defect again.
-    final darkTheme = ref.watch(impostazioniProvider.select((s) => s.temaScuro));
+    final darkTheme = ref.watch(
+      impostazioniProvider.select((s) => s.temaScuro),
+    );
+
+    final biometricLock = ref.watch(
+      impostazioniProvider.select((s) => s.autenticazioneBiometrica),
+    );
 
     return MaterialApp.router(
       title: 'TaskTap',
@@ -169,6 +214,29 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       darkTheme: buildAppTheme(brightness: Brightness.dark),
       themeMode: darkTheme ? ThemeMode.dark : ThemeMode.light,
       routerConfig: _router,
+      // Inside MaterialApp via `builder`, not around it: the lock needs the theme and the
+      // Directionality, and wrapping outside would also cover the navigator the router owns.
+      //
+      // The suspended banner lives here rather than in HomeShell so it covers every route the
+      // router owns — including pushed forms like "Nuovo ticket" — not just the 5 tab branches.
+      // A technician who is mid-wizard on a suspended tenant must see the same warning a
+      // dashboard visit would have shown, not discover the block only when the final submit 403s.
+      builder: (context, child) => BiometricLock(
+        enabled: biometricLock,
+        // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
+        // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
+        // with nothing behind that empty state, the status-bar strip would fall back to
+        // whatever the platform default is rather than matching the page underneath.
+        child: ColoredBox(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          child: Column(
+            children: [
+              const SuspendedBanner(),
+              Expanded(child: child ?? const SizedBox.shrink()),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

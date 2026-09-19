@@ -22,14 +22,13 @@ import 'package:tasktap_mobile/features/altro/notifiche_screen.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) =>
-    AppNotifica(
-      id: id,
-      titolo: 'Nuovo intervento',
-      corpo: 'Ti è stato assegnato un intervento.',
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-      letta: letta,
-    );
+AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) => AppNotifica(
+  id: id,
+  titolo: 'Nuovo intervento',
+  corpo: 'Ti è stato assegnato un intervento.',
+  timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+  letta: letta,
+);
 
 /// Builds a [NotificheScreen] backed by a real [NotificheNotifier] over an
 /// in-memory Drift DB seeded with [notifiche].
@@ -43,10 +42,15 @@ AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) =>
 /// is actually in the fresh in-memory DB. Seeding the DB itself — rather
 /// than trying to stub post-construction state — sidesteps the race
 /// entirely: whichever write "wins", the loaded data matches.
-Future<Widget> _buildScreen({List<AppNotifica> notifiche = const []}) async {
+Future<Widget> _buildScreen({
+  List<AppNotifica> notifiche = const [],
+  bool hasError = false,
+}) async {
   final db = AppDatabase(NativeDatabase.memory());
   for (final n in notifiche) {
-    await db.into(db.appNotifications).insertOnConflictUpdate(
+    await db
+        .into(db.appNotifications)
+        .insertOnConflictUpdate(
           AppNotificationsCompanion.insert(
             id: n.id,
             tenantId: 'test-tenant',
@@ -63,7 +67,8 @@ Future<Widget> _buildScreen({List<AppNotifica> notifiche = const []}) async {
 
   return ProviderScope(
     overrides: [
-      notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio())),
+      notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio(), ref)),
+      if (hasError) notificheHasErrorProvider.overrideWith((ref) => true),
     ],
     child: const MaterialApp(home: NotificheScreen()),
   );
@@ -100,10 +105,7 @@ void main() {
 
   // ── 3. Notification rows ───────────────────────────────────────────────────
   testWidgets('renders notification rows when provider has items', (tester) async {
-    final notifiche = [
-      _fakeNotifica(id: 'n1'),
-      _fakeNotifica(id: 'n2', letta: true),
-    ];
+    final notifiche = [_fakeNotifica(id: 'n1'), _fakeNotifica(id: 'n2', letta: true)];
 
     await tester.pumpWidget(await _buildScreen(notifiche: notifiche));
     await tester.pumpAndSettle();
@@ -141,10 +143,7 @@ void main() {
 
   // ── 6. Non lette filter shows only unread ─────────────────────────────────
   testWidgets('Non lette chip filters to unread only', (tester) async {
-    final notifiche = [
-      _fakeNotifica(id: 'n1', letta: false),
-      _fakeNotifica(id: 'n2', letta: true),
-    ];
+    final notifiche = [_fakeNotifica(id: 'n1', letta: false), _fakeNotifica(id: 'n2', letta: true)];
 
     await tester.pumpWidget(await _buildScreen(notifiche: notifiche));
     await tester.pumpAndSettle();
@@ -155,6 +154,19 @@ void main() {
 
     // Only 1 unread notification shown.
     expect(find.text('Nuovo intervento'), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 7. Fetch error shows a distinct state, not the empty inbox ────────────
+  testWidgets('shows error state with retry when refresh failed and cache is empty', (
+    tester,
+  ) async {
+    await tester.pumpWidget(await _buildScreen(hasError: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Impossibile caricare le notifiche'), findsOneWidget);
+    expect(find.text('Riprova'), findsOneWidget);
+    expect(find.text('Nessuna notifica'), findsNothing);
     await drain(tester);
   });
 }

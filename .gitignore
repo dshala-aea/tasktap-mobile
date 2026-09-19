@@ -20,3 +20,12 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Impeccable decision-page scratch state
+.impeccable/
+
+# Superpowers scratch state (brainstorm mockups, SDD workspaces)
+.superpowers/
+
+# Superpowers isolated worktrees
+.worktrees/

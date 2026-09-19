@@ -37,8 +37,9 @@ class SyncService {
       queryParameters: queryParams,
     );
 
-    final payload =
-        SyncResultDto.fromJson(response.data as Map<String, dynamic>);
+    final payload = SyncResultDto.fromJson(
+      response.data as Map<String, dynamic>,
+    );
 
     await db.transaction(() async {
       await _upsertCustomers(payload.customers);
@@ -46,9 +47,17 @@ class SyncService {
       await _upsertTickets(payload.tickets);
       await _upsertSchedules(payload.schedules);
       await _upsertDraftReports(payload.draftReports);
+      // Reports this technician submitted that have since left the draft state (Inviato,
+      // Controllato, Fatturato, Respinto, Annullato). Same upsert as drafts — the payload already
+      // carries the server-authoritative `stato`/`inviatoAt`/etc — so this is what makes an
+      // office rejection (POST /api/reports/{id}/respingi) actually show up on the device instead
+      // of the phone never learning about it. See sync_dto.dart's `submittedReports` doc comment.
+      await _upsertDraftReports(payload.submittedReports);
       await _upsertTicketStatuses(payload.ticketStatuses);
       await _upsertTicketTypes(payload.ticketTypes);
       await _upsertMateriali(payload.materiali);
+      await _upsertTicketMateriali(payload.ticketMateriali);
+      await _upsertMaterialeBarcodes(payload.materialiBarcodes);
       await _upsertCantieri(payload.cantieri);
       await _replaceColleagues(payload.colleagues);
     });
@@ -79,19 +88,25 @@ class SyncService {
 
     await db.transaction(() async {
       await db.delete(db.colleagues).go();
-      await db.batch((b) => b.insertAll(
-            db.colleagues,
-            list.map((c) => ColleaguesCompanion.insert(
-                  id: c.id,
-                  displayName: c.displayName,
-                )),
-          ));
+      await db.batch(
+        (b) => b.insertAll(
+          db.colleagues,
+          list.map(
+            (c) => ColleaguesCompanion.insert(
+              id: c.id,
+              displayName: c.displayName,
+            ),
+          ),
+        ),
+      );
     });
   }
 
   Future<void> _upsertMateriali(List<MaterialeDto> list) async {
     for (final m in list) {
-      await db.into(db.materiali).insertOnConflictUpdate(
+      await db
+          .into(db.materiali)
+          .insertOnConflictUpdate(
             MaterialiCompanion.insert(
               id: m.id,
               tenantId: m.tenantId,
@@ -111,10 +126,53 @@ class SyncService {
     }
   }
 
+  Future<void> _upsertTicketMateriali(List<SyncTicketMaterialeDto> list) async {
+    for (final m in list) {
+      await db
+          .into(db.ticketMateriali)
+          .insertOnConflictUpdate(
+            TicketMaterialiCompanion.insert(
+              id: m.id,
+              tenantId: m.tenantId,
+              createdAt: m.createdAt,
+              updatedAt: Value(m.updatedAt),
+              ticketId: m.ticketId,
+              materialeId: Value(m.materialeId),
+              freeTextName: Value(m.freeTextName),
+              quantity: m.quantity,
+              unitOfMeasure: Value(m.unitOfMeasure),
+              notes: Value(m.notes),
+              isAvailable: Value(m.isAvailable),
+            ),
+          );
+    }
+  }
+
+  Future<void> _upsertMaterialeBarcodes(List<MaterialeBarcodeDto> list) async {
+    for (final b in list) {
+      await db
+          .into(db.materialeBarcodes)
+          .insertOnConflictUpdate(
+            MaterialeBarcodesCompanion.insert(
+              id: b.id,
+              tenantId: b.tenantId,
+              createdAt: b.createdAt,
+              updatedAt: Value(b.updatedAt),
+              materialeId: b.materialeId,
+              barcode: b.barcode,
+              barcodeType: Value(b.barcodeType),
+              isPrimary: Value(b.isPrimary),
+            ),
+          );
+    }
+  }
+
   /// The cantieri a technician may be sent to.
   Future<void> _upsertCantieri(List<CantiereDto> list) async {
     for (final c in list) {
-      await db.into(db.cantieri).insertOnConflictUpdate(
+      await db
+          .into(db.cantieri)
+          .insertOnConflictUpdate(
             CantieriCompanion.insert(
               id: c.id,
               tenantId: c.tenantId,
@@ -137,7 +195,9 @@ class SyncService {
 
   Future<void> _upsertCustomers(List<CustomerDto> list) async {
     for (final c in list) {
-      await db.into(db.customers).insertOnConflictUpdate(
+      await db
+          .into(db.customers)
+          .insertOnConflictUpdate(
             CustomersCompanion.insert(
               id: c.id,
               tenantId: c.tenantId,
@@ -161,7 +221,9 @@ class SyncService {
 
   Future<void> _upsertLocations(List<LocationDto> list) async {
     for (final l in list) {
-      await db.into(db.locations).insertOnConflictUpdate(
+      await db
+          .into(db.locations)
+          .insertOnConflictUpdate(
             LocationsCompanion.insert(
               id: l.id,
               tenantId: l.tenantId,
@@ -185,13 +247,16 @@ class SyncService {
 
   Future<void> _upsertTickets(List<TicketDto> list) async {
     for (final t in list) {
-      await db.into(db.tickets).insertOnConflictUpdate(
+      await db
+          .into(db.tickets)
+          .insertOnConflictUpdate(
             TicketsCompanion.insert(
               id: t.id,
               tenantId: t.tenantId,
               createdAt: t.createdAt,
               updatedAt: Value(t.updatedAt),
               title: t.title,
+              numero: Value(t.numero),
               description: Value(t.description),
               customerId: t.customerId,
               locationId: t.locationId,
@@ -205,6 +270,9 @@ class SyncService {
               contractId: Value(t.contractId),
               prodottoAssistenzaId: Value(t.prodottoAssistenzaId),
               commessaId: Value(t.commessaId),
+              cantiereId: Value(t.cantiereId),
+              priority: Value(t.priority),
+              dueDate: Value(t.dueDate),
             ),
           );
     }
@@ -212,7 +280,9 @@ class SyncService {
 
   Future<void> _upsertSchedules(List<ScheduleDto> list) async {
     for (final s in list) {
-      await db.into(db.schedules).insertOnConflictUpdate(
+      await db
+          .into(db.schedules)
+          .insertOnConflictUpdate(
             SchedulesCompanion.insert(
               id: s.id,
               tenantId: s.tenantId,
@@ -220,8 +290,7 @@ class SyncService {
               updatedAt: Value(s.updatedAt),
               ticketId: Value(s.ticketId),
               activityDate: s.activityDate,
-              timeStartMinutes:
-                  ScheduleDto.parseTimeToMinutes(s.timeStart),
+              timeStartMinutes: ScheduleDto.parseTimeToMinutes(s.timeStart),
               timeEndMinutes: ScheduleDto.parseTimeToMinutes(s.timeEnd),
               userId: s.userId,
               statusId: s.statusId,
@@ -235,12 +304,14 @@ class SyncService {
       // Replaced wholesale rather than merged: the payload is the whole truth about who is on
       // this schedule, and someone removed from a squadra must stop appearing on the device the
       // same way they stop appearing on the server.
-      await (db.delete(db.scheduleAssignees)
-            ..where((t) => t.scheduleId.equals(s.id)))
-          .go();
+      await (db.delete(
+        db.scheduleAssignees,
+      )..where((t) => t.scheduleId.equals(s.id))).go();
 
       for (final a in s.assignees) {
-        await db.into(db.scheduleAssignees).insertOnConflictUpdate(
+        await db
+            .into(db.scheduleAssignees)
+            .insertOnConflictUpdate(
               ScheduleAssigneesCompanion.insert(
                 scheduleId: s.id,
                 userId: a.userId,
@@ -257,7 +328,32 @@ class SyncService {
 
   Future<void> _upsertDraftReports(List<ReportDto> list) async {
     for (final r in list) {
-      await db.into(db.draftReports).insertOnConflictUpdate(
+      // A local draft the technician is still actively working on is authoritative over whatever
+      // a background sync tick just fetched — the same rule rapportini_list_screen.dart's
+      // _confirmDeleteDraft already states for deletion ("local state is authoritative for a
+      // Bozza the technician is still working on").
+      //
+      // This id space collision became reachable the moment createCantiereReportDraft (cantiere-
+      // only rapportino creation) started reusing the backend-issued Report id for the local
+      // draft row, instead of minting a fresh client GUID like every other creation path. The
+      // mobile sync's own `draftReports`/`submittedReports` payload is "every Bozza this user
+      // authored" (MobileUserSyncService, backend) — which now includes that very report from the
+      // instant it exists server-side, with a blank title/details (the create call passes none)
+      // and isLocalOnly unset. Without this guard, HomeShell's periodic sync (every 60s, plus on
+      // resume/reconnect) would silently overwrite whatever the technician had already typed and
+      // saved locally, and flip isLocalOnly back to false mid-edit — exactly the invariant this
+      // function's own "Synced-down reports are never local-only" comment below assumes never
+      // collides with a row still being edited locally.
+      final local = await (db.select(
+        db.draftReports,
+      )..where((t) => t.id.equals(r.id))).getSingleOrNull();
+      if (local != null && local.isLocalOnly) {
+        continue;
+      }
+
+      await db
+          .into(db.draftReports)
+          .insertOnConflictUpdate(
             DraftReportsCompanion.insert(
               id: r.id,
               tenantId: r.tenantId,
@@ -273,10 +369,10 @@ class SyncService {
               startedAt: Value(r.startedAt),
               endedAt: Value(r.endedAt),
               documentTemplateId: Value(r.documentTemplateId),
-              customerSignatureAllegatoId:
-                  Value(r.customerSignatureAllegatoId),
-              technicianSignatureAllegatoId:
-                  Value(r.technicianSignatureAllegatoId),
+              customerSignatureAllegatoId: Value(r.customerSignatureAllegatoId),
+              technicianSignatureAllegatoId: Value(
+                r.technicianSignatureAllegatoId,
+              ),
               technicianNotes: Value(r.technicianNotes),
               closedAt: Value(r.closedAt),
               stato: Value(r.stato),
@@ -296,7 +392,9 @@ class SyncService {
 
   Future<void> _upsertTicketStatuses(List<TicketStatusDto> list) async {
     for (final s in list) {
-      await db.into(db.ticketStatuses).insertOnConflictUpdate(
+      await db
+          .into(db.ticketStatuses)
+          .insertOnConflictUpdate(
             TicketStatusesCompanion.insert(
               id: Value(s.id),
               tenantId: s.tenantId,
@@ -310,7 +408,9 @@ class SyncService {
 
   Future<void> _upsertTicketTypes(List<TicketTypeDto> list) async {
     for (final t in list) {
-      await db.into(db.ticketTypes).insertOnConflictUpdate(
+      await db
+          .into(db.ticketTypes)
+          .insertOnConflictUpdate(
             TicketTypesCompanion.insert(
               id: Value(t.id),
               tenantId: t.tenantId,
@@ -325,6 +425,20 @@ class SyncService {
 // ══════════════════════════════════════════════════════════════════════════════
 // Riverpod provider
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// Whether automatic background sync (the 60s foreground poll and the app-resume sync in
+/// [HomeShell]) should run at all.
+///
+/// Defaults to true and is overridden in `main.dart` with the Impostazioni → "Modalità offline"
+/// setting — same pattern as `gpsPreferenceProvider` in core/location: a core default here (data
+/// layer must not import a feature), bound once in main.dart so no call site has to remember the
+/// setting exists.
+///
+/// Deliberately does NOT gate the initial post-login sync or the reconnect-triggered flush of
+/// queued offline writes (timbra, tickets, rapportini, …) — those exist to avoid losing or
+/// silently staling data, not to keep it fresh in the background, so they stay on even with this
+/// preference off.
+final backgroundSyncPreferenceProvider = Provider<bool>((ref) => true);
 
 /// Provides the [AppDatabase] singleton.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -359,12 +473,11 @@ class SyncState {
     SyncStatus? status,
     DateTime? lastSync,
     String? errorMessage,
-  }) =>
-      SyncState(
-        status: status ?? this.status,
-        lastSync: lastSync ?? this.lastSync,
-        errorMessage: errorMessage,
-      );
+  }) => SyncState(
+    status: status ?? this.status,
+    lastSync: lastSync ?? this.lastSync,
+    errorMessage: errorMessage,
+  );
 }
 
 class SyncNotifier extends StateNotifier<SyncState> {
@@ -397,8 +510,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 }
 
-final syncProvider =
-    StateNotifierProvider<SyncNotifier, SyncState>((ref) {
+final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
   return SyncNotifier(
     ref.watch(syncServiceProvider),
     ref.watch(appDatabaseProvider),

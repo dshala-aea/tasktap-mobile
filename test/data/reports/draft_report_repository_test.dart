@@ -27,17 +27,16 @@ DraftReportsCompanion _draftCompanion({
   String id = 'r-1',
   String title = 'Rapportino Test',
   bool isLocalOnly = true,
-}) =>
-    DraftReportsCompanion.insert(
-      id: id,
-      tenantId: 'tenant-1',
-      createdAt: DateTime.utc(2026, 6, 21, 10),
-      title: title,
-      insertedUserId: 'user-1',
-      locationId: 'loc-1',
-      isLocalOnly: Value(isLocalOnly),
-      stato: const Value('Bozza'),
-    );
+}) => DraftReportsCompanion.insert(
+  id: id,
+  tenantId: 'tenant-1',
+  createdAt: DateTime.utc(2026, 6, 21, 10),
+  title: title,
+  insertedUserId: 'user-1',
+  locationId: 'loc-1',
+  isLocalOnly: Value(isLocalOnly),
+  stato: const Value('Bozza'),
+);
 
 ReportStaffTableCompanion _staffCompanion({
   String id = 's-1',
@@ -45,17 +44,16 @@ ReportStaffTableCompanion _staffCompanion({
   String userId = 'user-1',
   double? hoursWorked = 4.0,
   double kmTraveled = 50.0,
-}) =>
-    ReportStaffTableCompanion(
-      id: Value(id),
-      tenantId: const Value('tenant-1'),
-      createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
-      reportId: Value(reportId),
-      userId: Value(userId),
-      hoursWorked: Value(hoursWorked),
-      kmTraveled: Value(kmTraveled),
-      pauseMinutes: const Value(0),
-    );
+}) => ReportStaffTableCompanion(
+  id: Value(id),
+  tenantId: const Value('tenant-1'),
+  createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
+  reportId: Value(reportId),
+  userId: Value(userId),
+  hoursWorked: Value(hoursWorked),
+  kmTraveled: Value(kmTraveled),
+  pauseMinutes: const Value(0),
+);
 
 ReportMaterialiCompanion _materialeCompanion({
   String id = 'm-1',
@@ -63,32 +61,30 @@ ReportMaterialiCompanion _materialeCompanion({
   String? materialeId,
   String? freeTextName = 'Cavo rete cat6',
   double quantity = 10.0,
-}) =>
-    ReportMaterialiCompanion(
-      id: Value(id),
-      tenantId: const Value('tenant-1'),
-      createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
-      reportId: Value(reportId),
-      materialeId: Value(materialeId),
-      freeTextName: Value(freeTextName),
-      quantity: Value(quantity),
-      unitOfMeasure: const Value('m'),
-    );
+}) => ReportMaterialiCompanion(
+  id: Value(id),
+  tenantId: const Value('tenant-1'),
+  createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
+  reportId: Value(reportId),
+  materialeId: Value(materialeId),
+  freeTextName: Value(freeTextName),
+  quantity: Value(quantity),
+  unitOfMeasure: const Value('m'),
+);
 
 ReportControlliCompanion _controlloCompanion({
   String id = 'c-1',
   String reportId = 'r-1',
   String controlId = 'ctrl-pressione',
   String? stringValue = '120 bar',
-}) =>
-    ReportControlliCompanion(
-      id: Value(id),
-      tenantId: const Value('tenant-1'),
-      createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
-      reportId: Value(reportId),
-      controlId: Value(controlId),
-      stringValue: Value(stringValue),
-    );
+}) => ReportControlliCompanion(
+  id: Value(id),
+  tenantId: const Value('tenant-1'),
+  createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
+  reportId: Value(reportId),
+  controlId: Value(controlId),
+  stringValue: Value(stringValue),
+);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Tests
@@ -168,8 +164,7 @@ void main() {
   group('watchLocalDrafts', () {
     test('returns only isLocalOnly=true drafts', () async {
       await repo.createDraft(_draftCompanion(id: 'r-local', isLocalOnly: true));
-      await repo.createDraft(
-          _draftCompanion(id: 'r-synced', isLocalOnly: false));
+      await repo.createDraft(_draftCompanion(id: 'r-synced', isLocalOnly: false));
 
       final drafts = await repo.watchLocalDrafts().first;
       expect(drafts.length, 1);
@@ -179,6 +174,40 @@ void main() {
     test('empty list when no local drafts', () async {
       final drafts = await repo.watchLocalDrafts().first;
       expect(drafts, isEmpty);
+    });
+  });
+
+  group('watchAllReports', () {
+    test('returns local-only and synced-down (submitted) reports alike', () async {
+      await repo.createDraft(_draftCompanion(id: 'r-local', isLocalOnly: true));
+      await repo.createDraft(_draftCompanion(id: 'r-synced', isLocalOnly: false));
+
+      final reports = await repo.watchAllReports().first;
+      expect(reports.map((r) => r.id).toSet(), {'r-local', 'r-synced'});
+    });
+
+    test('reflects a status update from a re-sync (e.g. Respinto) without disappearing', () async {
+      await repo.createDraft(_draftCompanion(id: 'r-1', isLocalOnly: true));
+      await repo.saveDraft(
+        DraftReportsCompanion(
+          id: const Value('r-1'),
+          tenantId: const Value('tenant-1'),
+          createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
+          title: const Value('Rapportino Test'),
+          insertedUserId: const Value('user-1'),
+          locationId: const Value('loc-1'),
+          stato: const Value('Respinto'),
+          isLocalOnly: const Value(false),
+        ),
+      );
+
+      final reports = await repo.watchAllReports().first;
+      expect(reports, hasLength(1));
+      expect(reports.single.stato, 'Respinto');
+    });
+
+    test('empty list when nothing cached', () async {
+      expect(await repo.watchAllReports().first, isEmpty);
     });
   });
 
@@ -268,7 +297,9 @@ void main() {
       final start = DateTime.utc(2026, 6, 21, 8, 0);
       final end = DateTime.utc(2026, 6, 21, 16, 30);
 
-      await db.into(db.reportStaffTable).insertOnConflictUpdate(
+      await db
+          .into(db.reportStaffTable)
+          .insertOnConflictUpdate(
             ReportStaffTableCompanion(
               id: const Value('s-timer'),
               tenantId: const Value('tenant-1'),
@@ -287,8 +318,7 @@ void main() {
       expect(row.startTime, isNotNull);
       expect(row.endTime, isNotNull);
       // 8:00 → 16:30 = 510 minutes − 30 pause = 480 minutes = 8.0 hours
-      final workedMins =
-          row.endTime!.difference(row.startTime!).inMinutes - row.pauseMinutes;
+      final workedMins = row.endTime!.difference(row.startTime!).inMinutes - row.pauseMinutes;
       expect(workedMins, 480);
       expect(workedMins / 60.0, 8.0);
     });
@@ -310,9 +340,7 @@ void main() {
     });
 
     test('upsertMateriale inserts a row with cached materialeId', () async {
-      await repo.upsertMateriale(
-        _materialeCompanion(materialeId: 'mat-42', freeTextName: null),
-      );
+      await repo.upsertMateriale(_materialeCompanion(materialeId: 'mat-42', freeTextName: null));
 
       final rows = await repo.getMateriali('r-1');
       expect(rows.first.materialeId, 'mat-42');
@@ -349,10 +377,8 @@ void main() {
     });
 
     test('upsertControllo updates existing row by id', () async {
-      await repo.upsertControllo(
-          _controlloCompanion(stringValue: 'primo valore'));
-      await repo.upsertControllo(
-          _controlloCompanion(stringValue: 'secondo valore'));
+      await repo.upsertControllo(_controlloCompanion(stringValue: 'primo valore'));
+      await repo.upsertControllo(_controlloCompanion(stringValue: 'secondo valore'));
 
       final rows = await repo.getControlli('r-1');
       expect(rows.length, 1);
@@ -472,6 +498,51 @@ void main() {
 
       final rows = await repo.getAllegati('r-1');
       expect(rows.first.sizeBytes, 512);
+    });
+
+    test('persists capturedLatitude/capturedLongitude/capturedAt when provided', () async {
+      final capturedAt = DateTime.utc(2026, 9, 5, 14, 0);
+      await repo.saveSignature(
+        reportId: 'r-1',
+        allegatoId: 'sig-gps-1',
+        tenantId: 'tenant-1',
+        uploadedByUserId: 'user-1',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        localPath: '/tmp/sig-gps-1.png',
+        isCustomer: true,
+        capturedLatitude: 45.4642,
+        capturedLongitude: 9.19,
+        capturedAt: capturedAt,
+      );
+
+      final rows = await repo.getAllegati('r-1');
+      final row = rows.firstWhere((a) => a.id == 'sig-gps-1');
+      expect(row.capturedLatitude, 45.4642);
+      expect(row.capturedLongitude, 9.19);
+      // .toUtc(): drift's default DateTime storage round-trips the same instant but drops the
+      // UTC flag (reads back as local-zone), and DateTime's `==` considers that flag — so compare
+      // instants via a UTC-normalized value rather than raw `==` against the UTC fixture.
+      expect(row.capturedAt?.toUtc(), capturedAt);
+    });
+
+    test('leaves capturedLatitude/capturedLongitude/capturedAt null when GPS is unavailable', () async {
+      // GPS must never block signature capture — a denied/unavailable position is the normal
+      // case, not an error, and it must not prevent the signature itself from being saved.
+      await repo.saveSignature(
+        reportId: 'r-1',
+        allegatoId: 'sig-no-gps',
+        tenantId: 'tenant-1',
+        uploadedByUserId: 'user-1',
+        bytes: Uint8List.fromList([1]),
+        localPath: '/tmp/sig-no-gps.png',
+        isCustomer: false,
+      );
+
+      final rows = await repo.getAllegati('r-1');
+      final row = rows.firstWhere((a) => a.id == 'sig-no-gps');
+      expect(row.capturedLatitude, isNull);
+      expect(row.capturedLongitude, isNull);
+      expect(row.capturedAt, isNull);
     });
   });
 }

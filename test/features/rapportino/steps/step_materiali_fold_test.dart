@@ -11,28 +11,31 @@
 // rendered inputs actually write back to the editor state.
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/widgets/app_toggle.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
+import 'package:tasktap_mobile/data/reports/ticket_controls_cache_repository.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/steps/step_materiali_fold.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 class MockDio extends Mock implements Dio {}
 
 Response<T> _okResponse<T>(T data, String path) => Response<T>(
-      data: data,
-      statusCode: 200,
-      requestOptions: RequestOptions(path: path),
-    );
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 const _reportId = 'draft-1';
 const _ticketId = 'ticket-1';
@@ -43,22 +46,24 @@ ProviderContainer _buildContainer({
   bool isOnline = true,
   String? ticketId = _ticketId,
 }) {
-  final container = ProviderContainer(overrides: [
-    appDatabaseProvider.overrideWithValue(db),
-    dioProvider.overrideWithValue(dio ?? MockDio()),
-    isOnlineProvider.overrideWithValue(isOnline),
-    reportEditorProvider(_reportId).overrideWith(
-      (ref) => ReportEditorNotifier(
-        initialState: ReportEditorState(
-          reportId: _reportId,
-          tenantId: 'tenant-1',
-          insertedUserId: 'user-1',
-          ticketId: ticketId,
+  final container = ProviderContainer(
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      dioProvider.overrideWithValue(dio ?? MockDio()),
+      isOnlineProvider.overrideWithValue(isOnline),
+      reportEditorProvider(_reportId).overrideWith(
+        (ref) => ReportEditorNotifier(
+          initialState: ReportEditorState(
+            reportId: _reportId,
+            tenantId: 'tenant-1',
+            insertedUserId: 'user-1',
+            ticketId: ticketId,
+          ),
+          repo: DraftReportRepository(db),
         ),
-        repo: DraftReportRepository(db),
       ),
-    ),
-  ]);
+    ],
+  );
   return container;
 }
 
@@ -66,7 +71,28 @@ Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(
-      home: Scaffold(body: StepMaterialiFold(reportId: _reportId)),
+      // StepMaterialiFold no longer bounds its own height — it now sits inside the compartment
+      // sheet's ambient SingleChildScrollView (see openCompartmentSheet), so tests host it the
+      // same way rather than a bare, height-bounded Scaffold body.
+      home: Scaffold(body: SingleChildScrollView(child: StepMaterialiFold(reportId: _reportId))),
+    ),
+  );
+}
+
+/// Controlli moved out of [StepMaterialiFold] into its own compartment tile ([StepControlli]) —
+/// see that class's own doc comment. `ticketId` must match whatever `_buildContainer` seeded the
+/// report's own `ticketId` as: [StepControlli] takes it as an explicit constructor param (its
+/// parent, rapportino_form_screen.dart, reads it off `editorState.ticketId` itself), it does not
+/// read it back off provider state the way [StepMaterialiFold] used to.
+Widget _buildControlliStep(ProviderContainer container, {String? ticketId = _ticketId}) {
+  return UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: StepControlli(reportId: _reportId, ticketId: ticketId),
+        ),
+      ),
     ),
   );
 }
@@ -85,9 +111,9 @@ void main() {
   group('Controlli checklist — data', () {
     testWidgets('renders the real checklist items with type-driven inputs', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse(
-          [
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
             {
               'id': 'grp-1',
               'name': 'Sezione A',
@@ -101,7 +127,7 @@ void main() {
                   'controlLineageId': 'lin-1',
                   'label': 'Pressione OK',
                   'description': null,
-                  'type': 0, // Checkbox
+                  'type': 'Checkbox',
                   'isRequired': true,
                   'options': null,
                   'valoreLimite': null,
@@ -119,7 +145,7 @@ void main() {
                   'controlLineageId': 'lin-2',
                   'label': 'Note aggiuntive',
                   'description': null,
-                  'type': 1, // FreeText
+                  'type': 'Text',
                   'isRequired': false,
                   'options': null,
                   'valoreLimite': null,
@@ -134,13 +160,13 @@ void main() {
               ],
             },
           ],
-          '/api/tickets/$_ticketId/controls',
-        ),
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       // Real labels from the template, not a free-text "ID" box.
@@ -149,19 +175,18 @@ void main() {
       // The old dialog is gone.
       expect(find.text('Aggiungi controllo'), findsNothing);
       expect(find.text('Nome controllo / ID'), findsNothing);
-      // A checkbox-type item renders a toggle, not a text box. (Two
-      // AppToggles total: the pre-existing "Nessun materiale utilizzato"
-      // toggle plus this checklist item's.)
-      expect(find.byType(AppToggle), findsNWidgets(2));
+      // A checkbox-type item renders a toggle, not a text box. StepControlli renders standalone
+      // now (Controlli moved out of StepMaterialiFold, see that class's own doc comment) — no
+      // sibling "Nessun materiale utilizzato" toggle to count alongside this checklist item's own.
+      expect(find.byType(AppToggle), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('ticking a checkbox control writes the answer to editor state',
-        (tester) async {
+    testWidgets('ticking a checkbox control writes the answer to editor state', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse(
-          [
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
             {
               'id': 'grp-1',
               'name': 'Sezione A',
@@ -175,7 +200,7 @@ void main() {
                   'controlLineageId': 'lin-1',
                   'label': 'Pressione OK',
                   'description': null,
-                  'type': 0,
+                  'type': 'Checkbox',
                   'isRequired': true,
                   'options': null,
                   'valoreLimite': null,
@@ -190,13 +215,13 @@ void main() {
               ],
             },
           ],
-          '/api/tickets/$_ticketId/controls',
-        ),
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       // .last: the checklist item's toggle, not the pre-existing "Nessun
@@ -214,9 +239,9 @@ void main() {
 
     testWidgets('typing into a free-text control writes the answer', (tester) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
-        (_) async => _okResponse(
-          [
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
             {
               'id': 'grp-1',
               'name': 'Sezione A',
@@ -230,7 +255,7 @@ void main() {
                   'controlLineageId': 'lin-2',
                   'label': 'Note aggiuntive',
                   'description': null,
-                  'type': 1,
+                  'type': 'Text',
                   'isRequired': false,
                   'options': null,
                   'valoreLimite': null,
@@ -245,13 +270,13 @@ void main() {
               ],
             },
           ],
-          '/api/tickets/$_ticketId/controls',
-        ),
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
       );
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), 'Tutto regolare');
@@ -262,18 +287,78 @@ void main() {
       expect(rows.single.controlId, 'tc-2');
       expect(rows.single.stringValue, 'Tutto regolare');
     });
-  });
 
-  group('Controlli checklist — empty / not applicable', () {
-    testWidgets('says honestly that no controls are planned for this ticket',
-        (tester) async {
+    testWidgets('typing into a Number control writes numberValue, not stringValue', (
+      tester,
+    ) async {
       final dio = MockDio();
-      when(() => dio.get<List<dynamic>>('/api/tickets/$_ticketId/controls'))
-          .thenAnswer((_) async => _okResponse(<dynamic>[], '/api/tickets/$_ticketId/controls'));
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
+            {
+              'id': 'grp-1',
+              'name': 'Sezione A',
+              'description': null,
+              'sortOrder': 0,
+              'subgroups': <dynamic>[],
+              'controls': [
+                {
+                  'id': 'tc-3',
+                  'templateControlId': 'tpl-3',
+                  'controlLineageId': 'lin-3',
+                  'label': 'Temperatura mandata',
+                  'description': null,
+                  'type': 'Number',
+                  'isRequired': false,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 0,
+                  'status': 'Pending',
+                  'stringValue': null,
+                  'boolValue': null,
+                  'dateValue': null,
+                  'numberValue': null,
+                  'completedByReportId': null,
+                  'completedAt': null,
+                },
+              ],
+            },
+          ],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
+      );
 
       final container = _buildContainer(db: db, dio: dio);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), '62.5');
+      await tester.pumpAndSettle();
+
+      final rows = container.read(reportEditorProvider(_reportId)).controlloRows;
+      expect(rows, hasLength(1));
+      expect(rows.single.controlId, 'tc-3');
+      expect(rows.single.numberValue, 62.5);
+      expect(rows.single.stringValue, isNull);
+    });
+  });
+
+  group('Controlli checklist — empty / not applicable', () {
+    testWidgets('says honestly that no controls are planned for this ticket', (tester) async {
+      final dio = MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'groups': <dynamic>[],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
+      );
+
+      final container = _buildContainer(db: db, dio: dio);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
       expect(find.text('Nessun controllo previsto per questo intervento.'), findsOneWidget);
@@ -282,39 +367,344 @@ void main() {
       expect(find.byType(TextField), findsNothing);
     });
 
-    testWidgets('explains that controls require a linked ticket when there is none',
-        (tester) async {
+    testWidgets('explains that controls require a linked ticket when there is none', (
+      tester,
+    ) async {
       final container = _buildContainer(db: db, ticketId: null);
       addTearDown(container.dispose);
-      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpWidget(_buildControlliStep(container, ticketId: null));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('non è collegato a nessun ticket'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('non è collegato a nessun ticket'), findsOneWidget);
       expect(find.byType(TextField), findsNothing);
     });
   });
 
   group('Controlli checklist — offline', () {
-    testWidgets('says plainly it is offline instead of showing an empty list',
-        (tester) async {
+    testWidgets('says plainly it is offline when nothing was ever cached', (tester) async {
       final container = _buildContainer(db: db, isOnline: false);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildControlliStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Controlli non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun controllo previsto per questo intervento.'), findsNothing);
+      // Offline must never degrade into the old typed-ID box either.
+      expect(find.text('Aggiungi controllo'), findsNothing);
+    });
+  });
+
+  // ── Offline cache (mobile audit item #3) ────────────────────────────────────
+  //
+  // Every other section of this offline-first form works with zero network at capture time; the
+  // checklist used to be the one exception (no local cache — see the group above for the
+  // "nothing cached yet" case, unchanged by this feature). These verify the cache itself: a
+  // successful online fetch persists it, a cached checklist is viewable/answerable offline, and
+  // an answer given offline is an ordinary ControlloRow — already included in the submit payload
+  // the same way as every other answer (SubmissionQueue._buildRequest reads it straight from
+  // Drift, unaware of whether the checklist that produced it came from the network or the cache).
+
+  group('Controlli checklist — offline cache', () {
+    Map<String, dynamic> controlsPayload() => {
+      'id': 'grp-1',
+      'name': 'Sezione A',
+      'description': null,
+      'sortOrder': 0,
+      'subgroups': <dynamic>[],
+      'controls': [
+        {
+          'id': 'tc-1',
+          'templateControlId': 'tpl-1',
+          'controlLineageId': 'lin-1',
+          'label': 'Pressione OK',
+          'description': null,
+          'type': 'Checkbox',
+          'isRequired': true,
+          'options': null,
+          'valoreLimite': null,
+          'sortOrder': 0,
+          'status': 'Pending',
+          'stringValue': null,
+          'boolValue': null,
+          'dateValue': null,
+          'completedByReportId': null,
+          'completedAt': null,
+        },
+      ],
+    };
+
+    testWidgets('a successful online fetch caches the checklist locally', (tester) async {
+      final dio = MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$_ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [controlsPayload()],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$_ticketId/controls'),
+      );
+
+      final container = _buildContainer(db: db, dio: dio);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildControlliStep(container));
+      await tester.pumpAndSettle();
+
+      final cached = await (db.select(
+        db.cachedTicketControls,
+      )..where((t) => t.ticketId.equals(_ticketId))).getSingleOrNull();
+      expect(cached, isNotNull);
+      expect(cached!.controlsJson, contains('Pressione OK'));
+    });
+
+    testWidgets('a cached checklist is viewable and answerable while offline', (tester) async {
+      // Seed the cache as if a previous online fetch already happened, before this device lost
+      // connectivity mid-draft.
+      await TicketControlsCacheRepository(db).cacheControls(_ticketId, [
+        TicketControlGroupDto.fromJson(controlsPayload()),
+      ]);
+
+      final container = _buildContainer(db: db, isOnline: false);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildControlliStep(container));
+      await tester.pumpAndSettle();
+
+      // No offline error — the cache stands in for the network fetch.
+      expect(find.textContaining('Controlli non disponibili offline'), findsNothing);
+      expect(find.text('Pressione OK'), findsOneWidget);
+
+      // Still answerable: ticking it writes an ordinary ControlloRow, same as when online.
+      await tester.tap(find.byType(AppToggle).last);
+      await tester.pumpAndSettle();
+
+      final rows = container.read(reportEditorProvider(_reportId)).controlloRows;
+      expect(rows, hasLength(1));
+      expect(rows.single.controlId, 'tc-1');
+      expect(rows.single.boolValue, isTrue);
+    });
+
+    testWidgets('an answer recorded offline is persisted as a normal draft controllo row — '
+        'the same table SubmissionQueue reads to build the submit payload', (tester) async {
+      await TicketControlsCacheRepository(db).cacheControls(_ticketId, [
+        TicketControlGroupDto.fromJson(controlsPayload()),
+      ]);
+
+      final container = _buildContainer(db: db, isOnline: false);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildControlliStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(AppToggle).last);
+      await tester.pumpAndSettle();
+
+      // What SubmissionQueue._buildRequest actually reads at submit time.
+      final repo = DraftReportRepository(db);
+      final persisted = await repo.getControlli(_reportId);
+      expect(persisted, hasLength(1));
+      expect(persisted.single.controlId, 'tc-1');
+      expect(persisted.single.boolValue, isTrue);
+    });
+  });
+
+  group('Aggiungi materiale — Fabbisogno suggestions + scan entry point', () {
+    testWidgets('shows the scan button', (tester) async {
+      final container = _buildContainer(db: db, ticketId: null);
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('Controlli non disponibili offline'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('Nessun controllo previsto per questo intervento.'),
-        findsNothing,
-      );
-      // Offline must never degrade into the old typed-ID box either.
-      expect(find.text('Aggiungi controllo'), findsNothing);
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      // Icon-only now (see the add-material dialog's own "Altre opzioni"/scan simplification —
+      // critique P2 "Materiali add-dialog cognitive overload"), not a labeled TextButton.icon —
+      // the tooltip is the accessible name now, not visible text.
+      expect(find.byTooltip('Scansiona codice'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no suggestions row when the rapportino has no linked ticket', (tester) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dal fabbisogno del ticket'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('planned materiali from the ticket render as tappable suggestions', (tester) async {
+      // Local-Drift-backed now (see ticketMaterialiProvider's own doc comment) — seeded directly,
+      // not stubbed on MockDio.
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART-001',
+              name: 'Guarnizione EPDM',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              ticketId: _ticketId,
+              materialeId: const Value('mat-1'),
+              quantity: 3,
+              isAvailable: const Value(true),
+            ),
+          );
+
+      final container = _buildContainer(db: db);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dal fabbisogno del ticket'), findsOneWidget);
+      expect(find.text('Guarnizione EPDM'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping a suggestion fills quantity and unit from the planned line', (
+      tester,
+    ) async {
+      // Local-Drift-backed now — seeded directly, not stubbed on MockDio.
+      await db
+          .into(db.ticketMateriali)
+          .insert(
+            TicketMaterialiCompanion.insert(
+              id: 'tm-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              ticketId: _ticketId,
+              freeTextName: const Value('Nastro isolante'),
+              quantity: 2,
+              unitOfMeasure: const Value('rt'),
+              isAvailable: const Value(true),
+            ),
+          );
+
+      final container = _buildContainer(db: db);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Aggiungi materiale'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Nastro isolante'));
+      await tester.pumpAndSettle();
+
+      // Qtà is a +/- stepper now (same widget the saved row already used), not a TextField —
+      // the planned line's quantity (2) shows as plain "2" text, not a controller value.
+      expect(find.text('2'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // Regression test for the actual root cause behind "nothing searches through the actual
+    // materials/articles" — allMaterialiProvider (StreamProvider.autoDispose) used to be read
+    // once via `ref.read` at the moment the dialog opened. Nothing else on this screen watches
+    // that provider, so the very first open hit it cold: the underlying Drift `.watch()` stream
+    // had not delivered its first emission yet, `ref.read` got back AsyncLoading, and the
+    // catalog list the dialog captured was permanently empty for that dialog instance — the
+    // search box had nothing to search, and no amount of typing would ever surface a match. The
+    // fix (_MaterialeLookupField) watches the provider live instead, the same way
+    // _FabbisognoSuggestions already watches ticketMaterialiProvider.
+    testWidgets(
+      'catalog search surfaces a materiale that is not part of the ticket fabbisogno '
+      '(the "extra materiale" case)',
+      (tester) async {
+        await db
+            .into(db.materiali)
+            .insert(
+              MaterialiCompanion.insert(
+                id: 'mat-catalog-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                code: 'ART-500',
+                name: 'Vite autofilettante',
+                unitOfMeasure: const Value('pz'),
+              ),
+            );
+
+        // No ticket linked — and so no fabbisogno — to isolate that this suggestion comes from
+        // the full catalog search, not from the (separately tested) fabbisogno chips.
+        final container = _buildContainer(db: db, ticketId: null);
+        addTearDown(container.dispose);
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Aggiungi materiale'));
+        await tester.pumpAndSettle();
+
+        // Focusing the field with nothing typed shows the whole (unfiltered) catalog — proving
+        // the stream actually reached the dialog, not just that a typed query happens to match.
+        await tester.tap(find.byType(TextFormField));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Vite autofilettante'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+  });
+
+  // Item 7 of the admin-form audit: image_picker alone (Galleria/Fotocamera) can never return a
+  // PDF — this covers that a document-picking affordance now sits alongside them.
+  group('Foto / Allegati — Documento picker (item 7)', () {
+    testWidgets('offers a Documento (PDF) option next to Galleria/Fotocamera', (tester) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Galleria'), findsOneWidget);
+      expect(find.text('Fotocamera'), findsOneWidget);
+      expect(find.text('Documento (PDF)'), findsOneWidget);
+    });
+
+    testWidgets('a non-image allegato renders a document tile, not a broken image', (
+      tester,
+    ) async {
+      final container = _buildContainer(db: db, ticketId: null);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      await container
+          .read(reportEditorProvider(_reportId).notifier)
+          .addAllegato(
+            const AllegatoRow(
+              id: 'doc-1',
+              localPath: '/tmp/scheda-tecnica.pdf',
+              fileName: 'scheda-tecnica.pdf',
+              contentType: 'application/pdf',
+              sizeBytes: 1024,
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      expect(find.text('scheda-tecnica.pdf'), findsOneWidget);
+      expect(find.byIcon(LucideIcons.fileText), findsWidgets);
     });
   });
 }

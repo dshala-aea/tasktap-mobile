@@ -61,7 +61,5 @@ abstract final class Env {
 
   /// Returns true when all required env vars are present.
   static bool get isConfigured =>
-      oidcIssuer.isNotEmpty &&
-      oidcClientId.isNotEmpty &&
-      apiBaseUrl.isNotEmpty;
+      oidcIssuer.isNotEmpty && oidcClientId.isNotEmpty && apiBaseUrl.isNotEmpty;
 }

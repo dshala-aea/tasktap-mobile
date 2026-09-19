@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_rack.dart';
+import '../theme/app_spacing.dart';
 
-/// Standard TaskTap card — BG1 bg, 14 px radius, default 16 px padding, SH shadow.
+/// The app's general-purpose container — a flat Documento sheet.
 ///
-/// ```dart
-/// AppCard(child: Text('Hello'));
-/// AppCard.pressable(onTap: () {}, child: Text('Tap me'));
-/// ```
+/// Public API unchanged — every `AppCard(child: …)` call site across the app means "a block of
+/// content" exactly as before; only the material changed (flat sheet + hairline, not glass/blur).
 class AppCard extends StatelessWidget {
   const AppCard({
     super.key,
@@ -16,9 +17,10 @@ class AppCard extends StatelessWidget {
     this.onTap,
     this.borderColor,
     this.backgroundColor,
+    this.strapped = false,
+    this.flush = true,
   });
 
-  /// Tappable variant with ink ripple.
   const AppCard.pressable({
     super.key,
     required this.child,
@@ -26,127 +28,53 @@ class AppCard extends StatelessWidget {
     this.padding,
     this.borderColor,
     this.backgroundColor,
+    this.strapped = false,
+    this.flush = true,
   });
 
   final Widget child;
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onTap;
+
+  /// Overrides the sheet's border colour. [strapped] wins when both are set.
   final Color? borderColor;
+
   final Color? backgroundColor;
 
-  static const double _radius = 14;
-  static const EdgeInsets _defaultPadding = EdgeInsets.all(16);
+  /// Selected, priority, or still-needs-finishing — turns the border stamp-red. Not for a
+  /// live/running state: that's `LiveDot`, a different mark.
+  final bool strapped;
+
+  /// No longer consulted (kept for call-site compatibility — see the pre-existing `flush` field
+  /// on this widget before this change; it already did nothing).
+  final bool flush;
+
+  static const EdgeInsets _defaultPadding = EdgeInsets.fromLTRB(
+    14,
+    AppSpacing.md,
+    14,
+    AppSpacing.md,
+  );
+  static const _radius = AppRack.freeShape;
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? context.colors.bg1;
-    final border = borderColor ?? context.colors.borderMedium;
-
-    final br = BorderRadius.circular(_radius);
-
-    final decoration = BoxDecoration(
-      color: bg,
-      borderRadius: br,
-      border: Border.all(color: border, width: 0.5),
-      boxShadow: context.colors.shadow,
-    );
-
-    if (onTap != null) {
-      return Material(
-        color: Colors.transparent,
-        child: Ink(
-          decoration: decoration,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: br,
-            child: _content(),
-          ),
-        ),
-      );
-    }
+    final border = strapped ? AppColors.Y : (borderColor ?? context.colors.borderLight);
+    final content = Padding(padding: padding ?? _defaultPadding, child: child);
 
     return DecoratedBox(
-      decoration: decoration,
-      child: _content(),
-    );
-  }
-
-  Widget _content() {
-    final p = padding ?? _defaultPadding;
-    return Padding(padding: p, child: child);
-  }
-}
-
-/// Glass card for use on dark hero sections.
-///
-/// White-translucent gradient, 0.5 px white border, SH_INSET, 14 px radius.
-///
-/// ```dart
-/// GlassCard(child: Text('glass'));
-/// GlassCard.pressable(onTap: () {}, child: Text('tap'));
-/// ```
-class GlassCard extends StatelessWidget {
-  const GlassCard({
-    super.key,
-    required this.child,
-    this.padding,
-    this.onTap,
-  });
-
-  const GlassCard.pressable({
-    super.key,
-    required this.child,
-    required VoidCallback this.onTap,
-    this.padding,
-  });
-
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
-  final VoidCallback? onTap;
-
-  static const double _radius = 14;
-  static const EdgeInsets _defaultPadding = EdgeInsets.all(16);
-
-  @override
-  Widget build(BuildContext context) {
-    final br = BorderRadius.circular(_radius);
-
-    final decoration = BoxDecoration(
-      borderRadius: br,
-      border: Border.all(color: Colors.white.withAlpha(128), width: 0.5),
-      boxShadow: context.colors.shadowInset,
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          Colors.white.withAlpha(51),  // ~0.20 opacity
-          Colors.white.withAlpha(20),  // ~0.08 opacity
-        ],
+      decoration: BoxDecoration(
+        color: backgroundColor ?? context.colors.surface,
+        borderRadius: _radius,
+        border: Border.all(color: border, width: 1),
       ),
+      child: onTap == null
+          ? content
+          : Material(
+              color: Colors.transparent,
+              borderRadius: _radius,
+              child: InkWell(borderRadius: _radius, onTap: onTap, child: content),
+            ),
     );
-
-    if (onTap != null) {
-      return Material(
-        color: Colors.transparent,
-        child: Ink(
-          decoration: decoration,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: br,
-            child: _content(),
-          ),
-        ),
-      );
-    }
-
-    return DecoratedBox(
-      decoration: decoration,
-      child: _content(),
-    );
-  }
-
-  Widget _content() {
-    final p = padding ?? _defaultPadding;
-    return Padding(padding: p, child: child);
   }
 }

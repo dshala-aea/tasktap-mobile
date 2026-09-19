@@ -23,6 +23,7 @@ class MobileSessionDto {
     this.endTime,
     this.latitude,
     this.longitude,
+    this.gpsAccuracyMeters,
   });
 
   final String clientId;
@@ -31,13 +32,18 @@ class MobileSessionDto {
   final double? latitude; // null for simple timbra
   final double? longitude; // null for simple timbra
 
+  /// Device-reported GPS accuracy radius, in meters, at the moment [latitude]/[longitude] were
+  /// captured. Capture-only, mirrors `WorkLog.GpsAccuracyMeters` server-side.
+  final double? gpsAccuracyMeters;
+
   Map<String, dynamic> toJson() => {
-        'clientId': clientId,
-        'startTime': startTime.toUtc().toIso8601String(),
-        'endTime': endTime?.toUtc().toIso8601String(),
-        'latitude': latitude,
-        'longitude': longitude,
-      };
+    'clientId': clientId,
+    'startTime': startTime.toUtc().toIso8601String(),
+    'endTime': endTime?.toUtc().toIso8601String(),
+    'latitude': latitude,
+    'longitude': longitude,
+    'gpsAccuracyMeters': gpsAccuracyMeters,
+  };
 }
 
 // ── Response DTOs ─────────────────────────────────────────────────────────────
@@ -59,17 +65,57 @@ class UpsertSessionResponse {
   final String? tipoOra;
   final bool isActive;
 
-  factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) =>
-      UpsertSessionResponse(
-        clientId: json['clientId'] as String,
-        workLogId: json['workLogId'] as String,
-        startTime: DateTime.parse(json['startTime'] as String),
-        endTime: json['endTime'] != null
-            ? DateTime.parse(json['endTime'] as String)
-            : null,
-        tipoOra: json['tipoOra'] as String?,
-        isActive: json['isActive'] as bool? ?? false,
-      );
+  factory UpsertSessionResponse.fromJson(Map<String, dynamic> json) => UpsertSessionResponse(
+    clientId: json['clientId'] as String,
+    workLogId: json['workLogId'] as String,
+    startTime: DateTime.parse(json['startTime'] as String),
+    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    tipoOra: json['tipoOra'] as String?,
+    isActive: json['isActive'] as bool? ?? false,
+  );
+}
+
+/// One entry from `GET /api/WorkLog` — plain timbratura hours, no ticket/cantiere scope. Backs
+/// StepOre's last-resort hours suggestion (`recentWorkLogProvider`), distinct from
+/// [TodayWorkLogDto] (today only, `mobile/today`, no `userId`/`durationHours`).
+class UserWorkLogDto {
+  const UserWorkLogDto({
+    required this.id,
+    required this.userId,
+    required this.workDate,
+    required this.startTime,
+    this.endTime,
+    this.duration,
+  });
+
+  final String id;
+  final String userId;
+  final DateTime workDate;
+
+  /// StartTime from backend (TimeSpan → string "HH:mm:ss").
+  final String startTime;
+
+  /// EndTime — null when the session is still open.
+  final String? endTime;
+
+  /// The backend's own computed duration (`WorkLog.DurationHours`) — null while still open. Same
+  /// "trust the server's overnight-aware computation" reasoning as `TicketWorkLogDto.duration`.
+  final Duration? duration;
+
+  factory UserWorkLogDto.fromJson(Map<String, dynamic> json) => UserWorkLogDto(
+    id: json['id'] as String,
+    userId: json['userId'] as String? ?? '',
+    workDate: DateTime.parse(json['workDate'] as String),
+    startTime: json['startTime'] as String,
+    endTime: json['endTime'] as String?,
+    duration: json['endTime'] == null || json['durationHours'] == null
+        ? null
+        : Duration(
+            milliseconds:
+                (((json['durationHours'] as num).toDouble()) * Duration.millisecondsPerHour)
+                    .round(),
+          ),
+  );
 }
 
 class TodayWorkLogDto {
@@ -89,17 +135,63 @@ class TodayWorkLogDto {
   final bool isActive;
   final String? tipoOra;
 
-  factory TodayWorkLogDto.fromJson(Map<String, dynamic> json) =>
-      TodayWorkLogDto(
-        id: json['id'] as String,
-        clientId: json['clientId'] as String,
-        startTime: DateTime.parse(json['startTime'] as String),
-        endTime: json['endTime'] != null
-            ? DateTime.parse(json['endTime'] as String)
-            : null,
-        isActive: json['isActive'] as bool? ?? false,
-        tipoOra: json['tipoOra'] as String?,
-      );
+  factory TodayWorkLogDto.fromJson(Map<String, dynamic> json) => TodayWorkLogDto(
+    id: json['id'] as String,
+    clientId: json['clientId'] as String,
+    startTime: DateTime.parse(json['startTime'] as String),
+    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    isActive: json['isActive'] as bool? ?? false,
+    tipoOra: json['tipoOra'] as String?,
+  );
+}
+
+// ── Kiosk scan (POST /api/worklog/kiosk/scan) ─────────────────────────────────
+
+/// Why a `kioskScan` call failed, mirroring the 5-check authorization formula
+/// `WorkLogController.KioskScan` enforces server-side (see that action's own doc comment).
+enum KioskScanFailureReason {
+  /// The scanned token is malformed, unrecognized, or has already rotated past its 60s window
+  /// by the time this request reached the server — rescan.
+  invalidOrExpiredToken,
+
+  /// The kiosk device behind this token has been revoked from the admin's "Dispositivi kiosk"
+  /// page since the QR was generated.
+  deviceRevoked,
+
+  /// The tenant no longer holds the Kiosk module entitlement (402 from `EntitlementMiddleware`).
+  notEntitled,
+
+  /// The scanning technician isn't allowed to clock in/out here at all — wrong tenant's kiosk,
+  /// or (should never happen from this screen, which always sends the caller's own id) a
+  /// mismatched UserId.
+  forbidden,
+
+  /// No usable response reached us (offline, DNS, timeout).
+  network,
+
+  /// Anything else (5xx, malformed body, ...).
+  unknown,
+}
+
+class KioskScanException implements Exception {
+  const KioskScanException(this.reason, [this.message]);
+
+  final KioskScanFailureReason reason;
+  final String? message;
+
+  @override
+  String toString() => 'KioskScanException($reason${message != null ? ': $message' : ''})';
+}
+
+/// Result of a successful kiosk scan — same shape `ClockResultToActionResult` returns for both
+/// this endpoint and the sibling reverse-scan one.
+class KioskScanResult {
+  const KioskScanResult({required this.action, required this.workLogId, this.endTime});
+
+  /// "in" or "out".
+  final String action;
+  final String workLogId;
+  final DateTime? endTime;
 }
 
 // ── Giornata (GET /api/WorkLog/today) ─────────────────────────────────────────
@@ -123,13 +215,12 @@ class GiornataActionDto {
   final String? reasonCode;
   final String? reason;
 
-  factory GiornataActionDto.fromJson(Map<String, dynamic> json) =>
-      GiornataActionDto(
-        action: json['action'] as String,
-        enabled: json['enabled'] as bool? ?? false,
-        reasonCode: json['reasonCode'] as String?,
-        reason: json['reason'] as String?,
-      );
+  factory GiornataActionDto.fromJson(Map<String, dynamic> json) => GiornataActionDto(
+    action: json['action'] as String,
+    enabled: json['enabled'] as bool? ?? false,
+    reasonCode: json['reasonCode'] as String?,
+    reason: json['reason'] as String?,
+  );
 }
 
 /// The server's view of the signed-in user's day.
@@ -157,15 +248,15 @@ class GiornataDto {
   }
 
   factory GiornataDto.fromJson(Map<String, dynamic> json) => GiornataDto(
-        status: json['status'] as String? ?? 'ClockedOut',
-        workedMinutes: (json['workedMinutes'] as num?)?.toInt() ?? 0,
-        breakMinutes: (json['breakMinutes'] as num?)?.toInt() ?? 0,
-        isPayrollLocked: json['isPayrollLocked'] as bool? ?? false,
-        actions: (json['availableActions'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
-            .map(GiornataActionDto.fromJson)
-            .toList(),
-      );
+    status: json['status'] as String? ?? 'ClockedOut',
+    workedMinutes: (json['workedMinutes'] as num?)?.toInt() ?? 0,
+    breakMinutes: (json['breakMinutes'] as num?)?.toInt() ?? 0,
+    isPayrollLocked: json['isPayrollLocked'] as bool? ?? false,
+    actions: (json['availableActions'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(GiornataActionDto.fromJson)
+        .toList(),
+  );
 }
 
 // ── Client ────────────────────────────────────────────────────────────────────
@@ -180,24 +271,17 @@ class WorklogApiClient {
   /// Idempotent upsert: the server matches on (tenant, user, clientId) and
   /// updates the row (e.g. fills endTime) without creating duplicates.
   /// Throws [DioException] on network / server error.
-  Future<List<UpsertSessionResponse>> upsertSessions(
-    List<MobileSessionDto> sessions,
-  ) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/worklog/mobile/sessions',
-      data: {
-        'sessions': sessions.map((s) => s.toJson()).toList(),
-      },
+      data: {'sessions': sessions.map((s) => s.toJson()).toList()},
     );
 
     final data = response.data;
     if (data == null) throw StateError('Risposta vuota da upsertSessions');
 
     final list = data['sessions'] as List<dynamic>? ?? [];
-    return list
-        .cast<Map<String, dynamic>>()
-        .map(UpsertSessionResponse.fromJson)
-        .toList();
+    return list.cast<Map<String, dynamic>>().map(UpsertSessionResponse.fromJson).toList();
   }
 
   /// GET /api/worklog/mobile/today
@@ -205,22 +289,57 @@ class WorklogApiClient {
   /// Returns the current user's WorkLogs for today.
   /// Throws [DioException] on network / server error.
   Future<List<TodayWorkLogDto>> getToday() async {
-    final response = await _dio.get<List<dynamic>>(
-      '/api/worklog/mobile/today',
-    );
+    final response = await _dio.get<List<dynamic>>('/api/worklog/mobile/today');
 
     final list = response.data ?? [];
-    return list
-        .cast<Map<String, dynamic>>()
-        .map(TodayWorkLogDto.fromJson)
-        .toList();
+    return list.cast<Map<String, dynamic>>().map(TodayWorkLogDto.fromJson).toList();
   }
+
+  /// GET /api/WorkLog?userId=&dateFrom=&dateTo=
+  ///
+  /// This user's own plain WorkLog entries (no ticket/cantiere scope) between [dateFrom] and
+  /// [dateTo] inclusive, most recent first — the backend's own default sort when `sort` is
+  /// omitted (`WorkLogService.ResolveSort`: WorkDate desc). Backs StepOre's last-resort hours
+  /// suggestion, offered only when neither the ticket tier nor the cantiere tier found anything.
+  /// Distinct from [getToday] (today only, `mobile/today`, a different DTO shape) and
+  /// [getGiornata] (aggregate status, not individual entries). Throws [DioException] on
+  /// network/server error — the caller decides what offline means for this call site.
+  Future<List<UserWorkLogDto>> fetchForUser({
+    required String userId,
+    required DateTime dateFrom,
+    required DateTime dateTo,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/api/WorkLog',
+      queryParameters: {
+        'userId': userId,
+        'dateFrom': _dateOnly(dateFrom),
+        'dateTo': _dateOnly(dateTo),
+        'pageSize': 20,
+        'page': 1,
+      },
+    );
+
+    final data = response.data;
+    if (data == null) return [];
+
+    final raw = data['items'] as List<dynamic>? ?? [];
+    return raw.cast<Map<String, dynamic>>().map(UserWorkLogDto.fromJson).toList();
+  }
+
+  static String _dateOnly(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   /// GET /api/WorkLog/today
   ///
   /// The server's own view of the day, including which actions it will accept right now and
-  /// why it will refuse the others. Distinct from [getToday], which returns the raw entries
-  /// the sync path reconciles against.
+  /// why it will refuse the others. Distinct from [getToday], which hits a separate endpoint
+  /// (`GET mobile/today`, `WorkLogController.MobileToday`) and returns the raw per-session
+  /// WorkLog entries for the day (id, clientId, start/end, tipoOra) with no aggregate status or
+  /// available actions. Reconciliation (`WorkLogReconciler`) and sync (`TimbraSyncService`) both
+  /// use this method, not [getToday] — [getToday] has no call site in the app today.
   ///
   /// Throws [DioException] on network / server error — including offline, which is a normal
   /// state here and not an error the user should see.
@@ -230,6 +349,65 @@ class WorklogApiClient {
     final data = response.data;
     if (data == null) throw StateError('Risposta vuota da getGiornata');
     return GiornataDto.fromJson(data);
+  }
+
+  /// POST /api/worklog/kiosk/scan
+  ///
+  /// Clocks [userId] in or out (toggle, same as [GiornataDto]'s server-decided semantics) using
+  /// a kiosk device's rotating QR [token]. Runs over the caller's own authenticated session
+  /// (`dioProvider`'s bearer token) — this is the technician's phone scanning the wall tablet,
+  /// not the kiosk device's own `X-Api-Key` credential [KioskApiClient] uses.
+  ///
+  /// No location/customer here on purpose: the kiosk device carries its own fixed site
+  /// (registered once on the web admin's "Dispositivi kiosk" page), and
+  /// `WorkLogController.KioskScan` resolves it server-side from the device — the scanning phone
+  /// is never asked, and couldn't override it if it tried.
+  ///
+  /// [userId] must be the caller's own internal db id (`internalUserIdProvider`) —
+  /// `WorkLogController.KioskScan`'s Check 5 rejects anything else, by design (no
+  /// buddy-punching).
+  Future<KioskScanResult> kioskScan({required String token, required String userId}) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/worklog/kiosk/scan',
+        data: {'token': token, 'userId': userId},
+      );
+      final data = response.data ?? const <String, dynamic>{};
+      return KioskScanResult(
+        action: data['action'] as String? ?? 'in',
+        workLogId: data['workLogId'] as String? ?? '',
+        endTime: data['endTime'] != null ? DateTime.parse(data['endTime'] as String) : null,
+      );
+    } on DioException catch (e) {
+      throw _mapKioskScanError(e);
+    }
+  }
+
+  KioskScanException _mapKioskScanError(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 402) return const KioskScanException(KioskScanFailureReason.notEntitled);
+    if (status == 403) return const KioskScanException(KioskScanFailureReason.forbidden);
+    if (status == 400) {
+      // WorkLogController's kiosk/scan 400s are plain `BadRequest("...")` results, not
+      // ProblemDetails — [ApiController]'s automatic problem-details filter only rewrites
+      // results with a null Value, and these all set one, so the body is the raw string itself
+      // (JSON-serialized, e.g. `"Kiosk non piu attivo"`), never a {detail, title} object.
+      final body = e.response?.data;
+      final message = body is String ? body : (body is Map ? body['title'] as String? : null);
+      if (message != null && message.contains('non piu attivo')) {
+        return KioskScanException(KioskScanFailureReason.deviceRevoked, message);
+      }
+      return KioskScanException(KioskScanFailureReason.invalidOrExpiredToken, message);
+    }
+    switch (e.type) {
+      case DioExceptionType.connectionError:
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.sendTimeout:
+        return const KioskScanException(KioskScanFailureReason.network);
+      default:
+        return KioskScanException(KioskScanFailureReason.unknown, e.message);
+    }
   }
 }
 

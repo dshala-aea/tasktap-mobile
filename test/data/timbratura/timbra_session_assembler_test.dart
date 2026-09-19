@@ -14,12 +14,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_session_assembler.dart';
 
-WorkSession _ws(String id, String type, DateTime time) => WorkSession(
-      id: id,
-      eventType: type,
-      eventTime: time,
-      isPendingSync: true,
-    );
+WorkSession _ws(
+  String id,
+  String type,
+  DateTime time, {
+  double? latitude,
+  double? longitude,
+  double? gpsAccuracyMeters,
+}) => WorkSession(
+  id: id,
+  eventType: type,
+  eventTime: time,
+  isPendingSync: true,
+  latitude: latitude,
+  longitude: longitude,
+  gpsAccuracyMeters: gpsAccuracyMeters,
+);
 
 void main() {
   group('assembleIntervals', () {
@@ -39,10 +49,7 @@ void main() {
     test('ingresso → fine → one closed interval', () {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 17);
-      final intervals = assembleIntervals([
-        _ws('id-1', 'ingresso', t1),
-        _ws('id-2', 'fine', t2),
-      ]);
+      final intervals = assembleIntervals([_ws('id-1', 'ingresso', t1), _ws('id-2', 'fine', t2)]);
       expect(intervals.length, 1);
       expect(intervals[0].clientId, 'id-1');
       expect(intervals[0].startTime, t1);
@@ -52,10 +59,7 @@ void main() {
     test('ingresso → pausa → one closed interval', () {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 12);
-      final intervals = assembleIntervals([
-        _ws('id-1', 'ingresso', t1),
-        _ws('id-2', 'pausa', t2),
-      ]);
+      final intervals = assembleIntervals([_ws('id-1', 'ingresso', t1), _ws('id-2', 'pausa', t2)]);
       expect(intervals.length, 1);
       expect(intervals[0].clientId, 'id-1');
       expect(intervals[0].startTime, t1);
@@ -124,6 +128,78 @@ void main() {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final intervals = assembleIntervals([_ws('id-1', 'fine', t1)]);
       expect(intervals, isEmpty);
+    });
+
+    // ── GPS capture (item 10b) ────────────────────────────────────────────────
+    //
+    // Backend's MobileSessionDto carries a single "GPS at punch time" lat/lng pair per interval,
+    // so only the opener's (ingresso/ripresa) position is meaningful — this is what
+    // TimbraSyncService reads off WorkInterval and forwards.
+
+    group('GPS position (opener event only)', () {
+      test('ingresso with GPS → interval carries that position', () {
+        final t = DateTime.utc(2026, 6, 23, 8);
+        final intervals = assembleIntervals([
+          _ws('id-1', 'ingresso', t, latitude: 45.4654, longitude: 9.1859),
+        ]);
+        expect(intervals[0].latitude, 45.4654);
+        expect(intervals[0].longitude, 9.1859);
+      });
+
+      test('ingresso with no GPS → interval position is null', () {
+        final t = DateTime.utc(2026, 6, 23, 8);
+        final intervals = assembleIntervals([_ws('id-1', 'ingresso', t)]);
+        expect(intervals[0].latitude, isNull);
+        expect(intervals[0].longitude, isNull);
+      });
+
+      test("closing event's own GPS is ignored — only the opener's position is carried", () {
+        final t1 = DateTime.utc(2026, 6, 23, 8);
+        final t2 = DateTime.utc(2026, 6, 23, 17);
+        final intervals = assembleIntervals([
+          _ws('id-1', 'ingresso', t1, latitude: 45.0, longitude: 9.0),
+          // A 'fine' event carrying coordinates would be unusual (PunchNotifier never captures
+          // GPS for it), but the assembler must not let it clobber the opener's position anyway.
+          _ws('id-2', 'fine', t2, latitude: 46.0, longitude: 10.0),
+        ]);
+        expect(intervals[0].latitude, 45.0);
+        expect(intervals[0].longitude, 9.0);
+      });
+
+      test('each interval after a ripresa carries its own opener\'s position, not the first\'s', () {
+        final t1 = DateTime.utc(2026, 6, 23, 8);
+        final t2 = DateTime.utc(2026, 6, 23, 12);
+        final t3 = DateTime.utc(2026, 6, 23, 13);
+        final intervals = assembleIntervals([
+          _ws('id-1', 'ingresso', t1, latitude: 45.0, longitude: 9.0),
+          _ws('id-2', 'pausa', t2),
+          _ws('id-3', 'ripresa', t3, latitude: 45.5, longitude: 9.5),
+        ]);
+        expect(intervals.length, 2);
+        expect(intervals[0].latitude, 45.0);
+        expect(intervals[1].latitude, 45.5);
+        expect(intervals[1].longitude, 9.5);
+      });
+    });
+
+    // ── GPS accuracy (item 10c) ────────────────────────────────────────────────
+    //
+    // Same "opener only" carry-through as latitude/longitude — see WorkInterval.gpsAccuracyMeters.
+
+    group('GPS accuracy (opener event only)', () {
+      test('ingresso with accuracy → interval carries it', () {
+        final t = DateTime.utc(2026, 6, 23, 8);
+        final intervals = assembleIntervals([
+          _ws('id-1', 'ingresso', t, latitude: 45.4654, longitude: 9.1859, gpsAccuracyMeters: 12.0),
+        ]);
+        expect(intervals[0].gpsAccuracyMeters, 12.0);
+      });
+
+      test('ingresso with no accuracy reported → interval accuracy is null', () {
+        final t = DateTime.utc(2026, 6, 23, 8);
+        final intervals = assembleIntervals([_ws('id-1', 'ingresso', t)]);
+        expect(intervals[0].gpsAccuracyMeters, isNull);
+      });
     });
   });
 }

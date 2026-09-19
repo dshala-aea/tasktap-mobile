@@ -4,33 +4,40 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import '../../presentation/providers/schedule_providers.dart'
+    show allLocationsProvider, allCustomersProvider;
+import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Filter options for the ticket list.
 enum _TicketFilter { tutti, aperti, inCorso, inAttesa, completati }
 
 extension _TicketFilterLabel on _TicketFilter {
   String get label => switch (this) {
-        _TicketFilter.tutti => 'Tutti',
-        _TicketFilter.aperti => 'Aperti',
-        _TicketFilter.inCorso => 'In corso',
-        _TicketFilter.inAttesa => 'In attesa',
-        _TicketFilter.completati => 'Completati',
-      };
+    _TicketFilter.tutti => 'Tutti',
+    _TicketFilter.aperti => 'Aperti',
+    _TicketFilter.inCorso => 'In corso',
+    _TicketFilter.inAttesa => 'In attesa',
+    _TicketFilter.completati => 'Completati',
+  };
 
   String? get statusMatch => switch (this) {
-        _TicketFilter.tutti => null,
-        _TicketFilter.aperti => 'aperto',
-        _TicketFilter.inCorso => 'in corso',
-        _TicketFilter.inAttesa => 'in attesa',
-        _TicketFilter.completati => 'completato',
-      };
+    _TicketFilter.tutti => null,
+    _TicketFilter.aperti => 'aperto',
+    _TicketFilter.inCorso => 'in corso',
+    _TicketFilter.inAttesa => 'in attesa',
+    _TicketFilter.completati => 'completato',
+  };
 }
 
 class TicketListScreen extends StatefulWidget {
@@ -64,14 +71,19 @@ class _TicketListScreenState extends State<TicketListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo ticket',
-        onPressed: () async {
-          final created = await context.push<bool>('/ticket/new');
-          if (created == true && mounted) {
-            // List auto-refreshes via StreamProvider, no manual refresh needed.
-          }
-        },
+      floatingActionButton: Padding(
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
+        child: AppFab(
+          tooltip: 'Nuovo ticket',
+          onPressed: () async {
+            final created = await context.push<bool>('/ticket/new');
+            if (created == true && mounted) {
+              // List auto-refreshes via StreamProvider, no manual refresh needed.
+            }
+          },
+        ),
       ),
     );
   }
@@ -101,6 +113,16 @@ class _TicketListBody extends ConsumerWidget {
     final statusMap = statusMapAsync.valueOrNull ?? {};
     final allTickets = ticketsAsync.valueOrNull ?? [];
 
+    // One stream each for the whole list, not one per row: this list can run to hundreds of
+    // tickets, and a per-row locationByIdProvider/customerByIdProvider watch opened (and tore
+    // down, on scroll-out) two live Drift subscriptions per visible row.
+    final locationsById = {
+      for (final l in ref.watch(allLocationsProvider).valueOrNull ?? <Location>[]) l.id: l,
+    };
+    final customersById = {
+      for (final c in ref.watch(allCustomersProvider).valueOrNull ?? <Customer>[]) c.id: c,
+    };
+
     // Compute counts for subtitle.
     final inCorsoCount = allTickets.where((t) {
       final name = statusMap[t.statusId]?.toLowerCase() ?? '';
@@ -110,9 +132,9 @@ class _TicketListBody extends ConsumerWidget {
     // Filter + search.
     final filtered = allTickets.where((t) {
       final statusName = statusMap[t.statusId]?.toLowerCase() ?? '';
-      final matchFilter =
-          filter.statusMatch == null || statusName == filter.statusMatch;
-      final matchQuery = query.isEmpty ||
+      final matchFilter = filter.statusMatch == null || statusName == filter.statusMatch;
+      final matchQuery =
+          query.isEmpty ||
           t.title.toLowerCase().contains(query.toLowerCase()) ||
           t.id.toLowerCase().contains(query.toLowerCase());
       return matchFilter && matchQuery;
@@ -122,83 +144,104 @@ class _TicketListBody extends ConsumerWidget {
       onRefresh: () => ref.read(syncProvider.notifier).performSync(),
       child: CustomScrollView(
         slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Ticket',
-            subtitle: '${allTickets.length} totali · $inCorsoCount in corso',
-            actions: [
-              HeaderIconBtn(
-                icon: LucideIcons.filter,
-                label: 'Filtra interventi',
-                onTap: () {},
-              ),
-            ],
-          ),
-        ),
-        if (pendingTickets.isNotEmpty)
           SliverToBoxAdapter(
-            child: _PendingTicketsSection(pendingTickets: pendingTickets),
-          ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: searchCtrl,
-            hint: 'Cerca ticket…',
-            onChanged: onQueryChanged,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _TicketFilter.values.map((f) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: AppChip(
-                      label: f.label,
-                      active: filter == f,
-                      onTap: () => onFilterChanged(f),
-                    ),
-                  );
-                }).toList(),
-              ),
+            // The filter icon that used to sit here was `onTap: () {}` — and redundant besides: the
+            // status chips twelve pixels below it are the filter, and they work. A dead control
+            // next to a live one doing the same job teaches the technician to distrust both.
+            child: ScreenHeader(
+              title: 'Ticket',
+              subtitle: '${allTickets.length} totali · $inCorsoCount in corso',
             ),
           ),
-        ),
-        if (ticketsAsync.isLoading)
-          const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(48),
-                child: CircularProgressIndicator(),
-              ),
-            ),
-          )
-        else if (filtered.isEmpty)
+          if (pendingTickets.isNotEmpty)
+            SliverToBoxAdapter(child: _PendingTicketsSection(pendingTickets: pendingTickets)),
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.ticket,
-              title: 'Nessun ticket',
-              body: 'I ticket sincronizzati appariranno qui.',
+            child: Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.pagePadding),
+              child: AppSearchBar(
+                controller: searchCtrl,
+                hint: 'Cerca ticket…',
+                onChanged: onQueryChanged,
+              ),
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.md,
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _TicketFilter.values.map((f) {
+                    return Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: AppChip(
+                        label: f.label,
+                        active: filter == f,
+                        onTap: () => onFilterChanged(f),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+          // Loading and empty are small, mutually-exclusive, non-virtualized widgets — safe to
+          // crossfade as a unit. The populated list is not part of this switcher: it's a real
+          // SliverList (see below), still lazily built by SliverChildBuilderDelegate — a list "up
+          // to hundreds of tickets" per this file's own comment must stay virtualized, so it is
+          // never made to live inside a single AnimatedSwitcher child (which would force it to
+          // build eagerly). Its own first-appearance polish is the per-row fade in _TicketRow.
+          SliverToBoxAdapter(
+            child: AnimatedSwitcher(
+              duration: MediaQuery.of(context).disableAnimations
+                  ? Duration.zero
+                  : const Duration(milliseconds: 220),
+              transitionBuilder: (child, animation) =>
+                  FadeTransition(opacity: animation, child: child),
+              child: ticketsAsync.isLoading
+                  ? const Padding(
+                      key: ValueKey('loading'),
+                      padding: EdgeInsets.all(AppSpacing.xxxl),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : filtered.isEmpty
+                  ? EmptyState(
+                      key: const ValueKey('empty'),
+                      icon: LucideIcons.ticket,
+                      title: 'Nessun ticket',
+                      body: 'I ticket sincronizzati appariranno qui.',
+                    )
+                  : const SizedBox.shrink(key: ValueKey('list-placeholder')),
+            ),
+          ),
+          if (!ticketsAsync.isLoading && filtered.isNotEmpty)
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final ticket = filtered[i];
                 final statusName = statusMap[ticket.statusId] ?? '';
+                final location = locationsById[ticket.locationId];
+                final customerName = location != null
+                    ? customersById[location.customerId]?.companyName
+                    : null;
+                final where = [
+                  customerName,
+                  location?.city,
+                ].where((s) => s != null && s.isNotEmpty).join(' · ');
                 return _TicketRow(
+                  key: ValueKey(ticket.id),
                   ticket: ticket,
                   statusName: statusName,
+                  where: where,
                   isLast: i == filtered.length - 1,
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
         ],
       ),
     );
@@ -215,14 +258,19 @@ class _PendingTicketsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        0,
+        AppSpacing.pagePadding,
+        AppSpacing.md,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'In sospeso (${pendingTickets.length})',
             style: TextStyle(
-              fontFamily: 'Sora',
+              fontFamily: 'Archivo',
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: context.colors.ink,
@@ -230,7 +278,7 @@ class _PendingTicketsSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           for (final t in pendingTickets) ...[
-            _PendingTicketRow(ticket: t),
+            _PendingTicketRow(key: ValueKey(t.id), ticket: t),
             const SizedBox(height: 8),
           ],
         ],
@@ -240,7 +288,7 @@ class _PendingTicketsSection extends StatelessWidget {
 }
 
 class _PendingTicketRow extends ConsumerWidget {
-  const _PendingTicketRow({required this.ticket});
+  const _PendingTicketRow({super.key, required this.ticket});
 
   final PendingTicket ticket;
 
@@ -248,28 +296,38 @@ class _PendingTicketRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = PendingTicketState.fromString(ticket.state);
     final isFailed = state == PendingTicketState.failed;
+    final reducedMotion = MediaQuery.of(context).disableAnimations;
 
     final String subtitle = switch (state) {
-      PendingTicketState.pendingSync =>
-        'In attesa di connessione — verrà inviato automaticamente',
+      PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
       PendingTicketState.submitting => 'Invio in corso…',
-      PendingTicketState.failed =>
-        'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+      PendingTicketState.failed => 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
       PendingTicketState.submitted => 'Inviato',
     };
 
-    return Container(
-      padding: const EdgeInsets.all(12),
+    // Queued → failed used to be a hard cut: background and icon both flip the instant a retry
+    // gives up, on a row whose whole job is telling the technician their offline work is
+    // accounted for — the one state change here that actually needs to register as "something
+    // changed," not just "something is different now."
+    return AnimatedContainer(
+      duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: isFailed ? context.colors.redSoft : context.colors.bg3,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          Icon(
-            isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
-            size: 18,
-            color: isFailed ? context.colors.red : context.colors.inkMuted,
+          AnimatedSwitcher(
+            duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 250),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
+            child: Icon(
+              isFailed ? LucideIcons.alertTriangle : LucideIcons.wifiOff,
+              key: ValueKey(isFailed),
+              size: 18,
+              color: isFailed ? context.colors.red : context.colors.inkMuted,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -282,7 +340,7 @@ class _PendingTicketRow extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Archivo',
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: context.colors.ink,
@@ -293,7 +351,7 @@ class _PendingTicketRow extends ConsumerWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: 'Manrope',
+                    fontFamily: 'Archivo',
                     fontSize: 11,
                     color: context.colors.inkMuted,
                   ),
@@ -303,11 +361,17 @@ class _PendingTicketRow extends ConsumerWidget {
           ),
           if (isFailed) ...[
             const SizedBox(width: 8),
+            // fullWidth: false — AppButton defaults to full-width (wraps itself in
+            // SizedBox(width: double.infinity)) for every variant but ghost, and this sits
+            // directly in a Row with no Expanded/Flexible around it. A Row hands a non-flex child
+            // unbounded max width, so double.infinity-in-double.infinity threw
+            // "BoxConstraints forces an infinite width" at layout — a real crash on any failed
+            // pending ticket, not just a test artifact (nothing exercised this path before).
             AppButton(
               label: 'Riprova',
               size: AppButtonSize.sm,
-              onPressed: () =>
-                  ref.read(ticketCreationQueueProvider).retry(ticket.id),
+              fullWidth: false,
+              onPressed: () => ref.read(ticketCreationQueueProvider).retry(ticket.id),
             ),
           ],
         ],
@@ -316,50 +380,205 @@ class _PendingTicketRow extends ConsumerWidget {
   }
 }
 
-class _TicketRow extends ConsumerWidget {
+/// Vetro (module #2). Was a [ListRow] — icon avatar, title, reference-number subtitle, status
+/// pill and date off to the side. Replaced because that told you *what kind of thing* a row was,
+/// not what to do about it: title alone rarely says where to go or how urgent it is, and opening
+/// every row just to triage a list of thirty is the exact complaint that started this redesign.
+///
+/// A priority stripe (real `Ticket.priority`, synced since schema 20 — see `app_database.dart`)
+/// replaces the old leading icon tile; description, cliente/località (resolved the same way
+/// `work_queue_section.dart` already does, not a new lookup) and due date fill out the row. No
+/// blur here on purpose: this list can run to hundreds of rows, and a per-row backdrop filter
+/// during scroll is exactly the "many small instances" cost blur is expensive for — flat rows on
+/// the page ground, divided by a hairline border, read as the same system without paying for it.
+class _TicketRow extends StatelessWidget {
   const _TicketRow({
+    super.key,
     required this.ticket,
     required this.statusName,
+    required this.where,
     required this.isLast,
   });
 
   final Ticket ticket;
   final String statusName;
+
+  /// Cliente · città, resolved once for the whole list — see `_TicketListBody`'s own comment on
+  /// why this is no longer a per-row provider watch.
+  final String where;
   final bool isLast;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final shortId =
-        ticket.id.length > 8 ? ticket.id.substring(0, 8) : ticket.id;
-    final dateLabel =
-        DateFormat('dd/MM/yy', 'it').format(ticket.createdAt.toLocal());
+  Color _priorityColor(BuildContext context, AppVetroPalette v, String? priority) =>
+      switch (priority) {
+        // statusBad/statusWarn: context.vetro's semantic status tokens, out of scope for this sweep
+        // (see status_colors.dart) — left as-is, not converted to a flat AppColors constant.
+        'Urgente' => v.statusBad,
+        'Alta' => v.statusWarn,
+        'Media' => AppColors.Y,
+        _ => context.colors.inkFaint, // Bassa, or unset — neutral, not a fifth accent colour
+      };
 
-    return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(LucideIcons.ticket, size: 20, color: context.colors.inkMuted),
-      ),
-      title: ticket.title,
-      subtitle: '#$shortId',
-      meta: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
-          const SizedBox(height: 2),
-          Text(
-            dateLabel,
-            style: TextStyle(fontSize: 10, color: context.colors.inkMuted),
+  /// The stripe's own colour is invisible to a colorblind technician or a screen reader —
+  /// spoken/announced priority instead of relying on hue alone to triage a list of thirty tickets.
+  String _priorityLabel(String? priority) => switch (priority) {
+    'Urgente' => 'Priorità urgente',
+    'Alta' => 'Priorità alta',
+    'Media' => 'Priorità media',
+    _ => 'Priorità bassa',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final v = context.vetro;
+    final reference = ticketReference(ticket.numero);
+
+    final dueDate = ticket.dueDate;
+    final isOverdue =
+        dueDate != null &&
+        dueDate.isBefore(DateTime.now()) &&
+        statusName.toLowerCase() != 'completato';
+    final dueLabel = dueDate == null
+        ? null
+        : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
+
+    final row = Semantics(
+      // The stripe colour is a sighted-only cue; this is the same information for TalkBack/
+      // VoiceOver, and for a sighted colorblind technician who can't tell the hues apart either.
+      label:
+          '${_priorityLabel(ticket.priority)}. ${ticket.title}${statusName.isNotEmpty ? ', $statusName' : ''}',
+      button: true,
+      child: InkWell(
+        onTap: () => context.push('/ticket/${ticket.id}'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.pagePadding,
+            vertical: AppSpacing.md,
           ),
-        ],
+          decoration: BoxDecoration(
+            border: isLast ? null : Border(bottom: BorderSide(color: context.colors.borderLight)),
+          ),
+          // IntrinsicHeight, not a bare `Row(crossAxisAlignment: stretch, ...)`: this row lives
+          // inside a SliverChildBuilderDelegate item, which sizes to its own content and hands the
+          // Row no bounded height — `stretch` needs one to stretch the stripe into, and without
+          // IntrinsicHeight giving it one first, layout throws (RenderFlex._computeSizes, unbounded
+          // height) rather than silently doing something wrong.
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 3,
+                  margin: const EdgeInsets.only(right: AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: _priorityColor(context, v, ticket.priority),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          if (reference != null)
+                            Text(
+                              reference,
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: context.colors.inkFaint,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          const Spacer(),
+                          if (statusName.isNotEmpty) StatusPill(stato: statusName, small: true),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        ticket.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: context.colors.ink,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                      if (ticket.description != null && ticket.description!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          ticket.description!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
+                            fontSize: 12,
+                            color: context.colors.inkMuted,
+                          ),
+                        ),
+                      ],
+                      if (where.isNotEmpty || dueLabel != null) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            if (where.isNotEmpty) ...[
+                              Icon(LucideIcons.mapPin, size: 11, color: context.colors.inkFaint),
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  where,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: context.colors.ink,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (dueLabel != null) ...[
+                              const Spacer(),
+                              Text(
+                                dueLabel,
+                                style: TextStyle(
+                                  fontFamily: 'Archivo',
+                                  fontSize: 11,
+                                  fontWeight: isOverdue ? FontWeight.w700 : FontWeight.w600,
+                                  color: isOverdue ? v.statusBad : context.colors.inkMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      showDivider: !isLast,
-      onTap: () => context.push('/ticket/${ticket.id}'),
+    );
+
+    // A row's first appearance — scrolled into the viewport, freshly built by
+    // SliverChildBuilderDelegate — fades in rather than snapping into place. Runs once per
+    // Element lifetime (TweenAnimationBuilder does not replay on an ordinary rebuild of the same
+    // element, only when it is first created), so scrolling a row in and out of view does not
+    // re-trigger it, and it never touches the list's own virtualization above.
+    if (MediaQuery.of(context).disableAnimations) return row;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      builder: (context, value, child) => Opacity(opacity: value, child: child),
+      child: row,
     );
   }
 }

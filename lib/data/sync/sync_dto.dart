@@ -6,10 +6,19 @@ class SyncResultDto {
   final DateTime? since;
   final List<ScheduleDto> schedules;
   final List<ReportDto> draftReports;
+
+  /// Reports this technician submitted that have since left the draft state — Inviato,
+  /// Controllato, Fatturato, Respinto, Annullato. Read-only on the device: this is what lets the
+  /// Rapportini list (and the reject/rework affordance) show what happened to a report after it
+  /// left the phone, instead of the device never learning the office rejected it. See
+  /// `MobileUserSyncResult.SubmittedReports` (backend) for the query this mirrors.
+  final List<ReportDto> submittedReports;
   final List<CustomerDto> customers;
   final List<LocationDto> locations;
   final List<TicketDto> tickets;
+  final List<SyncTicketMaterialeDto> ticketMateriali;
   final List<MaterialeDto> materiali;
+  final List<MaterialeBarcodeDto> materialiBarcodes;
   final List<CantiereDto> cantieri;
   final List<TicketStatusDto> ticketStatuses;
   final List<TicketTypeDto> ticketTypes;
@@ -20,10 +29,13 @@ class SyncResultDto {
     required this.since,
     required this.schedules,
     required this.draftReports,
+    this.submittedReports = const [],
     required this.customers,
     required this.locations,
     required this.tickets,
+    this.ticketMateriali = const [],
     required this.materiali,
+    this.materialiBarcodes = const [],
     required this.cantieri,
     required this.ticketStatuses,
     required this.ticketTypes,
@@ -36,10 +48,19 @@ class SyncResultDto {
       since: j['since'] == null ? null : DateTime.parse(j['since'] as String),
       schedules: _list(j['schedules'], ScheduleDto.fromJson),
       draftReports: _list(j['draftReports'], ReportDto.fromJson),
+      submittedReports: _list(j['submittedReports'], ReportDto.fromJson),
       customers: _list(j['customers'], CustomerDto.fromJson),
       locations: _list(j['locations'], LocationDto.fromJson),
       tickets: _list(j['tickets'], TicketDto.fromJson),
+      ticketMateriali: _list(
+        j['ticketMateriali'],
+        SyncTicketMaterialeDto.fromJson,
+      ),
       materiali: _list(j['materiali'], MaterialeDto.fromJson),
+      materialiBarcodes: _list(
+        j['materialiBarcodes'],
+        MaterialeBarcodeDto.fromJson,
+      ),
       cantieri: _list(j['cantieri'], CantiereDto.fromJson),
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
@@ -59,9 +80,9 @@ class ColleagueDto {
   const ColleagueDto({required this.id, required this.displayName});
 
   factory ColleagueDto.fromJson(Map<String, dynamic> j) => ColleagueDto(
-        id: j['id'] as String,
-        displayName: j['displayName'] as String? ?? '',
-      );
+    id: j['id'] as String,
+    displayName: j['displayName'] as String? ?? '',
+  );
 }
 
 // ── Customer ───────────────────────────────────────────────────────────────────
@@ -102,22 +123,22 @@ class CustomerDto {
   });
 
   factory CustomerDto.fromJson(Map<String, dynamic> j) => CustomerDto(
-        id: j['id'] as String,
-        tenantId: j['tenantId'] as String,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        updatedAt: _dt(j['updatedAt']),
-        companyName: j['companyName'] as String,
-        taxId: j['taxId'] as String?,
-        address: j['address'] as String?,
-        city: j['city'] as String?,
-        postalCode: j['postalCode'] as String?,
-        country: j['country'] as String?,
-        phone: j['phone'] as String?,
-        email: j['email'] as String?,
-        contactPerson: j['contactPerson'] as String?,
-        notes: j['notes'] as String?,
-        isActive: j['isActive'] as bool? ?? true,
-      );
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    companyName: j['companyName'] as String,
+    taxId: j['taxId'] as String?,
+    address: j['address'] as String?,
+    city: j['city'] as String?,
+    postalCode: j['postalCode'] as String?,
+    country: j['country'] as String?,
+    phone: j['phone'] as String?,
+    email: j['email'] as String?,
+    contactPerson: j['contactPerson'] as String?,
+    notes: j['notes'] as String?,
+    isActive: j['isActive'] as bool? ?? true,
+  );
 }
 
 // ── Location ───────────────────────────────────────────────────────────────────
@@ -158,22 +179,22 @@ class LocationDto {
   });
 
   factory LocationDto.fromJson(Map<String, dynamic> j) => LocationDto(
-        id: j['id'] as String,
-        tenantId: j['tenantId'] as String,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        updatedAt: _dt(j['updatedAt']),
-        customerId: j['customerId'] as String,
-        name: j['name'] as String,
-        address: j['address'] as String?,
-        city: j['city'] as String?,
-        postalCode: j['postalCode'] as String?,
-        country: j['country'] as String?,
-        latitude: _dbl(j['latitude']),
-        longitude: _dbl(j['longitude']),
-        phone: j['phone'] as String?,
-        notes: j['notes'] as String?,
-        isActive: j['isActive'] as bool? ?? true,
-      );
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    customerId: j['customerId'] as String,
+    name: j['name'] as String,
+    address: j['address'] as String?,
+    city: j['city'] as String?,
+    postalCode: j['postalCode'] as String?,
+    country: j['country'] as String?,
+    latitude: _dbl(j['latitude']),
+    longitude: _dbl(j['longitude']),
+    phone: j['phone'] as String?,
+    notes: j['notes'] as String?,
+    isActive: j['isActive'] as bool? ?? true,
+  );
 }
 
 // ── Ticket ─────────────────────────────────────────────────────────────────────
@@ -184,6 +205,17 @@ class TicketDto {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final String title;
+
+  /// The per-tenant display number — what a technician and the customer both call this job.
+  ///
+  /// It has been on the wire the whole time: mobile sync returns the `Ticket` entity itself and
+  /// the entity carries `Numero`. This client simply never read it, so every ticket surface fell
+  /// back to `id.substring(0, 8)` and titled the screen with eight hex characters of a GUID.
+  ///
+  /// Null for tickets created before numbering existed. Null means *no number*, and the UI shows
+  /// nothing rather than reaching for the id again.
+  final String? numero;
+
   final String? description;
   final String customerId;
   final String locationId;
@@ -198,12 +230,22 @@ class TicketDto {
   final String? prodottoAssistenzaId;
   final String? commessaId;
 
+  /// The cantiere this ticket is linked to, when it has one. See `Tickets.cantiereId`'s own doc
+  /// comment in app_database.dart for why this needed a schema+cursor bump to actually reach the
+  /// device rather than just being added to this DTO.
+  final String? cantiereId;
+
+  /// Wire form is the enum name — see `Tickets.priority`'s own doc comment in `app_database.dart`.
+  final String? priority;
+  final DateTime? dueDate;
+
   const TicketDto({
     required this.id,
     required this.tenantId,
     required this.createdAt,
     this.updatedAt,
     required this.title,
+    this.numero,
     this.description,
     required this.customerId,
     required this.locationId,
@@ -217,28 +259,35 @@ class TicketDto {
     this.contractId,
     this.prodottoAssistenzaId,
     this.commessaId,
+    this.cantiereId,
+    this.priority,
+    this.dueDate,
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
-        id: j['id'] as String,
-        tenantId: j['tenantId'] as String,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        updatedAt: _dt(j['updatedAt']),
-        title: j['title'] as String,
-        description: j['description'] as String?,
-        customerId: j['customerId'] as String,
-        locationId: j['locationId'] as String,
-        assignedUserId: j['assignedUserId'] as String?,
-        statusId: (j['statusId'] as num).toInt(),
-        typeId: (j['typeId'] as num).toInt(),
-        agentId: j['agentId'] as String?,
-        closedAt: _dt(j['closedAt']),
-        technicianNotes: j['technicianNotes'] as String?,
-        internalNotes: j['internalNotes'] as String?,
-        contractId: j['contractId'] as String?,
-        prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
-        commessaId: j['commessaId'] as String?,
-      );
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    title: j['title'] as String,
+    numero: j['numero'] as String?,
+    description: j['description'] as String?,
+    customerId: j['customerId'] as String,
+    locationId: j['locationId'] as String,
+    assignedUserId: j['assignedUserId'] as String?,
+    statusId: (j['statusId'] as num).toInt(),
+    typeId: (j['typeId'] as num).toInt(),
+    agentId: j['agentId'] as String?,
+    closedAt: _dt(j['closedAt']),
+    technicianNotes: j['technicianNotes'] as String?,
+    internalNotes: j['internalNotes'] as String?,
+    contractId: j['contractId'] as String?,
+    prodottoAssistenzaId: j['prodottoAssistenzaId'] as String?,
+    commessaId: j['commessaId'] as String?,
+    cantiereId: j['cantiereId'] as String?,
+    priority: j['priority'] as String?,
+    dueDate: _dt(j['dueDate']),
+  );
 }
 
 // ── Materiale ──────────────────────────────────────────────────────────────────
@@ -275,22 +324,110 @@ class MaterialeDto {
   });
 
   factory MaterialeDto.fromJson(Map<String, dynamic> j) => MaterialeDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    code: j['code'] as String,
+    name: j['name'] as String,
+    description: j['description'] as String?,
+    unitOfMeasure: j['unitOfMeasure'] as String?,
+    category: j['category'] as String?,
+    marca: j['marca'] as String?,
+    // decimal? fields serialise as either a JSON number or a string
+    // (pattern-validated), same idiom as ReportMateriale.UnitPrice — see
+    // Materiale.AliquotaIVA's XML doc for why.
+    purchasePrice: _dbl(j['purchasePrice']),
+    salePrice: _dbl(j['salePrice']),
+    isActive: j['isActive'] as bool? ?? true,
+  );
+}
+
+// ── TicketMateriale (fabbisogno) ─────────────────────────────────────────────
+//
+// Mirrors the backend's raw TicketMateriale entity field-for-field — not the Italian-translated
+// shape the per-ticket detail REST endpoint's own response DTO uses (see TicketMaterialeDto in
+// ticket_detail_api_client.dart, which stays the online source of truth for that screen). This
+// one is only ever read into the local Drift mirror.
+class SyncTicketMaterialeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String ticketId;
+  final String? materialeId;
+  final String? freeTextName;
+  final double quantity;
+  final String? unitOfMeasure;
+  final String? notes;
+  final bool isAvailable;
+
+  const SyncTicketMaterialeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.ticketId,
+    this.materialeId,
+    this.freeTextName,
+    required this.quantity,
+    this.unitOfMeasure,
+    this.notes,
+    this.isAvailable = false,
+  });
+
+  factory SyncTicketMaterialeDto.fromJson(Map<String, dynamic> j) =>
+      SyncTicketMaterialeDto(
         id: j['id'] as String,
         tenantId: j['tenantId'] as String,
         createdAt: DateTime.parse(j['createdAt'] as String),
         updatedAt: _dt(j['updatedAt']),
-        code: j['code'] as String,
-        name: j['name'] as String,
-        description: j['description'] as String?,
+        ticketId: j['ticketId'] as String,
+        materialeId: j['materialeId'] as String?,
+        freeTextName: j['freeTextName'] as String?,
+        quantity: _dbl(j['quantity']) ?? 0,
         unitOfMeasure: j['unitOfMeasure'] as String?,
-        category: j['category'] as String?,
-        marca: j['marca'] as String?,
-        // decimal? fields serialise as either a JSON number or a string
-        // (pattern-validated), same idiom as ReportMateriale.UnitPrice — see
-        // Materiale.AliquotaIVA's XML doc for why.
-        purchasePrice: _dbl(j['purchasePrice']),
-        salePrice: _dbl(j['salePrice']),
-        isActive: j['isActive'] as bool? ?? true,
+        notes: j['notes'] as String?,
+        isAvailable: j['isAvailable'] as bool? ?? false,
+      );
+}
+
+// ── MaterialeBarcode ─────────────────────────────────────────────────────────
+//
+// Mirrors the backend's SyncMaterialeBarcodeDto — a barcode/QR code tied to a Materiale, for
+// offline scan-to-lookup. See MaterialeBarcodes (local Drift table) for why this is delta-synced
+// independently of its parent MaterialeDto.
+class MaterialeBarcodeDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String materialeId;
+  final String barcode;
+  final String? barcodeType;
+  final bool isPrimary;
+
+  const MaterialeBarcodeDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.materialeId,
+    required this.barcode,
+    this.barcodeType,
+    this.isPrimary = false,
+  });
+
+  factory MaterialeBarcodeDto.fromJson(Map<String, dynamic> j) =>
+      MaterialeBarcodeDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        materialeId: j['materialeId'] as String,
+        barcode: j['barcode'] as String,
+        barcodeType: j['barcodeType'] as String?,
+        isPrimary: j['isPrimary'] as bool? ?? false,
       );
 }
 
@@ -308,8 +445,7 @@ const _cantiereStatusValues = <String, int>{
 /// Parses the wire enum string to the int the Drift column stores.
 /// Unknown/missing values default to Active — the safest fallback for a
 /// picker that filters on "active" cantieri (see [CantieriProvider] usage).
-int parseCantiereStatus(dynamic v) =>
-    _cantiereStatusValues[v as String?] ?? 0;
+int parseCantiereStatus(dynamic v) => _cantiereStatusValues[v as String?] ?? 0;
 
 class CantiereDto {
   final String id;
@@ -345,21 +481,21 @@ class CantiereDto {
   });
 
   factory CantiereDto.fromJson(Map<String, dynamic> j) => CantiereDto(
-        id: j['id'] as String,
-        tenantId: j['tenantId'] as String,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        updatedAt: _dt(j['updatedAt']),
-        name: j['name'] as String,
-        address: j['address'] as String?,
-        city: j['city'] as String?,
-        postalCode: j['postalCode'] as String?,
-        notes: j['notes'] as String?,
-        startDate: _dt(j['startDate']),
-        endDate: _dt(j['endDate']),
-        status: parseCantiereStatus(j['status']),
-        customerId: j['customerId'] as String?,
-        commessaId: j['commessaId'] as String?,
-      );
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    name: j['name'] as String,
+    address: j['address'] as String?,
+    city: j['city'] as String?,
+    postalCode: j['postalCode'] as String?,
+    notes: j['notes'] as String?,
+    startDate: _dt(j['startDate']),
+    endDate: _dt(j['endDate']),
+    status: parseCantiereStatus(j['status']),
+    customerId: j['customerId'] as String?,
+    commessaId: j['commessaId'] as String?,
+  );
 }
 
 // ── TicketStatus ───────────────────────────────────────────────────────────────
@@ -380,12 +516,12 @@ class TicketStatusDto {
   });
 
   factory TicketStatusDto.fromJson(Map<String, dynamic> j) => TicketStatusDto(
-        id: (j['id'] as num).toInt(),
-        tenantId: j['tenantId'] as String,
-        name: j['name'] as String,
-        isDefault: j['isDefault'] as bool? ?? false,
-        isClosed: j['isClosed'] as bool? ?? false,
-      );
+    id: (j['id'] as num).toInt(),
+    tenantId: j['tenantId'] as String,
+    name: j['name'] as String,
+    isDefault: j['isDefault'] as bool? ?? false,
+    isClosed: j['isClosed'] as bool? ?? false,
+  );
 }
 
 // ── TicketType ─────────────────────────────────────────────────────────────────
@@ -404,11 +540,11 @@ class TicketTypeDto {
   });
 
   factory TicketTypeDto.fromJson(Map<String, dynamic> j) => TicketTypeDto(
-        id: (j['id'] as num).toInt(),
-        tenantId: j['tenantId'] as String,
-        name: j['name'] as String,
-        description: j['description'] as String?,
-      );
+    id: (j['id'] as num).toInt(),
+    tenantId: j['tenantId'] as String,
+    name: j['name'] as String,
+    description: j['description'] as String?,
+  );
 }
 
 // ── Schedule ───────────────────────────────────────────────────────────────────
@@ -420,8 +556,10 @@ class ScheduleDto {
   final DateTime? updatedAt;
   final String? ticketId;
   final DateTime activityDate;
+
   /// TimeStart serialised as "hh:mm:ss" string (C# TimeSpan JSON default)
   final String timeStart;
+
   /// TimeEnd serialised as "hh:mm:ss" string
   final String timeEnd;
   final String userId;
@@ -529,7 +667,8 @@ class ScheduleAssigneeDto {
     this.isLegacyStaff = false,
   });
 
-  factory ScheduleAssigneeDto.fromJson(Map<String, dynamic> j) => ScheduleAssigneeDto(
+  factory ScheduleAssigneeDto.fromJson(Map<String, dynamic> j) =>
+      ScheduleAssigneeDto(
         userId: j['userId'] as String,
         isUserActive: j['isUserActive'] as bool? ?? true,
         isDirect: j['isDirect'] as bool? ?? false,
@@ -538,7 +677,6 @@ class ScheduleAssigneeDto {
         isLegacyStaff: j['isLegacyStaff'] as bool? ?? false,
       );
 }
-
 
 // ── Report (draft) ─────────────────────────────────────────────────────────────
 
@@ -600,41 +738,39 @@ class ReportDto {
   });
 
   factory ReportDto.fromJson(Map<String, dynamic> j) => ReportDto(
-        id: j['id'] as String,
-        tenantId: j['tenantId'] as String,
-        createdAt: DateTime.parse(j['createdAt'] as String),
-        updatedAt: _dt(j['updatedAt']),
-        title: j['title'] as String,
-        scheduleId: j['scheduleId'] as String?,
-        ticketId: j['ticketId'] as String?,
-        customerId: j['customerId'] as String?,
-        details: j['details'] as String?,
-        insertedUserId: j['insertedUserId'] as String,
-        locationId: j['locationId'] as String,
-        startedAt: _dt(j['startedAt']),
-        endedAt: _dt(j['endedAt']),
-        documentTemplateId: j['documentTemplateId'] as String?,
-        customerSignatureAllegatoId:
-            j['customerSignatureAllegatoId'] as String?,
-        technicianSignatureAllegatoId:
-            j['technicianSignatureAllegatoId'] as String?,
-        technicianNotes: j['technicianNotes'] as String?,
-        closedAt: _dt(j['closedAt']),
-        stato: j['stato'] as String? ?? 'Bozza',
-        inviatoAt: _dt(j['inviatoAt']),
-        controllatoAt: _dt(j['controllatoAt']),
-        controllatoDa: j['controllatoDa'] as String?,
-        fatturatoAt: _dt(j['fatturatoAt']),
-        materialiNotRequired: j['materialiNotRequired'] as bool? ?? false,
-        customerSignoffText: j['customerSignoffText'] as String?,
-        customerSignoffAt: _dt(j['customerSignoffAt']),
-      );
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    title: j['title'] as String,
+    scheduleId: j['scheduleId'] as String?,
+    ticketId: j['ticketId'] as String?,
+    customerId: j['customerId'] as String?,
+    details: j['details'] as String?,
+    insertedUserId: j['insertedUserId'] as String,
+    locationId: j['locationId'] as String,
+    startedAt: _dt(j['startedAt']),
+    endedAt: _dt(j['endedAt']),
+    documentTemplateId: j['documentTemplateId'] as String?,
+    customerSignatureAllegatoId: j['customerSignatureAllegatoId'] as String?,
+    technicianSignatureAllegatoId:
+        j['technicianSignatureAllegatoId'] as String?,
+    technicianNotes: j['technicianNotes'] as String?,
+    closedAt: _dt(j['closedAt']),
+    stato: j['stato'] as String? ?? 'Bozza',
+    inviatoAt: _dt(j['inviatoAt']),
+    controllatoAt: _dt(j['controllatoAt']),
+    controllatoDa: j['controllatoDa'] as String?,
+    fatturatoAt: _dt(j['fatturatoAt']),
+    materialiNotRequired: j['materialiNotRequired'] as bool? ?? false,
+    customerSignoffText: j['customerSignoffText'] as String?,
+    customerSignoffAt: _dt(j['customerSignoffAt']),
+  );
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-DateTime? _dt(dynamic v) =>
-    v == null ? null : DateTime.parse(v as String);
+DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
 
 double? _dbl(dynamic v) {
   if (v == null) return null;

@@ -1,15 +1,19 @@
 // lib/features/calendario/views/settimana_view.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 
-import '../../../core/theme/app_colors.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+
 import '../../../core/theme/status_colors.dart';
 import '../../../data/local/app_database.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../calendario_providers.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Calendario → Settimana view: 7-column day grid for the selected week with
 /// compact event chips per day. Columns are scrollable horizontally; chips
@@ -42,10 +46,17 @@ class SettimanaView extends ConsumerWidget {
     final grouped = groupSchedulesByDay(schedules);
     final today = DateTime.now();
     final todayKey = DateTime(today.year, today.month, today.day);
+    final teamScheduleIds =
+        ref.watch(teamAssignedScheduleIdsProvider).valueOrNull ?? const {};
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        0,
+        AppSpacing.sm,
+        context.navClearance,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: days.map((day) {
@@ -64,28 +75,31 @@ class SettimanaView extends ConsumerWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   child: AppTappable(
                     onTap: () => onDayTap?.call(day),
-                    color: isToday ? context.colors.surfaceInverse : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
+                    color: isToday ? AppColors.Y : Colors.transparent,
+                    borderRadius: AppRack.insetShape,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           dayAbbr.format(day).toUpperCase(),
-                          style: GoogleFonts.manrope(
+                          style: TextStyle(
+                            fontFamily: 'Archivo',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: isToday ? AppColors.Y : context.colors.inkMuted,
+                            color: isToday
+                                ? Colors.white
+                                : context.colors.inkMuted,
                             letterSpacing: 0.5,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '${day.day}',
-                          style: GoogleFonts.sora(
+                          style: TextStyle(
+                            fontFamily: 'Archivo Narrow',
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color:
-                                isToday ? context.colors.inkInverse : context.colors.ink,
+                            color: isToday ? Colors.white : context.colors.ink,
                           ),
                         ),
                       ],
@@ -93,19 +107,37 @@ class SettimanaView extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                // Event chips
-                ...daySchedules.map((s) => _WeekEventChip(
-                      schedule: s,
-                      onTap: () => onEventTap?.call(s),
-                    )),
-                if (daySchedules.isEmpty)
-                  SizedBox(
-                    height: 32,
-                    child: Center(
-                      child: Text('–',
-                          style: TextStyle(color: context.colors.inkDisabled, fontSize: 12)),
+                // Event chips — a day with more chips than fit the column's height scrolls on its
+                // own axis rather than overflowing the Row's cross-axis (the outer scroller only
+                // moves horizontally, between days).
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ...daySchedules.map(
+                          (s) => _WeekEventChip(
+                            schedule: s,
+                            onTap: () => onEventTap?.call(s),
+                            isTeam: teamScheduleIds.contains(s.id),
+                          ),
+                        ),
+                        if (daySchedules.isEmpty)
+                          SizedBox(
+                            height: 32,
+                            child: Center(
+                              child: Text(
+                                '–',
+                                style: TextStyle(
+                                  color: context.colors.inkDisabled,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
+                ),
               ],
             ),
           );
@@ -116,15 +148,23 @@ class SettimanaView extends ConsumerWidget {
 }
 
 class _WeekEventChip extends StatelessWidget {
-  const _WeekEventChip({required this.schedule, required this.onTap});
+  const _WeekEventChip({
+    required this.schedule,
+    required this.onTap,
+    this.isTeam = false,
+  });
 
   final Schedule schedule;
   final VoidCallback onTap;
 
+  /// See `_ScheduleListRow.isTeam` in `lista_view.dart` for what this flag means and why it has
+  /// no squadra name attached.
+  final bool isTeam;
+
   @override
   Widget build(BuildContext context) {
     final statusName = scheduleStatusName(schedule.statusId);
-    final pair = statusColor(statusName);
+    final pair = statusColor(context, statusName);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
@@ -132,18 +172,41 @@ class _WeekEventChip extends StatelessWidget {
       child: AppTappable(
         onTap: onTap,
         color: pair.background,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: AppRack.insetShape,
         border: Border.all(color: pair.foreground.withAlpha(51), width: 0.5),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Text(
-          schedule.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.manrope(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: pair.foreground,
-          ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 6,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isTeam) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Icon(
+                  LucideIcons.users,
+                  size: 9,
+                  color: pair.foreground.withAlpha(204),
+                ),
+              ),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                schedule.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: pair.foreground,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

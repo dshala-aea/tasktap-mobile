@@ -9,62 +9,83 @@ import '../../presentation/providers/report_editor_providers.dart';
 // Rapportino list providers (D3b)
 //
 // Drives RapportiniListScreen and RapportinoViewScreen.
-// Only local DraftReports are cached; server lifecycle (Pagata/Annullato) is
-// not synced back to the device yet.
+//
+// The full server lifecycle (Inviato/Controllato/Fatturato/Respinto/Annullato) now syncs back to
+// the device — see SyncService's `submittedReports` upsert (sync_service.dart) — so this reads
+// every report the device knows about, not just still-local drafts. See
+// `DraftReportRepository.watchAllReports` for why no `isLocalOnly` filter is needed here.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// Stream of all local drafts (isLocalOnly == true), newest first.
-final rapportiniListProvider =
-    StreamProvider.autoDispose<List<DraftReport>>((ref) {
+/// Stream of every report this technician has locally — drafts and synced-down submitted
+/// reports alike — newest first.
+final rapportiniListProvider = StreamProvider.autoDispose<List<DraftReport>>((ref) {
   final repo = ref.watch(draftReportRepositoryProvider);
-  return repo.watchLocalDrafts();
+  return repo.watchAllReports();
 });
 
 /// Stream a single draft by id — for the view screen.
-final rapportinoByIdProvider =
-    StreamProvider.autoDispose.family<DraftReport?, String>((ref, reportId) {
+final rapportinoByIdProvider = StreamProvider.autoDispose.family<DraftReport?, String>((
+  ref,
+  reportId,
+) {
   final repo = ref.watch(draftReportRepositoryProvider);
   return repo.watchDraft(reportId);
 });
 
 /// Stream staff rows for a given report.
-final rapportinoStaffProvider =
-    StreamProvider.autoDispose.family<List<ReportStaffTableData>, String>(
-  (ref, reportId) {
-    final repo = ref.watch(draftReportRepositoryProvider);
-    return repo.watchStaff(reportId);
-  },
-);
+final rapportinoStaffProvider = StreamProvider.autoDispose
+    .family<List<ReportStaffTableData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchStaff(reportId);
+    });
 
 /// Stream materiali rows for a given report.
-final rapportinoMaterialiProvider =
-    StreamProvider.autoDispose.family<List<ReportMaterialiData>, String>(
-  (ref, reportId) {
-    final repo = ref.watch(draftReportRepositoryProvider);
-    return repo.watchMateriali(reportId);
-  },
-);
+final rapportinoMaterialiProvider = StreamProvider.autoDispose
+    .family<List<ReportMaterialiData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchMateriali(reportId);
+    });
+
+/// Stream every allegato (photos + signatures) for a given report — used by
+/// RapportinoViewScreen to show what Step 6 attached and to resolve the customer signature's
+/// actual image instead of a placeholder. `watchAllegati` filters by `entityId == reportId`
+/// alone, so this list mixes photo and signature rows together; callers separate them by
+/// matching id against `DraftReport.customerSignatureAllegatoId`.
+final rapportinoAllegatiProvider = StreamProvider.autoDispose
+    .family<List<ReportAllegatiData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchAllegati(reportId);
+    });
+
+/// Sums the hours actually worked across staff rows, in minutes.
+///
+/// `hoursWorked` wins whenever it's set, matching `StaffRow.effectiveHours` (the same value these
+/// rows were persisted with by `ReportEditorNotifier._staffToCompanion`) — not just as a no-timer
+/// fallback. Once a timer has been stopped at least once, `hoursWorked` holds the per-segment
+/// accumulated total, while the raw startTime→endTime span also covers any idle gap between a
+/// stop and a later restart (startTime is pinned to the first start). Falling back to the span
+/// here would double-count that gap in the list's own total even though the fix in
+/// `StaffRow.effectiveHours` already keeps it out of what gets saved.
+double totalOreMinutes(List<ReportStaffTableData> rows) {
+  return rows.fold<double>(0, (acc, r) {
+    if (r.hoursWorked != null) return acc + (r.hoursWorked! * 60.0);
+    if (r.startTime != null && r.endTime != null) {
+      final worked = r.endTime!.difference(r.startTime!).inMinutes - r.pauseMinutes;
+      return acc + worked;
+    }
+    return acc;
+  });
+}
 
 /// Derived: total ore from staff rows for a given report.
 /// Returns a formatted string like "3h 30min" or "—".
-final rapportinoOreProvider =
-    Provider.autoDispose.family<String, String>((ref, reportId) {
+final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, reportId) {
   final staffAsync = ref.watch(rapportinoStaffProvider(reportId));
   return staffAsync.when(
     loading: () => '—',
     error: (e, s) => '—',
     data: (rows) {
-      final totalMinutes = rows.fold<double>(
-        0,
-        (acc, r) {
-          if (r.startTime != null && r.endTime != null) {
-            final worked =
-                r.endTime!.difference(r.startTime!).inMinutes - r.pauseMinutes;
-            return acc + worked;
-          }
-          return acc + ((r.hoursWorked ?? 0.0) * 60.0);
-        },
-      );
+      final totalMinutes = totalOreMinutes(rows);
       if (totalMinutes <= 0) return '—';
       final h = totalMinutes ~/ 60;
       final m = (totalMinutes % 60).round();
@@ -74,35 +95,116 @@ final rapportinoOreProvider =
   );
 });
 
+/// Combines staff count, materiali count, and the ore label for one report into a single
+/// watch — see `_RapportinoRow.build` (rapportini_list_screen.dart), which used to `ref.watch`
+/// [rapportinoStaffProvider], [rapportinoMaterialiProvider], and [rapportinoOreProvider]
+/// separately per row. Purely additive: the three providers above are untouched, so
+/// `RapportinoViewScreen` (which still watches them individually) is unaffected.
+class RapportinoRowSummary {
+  const RapportinoRowSummary({
+    required this.staffCount,
+    required this.materialiCount,
+    required this.oreLabel,
+  });
+
+  final int staffCount;
+  final int materialiCount;
+  final String oreLabel;
+}
+
+final rapportinoRowSummaryProvider = Provider.autoDispose.family<RapportinoRowSummary, String>((
+  ref,
+  reportId,
+) {
+  final staffAsync = ref.watch(rapportinoStaffProvider(reportId));
+  final materialiAsync = ref.watch(rapportinoMaterialiProvider(reportId));
+  final oreLabel = ref.watch(rapportinoOreProvider(reportId));
+  return RapportinoRowSummary(
+    staffCount: staffAsync.valueOrNull?.length ?? 0,
+    materialiCount: materialiAsync.valueOrNull?.length ?? 0,
+    oreLabel: oreLabel,
+  );
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Status-name resolver
 //
 // Maps submissionState + stato → Italian label for the StatusPill.
-// submitted  → "Inviata"
-// draft/readyToSubmit/failed  → "Bozza"
-// uploadingMedia/submitting   → "Invio…"
+// uploadingMedia/submitting → "Invio…" (local, in-flight — no server stato yet)
+// stato == Respinto         → "Respinta"
+// stato == Controllato      → "Controllato"
+// stato == Fatturato        → "Pagata"
+// stato == Annullato        → "Annullato"
+// submissionState==submitted OR stato==Inviato → "Inviata"
+// everything else           → "Bozza"
+//
+// `stato` is checked first for the four states past "submitted" because it — not the local
+// `submissionState` — is the field SyncService's `submittedReports` upsert keeps current: a
+// report this device never itself submitted (or one the office has since moved further along —
+// rejected, checked, invoiced) needs the right label regardless of what `submissionState` this
+// device last recorded for it. "Inviata" falls back to `submissionState == submitted` alongside
+// `stato == Inviato` because the two are set together by `markSubmitted` on this device but a
+// sync only ever touches `stato`, never `submissionState` (see SyncService._upsertDraftReports) —
+// requiring both would make a report this device submitted, and that has not been touched by the
+// office since, momentarily read as "Bozza" between submit and the next sync.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Returns the Italian status label shown in the StatusPill for a draft.
 String rapportinoStatusLabel(DraftReport draft) {
   final sub = DraftSubmissionState.fromString(draft.submissionState);
-  return switch (sub) {
-    DraftSubmissionState.submitted => 'Inviata',
-    DraftSubmissionState.uploadingMedia => 'Invio…',
-    DraftSubmissionState.submitting => 'Invio…',
-    _ => 'Bozza',
-  };
+  if (sub == DraftSubmissionState.uploadingMedia || sub == DraftSubmissionState.submitting) {
+    return 'Invio…';
+  }
+  switch (draft.stato) {
+    case 'Respinto':
+      return 'Respinta';
+    case 'Controllato':
+      return 'Controllato';
+    case 'Fatturato':
+      return 'Pagata';
+    case 'Annullato':
+      return 'Annullato';
+  }
+  if (sub == DraftSubmissionState.submitted || draft.stato == 'Inviato') {
+    return 'Inviata';
+  }
+  return 'Bozza';
 }
 
-/// Returns true when the draft is submitted (read-only view mode).
+/// Returns true once the report has left the draft state — either this device submitted it
+/// (`submissionState == submitted`) or a sync learned it left `Bozza` some other way — so the
+/// list should route to the read-only view instead of the editor.
 bool rapportinoIsSubmitted(DraftReport draft) {
-  return DraftSubmissionState.fromString(draft.submissionState) ==
-      DraftSubmissionState.submitted;
+  if (DraftSubmissionState.fromString(draft.submissionState) == DraftSubmissionState.submitted) {
+    return true;
+  }
+  return draft.stato != 'Bozza';
 }
 
 /// Returns true when the draft is in-flight (uploading or submitting).
 bool rapportinoIsInFlight(DraftReport draft) {
   final sub = DraftSubmissionState.fromString(draft.submissionState);
-  return sub == DraftSubmissionState.uploadingMedia ||
-      sub == DraftSubmissionState.submitting;
+  return sub == DraftSubmissionState.uploadingMedia || sub == DraftSubmissionState.submitting;
+}
+
+/// Returns true when the office rejected this report (`Inviato → Respinto`) — the case that
+/// needs a rework affordance rather than a plain read-only view. See `createReworkDraft`
+/// (create_draft.dart) and RapportinoViewScreen's rejection banner.
+bool rapportinoIsRejected(DraftReport draft) => draft.stato == 'Respinto';
+
+/// Mirrors the backend's own guard — `ReportStateMachine.CanEditOrDelete`
+/// (TaskTapAPI.Application/Services/Reports/ReportStateMachine.cs) — which now allows edit/delete
+/// through Bozza, Inviato and Respinto, and blocks from Controllato onward (and for Annullato/
+/// NonFatturabile): "before the office review/approval step", not "still a draft". Previously
+/// mobile gated the list's edit/delete actions to `stato == 'Bozza'` only, which under-matched
+/// what the server actually allows once a report has been sent but not yet reviewed.
+bool rapportinoCanEditOrDelete(DraftReport draft) {
+  switch (draft.stato) {
+    case 'Bozza':
+    case 'Inviato':
+    case 'Respinto':
+      return true;
+    default:
+      return false;
+  }
 }

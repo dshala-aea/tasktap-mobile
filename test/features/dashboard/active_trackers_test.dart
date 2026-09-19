@@ -39,8 +39,10 @@ void main() {
         'startedAtUtc': '2026-08-14T06:30:00Z',
       });
 
-      expect(tracker.elapsedAt(DateTime.utc(2026, 8, 14, 8, 0)),
-          const Duration(hours: 1, minutes: 30));
+      expect(
+        tracker.elapsedAt(DateTime.utc(2026, 8, 14, 8, 0)),
+        const Duration(hours: 1, minutes: 30),
+      );
     });
 
     /// An explicit offset is a zone too.

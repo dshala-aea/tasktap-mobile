@@ -1,10 +1,16 @@
 // dart format width=100
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+
+/// `TicketsController.UploadAttachment`'s own cap. Checked client-side too — before a photo/file
+/// is even queued or sent — so an oversized file is rejected with a clear, actionable sentence
+/// rather than a 400 the technician has to make sense of after the upload appears to have run.
+const int kMaxTicketAttachmentBytes = 10 * 1024 * 1024;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TicketDetailApiClient
@@ -29,10 +35,7 @@ class TicketDetailApiClient {
       queryParameters: {'ticketId': ticketId, 'pageSize': 100},
     );
     final items = (response.data?['items'] as List<dynamic>?) ?? const [];
-    return items
-        .cast<Map<String, dynamic>>()
-        .map(TicketReportSummary.fromJson)
-        .toList();
+    return items.cast<Map<String, dynamic>>().map(TicketReportSummary.fromJson).toList();
   }
 
   /// Files uploaded directly to the ticket (not via a rapportino).
@@ -47,9 +50,14 @@ class TicketDetailApiClient {
   /// The ticket's checklist, resolved from the maintenance-template version it
   /// materialised at creation (ADR-0012). An empty list means no version
   /// resolved — a legitimate state, not a loading failure.
+  ///
+  /// The endpoint's response is `{groups, assetProgress}` (backend commit
+  /// 001be48) — this only reads `groups`; `assetProgress` (per-asset
+  /// Controllato/Note) has no UI here yet, tracked as separate follow-up work.
   Future<List<TicketControlGroupDto>> fetchControls(String ticketId) async {
-    final response = await _dio.get<List<dynamic>>('/api/tickets/$ticketId/controls');
-    return (response.data ?? const [])
+    final response = await _dio.get<Map<String, dynamic>>('/api/tickets/$ticketId/controls');
+    final groups = response.data?['groups'] as List<dynamic>?;
+    return (groups ?? const [])
         .cast<Map<String, dynamic>>()
         .map(TicketControlGroupDto.fromJson)
         .toList();
@@ -62,6 +70,43 @@ class TicketDetailApiClient {
         .cast<Map<String, dynamic>>()
         .map(TicketMaterialeDto.fromJson)
         .toList();
+  }
+
+  /// Uploads one photo/file directly to a ticket (Allegati tab).
+  ///
+  /// [ticketId] — the ticket to attach it to. [localPath] — absolute path to the local file.
+  /// [fileName] — original file name. [contentType] — MIME type (e.g. "image/jpeg").
+  ///
+  /// The 10 MB cap is enforced by `TicketsController.UploadAttachment` — see
+  /// [kMaxTicketAttachmentBytes] for the client-side check that runs before this is ever called.
+  ///
+  /// Throws [DioException] on network/server error.
+  Future<TicketAttachmentUploadResponse> uploadAttachment({
+    required String ticketId,
+    required String localPath,
+    required String fileName,
+    required String contentType,
+  }) async {
+    final file = File(localPath);
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        file.path,
+        filename: fileName,
+        contentType: DioMediaType.parse(contentType),
+      ),
+    });
+
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/tickets/$ticketId/attachments',
+      data: formData,
+      options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+    );
+
+    final data = response.data;
+    if (data == null) {
+      throw StateError('Empty response from attachment upload');
+    }
+    return TicketAttachmentUploadResponse.fromJson(data);
   }
 }
 
@@ -107,8 +152,12 @@ class TicketReportSummary {
   final String id;
   final String title;
 
-  /// Raw ReportStatoEnum ordinal (0=Bozza … 5=Annullato) — the backend
-  /// serializes it as an int, not the string StatusPill expects.
+  /// ReportStatoEnum ordinal (0=Bozza … 6=NonFatturabile), normalized from whichever shape the
+  /// backend sends: `GET /api/Reports` serializes the real `Report` entity, and `Report.Stato`
+  /// carries `[JsonConverter(JsonStringEnumConverter)]` (added for the mobile sync payload — see
+  /// that property's own doc comment), so this arrives as the enum's NAME ("Inviato"), not its
+  /// ordinal — unlike other endpoints whose hand-rolled anonymous projections don't inherit that
+  /// attribute and still send a raw int. Tolerate both rather than assume one.
   final int stato;
   final DateTime createdAt;
 
@@ -119,7 +168,24 @@ class TicketReportSummary {
     3: 'Fatturato',
     4: 'Respinto',
     5: 'Annullato',
+    6: 'NonFatturabile',
   };
+
+  static const _statoOrdinals = {
+    'Bozza': 0,
+    'Inviato': 1,
+    'Controllato': 2,
+    'Fatturato': 3,
+    'Respinto': 4,
+    'Annullato': 5,
+    'NonFatturabile': 6,
+  };
+
+  static int _parseStato(dynamic raw) {
+    if (raw is int) return raw;
+    if (raw is String) return _statoOrdinals[raw] ?? 0;
+    return 0;
+  }
 
   String get statoLabel => _statoLabels[stato] ?? 'Bozza';
 
@@ -127,7 +193,7 @@ class TicketReportSummary {
     return TicketReportSummary(
       id: json['id'] as String,
       title: json['title'] as String? ?? '',
-      stato: json['stato'] as int? ?? 0,
+      stato: _parseStato(json['stato']),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
@@ -159,6 +225,24 @@ class TicketAttachmentDto {
       sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
       contentUrl: json['contentUrl'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+/// Response from `POST /api/tickets/{id}/attachments` — just enough to mark the local outbox
+/// row submitted. The full [TicketAttachmentDto] (fileName/size/createdAt/…) comes back from the
+/// next `GET /api/Tickets/{id}/attachments` instead, which is what the Allegati tab re-fetches
+/// after an upload lands.
+class TicketAttachmentUploadResponse {
+  const TicketAttachmentUploadResponse({required this.allegatoId, required this.contentUrl});
+
+  final String allegatoId;
+  final String contentUrl;
+
+  factory TicketAttachmentUploadResponse.fromJson(Map<String, dynamic> json) {
+    return TicketAttachmentUploadResponse(
+      allegatoId: json['allegatoId'] as String,
+      contentUrl: json['contentUrl'] as String? ?? '',
     );
   }
 }
@@ -199,17 +283,21 @@ class TicketMaterialeDto {
   }
 }
 
-/// How a control renders its input and stores its value — mirrors the
-/// backend's ControlTypeEnum (serialized as a plain int, no string converter).
-enum ControlType { checkbox, freeText, radioOnOff, date, singleChoice, unknown }
+/// How a control renders its input and stores its value — mirrors the backend's
+/// ControlTypeEnum, now a string wire shape (JsonStringEnumConverter) instead of a plain int.
+/// Renamed from the old checkbox/freeText/radioOnOff/date/singleChoice set to
+/// checkbox/text/trueFalse/dateTime/singleChoice + a new [number] — by MEANING, not by the old
+/// int ordinal (which was fully reordered server-side, see backend's ControlTypeEnum.cs).
+enum ControlType { text, number, dateTime, checkbox, trueFalse, options, unknown }
 
-ControlType _controlTypeFromInt(int? value) {
+ControlType _controlTypeFromWire(String? value) {
   return switch (value) {
-    0 => ControlType.checkbox,
-    1 => ControlType.freeText,
-    2 => ControlType.radioOnOff,
-    3 => ControlType.date,
-    4 => ControlType.singleChoice,
+    'Text' => ControlType.text,
+    'Number' => ControlType.number,
+    'DateTime' => ControlType.dateTime,
+    'Checkbox' => ControlType.checkbox,
+    'TrueFalse' => ControlType.trueFalse,
+    'Options' => ControlType.options,
     _ => ControlType.unknown,
   };
 }
@@ -268,6 +356,7 @@ class TicketControlDto {
     this.stringValue,
     this.boolValue,
     this.dateValue,
+    this.numberValue,
   });
 
   final String id;
@@ -277,7 +366,7 @@ class TicketControlDto {
   final ControlType type;
   final bool isRequired;
 
-  /// Serialized choice list (JSON array of strings) for [ControlType.singleChoice].
+  /// Serialized choice list (JSON array of strings) for [ControlType.options].
   final String? options;
   final double? valoreLimite;
   final int sortOrder;
@@ -289,6 +378,7 @@ class TicketControlDto {
   final String? stringValue;
   final bool? boolValue;
   final DateTime? dateValue;
+  final double? numberValue;
 
   /// [options] parsed as a choice list, or empty when absent/unparseable.
   List<String> get choiceOptions {
@@ -311,7 +401,7 @@ class TicketControlDto {
       templateControlId: json['templateControlId'] as String? ?? '',
       label: json['label'] as String? ?? '',
       description: json['description'] as String?,
-      type: _controlTypeFromInt(json['type'] as int?),
+      type: _controlTypeFromWire(json['type'] as String?),
       isRequired: json['isRequired'] as bool? ?? false,
       options: json['options'] as String?,
       valoreLimite: _asDouble(json['valoreLimite']),
@@ -319,9 +409,8 @@ class TicketControlDto {
       status: json['status'] as String? ?? 'Pending',
       stringValue: json['stringValue'] as String?,
       boolValue: json['boolValue'] as bool?,
-      dateValue: json['dateValue'] != null
-          ? DateTime.tryParse(json['dateValue'] as String)
-          : null,
+      dateValue: json['dateValue'] != null ? DateTime.tryParse(json['dateValue'] as String) : null,
+      numberValue: _asDouble(json['numberValue']),
     );
   }
 }

@@ -9,6 +9,9 @@
 // - syncNow() with sessions → calls upsertSessions + markSynced
 // - syncNow() on API error → swallows exception (no rethrow)
 // - markSynced receives all event ids (not just opener ids)
+// - resurrection guard: an opener WorkLogReconciler has flagged as orphaned (server already
+//   closed this interval elsewhere) is excluded from the push, so a stale local "still active"
+//   event can never re-open or extend a worklog the server has already closed.
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +33,9 @@ class _FakeRepo implements IWorkSessionRepository {
     required String id,
     required DateTime eventTime,
     required String eventType,
+    double? latitude,
+    double? longitude,
+    double? gpsAccuracyMeters,
   }) async {}
 
   @override
@@ -45,6 +51,9 @@ class _FakeRepo implements IWorkSessionRepository {
 
   @override
   Future<void> clearToday() async {}
+
+  @override
+  Future<void> markReconciledOrphan(String id) async {}
 }
 
 // ── Fake API client ───────────────────────────────────────────────────────────
@@ -57,9 +66,7 @@ class _FakeApiClient extends WorklogApiClient {
   bool shouldThrow = false;
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(
-    List<MobileSessionDto> sessions,
-  ) async {
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async {
     if (shouldThrow) throw Exception('Network error');
     calls.add(List.of(sessions));
     return sessions
@@ -81,12 +88,20 @@ class _FakeApiClient extends WorklogApiClient {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-WorkSession _ws(String id, String type, DateTime time) => WorkSession(
-      id: id,
-      eventType: type,
-      eventTime: time,
-      isPendingSync: true,
-    );
+WorkSession _ws(
+  String id,
+  String type,
+  DateTime time, {
+  String? notes,
+  double? gpsAccuracyMeters,
+}) => WorkSession(
+  id: id,
+  eventType: type,
+  eventTime: time,
+  notes: notes,
+  isPendingSync: true,
+  gpsAccuracyMeters: gpsAccuracyMeters,
+);
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -106,10 +121,7 @@ void main() {
     test('ingresso → fine: calls upsertSessions with one interval', () async {
       final t1 = DateTime.utc(2026, 6, 23, 8);
       final t2 = DateTime.utc(2026, 6, 23, 17);
-      final sessions = [
-        _ws('id-1', 'ingresso', t1),
-        _ws('id-2', 'fine', t2),
-      ];
+      final sessions = [_ws('id-1', 'ingresso', t1), _ws('id-2', 'fine', t2)];
       final repo = _FakeRepo(sessions);
       final api = _FakeApiClient();
       final svc = TimbraSyncService(repo: repo, apiClient: api);
@@ -143,6 +155,18 @@ void main() {
 
       // All three event ids should be marked synced
       expect(repo.markedSynced, containsAll(['id-1', 'id-2', 'id-3']));
+    });
+
+    test('gpsAccuracyMeters is forwarded to the DTO', () async {
+      final t1 = DateTime.utc(2026, 6, 23, 8);
+      final sessions = [_ws('id-1', 'ingresso', t1, gpsAccuracyMeters: 15.5)];
+      final repo = _FakeRepo(sessions);
+      final api = _FakeApiClient();
+      final svc = TimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls[0][0].gpsAccuracyMeters, 15.5);
     });
 
     test('active interval has null endTime in DTO', () async {
@@ -190,6 +214,66 @@ void main() {
       expect(api.calls[0].length, 2);
       expect(api.calls[0][0].clientId, 'id-1');
       expect(api.calls[0][1].clientId, 'id-3');
+    });
+  });
+
+  group('TimbraSyncService.syncNow — resurrection guard', () {
+    test('an orphan-marked open interval is never pushed', () async {
+      final t1 = DateTime.utc(2026, 8, 24, 8);
+      // A stale open shift the reconciler has already determined the server closed elsewhere.
+      final sessions = [_ws('id-1', 'ingresso', t1, notes: reconciledOrphanMarker)];
+      final repo = _FakeRepo(sessions);
+      final api = _FakeApiClient();
+      final svc = TimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls, isEmpty);
+      expect(repo.markedSynced, isEmpty);
+    });
+
+    test(
+      'an orphaned opener does not block a later, legitimate shift from syncing',
+      () async {
+        final t1 = DateTime.utc(2026, 8, 24, 8);
+        final t2 = DateTime.utc(2026, 8, 24, 9);
+        final t3 = DateTime.utc(2026, 8, 24, 14);
+        final sessions = [
+          // Stale shift, closed server-side elsewhere and marked orphaned by the reconciler.
+          _ws('id-1', 'ingresso', t1, notes: reconciledOrphanMarker),
+          // Local correction closing it for display purposes only.
+          _ws('id-2', 'fine', t2),
+          // A brand-new shift punched in normally afterwards.
+          _ws('id-3', 'ingresso', t3),
+        ];
+        final repo = _FakeRepo(sessions);
+        final api = _FakeApiClient();
+        final svc = TimbraSyncService(repo: repo, apiClient: api);
+
+        await svc.syncNow();
+
+        expect(api.calls.length, 1);
+        final dtos = api.calls[0];
+        expect(dtos.length, 1);
+        expect(dtos[0].clientId, 'id-3');
+        expect(dtos[0].endTime, isNull);
+        expect(repo.markedSynced, contains('id-3'));
+        expect(repo.markedSynced, isNot(contains('id-1')));
+      },
+    );
+
+    test('a normal (non-orphaned) open interval is unaffected — still syncs', () async {
+      final t1 = DateTime.utc(2026, 8, 24, 8);
+      final sessions = [_ws('id-1', 'ingresso', t1)];
+      final repo = _FakeRepo(sessions);
+      final api = _FakeApiClient();
+      final svc = TimbraSyncService(repo: repo, apiClient: api);
+
+      await svc.syncNow();
+
+      expect(api.calls.length, 1);
+      expect(api.calls[0][0].clientId, 'id-1');
+      expect(repo.markedSynced, contains('id-1'));
     });
   });
 }

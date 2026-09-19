@@ -1,224 +1,487 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../core/widgets/widgets.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/widgets/app_button.dart';
-import '../../core/widgets/app_stepper.dart';
+import '../../core/theme/app_rack.dart';
+import '../../core/widgets/app_compartment_tile.dart';
+import '../../data/reports/ticket_controls_cache_repository.dart';
+import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import '../ticket/ticket_detail_api_client.dart' show flattenTicketControls;
+import 'ai_draft_action.dart';
 import 'steps/step_dettagli.dart';
 import 'steps/step_materiali_fold.dart';
 import 'steps/step_ore.dart';
 import 'steps/step_riepilogo.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // RapportinoFormScreen
 //
-// 4-step rapportino editor (Dettagli / Ore / Materiali / Riepilogo).
-// Reuses the M4/M5 reportEditorProvider backbone unchanged.
-// The old 7-step RapportinoEditorScreen is superseded by this screen.
+// A checklist of three compartments (Dettagli / Ore / Materiali), not a stepper — see
+// _openStep's own doc comment for why this replaced the sequential wizard. Riepilogo is not a
+// fourth peer tile: it is what the completion card itself opens, because reviewing the draft and
+// fixing whatever's missing is one action, not a checklist item you tick off in advance of doing
+// it. Reuses the M4/M5 reportEditorProvider backbone unchanged, and each step widget unchanged:
+// the same StepDettagli/StepOre/StepMaterialiFold/StepRiepilogo the stepper rendered inline now
+// render inside a bottom sheet instead.
+//
+// Two entry points are pre-empted rather than left as plain taps, on the same principle: don't
+// make the technician do something the flow already knows the answer to.
+//  - Dettagli opens itself on first arrival at a still-empty draft — there's nothing to decide
+//    before seeing it, so requiring a tap first is pure friction.
+//  - Ore no longer arrives pre-populated with the creating technician's hours row (that used to
+//    happen at draft-creation time, before this screen even opened — a row existing before the
+//    technician had done anything was the "prefilled with a stranger" bug this fixed). Instead the
+//    row is added the moment the technician actually opens Ore, and only if it's still empty —
+//    added on genuine entry into the step, not fabricated ahead of it.
+//
+// GPS auto-capture is a third, independent one-shot concern, deliberately NOT piggybacked on the
+// Dettagli auto-open above. Every real draft-creation entry point (ticket detail's "Crea
+// rapportino", the rapportini list's "Nuovo rapportino", create_draft.dart's
+// createCantiereReportDraft) pre-fills a non-empty title, so dettagliDone is already true on first
+// build and the Dettagli auto-open never fires — which used to mean GPS, wired into
+// StepDettagli.initState, never fired either unless the technician manually tapped an already-
+// checkmarked Dettagli tile. Firing it here instead, gated only by the same preconditions
+// captureGpsSilently's callers already use (preference on, no coordinate yet), makes it reachable
+// regardless of whether Dettagli ever opens. StepDettagli no longer captures GPS itself — this is
+// now the only trigger, so there's nothing to race or double-fire.
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// The 4 UI steps exposed by the new form (separate from the legacy
-/// RapportinoStep enum which is still used by the notifier internally).
-enum _FormStep { dettagli, ore, materiali, riepilogo }
-
-const _kSteps = [
-  StepperStep(label: 'Dettagli'),
-  StepperStep(label: 'Ore'),
-  StepperStep(label: 'Materiali'),
-  StepperStep(label: 'Riepilogo'),
-];
-
 class RapportinoFormScreen extends ConsumerStatefulWidget {
-  const RapportinoFormScreen({
-    super.key,
-    required this.reportId,
-  });
+  const RapportinoFormScreen({super.key, required this.reportId});
 
   final String reportId;
 
   @override
-  ConsumerState<RapportinoFormScreen> createState() =>
-      _RapportinoFormScreenState();
+  ConsumerState<RapportinoFormScreen> createState() => _RapportinoFormScreenState();
 }
 
 class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
-  _FormStep _step = _FormStep.dettagli;
+  bool _hasAutoOpenedDettagli = false;
+  bool _hasAttemptedGpsCapture = false;
 
-  int get _stepIndex => _FormStep.values.indexOf(_step);
-  bool get _isFirst => _step == _FormStep.dettagli;
-  bool get _isLast => _step == _FormStep.riepilogo;
+  Future<void> _openOre(BuildContext context) async {
+    final reportId = widget.reportId;
+    final state = ref.read(reportEditorProvider(reportId));
 
-  void _goNext() {
-    final values = _FormStep.values;
-    final idx = values.indexOf(_step);
-    if (idx < values.length - 1) {
-      setState(() => _step = values[idx + 1]);
+    if (state.staffRows.isEmpty) {
+      final internalUserId = await ref.read(internalUserIdProvider.future);
+      // Silently skip the seed (never blocks opening Ore) when the internal id hasn't resolved
+      // yet — the technician can still add themselves manually via "Aggiungi tecnico", the same
+      // picker every other staff row already goes through.
+      if (internalUserId != null) {
+        await ref
+            .read(reportEditorProvider(reportId).notifier)
+            .addStaff(StaffRow(id: 'staff-$internalUserId', userId: internalUserId));
+      }
     }
-  }
 
-  void _goBack() {
-    final values = _FormStep.values;
-    final idx = values.indexOf(_step);
-    if (idx > 0) {
-      setState(() => _step = values[idx - 1]);
-    }
+    if (!context.mounted) return;
+    openCompartmentSheet(
+      context,
+      label: 'Ore',
+      content: StepOre(reportId: reportId),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final editorState = ref.watch(reportEditorProvider(widget.reportId));
+    final reportId = widget.reportId;
+    final editorState = ref.watch(reportEditorProvider(reportId));
+    final subtitle = editorState.title.isEmpty ? null : editorState.title;
 
-    // Build header context string from ticket/cantiere if linked.
-    String? contextSubtitle;
-    if (editorState.ticketId != null && editorState.ticketId!.isNotEmpty) {
-      contextSubtitle = 'Ticket: ${editorState.ticketId}';
-    } else if (editorState.cantiereId != null &&
-        editorState.cantiereId!.isNotEmpty) {
-      contextSubtitle = 'Cantiere: ${editorState.cantiereId}';
-    } else if (editorState.ticketFreeText?.isNotEmpty ?? false) {
-      contextSubtitle = 'Ticket: ${editorState.ticketFreeText}';
+    final dettagliDone = editorState.title.isNotEmpty;
+    final oreDone = editorState.staffRows.isNotEmpty;
+    final materialiDone = editorState.materialeRows.isNotEmpty || editorState.materialiNotRequired;
+
+    // Vacuously done when there's no ticket to hang controls on (a determined state, not an
+    // unknown one) or the ticket's maintenance template genuinely has none — see
+    // controlliCompletionFor's own doc comment. While the async read is still in flight with
+    // nothing cached yet, this deliberately reads as NOT done rather than falling through to the
+    // same empty-list default a genuine zero-controls ticket gets — the alternative was a
+    // false-positive "done" dot on first paint that could flip to incomplete once the real
+    // control list loaded, the exact "flash of wrong information" this screen's own isLoading
+    // gate (below) already guards against for the other three tiles.
+    final ticketId = editorState.ticketId;
+    final controlliDone = ticketId == null
+        ? true
+        : ref
+              .watch(cachedTicketControlsProvider(ticketId))
+              .maybeWhen(
+                data: (groups) => controlliCompletionFor(
+                  requiredControlIds: flattenTicketControls(
+                    groups,
+                  ).map((f) => f.control.id).toList(),
+                  recordedRows: editorState.controlloRows,
+                ),
+                orElse: () => false,
+              );
+
+    // Once per screen lifetime, after the first frame (a BuildContext for showModalBottomSheet
+    // isn't valid mid-build) — and only for a draft with nothing in Dettagli yet, so reopening an
+    // already-detailed report to check Materiali doesn't get interrupted by an unwanted sheet.
+    if (!_hasAutoOpenedDettagli && !editorState.isLoading && !dettagliDone) {
+      _hasAutoOpenedDettagli = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        openCompartmentSheet(
+          context,
+          label: 'Dettagli',
+          content: StepDettagli(reportId: reportId),
+        );
+      });
+    }
+
+    // Independent one-shot: capture GPS silently the moment the draft's data has finished loading,
+    // regardless of whether Dettagli ever opens — see this file's own header comment for why this
+    // can no longer piggyback on the auto-open above. No postFrameCallback needed here (unlike
+    // Dettagli's sheet, this touches no BuildContext), and the gpsLatitude == null guard is what
+    // keeps this a true one-shot: once a coordinate lands, this never fires again for this draft,
+    // rework or otherwise.
+    if (!_hasAttemptedGpsCapture &&
+        !editorState.isLoading &&
+        ref.read(gpsPreferenceProvider) &&
+        editorState.gpsLatitude == null) {
+      _hasAttemptedGpsCapture = true;
+      unawaited(ref.read(reportEditorProvider(reportId).notifier).captureGpsSilently());
     }
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: context.colors.inkInverse,
-        elevation: 0,
-        titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Rapportino',
-              style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
+      appBar: ScreenHeaderBar(
+        title: 'Rapportino',
+        subtitle: subtitle,
+        actions: [
+          // Autosave indicator — spinner ↔ cloud used to hard-cut, on the single most-repeated
+          // state change in this screen: it flips on every field edit while filling in a report.
+          // AnimatedSwitcher, matching the idiom this pass already established on Dashboard and
+          // the ticket list.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+            child: Semantics(
+              label: editorState.isSaving ? 'Salvataggio in corso' : 'Rapportino salvato',
+              liveRegion: true,
+              child: AnimatedSwitcher(
+                duration: MediaQuery.of(context).disableAnimations
+                    ? Duration.zero
+                    : const Duration(milliseconds: 200),
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
+                child: editorState.isSaving
+                    ? SizedBox(
+                        key: const ValueKey('saving'),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.Y),
+                      )
+                    : Icon(
+                        LucideIcons.cloud,
+                        key: const ValueKey('saved'),
+                        size: 20,
+                        color: AppColors.Y,
+                      ),
+              ),
             ),
-            if (contextSubtitle != null)
-              Text(
-                contextSubtitle,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: context.colors.inkMuted,
-                  fontSize: 11,
+          ),
+        ],
+      ),
+      // While the draft's saved data is still loading from Drift, the grid's done/not-done dots
+      // and the completion count would read as blank/incomplete regardless of what's actually
+      // saved — a flash of wrong information is worse than a brief spinner. See
+      // ReportEditorNotifier._hydrate's own doc comment for why this load exists at all.
+      body: editorState.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  AppSpacing.pagePadding,
+                  AppSpacing.lg,
+                  AppSpacing.pagePadding,
+                  // fabSafeBottom, not navClearance: this route is pushed full-screen
+                  // (rootNavigatorKey) — the shell's floating pill nav is never drawn here.
+                  context.fabSafeBottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Primary AI-assist action first, then the manual checklist below it — natural
+                    // reading order for a technician who just opened the report. Always visible (no
+                    // tile tap required), unlike the old buried-in-Dettagli button it replaces.
+                    AiDraftAction(reportId: reportId),
+                    GridView.count(
+                      // 4 columns at every width, matching the 4 tiles now in this grid (Controlli
+                      // split out from Materiali into its own tile — see StepControlli's doc
+                      // comment). Was 3-on-phone/4-on-wide when the grid held 3 tiles; left
+                      // unchanged after the split, a 4th tile wrapped to an orphaned second row on
+                      // every phone — the primary device class — directly contradicting DESIGN.md's
+                      // own "never more than one row of primary choices" rule.
+                      // AppCompartmentTile's label already wraps to 2 lines with ellipsis, so the
+                      // narrower phone tile this produces degrades safely.
+                      crossAxisCount: 4,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      mainAxisSpacing: AppSpacing.md,
+                      crossAxisSpacing: AppSpacing.md,
+                      childAspectRatio: 1.0,
+                      children: [
+                        _StepTile(
+                          icon: LucideIcons.fileText,
+                          label: 'Dettagli',
+                          done: dettagliDone,
+                          onTap: () => openCompartmentSheet(
+                            context,
+                            label: 'Dettagli',
+                            content: StepDettagli(reportId: reportId),
+                          ),
+                        ),
+                        _StepTile(
+                          icon: LucideIcons.clock,
+                          label: 'Ore',
+                          done: oreDone,
+                          onTap: () => _openOre(context),
+                        ),
+                        _StepTile(
+                          icon: LucideIcons.clipboardCheck,
+                          label: 'Controlli',
+                          done: controlliDone,
+                          onTap: () => openCompartmentSheet(
+                            context,
+                            label: 'Controlli',
+                            content: StepControlli(reportId: reportId, ticketId: ticketId),
+                          ),
+                        ),
+                        _StepTile(
+                          icon: LucideIcons.package,
+                          label: 'Materiali',
+                          done: materialiDone,
+                          onTap: () => openCompartmentSheet(
+                            context,
+                            label: 'Materiali',
+                            content: StepMaterialiFold(reportId: reportId),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    _CompletionCard(
+                      completed: [
+                        dettagliDone,
+                        oreDone,
+                        controlliDone,
+                        materialiDone,
+                      ].where((d) => d).length,
+                      onTap: () => openCompartmentSheet(
+                        context,
+                        label: 'Riepilogo',
+                        content: StepRiepilogo(reportId: reportId),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-          ],
-        ),
-        actions: [
-          // Autosave indicator
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: editorState.isSaving
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.Y,
-                    ),
-                  )
-                : const Icon(LucideIcons.cloud,
-                    size: 20, color: AppColors.Y),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // ── Stepper ────────────────────────────────────────────────────────
-          Container(
-            color: AppColors.CHARCOAL,
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: AppStepper(
-              steps: _kSteps,
-              currentIndex: _stepIndex,
             ),
-          ),
-
-          // ── Step content ───────────────────────────────────────────────────
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              switchInCurve: Curves.easeInOut,
-              switchOutCurve: Curves.easeInOut,
-              child: _buildStep(key: ValueKey(_step)),
-            ),
-          ),
-
-          // ── Sticky bottom navigation bar ───────────────────────────────────
-          _BottomNavBar(
-            isFirst: _isFirst,
-            isLast: _isLast,
-            onBack: _goBack,
-            onNext: _goNext,
-          ),
-        ],
-      ),
     );
-  }
-
-  Widget _buildStep({required Key key}) {
-    return switch (_step) {
-      _FormStep.dettagli => StepDettagli(key: key, reportId: widget.reportId),
-      _FormStep.ore => StepOre(key: key, reportId: widget.reportId),
-      _FormStep.materiali =>
-        StepMaterialiFold(key: key, reportId: widget.reportId),
-      _FormStep.riepilogo => StepRiepilogo(key: key, reportId: widget.reportId),
-    };
   }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// _BottomNavBar
+// _CompletionCard — Vetro gradient summary anchoring the checklist, and its tap target
+//
+// The grid alone left the rest of the screen a dead void with nothing telling the technician
+// where they stood. Was the CHARCOAL/AppColors.Y card Ore's own "Totale ore" card used —
+// Vetro's tint gradient carries the same "readout" job now (see _TicketRow's own note on why
+// the strap language moved from brand-orange to tint across every module).
+//
+// It is also the only way into Riepilogo. Riepilogo used to sit in the grid as a fourth
+// checklist item, ticked once both signatures existed — which asked the technician to treat
+// "review the draft" as a box to check before they had reviewed anything. It is the pre-confirm
+// step, not a peer of Dettagli/Ore/Materiali: tapping this card always opens it, complete or not,
+// because seeing what's still missing — and filling it in — is what that screen is for.
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _BottomNavBar extends StatelessWidget {
-  const _BottomNavBar({
-    required this.isFirst,
-    required this.isLast,
-    required this.onBack,
-    required this.onNext,
-  });
+class _CompletionCard extends StatelessWidget {
+  const _CompletionCard({required this.completed, required this.onTap});
 
-  final bool isFirst;
-  final bool isLast;
-  final VoidCallback onBack;
-  final VoidCallback onNext;
+  final int completed;
+  final VoidCallback onTap;
+
+  // Dettagli, Ore, Controlli, Materiali — Controlli split into its own tile from what used to
+  // be a Materiali sub-section (see StepControlli's own doc comment).
+  static const _total = 4;
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        color: context.colors.surface,
-        padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
-        child: Row(
-          children: [
-            if (!isFirst) ...[
-              Expanded(
-                child: AppButton.secondary(
-                  label: 'Indietro',
-                  onPressed: onBack,
-                  size: AppButtonSize.lg,
-                ),
+    final ready = completed == _total;
+    final reducedMotion = MediaQuery.of(context).disableAnimations;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: AppRack.freeShape,
+      child: InkWell(
+        borderRadius: AppRack.freeShape,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: AppRack.freeShape,
+            color: AppColors.Y,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.Y.withAlpha(90),
+                blurRadius: 24,
+                offset: const Offset(0, 12),
               ),
-              if (!isLast) const SizedBox(width: 12),
             ],
-            if (!isLast)
-              Expanded(
-                child: AppButton(
-                  label: 'Avanti',
-                  onPressed: onNext,
-                  size: AppButtonSize.lg,
-                ),
+          ),
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Compilazione',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      color: Colors.white.withAlpha(200),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // The one number on this whole screen that actually answers "am I done" — used
+                  // to jump straight from one digit to the next with no transition, on the card
+                  // that is the sole way into Riepilogo. A fade-through (out then in, not a
+                  // crossfade) reads as the count ticking over rather than two different cards
+                  // being swapped.
+                  AnimatedSwitcher(
+                    duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: Text(
+                      '$completed di $_total',
+                      key: ValueKey(completed),
+                      style: const TextStyle(
+                        fontFamily: 'Archivo Narrow',
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-          ],
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  AnimatedSwitcher(
+                    duration: reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: Row(
+                      key: ValueKey(ready),
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          ready ? LucideIcons.checkCircle2 : LucideIcons.circleDot,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          ready ? 'Pronto per l\'invio' : 'Da completare',
+                          style: AppTextStyles.titleMedium.copyWith(color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        'Rivedi e invia',
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          color: Colors.white.withAlpha(200),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronRight, size: 14, color: Colors.white.withAlpha(200)),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _StepTile — CompartmentTile plus a completion mark
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A [VetroCompartmentTile] with a filled/hollow completion dot — the "what's left" read a
+/// stepper's numbered discs used to give for free. No forced order and no discs to number, so
+/// this is the one piece of state the grid still needs to carry per tile.
+class _StepTile extends StatelessWidget {
+  const _StepTile({
+    required this.icon,
+    required this.label,
+    required this.done,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool done;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // fit: expand — a bare Stack gives the tile loose constraints, so it shrinks to content
+    // width and leaves the badge floating at the grid cell's corner instead of the tile's own
+    // corner (visible as a detached circle to the right of each tile).
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        AppCompartmentTile(icon: icon, label: label, onTap: onTap),
+        Positioned(
+          top: 10,
+          right: 10,
+          // The one confirmation that a compartment's work actually registered — returning from
+          // Ore or Materiali having just filled something in, this badge used to just flip with
+          // no transition at all. A scale+fade reads as the tile "catching" the checkmark rather
+          // than silently being a different icon on the next frame.
+          child: AnimatedSwitcher(
+            duration: MediaQuery.of(context).disableAnimations
+                ? Duration.zero
+                : const Duration(milliseconds: 220),
+            transitionBuilder: (child, animation) => ScaleTransition(
+              scale: animation,
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: Icon(
+              done ? LucideIcons.checkCircle2 : LucideIcons.circle,
+              key: ValueKey(done),
+              size: 16,
+              color: done ? context.colors.green : context.colors.borderMedium,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

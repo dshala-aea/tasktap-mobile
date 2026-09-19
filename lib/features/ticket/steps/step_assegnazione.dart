@@ -9,6 +9,7 @@ import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Step 3 — Assegnazione
@@ -24,11 +25,7 @@ final techniciansProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 });
 
 class StepAssegnazione extends ConsumerStatefulWidget {
-  const StepAssegnazione({
-    super.key,
-    required this.state,
-    required this.onChanged,
-  });
+  const StepAssegnazione({super.key, required this.state, required this.onChanged});
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
@@ -43,12 +40,17 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
     final techsAsync = ref.watch(techniciansProvider);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(19, 8, 19, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.sm,
+        AppSpacing.pagePadding,
+        AppSpacing.xl,
+      ),
       children: [
         Text(
           'Assegnazione',
           style: TextStyle(
-            fontFamily: 'Sora',
+            fontFamily: 'Archivo',
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: context.colors.ink,
@@ -65,9 +67,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
         _AssignmentOption(
           label: 'Nessuna assegnazione',
           isSelected: widget.state.assignedUserId == null,
-          onTap: () => widget.onChanged(
-            widget.state.copyWith(assignedUserId: null),
-          ),
+          onTap: () => widget.onChanged(widget.state.copyWith(assignedUserId: null)),
         ),
 
         const SizedBox(height: 12),
@@ -75,11 +75,11 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
         // ── Technician list ────────────────────────────────────────────────
         techsAsync.when(
           loading: () => const Padding(
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpacing.xl),
             child: Center(child: CircularProgressIndicator()),
           ),
           error: (err, _) => Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Column(
               children: [
                 Icon(LucideIcons.cloudOff, size: 32, color: context.colors.inkMuted),
@@ -87,9 +87,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                 Text(
                   'Impossibile caricare i tecnici.\nSeleziona un ticket senza assegnazione.',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: context.colors.inkMuted,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               ],
             ),
@@ -97,12 +95,10 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
           data: (techs) {
             if (techs.isEmpty) {
               return Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text(
                   'Nessun tecnico disponibile.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: context.colors.inkMuted,
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
                 ),
               );
             }
@@ -116,12 +112,11 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
                 if (name.isEmpty) return const SizedBox.shrink();
 
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: _AssignmentOption(
                     label: name,
                     isSelected: widget.state.assignedUserId == id,
-                    onTap: () =>
-                        widget.onChanged(widget.state.copyWith(assignedUserId: id)),
+                    onTap: () => widget.onChanged(widget.state.copyWith(assignedUserId: id)),
                   ),
                 );
               }).toList(),
@@ -138,11 +133,7 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _AssignmentOption extends StatelessWidget {
-  const _AssignmentOption({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _AssignmentOption({required this.label, required this.isSelected, required this.onTap});
 
   final String label;
   final bool isSelected;
@@ -158,28 +149,25 @@ class _AssignmentOption extends StatelessWidget {
         color: isSelected ? AppColors.Y : context.colors.borderStrong,
         width: isSelected ? 2 : 1,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
       child: Row(
-          children: [
-            Icon(
-              isSelected
-                  ? LucideIcons.circleDot
-                  : LucideIcons.circle,
-              size: 20,
-              color: isSelected ? AppColors.Y : context.colors.inkMuted,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: AppTextStyles.bodyLarge.copyWith(
-                  color: isSelected ? context.colors.ink : context.colors.inkMuted,
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
+        children: [
+          Icon(
+            isSelected ? LucideIcons.circleDot : LucideIcons.circle,
+            size: 20,
+            color: isSelected ? AppColors.Y : context.colors.inkMuted,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: isSelected ? context.colors.ink : context.colors.inkMuted,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
-          ],
+          ),
+        ],
       ),
     );
   }

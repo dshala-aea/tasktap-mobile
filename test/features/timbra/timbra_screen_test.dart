@@ -11,11 +11,15 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
+import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show giornataProvider;
 import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
 // ── No-op stubs (prevent Dio from being constructed by providers) ─────────────
@@ -26,6 +30,9 @@ abstract class _StubRepo implements IWorkSessionRepository {
     required String id,
     required DateTime eventTime,
     required String eventType,
+    double? latitude,
+    double? longitude,
+    double? gpsAccuracyMeters,
   }) async {}
 
   @override
@@ -39,6 +46,9 @@ abstract class _StubRepo implements IWorkSessionRepository {
 
   @override
   Future<void> clearToday() async {}
+
+  @override
+  Future<void> markReconciledOrphan(String id) async {}
 }
 
 class _NoopRepo extends _StubRepo {}
@@ -47,10 +57,7 @@ class _NoopApiClient extends WorklogApiClient {
   _NoopApiClient() : super(Dio());
 
   @override
-  Future<List<UpsertSessionResponse>> upsertSessions(
-    List<MobileSessionDto> sessions,
-  ) async =>
-      [];
+  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async => [];
 
   @override
   Future<List<TodayWorkLogDto>> getToday() async => [];
@@ -66,11 +73,22 @@ AppDatabase _makeDb() {
   return AppDatabase(NativeDatabase.memory());
 }
 
-Widget _buildApp(AppDatabase db) {
+Widget _buildApp(
+  AppDatabase db, {
+  ILocationService? locationService,
+  List<Override> extraOverrides = const [],
+}) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
       timbraSyncServiceProvider.overrideWithValue(_makeNoopSyncService()),
+      // Real LocationService touches platform channels (Geolocator) that no widget test here
+      // mocks, and PunchNotifier now calls it (best-effort, silent GPS capture — see
+      // PunchNotifier._captureGpsSilently) on every punch/pause. DisabledLocationService is the
+      // same "no position, never prompts" behavior the app itself falls back to whenever the
+      // technician has GPS turned off, so this is a realistic default, not just a test workaround.
+      locationServiceProvider.overrideWithValue(locationService ?? const DisabledLocationService()),
+      ...extraOverrides,
     ],
     child: const MaterialApp(home: TimbraScreen()),
   );
@@ -136,7 +154,9 @@ void main() {
 
   testWidgets('sync dot appears when isPendingSync events exist', (tester) async {
     // Pre-seed a pending session directly into the DB.
-    await db.into(db.workSessions).insert(
+    await db
+        .into(db.workSessions)
+        .insert(
           WorkSessionsCompanion.insert(
             id: 'test-pending',
             eventTime: DateTime.now().toUtc(),
@@ -181,8 +201,7 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI',
-        (tester) async {
+    testWidgets('tapping PAUSA records a Pausa entry and flips to RIPRENDI', (tester) async {
       await tester.pumpWidget(_buildApp(db));
       await tester.pump(const Duration(milliseconds: 50));
 
@@ -200,8 +219,7 @@ void main() {
       await _teardownTimer(tester);
     });
 
-    testWidgets('tapping RIPRENDI records a Ripresa entry and flips back to PAUSA',
-        (tester) async {
+    testWidgets('tapping RIPRENDI records a Ripresa entry and flips back to PAUSA', (tester) async {
       await tester.pumpWidget(_buildApp(db));
       await tester.pump(const Duration(milliseconds: 50));
 
@@ -237,6 +255,221 @@ void main() {
 
       expect(find.text('PAUSA'), findsNothing);
       expect(find.text('RIPRENDI'), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
+
+  /// The screen's height budget, which used to be spent badly in both directions.
+  ///
+  /// It began as one SingleChildScrollView, so the punch button — the only reason to open the
+  /// screen — could be scrolled off it and on a small phone started that way. Pinning everything
+  /// instead is the opposite failure: the controls take about 400dp, so on a 640dp viewport the
+  /// session list gets a few pixels and shows nothing at all.
+  group('layout adapts to the height it is given', () {
+    testWidgets('a tall phone holds the controls still and scrolls only the sessions', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // The punch control is not inside anything that scrolls, so it cannot leave the screen.
+      expect(
+        find.ancestor(of: find.text('INIZIA TURNO'), matching: find.byType(SingleChildScrollView)),
+        findsNothing,
+      );
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('a short phone scrolls the page rather than crushing the list', (tester) async {
+      // A squeezed session card is worse than a scroll: the day's total is the one number on it
+      // anybody is looking for, and at a few pixels tall nothing renders at all.
+      await tester.binding.setSurfaceSize(const Size(320, 560));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'no overflow at the smallest supported size');
+      await _teardownTimer(tester);
+    });
+  });
+
+  // ── Status-First Hero (2026-08-30) ────────────────────────────────────────
+  //
+  // The state badge (IN TURNO / IN PAUSA / FUORI TURNO) and the promoted guard banner replacing
+  // the old under-button reason text.
+
+  group('hero status', () {
+    testWidgets('shows FUORI TURNO before any shift starts', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('FUORI TURNO'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows IN TURNO once a shift starts', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      // The status pill crossfades on change (AnimatedSwitcher, 220ms) — let it finish so the
+      // outgoing label is actually gone, not mid-fade.
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('IN TURNO'), findsOneWidget);
+      expect(find.text('FUORI TURNO'), findsNothing);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows IN PAUSA while on break', (tester) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.text('INIZIA TURNO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      await tester.tap(find.text('PAUSA'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('IN PAUSA'), findsOneWidget);
+      expect(find.text('IN TURNO'), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
+
+  group('guard banner', () {
+    GiornataDto giornataWith(GiornataActionDto action) => GiornataDto(
+      status: 'Working',
+      workedMinutes: 0,
+      breakMinutes: 0,
+      isPayrollLocked: action.reasonCode == 'payroll_locked',
+      actions: [action],
+    );
+
+    testWidgets('renders the server reason above the punch button when ClockIn is refused', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [
+            giornataProvider.overrideWith(
+              (ref) async => giornataWith(
+                const GiornataActionDto(
+                  action: 'ClockIn',
+                  enabled: false,
+                  reasonCode: 'payroll_locked',
+                  reason: "Il periodo è chiuso per le buste paga: chiedi all'amministrazione.",
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+      // Let giornataProvider's future resolve before asserting on its dependents.
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // findsOneWidget also proves it is not duplicated under the dimmed button anymore —
+      // _PunchButton no longer renders its own copy of the reason (see its doc comment).
+      expect(find.textContaining('chiuso per le buste paga'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('does not render when ClockIn is allowed', (tester) async {
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [
+            giornataProvider.overrideWith(
+              (ref) async =>
+                  giornataWith(const GiornataActionDto(action: 'ClockIn', enabled: true)),
+            ),
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byIcon(LucideIcons.alertTriangle), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
+
+  // ── Clock-in method gating (Task 13) ──────────────────────────────────────
+  //
+  // effectiveClockInMethodProvider (Task 12) reflects the tenant/user's configured clock-in
+  // method. This is a UI-only gate for UX purposes — the backend already enforces the real
+  // authorization on both the button and kiosk-QR clock-in endpoints.
+
+  group('clock-in method gating', () {
+    testWidgets('shows a QR-required message instead of the punch button when method is qrOnly', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildApp(db, extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('QrOnly')]),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsNothing);
+      expect(find.text('FINE TURNO'), findsNothing);
+      expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
+      expect(find.text('Scansiona QR'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('hides the header QR icon when method is buttonOnly', (tester) async {
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('ButtonOnly')],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.bySemanticsLabel('Timbra con QR'), findsNothing);
+      expect(find.byIcon(Icons.qr_code_scanner), findsNothing);
+      // The punch button remains available.
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows both the punch button and the QR header icon when method is both', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildApp(db, extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('Both')]),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+      expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows both by default (no override) — existing behavior unchanged', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+      expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
+
       await _teardownTimer(tester);
     });
   });

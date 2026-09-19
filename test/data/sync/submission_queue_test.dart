@@ -1,4 +1,8 @@
 // dart format width=100
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +13,7 @@ import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/reports/report_submit_api_client.dart';
 import 'package:tasktap_mobile/data/reports/submit_report_request.dart';
 import 'package:tasktap_mobile/data/sync/submission_queue.dart';
+import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Mocks & fallbacks
@@ -18,8 +23,7 @@ class MockReportSubmitApiClient extends Mock implements ReportSubmitApiClient {}
 
 class FakeSubmitReportRequest extends Fake implements SubmitReportRequest {}
 
-class FakeReportAttachmentUploadResponse extends Fake
-    implements ReportAttachmentUploadResponse {}
+class FakeReportAttachmentUploadResponse extends Fake implements ReportAttachmentUploadResponse {}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Helpers
@@ -39,54 +43,70 @@ Future<void> _insertDraft(
   String? suffix,
 }) async {
   final s = suffix ?? id;
-  await db.into(db.draftReports).insert(DraftReportsCompanion.insert(
-        id: id,
-        tenantId: 'tenant-1',
-        createdAt: DateTime.utc(2026, 1, 1),
-        title: 'Test rapportino',
-        insertedUserId: 'user-1',
-        locationId: 'loc-1',
-        isLocalOnly: const Value(true),
-        submissionState: Value(submissionState),
-        idempotencyKey: Value(idempotencyKey),
-        customerSignatureAllegatoId: Value(customerSigId),
-        technicianSignatureAllegatoId: Value(technicianSigId),
-      ));
-
-  // Insert a staff row
-  await db.into(db.reportStaffTable).insert(ReportStaffTableCompanion.insert(
-        id: 'staff-$s',
-        tenantId: 'tenant-1',
-        createdAt: DateTime.utc(2026, 1, 1),
-        reportId: id,
-        userId: 'user-1',
-      ));
-
-  // Insert a materiale row
-  await db.into(db.reportMateriali).insert(ReportMaterialiCompanion.insert(
-        id: 'mat-$s',
-        tenantId: 'tenant-1',
-        createdAt: DateTime.utc(2026, 1, 1),
-        reportId: id,
-        quantity: 1.0,
-        freeTextName: const Value('Vite'),
-      ));
-
-  if (isPendingAllegato) {
-    await db.into(db.reportAllegati).insert(ReportAllegatiCompanion.insert(
-          id: 'allegato-local-$s',
+  await db
+      .into(db.draftReports)
+      .insert(
+        DraftReportsCompanion.insert(
+          id: id,
           tenantId: 'tenant-1',
           createdAt: DateTime.utc(2026, 1, 1),
-          fileName: 'photo.jpg',
-          contentType: 'image/jpeg',
-          sizeBytes: 1024,
-          storagePath: '/local/photo.jpg',
-          url: '/local/photo.jpg',
-          entityType: 1,
-          entityId: id,
-          uploadedByUserId: 'user-1',
-          isPendingUpload: const Value(true),
-        ));
+          title: 'Test rapportino',
+          insertedUserId: 'user-1',
+          locationId: 'loc-1',
+          isLocalOnly: const Value(true),
+          submissionState: Value(submissionState),
+          idempotencyKey: Value(idempotencyKey),
+          customerSignatureAllegatoId: Value(customerSigId),
+          technicianSignatureAllegatoId: Value(technicianSigId),
+        ),
+      );
+
+  // Insert a staff row
+  await db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: 'staff-$s',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: id,
+          userId: 'user-1',
+        ),
+      );
+
+  // Insert a materiale row
+  await db
+      .into(db.reportMateriali)
+      .insert(
+        ReportMaterialiCompanion.insert(
+          id: 'mat-$s',
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 1, 1),
+          reportId: id,
+          quantity: 1.0,
+          freeTextName: const Value('Vite'),
+        ),
+      );
+
+  if (isPendingAllegato) {
+    await db
+        .into(db.reportAllegati)
+        .insert(
+          ReportAllegatiCompanion.insert(
+            id: 'allegato-local-$s',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            fileName: 'photo.jpg',
+            contentType: 'image/jpeg',
+            sizeBytes: 1024,
+            storagePath: '/local/photo.jpg',
+            url: '/local/photo.jpg',
+            entityType: 1,
+            entityId: id,
+            uploadedByUserId: 'user-1',
+            isPendingUpload: const Value(true),
+          ),
+        );
   }
 }
 
@@ -115,31 +135,25 @@ void main() {
 
   group('DraftSubmissionState', () {
     test('fromString maps all known values', () {
-      expect(DraftSubmissionState.fromString('draft'),
-          DraftSubmissionState.draft);
-      expect(DraftSubmissionState.fromString('readyToSubmit'),
-          DraftSubmissionState.readyToSubmit);
-      expect(DraftSubmissionState.fromString('uploadingMedia'),
-          DraftSubmissionState.uploadingMedia);
-      expect(DraftSubmissionState.fromString('submitting'),
-          DraftSubmissionState.submitting);
-      expect(DraftSubmissionState.fromString('submitted'),
-          DraftSubmissionState.submitted);
-      expect(DraftSubmissionState.fromString('failed'),
-          DraftSubmissionState.failed);
+      expect(DraftSubmissionState.fromString('draft'), DraftSubmissionState.draft);
+      expect(DraftSubmissionState.fromString('readyToSubmit'), DraftSubmissionState.readyToSubmit);
+      expect(
+        DraftSubmissionState.fromString('uploadingMedia'),
+        DraftSubmissionState.uploadingMedia,
+      );
+      expect(DraftSubmissionState.fromString('submitting'), DraftSubmissionState.submitting);
+      expect(DraftSubmissionState.fromString('submitted'), DraftSubmissionState.submitted);
+      expect(DraftSubmissionState.fromString('failed'), DraftSubmissionState.failed);
     });
 
     test('fromString returns draft for null or unknown', () {
-      expect(DraftSubmissionState.fromString(null),
-          DraftSubmissionState.draft);
-      expect(DraftSubmissionState.fromString('garbage'),
-          DraftSubmissionState.draft);
+      expect(DraftSubmissionState.fromString(null), DraftSubmissionState.draft);
+      expect(DraftSubmissionState.fromString('garbage'), DraftSubmissionState.draft);
     });
 
     test('toPersistedString is stable', () {
       expect(DraftSubmissionState.draft.toPersistedString(), 'draft');
-      expect(DraftSubmissionState.readyToSubmit.toPersistedString(),
-          'readyToSubmit');
+      expect(DraftSubmissionState.readyToSubmit.toPersistedString(), 'readyToSubmit');
       expect(DraftSubmissionState.submitted.toPersistedString(), 'submitted');
       expect(DraftSubmissionState.failed.toPersistedString(), 'failed');
     });
@@ -184,29 +198,33 @@ void main() {
 
   group('idempotency key stability across retries', () {
     test('retry reuses the same idempotency key', () async {
-      await _insertDraft(db, submissionState: 'failed',
-          idempotencyKey: 'stable-key-abc');
+      await _insertDraft(db, submissionState: 'failed', idempotencyKey: 'stable-key-abc');
 
       // Mock API to succeed on retry
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-            replayed: false,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async => const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+          replayed: false,
+        ),
+      );
 
       // Capture the idempotency key used in the submit call
       String? capturedKey;
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
-        capturedKey =
-            inv.namedArguments[#idempotencyKey] as String?;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedKey = inv.namedArguments[#idempotencyKey] as String?;
         return const SubmitReportResponse(
           id: 'report-1',
           title: 'Test',
@@ -224,18 +242,17 @@ void main() {
 
   group('SubmissionQueue.processAll — no pending allegati', () {
     test('draft with no pending allegati skips to submitting', () async {
-      await _insertDraft(db, submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1');
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
 
       await queue.processAll();
 
@@ -245,18 +262,17 @@ void main() {
       expect(draft.stato, 'Inviato');
     });
 
-    test('submit maps draft → SubmitReportRequest with correct field names',
-        () async {
-      await _insertDraft(db, submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1');
+    test('submit maps draft → SubmitReportRequest with correct field names', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
 
       SubmitReportRequest? capturedRequest;
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
-        capturedRequest =
-            inv.namedArguments[#request] as SubmitReportRequest?;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
         return const SubmitReportResponse(
           id: 'report-1',
           title: 'Test',
@@ -280,43 +296,56 @@ void main() {
 
   group('SubmissionQueue.processAll — with pending allegati', () {
     test('uploads pending allegati before submitting', () async {
-      await _insertDraft(db,
-          submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1',
-          isPendingAllegato: true);
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        isPendingAllegato: true,
+      );
 
-      when(() => mockApiClient.uploadAttachment(
-            reportId: any(named: 'reportId'),
-            localPath: any(named: 'localPath'),
-            fileName: any(named: 'fileName'),
-            contentType: any(named: 'contentType'),
-          )).thenAnswer((_) async =>
-          const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-1'));
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      ).thenAnswer(
+        (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-1'),
+      );
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
 
       await queue.processAll();
 
-      // Upload was called once
-      verify(() => mockApiClient.uploadAttachment(
-            reportId: 'report-1',
-            localPath: '/local/photo.jpg',
-            fileName: 'photo.jpg',
-            contentType: 'image/jpeg',
-          )).called(1);
+      // Upload was called once — a plain photo allegato carries no GPS/timestamp, so those
+      // fields reach uploadAttachment as null.
+      verify(
+        () => mockApiClient.uploadAttachment(
+          reportId: 'report-1',
+          localPath: '/local/photo.jpg',
+          fileName: 'photo.jpg',
+          contentType: 'image/jpeg',
+          capturedLatitude: null,
+          capturedLongitude: null,
+          capturedAt: null,
+        ),
+      ).called(1);
 
       // Allegato is no longer pending
       final allegati = await repo.getAllegati('report-1');
-      final uploaded =
-          allegati.where((a) => !a.isPendingUpload).toList();
+      final uploaded = allegati.where((a) => !a.isPendingUpload).toList();
       expect(uploaded.length, 1);
 
       // Draft is submitted
@@ -324,28 +353,110 @@ void main() {
       expect(draft!.submissionState, 'submitted');
     });
 
-    test('maps local allegato id → server allegato id in photoAllegatoIds',
-        () async {
-      await _insertDraft(db,
-          submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-1',
-          isPendingAllegato: true);
+    test(
+      'passes capturedLatitude/capturedLongitude/capturedAt through to uploadAttachment '
+      'for a plain (non-FK-linked) allegato that happens to carry GPS/timestamp',
+      () async {
+        // Note: this allegato is NOT linked via draft.customerSignatureAllegatoId, so despite
+        // its signature-styled file name it is routed as a plain upload — same as any photo
+        // carrying GPS/timestamp. A REAL signature is identified by that FK (see the
+        // 'signature allegati route to firma-cliente/firma-tecnico' group below), never by
+        // matching its file name.
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-gps');
 
-      when(() => mockApiClient.uploadAttachment(
+        final capturedAt = DateTime.utc(2026, 9, 5, 12, 30);
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'sig-gps-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                fileName: 'firma_cliente.png',
+                contentType: 'image/png',
+                sizeBytes: 10,
+                storagePath: '/local/sig-gps-1.png',
+                url: '/local/sig-gps-1.png',
+                entityType: 1,
+                entityId: 'report-1',
+                uploadedByUserId: 'user-1',
+                isPendingUpload: const Value(true),
+                capturedLatitude: const Value(45.4642),
+                capturedLongitude: const Value(9.19),
+                capturedAt: Value(capturedAt),
+              ),
+            );
+
+        when(
+          () => mockApiClient.uploadAttachment(
             reportId: any(named: 'reportId'),
             localPath: any(named: 'localPath'),
             fileName: any(named: 'fileName'),
             contentType: any(named: 'contentType'),
-          )).thenAnswer((_) async =>
-          const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-99'));
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        ).thenAnswer(
+          (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-sig-gps-1'),
+        );
 
-      SubmitReportRequest? capturedRequest;
-      when(() => mockApiClient.submitReport(
+        when(
+          () => mockApiClient.submitReport(
             request: any(named: 'request'),
             idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
-        capturedRequest =
-            inv.namedArguments[#request] as SubmitReportRequest?;
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+        );
+
+        await queue.processAll();
+
+        verify(
+          () => mockApiClient.uploadAttachment(
+            reportId: 'report-1',
+            localPath: '/local/sig-gps-1.png',
+            fileName: 'firma_cliente.png',
+            contentType: 'image/png',
+            capturedLatitude: 45.4642,
+            capturedLongitude: 9.19,
+            capturedAt: capturedAt,
+          ),
+        ).called(1);
+      },
+    );
+
+    test('maps local allegato id → server allegato id in photoAllegatoIds', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        isPendingAllegato: true,
+      );
+
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      ).thenAnswer(
+        (_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-allegato-99'),
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
         return const SubmitReportResponse(
           id: 'report-1',
           title: 'Test',
@@ -357,44 +468,297 @@ void main() {
       await queue.processAll();
 
       // photoAllegatoIds now contains the SERVER id, not the local one
-      expect(capturedRequest!.photoAllegatoIds,
-          contains('server-allegato-99'));
-      expect(capturedRequest!.photoAllegatoIds,
-          isNot(contains('allegato-local-report-1')));
+      expect(capturedRequest!.photoAllegatoIds, contains('server-allegato-99'));
+      expect(capturedRequest!.photoAllegatoIds, isNot(contains('allegato-local-report-1')));
+    });
+  });
+
+  group('SubmissionQueue — signature allegati route to firma-cliente/firma-tecnico', () {
+    late Directory tempDir;
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('submission_queue_test');
+    });
+
+    tearDown(() {
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    /// Writes [bytes] to a real file on disk and returns its path — signCustomer/signTechnician
+    /// base64-encode the file's on-disk bytes, so the mocked client needs a real file to read.
+    String writeLocalFile(String name, List<int> bytes) {
+      final file = File('${tempDir.path}/$name');
+      file.writeAsBytesSync(bytes);
+      return file.path;
+    }
+
+    test(
+      'a customer-signature allegato (identified via the draft header FK, not its file name) '
+      'goes through signCustomer, not uploadAttachment',
+      () async {
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-sig-cust');
+        final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]);
+        final path = writeLocalFile('firma_cliente.png', bytes);
+        final capturedAt = DateTime.utc(2026, 9, 18, 10, 30);
+
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'sig-cust-local',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                fileName: 'firma_cliente.png',
+                contentType: 'image/png',
+                sizeBytes: bytes.length,
+                storagePath: path,
+                url: path,
+                entityType: 1,
+                entityId: 'report-1',
+                uploadedByUserId: 'user-1',
+                isPendingUpload: const Value(true),
+                capturedLatitude: const Value(45.4642),
+                capturedLongitude: const Value(9.19),
+                capturedAt: Value(capturedAt),
+              ),
+            );
+        // The FK is what marks this allegato as the customer signature — set after the fact,
+        // same as saveSignature does at capture time.
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: true,
+          serverAllegatoId: 'sig-cust-local',
+        );
+
+        when(
+          () => mockApiClient.signCustomer(
+            reportId: any(named: 'reportId'),
+            signatureBase64: any(named: 'signatureBase64'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        ).thenAnswer((_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-sig-c'));
+
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+        );
+
+        await queue.processAll();
+
+        verify(
+          () => mockApiClient.signCustomer(
+            reportId: 'report-1',
+            signatureBase64: base64Encode(bytes),
+            capturedLatitude: 45.4642,
+            capturedLongitude: 9.19,
+            capturedAt: capturedAt,
+          ),
+        ).called(1);
+        verifyNever(
+          () => mockApiClient.uploadAttachment(
+            reportId: any(named: 'reportId'),
+            localPath: any(named: 'localPath'),
+            fileName: any(named: 'fileName'),
+            contentType: any(named: 'contentType'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        );
+
+        // Draft header's customerSignatureAllegatoId is updated to the SERVER id.
+        final draft = await repo.getDraft('report-1');
+        expect(draft!.customerSignatureAllegatoId, 'server-sig-c');
+      },
+    );
+
+    test(
+      'a technician-signature allegato goes through signTechnician, not uploadAttachment',
+      () async {
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-sig-tech');
+        final bytes = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x01]);
+        final path = writeLocalFile('firma_tecnico.png', bytes);
+
+        await db
+            .into(db.reportAllegati)
+            .insert(
+              ReportAllegatiCompanion.insert(
+                id: 'sig-tech-local',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                fileName: 'firma_tecnico.png',
+                contentType: 'image/png',
+                sizeBytes: bytes.length,
+                storagePath: path,
+                url: path,
+                entityType: 1,
+                entityId: 'report-1',
+                uploadedByUserId: 'user-1',
+                isPendingUpload: const Value(true),
+              ),
+            );
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: false,
+          serverAllegatoId: 'sig-tech-local',
+        );
+
+        when(
+          () => mockApiClient.signTechnician(
+            reportId: any(named: 'reportId'),
+            signatureBase64: any(named: 'signatureBase64'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        ).thenAnswer((_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-sig-t'));
+
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer(
+          (_) async =>
+              const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+        );
+
+        await queue.processAll();
+
+        verify(
+          () => mockApiClient.signTechnician(
+            reportId: 'report-1',
+            signatureBase64: base64Encode(bytes),
+            // No GPS captured this time — the two fields must reach the call as null rather
+            // than being dropped or defaulted.
+            capturedLatitude: null,
+            capturedLongitude: null,
+            capturedAt: null,
+          ),
+        ).called(1);
+        verifyNever(
+          () => mockApiClient.uploadAttachment(
+            reportId: any(named: 'reportId'),
+            localPath: any(named: 'localPath'),
+            fileName: any(named: 'fileName'),
+            contentType: any(named: 'contentType'),
+            capturedLatitude: any(named: 'capturedLatitude'),
+            capturedLongitude: any(named: 'capturedLongitude'),
+            capturedAt: any(named: 'capturedAt'),
+          ),
+        );
+
+        final draft = await repo.getDraft('report-1');
+        expect(draft!.technicianSignatureAllegatoId, 'server-sig-t');
+      },
+    );
+
+    test('a plain photo allegato still goes through uploadAttachment, unaffected', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-photo',
+        isPendingAllegato: true,
+      );
+
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      ).thenAnswer((_) async => const ReportAttachmentUploadResponse(allegatoId: 'server-photo'));
+
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
+
+      await queue.processAll();
+
+      verify(
+        () => mockApiClient.uploadAttachment(
+          reportId: 'report-1',
+          localPath: '/local/photo.jpg',
+          fileName: 'photo.jpg',
+          contentType: 'image/jpeg',
+          capturedLatitude: null,
+          capturedLongitude: null,
+          capturedAt: null,
+        ),
+      ).called(1);
+      verifyNever(
+        () => mockApiClient.signCustomer(
+          reportId: any(named: 'reportId'),
+          signatureBase64: any(named: 'signatureBase64'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      );
+      verifyNever(
+        () => mockApiClient.signTechnician(
+          reportId: any(named: 'reportId'),
+          signatureBase64: any(named: 'signatureBase64'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      );
     });
   });
 
   group('SubmissionQueue — failure path', () {
     test('failure sets state to failed and preserves draft', () async {
-      await _insertDraft(db, submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-fail');
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-fail');
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenThrow(Exception('Network error'));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenThrow(Exception('Network error'));
 
       await queue.processAll();
 
       final draft = await repo.getDraft('report-1');
       expect(draft, isNotNull); // draft is NOT deleted
       expect(draft!.submissionState, 'failed');
-      expect(draft.submissionError, contains('Network error'));
+      // This column is rendered verbatim under "Invio fallito" in the Riepilogo step, so it must
+      // hold a sentence rather than the exception. It used to store `e.toString()`.
+      expect(draft.submissionError, isNot(contains('Network error')));
+      expect(draft.submissionError, isNot(contains('Exception')));
+      expect(draft.submissionError, contains('Niente è andato perso'));
     });
 
     test('failed draft can be retried', () async {
-      await _insertDraft(db, submissionState: 'failed',
-          idempotencyKey: 'stable-retry-key');
+      await _insertDraft(db, submissionState: 'failed', idempotencyKey: 'stable-retry-key');
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((_) async => const SubmitReportResponse(
-            id: 'report-1',
-            title: 'Test',
-            stato: '1',
-            inviatoAt: null,
-          ));
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer(
+        (_) async =>
+            const SubmitReportResponse(id: 'report-1', title: 'Test', stato: '1', inviatoAt: null),
+      );
 
       await queue.retry('report-1');
 
@@ -403,50 +767,65 @@ void main() {
     });
 
     test('attachment upload failure sets failed state', () async {
-      await _insertDraft(db,
-          submissionState: 'readyToSubmit',
-          idempotencyKey: 'key-attach-fail',
-          isPendingAllegato: true);
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-attach-fail',
+        isPendingAllegato: true,
+      );
 
-      when(() => mockApiClient.uploadAttachment(
-            reportId: any(named: 'reportId'),
-            localPath: any(named: 'localPath'),
-            fileName: any(named: 'fileName'),
-            contentType: any(named: 'contentType'),
-          )).thenThrow(Exception('Storage error'));
+      when(
+        () => mockApiClient.uploadAttachment(
+          reportId: any(named: 'reportId'),
+          localPath: any(named: 'localPath'),
+          fileName: any(named: 'fileName'),
+          contentType: any(named: 'contentType'),
+          capturedLatitude: any(named: 'capturedLatitude'),
+          capturedLongitude: any(named: 'capturedLongitude'),
+          capturedAt: any(named: 'capturedAt'),
+        ),
+      ).thenThrow(Exception('Storage error'));
 
       await queue.processAll();
 
       final draft = await repo.getDraft('report-1');
       expect(draft!.submissionState, 'failed');
-      expect(draft.submissionError, contains('Storage error'));
+      expect(draft.submissionError, isNot(contains('Storage error')));
+      expect(draft.submissionError, isNot(contains('Exception')));
       // submit was NOT called
-      verifyNever(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          ));
+      verifyNever(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      );
     });
   });
 
   group('SubmissionQueue — multiple drafts', () {
     test('processAll processes each ready draft independently', () async {
       // Insert two separate ready drafts
-      await _insertDraft(db, id: 'report-A',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-A');
-      await _insertDraft(db, id: 'report-B',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-B');
+      await _insertDraft(
+        db,
+        id: 'report-A',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-A',
+      );
+      await _insertDraft(
+        db,
+        id: 'report-B',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-B',
+      );
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
         final req = inv.namedArguments[#request] as SubmitReportRequest;
-        return SubmitReportResponse(
-          id: req.id,
-          title: req.title,
-          stato: '1',
-          inviatoAt: null,
-        );
+        return SubmitReportResponse(id: req.id, title: req.title, stato: '1', inviatoAt: null);
       });
 
       await queue.processAll();
@@ -457,27 +836,31 @@ void main() {
       expect(b!.submissionState, 'submitted');
     });
 
-    test('failure on one draft does not prevent other from submitting',
-        () async {
-      await _insertDraft(db, id: 'report-good',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-good');
-      await _insertDraft(db, id: 'report-bad',
-          submissionState: 'readyToSubmit', idempotencyKey: 'key-bad');
+    test('failure on one draft does not prevent other from submitting', () async {
+      await _insertDraft(
+        db,
+        id: 'report-good',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-good',
+      );
+      await _insertDraft(
+        db,
+        id: 'report-bad',
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-bad',
+      );
 
-      when(() => mockApiClient.submitReport(
-            request: any(named: 'request'),
-            idempotencyKey: any(named: 'idempotencyKey'),
-          )).thenAnswer((inv) async {
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
         final req = inv.namedArguments[#request] as SubmitReportRequest;
         if (req.id == 'report-bad') {
           throw Exception('Bad draft fails');
         }
-        return SubmitReportResponse(
-          id: req.id,
-          title: req.title,
-          stato: '1',
-          inviatoAt: null,
-        );
+        return SubmitReportResponse(id: req.id, title: req.title, stato: '1', inviatoAt: null);
       });
 
       await queue.processAll();
@@ -498,15 +881,9 @@ void main() {
         locationId: 'loc-1',
         title: 'Test',
         materialiNotRequired: false,
-        staff: [
-          SubmitReportStaffDto(userId: 'user-1', kmTraveled: 10.5),
-        ],
-        materiali: [
-          SubmitReportMaterialeDto(quantity: 2.0, freeTextName: 'Bullone'),
-        ],
-        controlli: [
-          SubmitReportControlloDto(ticketControlId: 'ctrl-1', boolValue: true),
-        ],
+        staff: [SubmitReportStaffDto(userId: 'user-1', kmTraveled: 10.5)],
+        materiali: [SubmitReportMaterialeDto(quantity: 2.0, freeTextName: 'Bullone')],
+        controlli: [SubmitReportControlloDto(ticketControlId: 'ctrl-1', boolValue: true)],
       );
 
       final json = req.toJson();
@@ -521,11 +898,7 @@ void main() {
     });
 
     test('toJson omits null optional fields', () {
-      const req = SubmitReportRequest(
-        id: 'guid-1',
-        locationId: 'loc-1',
-        title: 'T',
-      );
+      const req = SubmitReportRequest(id: 'guid-1', locationId: 'loc-1', title: 'T');
       final json = req.toJson();
       expect(json.containsKey('scheduleId'), isFalse);
       expect(json.containsKey('ticketId'), isFalse);
@@ -549,8 +922,7 @@ void main() {
       expect(json['pauseMinutes'], 30);
     });
 
-    test('materiale toJson mirrors backend SubmitReportMaterialeDto fields',
-        () {
+    test('materiale toJson mirrors backend SubmitReportMaterialeDto fields', () {
       const m = SubmitReportMaterialeDto(
         materialeId: 'mat-guid-1',
         quantity: 3.5,
@@ -566,8 +938,7 @@ void main() {
       expect(json['magazzinoId'], 'mag-1');
     });
 
-    test('controllo toJson mirrors backend SubmitReportControlloDto fields',
-        () {
+    test('controllo toJson mirrors backend SubmitReportControlloDto fields', () {
       const c = SubmitReportControlloDto(
         ticketControlId: 'ctrl-1',
         stringValue: 'OK',
@@ -620,24 +991,27 @@ void main() {
       expect(ready.first.id, 'r1');
     });
 
-    test('getPendingAllegati returns only isPendingUpload=true allegati',
-        () async {
+    test('getPendingAllegati returns only isPendingUpload=true allegati', () async {
       await _insertDraft(db, isPendingAllegato: true);
       // Also insert a non-pending allegato
-      await db.into(db.reportAllegati).insert(ReportAllegatiCompanion.insert(
-            id: 'allegato-uploaded',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 1, 1),
-            fileName: 'old.jpg',
-            contentType: 'image/jpeg',
-            sizeBytes: 512,
-            storagePath: '/server/old.jpg',
-            url: 'https://server/old.jpg',
-            entityType: 1,
-            entityId: 'report-1',
-            uploadedByUserId: 'user-1',
-            isPendingUpload: const Value(false),
-          ));
+      await db
+          .into(db.reportAllegati)
+          .insert(
+            ReportAllegatiCompanion.insert(
+              id: 'allegato-uploaded',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              fileName: 'old.jpg',
+              contentType: 'image/jpeg',
+              sizeBytes: 512,
+              storagePath: '/server/old.jpg',
+              url: 'https://server/old.jpg',
+              entityType: 1,
+              entityId: 'report-1',
+              uploadedByUserId: 'user-1',
+              isPendingUpload: const Value(false),
+            ),
+          );
 
       final pending = await repo.getPendingAllegati('report-1');
       expect(pending.length, 1);
@@ -655,9 +1029,7 @@ void main() {
       expect(allegati.first.isPendingUpload, isFalse);
     });
 
-    test(
-        'markAllegatoUploaded replaces local id with server id when different',
-        () async {
+    test('markAllegatoUploaded replaces local id with server id when different', () async {
       await _insertDraft(db, isPendingAllegato: true);
       await repo.markAllegatoUploaded(
         localId: 'allegato-local-report-1',
@@ -678,5 +1050,119 @@ void main() {
       expect(draft!.stato, 'Inviato');
       expect(draft.isLocalOnly, isFalse);
     });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Regression: rapportino autosave data-loss bug.
+  //
+  // ReportEditorNotifier's autosave used to write the GPS/free-text metadata blob into the same
+  // `details` column the technician's typed description lives in, so every autosave silently
+  // discarded whatever the technician had typed — and that blob is exactly what SubmissionQueue
+  // sends to the backend/customer PDF as the report's description. This drives a real
+  // ReportEditorNotifier through a realistic typing + autosave sequence, then submits through the
+  // real SubmissionQueue, and asserts the *typed text* — not the metadata blob — reaches the
+  // backend payload.
+  // ══════════════════════════════════════════════════════════════════════════════
+  group('rapportino autosave data-loss regression', () {
+    test(
+      'typed description reaches the submit payload verbatim, GPS/free-text metadata does not '
+      'clobber it',
+      () async {
+        final editorRepo = DraftReportRepository(db);
+        final notifier = ReportEditorNotifier(
+          initialState: const ReportEditorState(
+            reportId: 'report-1',
+            tenantId: 'tenant-1',
+            insertedUserId: 'user-1',
+          ),
+          repo: editorRepo,
+        );
+
+        // A realistic sequence: title, then the description typed keystroke-by-keystroke (each
+        // keystroke triggers autosave in the real UI — see step_dettagli.dart's onChanged), then
+        // free-text customer + GPS captured afterwards (also autosaving), exactly the ordering
+        // that used to let the metadata blob win the last write to `details`.
+        await notifier.setTitle('Manutenzione caldaia');
+        const typed = 'Sostituita guarnizione, verificata pressione impianto';
+        for (var i = 1; i <= typed.length; i++) {
+          await notifier.setDetails(typed.substring(0, i));
+        }
+        await notifier.setCustomerFreeText('ACME Srl (non in lista)');
+        await notifier.setWorkAddress('Via Roma 10, Milano');
+        notifier.setGps(45.4642, 9.19);
+        // setGps's autosave is fire-and-forget; give it a tick to land before reading back.
+        await Future<void>.delayed(Duration.zero);
+
+        // Locally persisted: both survive, in separate columns.
+        final draft = await editorRepo.getDraft('report-1');
+        expect(draft, isNotNull);
+        expect(draft!.details, typed);
+        expect(draft.metadataJson, contains('ACME Srl'));
+        expect(draft.metadataJson, contains('Via Roma 10'));
+        expect(draft.metadataJson, contains('45.4642'));
+        // The metadata blob must never appear in `details` again.
+        expect(draft.details, isNot(contains('customerFreeText')));
+        expect(draft.details, isNot(contains('gpsLatitude')));
+
+        // Fill in what enqueue()/processAll() require to actually submit.
+        await db
+            .into(db.reportStaffTable)
+            .insert(
+              ReportStaffTableCompanion.insert(
+                id: 'staff-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                reportId: 'report-1',
+                userId: 'user-1',
+              ),
+            );
+        await db
+            .into(db.reportMateriali)
+            .insert(
+              ReportMaterialiCompanion.insert(
+                id: 'mat-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                reportId: 'report-1',
+                quantity: 1.0,
+                freeTextName: const Value('Guarnizione'),
+              ),
+            );
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: true,
+          serverAllegatoId: 'sig-cust',
+        );
+        await repo.updateSignatureAllegatoId(
+          reportId: 'report-1',
+          isCustomer: false,
+          serverAllegatoId: 'sig-tech',
+        );
+
+        SubmitReportRequest? capturedRequest;
+        when(
+          () => mockApiClient.submitReport(
+            request: any(named: 'request'),
+            idempotencyKey: any(named: 'idempotencyKey'),
+          ),
+        ).thenAnswer((inv) async {
+          capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+          return const SubmitReportResponse(
+            id: 'report-1',
+            title: 'Manutenzione caldaia',
+            stato: '1',
+            inviatoAt: null,
+          );
+        });
+
+        await queue.enqueue('report-1');
+        await queue.processAll();
+
+        expect(capturedRequest, isNotNull);
+        expect(capturedRequest!.details, typed);
+        expect(capturedRequest!.details, isNot(contains('customerFreeText')));
+        expect(capturedRequest!.details, isNot(contains('gpsLatitude')));
+      },
+    );
   });
 }

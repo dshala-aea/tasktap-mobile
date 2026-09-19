@@ -9,6 +9,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -23,13 +24,15 @@ class _MockAuthRepository extends Mock implements IAuthRepository {}
 class _MockDio extends Mock implements Dio {}
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     registerFallbackValue(RequestOptions(path: '/'));
+    // The dashboard's ID-plate hero formats today's date in Italian; without this, any test that
+    // mounts the real app tree throws LocaleDataException the moment it builds.
+    await initializeDateFormatting('it', null);
   });
 
-  testWidgets('TaskTapApp smoke test — renders without error',
-      (WidgetTester tester) async {
+  testWidgets('TaskTapApp smoke test — renders without error', (WidgetTester tester) async {
     final repo = _MockAuthRepository();
     final authStream = StreamController<AuthUser?>.broadcast();
     final db = AppDatabase(NativeDatabase.memory());
@@ -37,10 +40,8 @@ void main() {
 
     // Stub the sync endpoint so HomeShell's performSync doesn't throw.
     when(
-      () => mockDio.get<Map<String, dynamic>>(
-        any(),
-        queryParameters: any(named: 'queryParameters'),
-      ),
+      () =>
+          mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
     ).thenAnswer(
       (_) async => Response<Map<String, dynamic>>(
         requestOptions: RequestOptions(path: '/api/sync/mobile'),

@@ -1,7 +1,17 @@
 // dart format width=100
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'entitlement_repository.dart';
+
+/// SharedPreferences key for the signed-in user's INTERNAL database Guid (`User.Id` on the
+/// backend), as opposed to `AuthUser.id` (the Zitadel OIDC `sub` claim — a large numeric string,
+/// never a Guid). The two were conflated at several call sites (report-creation staff/author
+/// fields, cantiere-lead checks, the van lookup) before this key existed: nothing anywhere on
+/// device exposed the real internal id, so those call sites silently wrote the OIDC sub into
+/// columns that must hold a Guid, matching nothing in the local `colleagues`/`users` mirror.
+/// See `internalUserIdProvider` (auth_providers.dart) for the reading side.
+const internalUserIdPrefsKey = 'internal_user_id';
 
 /// Refreshes the cached entitlement from the server.
 ///
@@ -10,8 +20,8 @@ import 'entitlement_repository.dart';
 /// downgrading to "nothing granted" because a request timed out on a building site.
 class EntitlementService {
   EntitlementService({required Dio dio, required EntitlementRepository repository})
-      : _dio = dio,
-        _repository = repository;
+    : _dio = dio,
+      _repository = repository;
 
   final Dio _dio;
   final EntitlementRepository _repository;
@@ -37,6 +47,9 @@ class EntitlementService {
     final features = _stringList(body['features']);
     final capabilities = _stringList(body['capabilities']);
     final seatType = body['seatType'];
+    final clockInMethod = body['clockInMethod'] as String?;
+    final subscription = body['subscription'];
+    final subscriptionStatus = subscription is Map ? subscription['status'] as String? : null;
 
     // `features` always carries at least the always-on modules when the server answers properly,
     // so an empty list means we did not get what we asked for.
@@ -49,7 +62,22 @@ class EntitlementService {
       capabilities: capabilities,
       seatType: seatType,
       fetchedAt: DateTime.now().toUtc(),
+      subscriptionStatus: subscriptionStatus,
+      clockInMethod: clockInMethod,
     );
+
+    // The response's `user.id` is the backend's internal Users.Id (a Guid) — distinct from the
+    // OIDC sub that AuthUser.id carries. Persisted separately (not through EntitlementRepository,
+    // which is scoped to entitlement fields) so report-creation and every other "who am I,
+    // internally" call site has a real value to read instead of falling back to the sub. Best
+    // effort: a missing/malformed `user` object does not fail the whole refresh, since
+    // entitlements themselves are still good.
+    final user = body['user'];
+    final internalUserId = user is Map ? user['id'] as String? : null;
+    if (internalUserId != null && internalUserId.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(internalUserIdPrefsKey, internalUserId);
+    }
 
     return true;
   }

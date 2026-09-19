@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+import '../../data/api/json_parse.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AdminApiClient
@@ -10,6 +11,73 @@ import '../../data/api/dio_client.dart';
 // All methods POST/PUT/DELETE to the backend; reads still come from the
 // local Drift cache for offline-first behavior.
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// Squadra member role — mirrors backend `SquadraRuoloEnum` (`WorkEnums.cs`), which has no
+/// `[JsonStringEnumConverter]` and no `TeamLead` value. It deserializes as a bare integer, so
+/// sending `ruolo` as a JSON string (e.g. `"TeamLead"`) fails backend deserialization for the
+/// whole add-member/change-role call.
+class SquadraRuolo {
+  static const int membro = 0;
+  static const int capo = 1;
+
+  /// Display label for a `ruolo` value read back from the backend. Defaults to "Membro" for
+  /// anything other than [capo] (including missing/null), matching the backend enum's own
+  /// `Membro = 0` default.
+  static String label(Object? ruolo) => ruolo == capo ? 'Capo' : 'Membro';
+}
+
+/// One existing schedule that overlaps a proposed one, from
+/// `POST /api/schedules/check-conflicts` (`ScheduleConflictDto` in `SchedulesController.cs`).
+class ScheduleConflict {
+  const ScheduleConflict({
+    required this.id,
+    required this.activityDate,
+    required this.timeStart,
+    required this.timeEnd,
+    this.userId,
+    this.squadraId,
+    required this.title,
+    required this.conflictOnUser,
+    required this.conflictOnSquadra,
+  });
+
+  final String id;
+  final DateTime activityDate;
+
+  /// "HH:MM:SS", as the backend's `TimeSpan` serialises.
+  final String timeStart;
+  final String timeEnd;
+
+  final String? userId;
+  final String? squadraId;
+  final String title;
+
+  /// Whether the checked technician is the one directly assigned on this conflicting schedule.
+  final bool conflictOnUser;
+
+  /// Whether the checked squadra is the one assigned on this conflicting schedule.
+  final bool conflictOnSquadra;
+
+  factory ScheduleConflict.fromJson(Map<String, dynamic> j) => ScheduleConflict(
+    id: j['id'] as String,
+    activityDate: DateTime.parse(j['activityDate'] as String),
+    timeStart: j['timeStart'] as String? ?? '00:00:00',
+    timeEnd: j['timeEnd'] as String? ?? '00:00:00',
+    userId: j['userId'] as String?,
+    squadraId: j['squadraId'] as String?,
+    title: j['title'] as String? ?? '',
+    conflictOnUser: j['conflictOnUser'] as bool? ?? false,
+    conflictOnSquadra: j['conflictOnSquadra'] as bool? ?? false,
+  );
+}
+
+/// Result of `POST /api/contracts/{id}/genera-schedule` — see [AdminApiClient.generaSchedule].
+class GeneraScheduleResult {
+  const GeneraScheduleResult({required this.created, required this.message});
+
+  final int created;
+  final String message;
+}
 
 class AdminApiClient {
   AdminApiClient(this._dio);
@@ -36,7 +104,8 @@ class AdminApiClient {
         if (taxId != null && taxId.isNotEmpty) 'taxId': taxId,
         if (address != null && address.isNotEmpty) 'address': address,
         if (city != null && city.isNotEmpty) 'city': city,
-        if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
+        if (postalCode != null && postalCode.isNotEmpty)
+          'postalCode': postalCode,
         if (country != null && country.isNotEmpty) 'country': country,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (email != null && email.isNotEmpty) 'email': email,
@@ -45,7 +114,7 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
-    return res.data!['customerId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateCustomer(
@@ -80,6 +149,11 @@ class AdminApiClient {
     );
   }
 
+  /// Soft-deletes a customer. Mirrors `DELETE /api/customers/{id}` (CustomersController.Delete).
+  Future<void> deleteCustomer(String id) async {
+    await _dio.delete('/api/customers/$id');
+  }
+
   // ── Locations ────────────────────────────────────────────────────────────
 
   Future<String> createLocation({
@@ -101,7 +175,8 @@ class AdminApiClient {
         'name': name,
         if (address != null && address.isNotEmpty) 'address': address,
         if (city != null && city.isNotEmpty) 'city': city,
-        if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
+        if (postalCode != null && postalCode.isNotEmpty)
+          'postalCode': postalCode,
         if (country != null && country.isNotEmpty) 'country': country,
         'latitude': ?latitude,
         'longitude': ?longitude,
@@ -109,7 +184,7 @@ class AdminApiClient {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       },
     );
-    return res.data!['locationId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateLocation(
@@ -144,6 +219,13 @@ class AdminApiClient {
     );
   }
 
+  /// Mirrors `DELETE /api/locations/{id}` (`LocationsController.Delete`). Gap 3 of the feature
+  /// audit — the create/edit half of Sedi CRUD existed, delete did not, on the customer detail
+  /// screen or anywhere else in the app.
+  Future<void> deleteLocation(String id) async {
+    await _dio.delete('/api/locations/$id');
+  }
+
   // ── Cantieri ─────────────────────────────────────────────────────────────
 
   Future<String> createCantiere({
@@ -156,6 +238,10 @@ class AdminApiClient {
     DateTime? endDate,
     int status = 0,
     String? customerId,
+    // CreateCantiereRequest.CommessaId (CantieriController.cs) — landed backend-side in af9039c;
+    // before that this field didn't exist on the request DTO at all, so sending it would have
+    // silently no-opped (see Gap 5 of the feature audit).
+    String? commessaId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/cantieri',
@@ -163,15 +249,17 @@ class AdminApiClient {
         'name': name,
         if (address != null && address.isNotEmpty) 'address': address,
         if (city != null && city.isNotEmpty) 'city': city,
-        if (postalCode != null && postalCode.isNotEmpty) 'postalCode': postalCode,
+        if (postalCode != null && postalCode.isNotEmpty)
+          'postalCode': postalCode,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         if (startDate != null) 'startDate': startDate.toIso8601String(),
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'status': status,
         'customerId': ?customerId,
+        'commessaId': ?commessaId,
       },
     );
-    return res.data!['cantiereId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateCantiere(
@@ -185,6 +273,9 @@ class AdminApiClient {
     DateTime? endDate,
     int status = 0,
     String? customerId,
+
+    /// See [createCantiere]'s own doc comment on this field.
+    String? commessaId,
   }) async {
     await _dio.put(
       '/api/cantieri/$id',
@@ -198,8 +289,172 @@ class AdminApiClient {
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'status': status,
         'customerId': ?customerId,
+        'commessaId': ?commessaId,
       },
     );
+  }
+
+  /// Hard-deletes a cantiere. Mirrors `DELETE /api/cantieri/{id}` (CantieriController.Delete).
+  Future<void> deleteCantiere(String id) async {
+    await _dio.delete('/api/cantieri/$id');
+  }
+
+  /// Live cantiere detail — `GET /api/cantieri/{id}` (`CantieriController.GetById`), returning
+  /// `CantiereDetailResponse` (`{cantiere, contacts, assignments}`). Unlike the Drift mirror
+  /// (`Cantieri` table, base fields only), this is the only source for a cantiere's contacts and
+  /// crew assignments — neither sub-resource is synced to the device.
+  Future<Map<String, dynamic>?> fetchCantiereDetail(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/cantieri/$id');
+    return res.data;
+  }
+
+  // ── Cantiere contacts ────────────────────────────────────────────────────
+  //
+  // Mirrors UpsertCantiereContactRequest (CantieriController.cs:386-393) — the same shape for
+  // both add and update, name required, everything else optional.
+
+  Future<String> addCantiereContact(
+    String cantiereId, {
+    required String name,
+    String? role,
+    String? phone,
+    String? email,
+    String? notes,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/cantieri/$cantiereId/contacts',
+      data: {
+        'name': name,
+        'role': ?role,
+        'phone': ?phone,
+        'email': ?email,
+        'notes': ?notes,
+      },
+    );
+    return res.data!['id'] as String;
+  }
+
+  Future<void> updateCantiereContact(
+    String cantiereId,
+    String contactId, {
+    required String name,
+    String? role,
+    String? phone,
+    String? email,
+    String? notes,
+  }) async {
+    await _dio.put(
+      '/api/cantieri/$cantiereId/contacts/$contactId',
+      data: {
+        'name': name,
+        'role': ?role,
+        'phone': ?phone,
+        'email': ?email,
+        'notes': ?notes,
+      },
+    );
+  }
+
+  /// Mirrors `DELETE /api/cantieri/{id}/contacts/{contactId}` (`CantieriController.DeleteContact`).
+  Future<void> deleteCantiereContact(
+    String cantiereId,
+    String contactId,
+  ) async {
+    await _dio.delete('/api/cantieri/$cantiereId/contacts/$contactId');
+  }
+
+  // ── Cantiere crew assignments ───────────────────────────────────────────
+  //
+  // Individual technician only — `CantiereAssignment` has no `SquadraId` (unlike
+  // `ScheduleAssignment`), so there is no squadra-level assignment to offer here.
+
+  Future<String> addCantiereAssignment(
+    String cantiereId, {
+    required String userId,
+    String? role,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/cantieri/$cantiereId/assignments',
+      data: {
+        'userId': userId,
+        'role': ?role,
+        if (startDate != null) 'startDate': startDate.toIso8601String(),
+        if (endDate != null) 'endDate': endDate.toIso8601String(),
+      },
+    );
+    return res.data!['id'] as String;
+  }
+
+  /// Mirrors `DELETE /api/cantieri/{id}/assignments/{assignmentId}`
+  /// (`CantieriController.RemoveAssignment`).
+  Future<void> removeCantiereAssignment(
+    String cantiereId,
+    String assignmentId,
+  ) async {
+    await _dio.delete('/api/cantieri/$cantiereId/assignments/$assignmentId');
+  }
+
+  // ── Cantiere linked records (read-only) ─────────────────────────────────
+  //
+  // None of these are synced to Drift — the cantiere detail screen's Ore/Interventi/Rapportini
+  // sections fetch them live, mirroring web's OreSection/InterventiSection/RapportiniSection
+  // (frontend/src/features/cantieri/CantiereSections.tsx).
+
+  /// Interventi (tickets) raised on this cantiere — `GET /api/tickets?cantiereId=`.
+  Future<List<Map<String, dynamic>>> fetchCantiereTickets(
+    String cantiereId,
+  ) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/tickets',
+      queryParameters: {
+        'cantiereId': cantiereId,
+        'pageSize': 50,
+        'sort': '-createdAt',
+      },
+    );
+    return pagedItems(res.data);
+  }
+
+  /// Hours logged on this cantiere — `GET /api/cantiereworklog?cantiereId=`.
+  Future<List<Map<String, dynamic>>> fetchCantiereWorkLogs(
+    String cantiereId,
+  ) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/cantiereworklog',
+      queryParameters: {
+        'cantiereId': cantiereId,
+        'pageSize': 50,
+        'sort': '-workDate',
+      },
+    );
+    return pagedItems(res.data);
+  }
+
+  // ── Commesse ─────────────────────────────────────────────────────────────
+  //
+  // No local Drift mirror — like Squadre/ProdottoAssistenza, fetched live wherever a picker needs
+  // the list (here: the cantiere form's Commessa field, Gap 5 of the feature audit).
+
+  /// [customerId], when given, filters server-side via `CommesseController.GetAll`'s own
+  /// `customerId` query param — the admin cantiere form's Commessa picker needs this scoped to
+  /// the currently-selected client instead of listing every commessa across every customer.
+  Future<List<Map<String, dynamic>>> fetchCommesse({String? customerId}) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/commesse',
+      queryParameters: {'customerId': ?customerId},
+    );
+    return pagedItems(res.data);
+  }
+
+  /// Single commessa by id — feature audit module #13, Gap 6: mobile already syncs
+  /// `Ticket.commessaId`/`Cantiere.commessaId` (bare id columns) but had no way to resolve one to
+  /// its `codice` for display. Same shape as [fetchContractById]: no local Drift mirror, so this
+  /// is fetched live wherever a screen needs to show the commessa a ticket/cantiere belongs to.
+  Future<Map<String, dynamic>?> fetchCommessaById(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/commesse/$id');
+    return res.data;
   }
 
   // ── Schedules ────────────────────────────────────────────────────────────
@@ -208,7 +463,10 @@ class AdminApiClient {
     required DateTime activityDate,
     required int timeStartMinutes,
     required int timeEndMinutes,
-    required String userId,
+    // Optional, matching backend `CreateScheduleRequest.UserId` (ADR-0009): a schedule can be
+    // assigned to a squadra and to no individual, and requiring this here made a team-only
+    // schedule impossible to create from mobile.
+    String? userId,
     required int statusId,
     required String locationId,
     String? ticketId,
@@ -218,16 +476,23 @@ class AdminApiClient {
     String? teamLeadId,
     String? staffIds,
     String? squadraId,
+
+    /// Sent as `?force=true` when the caller already showed the admin a conflict list (from
+    /// [checkScheduleConflicts]) and they chose to save anyway. Mirrors
+    /// `SchedulesController.Create`'s `force` query param, which otherwise answers 409 with the
+    /// conflicts.
+    bool force = false,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/schedules',
+      queryParameters: force ? {'force': true} : null,
       data: {
         'activityDate': activityDate.toIso8601String(),
         'timeStart':
             '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
         'timeEnd':
             '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
-        'userId': userId,
+        'userId': ?userId,
         'statusId': statusId,
         'locationId': locationId,
         'ticketId': ?ticketId,
@@ -240,9 +505,21 @@ class AdminApiClient {
         'squadraId': ?squadraId,
       },
     );
-    return res.data!['scheduleId'] as String;
+    return res.data!['id'] as String;
   }
 
+  /// Updates a schedule, including its assignment (`teamLeadId`/`staffIds`/`squadraId`) — this used
+  /// to only cover the five scalar fields, which meant an admin could never re-assign an existing
+  /// schedule from mobile even though `UpdateScheduleRequest` (`SchedulesController.cs`) has always
+  /// accepted these.
+  ///
+  /// To actually *change* which assignment kind a schedule has (e.g. individual → squadra), the
+  /// caller must explicitly clear the sources being replaced by passing the all-zeros GUID
+  /// (`00000000-0000-0000-0000-000000000000`) for `userId`/`teamLeadId`/`squadraId`, or `"[]"` for
+  /// `staffIds` — omitting a field here means "untouched" server-side
+  /// (`ScheduleAssignmentWriter.ApplyAsync`: "only sources the input speaks about are reconciled"),
+  /// and a JSON `null` binds identically to an absent key, so there is no other way to say "no
+  /// longer this". `AdminScheduleFormScreen._save` does this when switching assignment type.
   Future<void> updateSchedule(
     String id, {
     DateTime? activityDate,
@@ -255,11 +532,19 @@ class AdminApiClient {
     bool? allDay,
     String? title,
     String? description,
+    String? teamLeadId,
+    String? staffIds,
+    String? squadraId,
+
+    /// See [createSchedule]'s `force`.
+    bool force = false,
   }) async {
     await _dio.put(
       '/api/schedules/$id',
+      queryParameters: force ? {'force': true} : null,
       data: {
-        if (activityDate != null) 'activityDate': activityDate.toIso8601String(),
+        if (activityDate != null)
+          'activityDate': activityDate.toIso8601String(),
         if (timeStartMinutes != null)
           'timeStart':
               '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
@@ -273,27 +558,146 @@ class AdminApiClient {
         'allDay': ?allDay,
         'title': ?title,
         'description': ?description,
+        'teamLeadId': ?teamLeadId,
+        'staffIds': ?staffIds,
+        'squadraId': ?squadraId,
       },
     );
+  }
+
+  /// Live schedule detail — `GET /api/schedules/{id}` (`SchedulesController.GetById`). Unlike the
+  /// Drift mirror (`Schedule` row + `ScheduleAssignees`, synced from the sparser sync payload),
+  /// this resolves `teamLeadId`/`squadraId`/`squadraNome`, which nothing on-device carries. Used to
+  /// prefill the assignment picker when opening the edit form — offline, the form falls back to
+  /// what the mirror knows (direct/team, no squadra id) rather than blocking entirely.
+  Future<Map<String, dynamic>?> fetchScheduleDetail(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/schedules/$id');
+    return res.data;
+  }
+
+  /// The all-zeros GUID `updateSchedule` needs to *explicitly* clear an assignment field — see
+  /// that method's doc comment for why an omitted/null field cannot do this.
+  static const String emptyAssignmentId =
+      '00000000-0000-0000-0000-000000000000';
+
+  /// Pre-flight conflict check, mirroring `POST /api/schedules/check-conflicts`
+  /// (`SchedulesController.CheckConflicts`). Returns every schedule the given user/squadra is
+  /// already explicitly booked on for the same day with an overlapping time (or either is
+  /// `allDay`). An empty list means it is safe to save without `force`.
+  Future<List<ScheduleConflict>> checkScheduleConflicts({
+    required DateTime activityDate,
+    required int timeStartMinutes,
+    required int timeEndMinutes,
+    bool allDay = false,
+    String? userId,
+    String? squadraId,
+    String? excludeScheduleId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/schedules/check-conflicts',
+      data: {
+        'activityDate': activityDate.toIso8601String(),
+        'timeStart':
+            '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
+        'timeEnd':
+            '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
+        'allDay': allDay,
+        'userId': ?userId,
+        'squadraId': ?squadraId,
+        'excludeScheduleId': ?excludeScheduleId,
+      },
+    );
+    final conflicts = res.data?['conflicts'] as List<dynamic>? ?? const [];
+    return conflicts
+        .map((e) => ScheduleConflict.fromJson(e as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   // ── Tickets ─────────────────────────────────────────────────────────────
 
   Future<void> assignTicket(String ticketId, String? userId) async {
+    await _dio.put('/api/tickets/$ticketId', data: {'assignedUserId': ?userId});
+  }
+
+  /// General field edit from ticket detail (`EditTicketScreen`) — distinct from [assignTicket],
+  /// which narrowly sends `assignedUserId` for the "Assegna" action.
+  ///
+  /// Matches `UpdateTicketRequest` (`TicketsController.cs`): every field is optional there too,
+  /// but this only ever sends the five the edit screen actually exposes — title, description,
+  /// customer, location, type. `statusId` has no PUT field at all (status changes go through
+  /// `PUT /api/Tickets/{id}/status` — see `TicketWorkflowApiClient.updateStatus`) and priority is
+  /// deliberately left alone (see `StepDettagliTicket.showPriority`'s doc comment for why).
+  Future<void> updateTicket(
+    String id, {
+    String? title,
+    String? description,
+    String? customerId,
+    String? locationId,
+    int? typeId,
+  }) async {
     await _dio.put(
-      '/api/tickets/$ticketId',
+      '/api/tickets/$id',
       data: {
-        'assignedUserId': ?userId,
+        'title': ?title,
+        'description': ?description,
+        'customerId': ?customerId,
+        'locationId': ?locationId,
+        'typeId': ?typeId,
       },
     );
   }
 
   Future<List<Map<String, dynamic>>> fetchTechnicians() async {
-    final res = await _dio.get<List<dynamic>>(
+    final res = await _dio.get<Map<String, dynamic>>(
       '/api/users',
-      queryParameters: {'role': 'Technician', 'isActive': 'true'},
+      queryParameters: {
+        'role': 'Technician',
+        'isActive': 'true',
+        'pageSize': 200,
+      },
     );
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(res.data);
+  }
+
+  /// Every user in the tenant, paginating through the backend's page-size cap
+  /// (`ListQuery.SafePageSize` clamps to 1–100 — `TaskTapAPI.Api/Queries/ListQuery.cs`), each
+  /// carrying the derived `squadraId`/`lastAccessAt` projection `UsersController.PopulateSquadreAsync`
+  /// puts on every `/api/users` response (backend commit `c5fe0d5`).
+  ///
+  /// Exists so the squadra list/detail screens can derive a per-squadra member count (Gap 7 of the
+  /// feature audit) and each member's last-access timestamp (Gap 6) from ONE bulk fetch, shared via
+  /// `allUsersWithSquadraProvider` — chosen over the two N+1 alternatives: a
+  /// `GET /api/squadre/{id}/membri` call per squadra row on the list screen (N calls, N = squadra
+  /// count, just to answer "how many"), or a live `GET /api/users/{id}` call per member row on the
+  /// detail screen (N calls, N = member count, for a field the bulk list already carries). The call
+  /// count here instead scales with total tenant users ÷ 100 — one request for any tenant under the
+  /// page-size cap, which every seat-billed tenant this app serves is in practice (see the
+  /// pagination comment on `UsersController.GetAll`: "seats are billed per head... hundreds, not
+  /// millions").
+  ///
+  /// [activeOnly], like [fetchTechnicians]'s own filter, excludes deactivated users — they don't
+  /// need to be counted as squadra members or looked up for a last-access display.
+  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({
+    bool activeOnly = true,
+  }) async {
+    final result = <Map<String, dynamic>>[];
+    var page = 1;
+    while (true) {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/api/users',
+        queryParameters: {
+          if (activeOnly) 'isActive': true,
+          'page': page,
+          'pageSize': 100,
+        },
+      );
+      final items = pagedItems(res.data);
+      result.addAll(items);
+      final totalPages = res.data?['totalPages'] as int? ?? 1;
+      if (items.isEmpty || page >= totalPages) break;
+      page++;
+    }
+    return result;
   }
 
   // ── Materiali ────────────────────────────────────────────────────────────
@@ -307,6 +711,7 @@ class AdminApiClient {
     String? marca,
     double? purchasePrice,
     double? salePrice,
+    double? aliquotaIva,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/materiali',
@@ -321,9 +726,10 @@ class AdminApiClient {
         if (marca != null && marca.isNotEmpty) 'marca': marca,
         'purchasePrice': ?purchasePrice,
         'salePrice': ?salePrice,
+        'aliquotaIVA': ?aliquotaIva,
       },
     );
-    return res.data!['materialId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateMateriale(
@@ -336,6 +742,7 @@ class AdminApiClient {
     String? marca,
     double? purchasePrice,
     double? salePrice,
+    double? aliquotaIva,
     bool? isActive,
   }) async {
     await _dio.put(
@@ -349,18 +756,175 @@ class AdminApiClient {
         'marca': ?marca,
         'purchasePrice': ?purchasePrice,
         'salePrice': ?salePrice,
+        'aliquotaIVA': ?aliquotaIva,
         'isActive': ?isActive,
       },
     );
   }
 
-  // ── ProdottoAssistenza ──────────────────────────────────────────────────
-
-  Future<List<Map<String, dynamic>>> fetchProdottiAssistenza() async {
-    final res = await _dio.get<List<dynamic>>('/api/prodottoassistenza');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+  /// Soft-deletes a materiale — mirrors `DELETE /api/materiali/{id}` (`MaterialiController.Delete`),
+  /// which sets `IsActive = false` server-side rather than removing the row. Reactivating is a
+  /// plain [updateMateriale] call with `isActive: true` — there is no separate "undelete" route.
+  Future<void> deleteMateriale(String id) async {
+    await _dio.delete('/api/materiali/$id');
   }
 
+  // ── Materiale barcodes ───────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchMaterialeBarcodes(
+    String materialeId,
+  ) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/materiali/$materialeId/barcodes',
+    );
+    return (res.data ?? const []).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> addMaterialeBarcode(
+    String materialeId, {
+    required String barcode,
+    String? barcodeType,
+    bool isPrimary = false,
+  }) async {
+    await _dio.post(
+      '/api/materiali/$materialeId/barcodes',
+      data: {
+        'barcode': barcode,
+        'barcodeType': ?barcodeType,
+        'isPrimary': isPrimary,
+      },
+    );
+  }
+
+  Future<void> updateMaterialeBarcode(
+    String materialeId,
+    String barcodeId, {
+    String? barcode,
+    String? barcodeType,
+    bool? isPrimary,
+  }) async {
+    await _dio.put(
+      '/api/materiali/$materialeId/barcodes/$barcodeId',
+      data: {
+        'barcode': ?barcode,
+        'barcodeType': ?barcodeType,
+        'isPrimary': ?isPrimary,
+      },
+    );
+  }
+
+  Future<void> deleteMaterialeBarcode(
+    String materialeId,
+    String barcodeId,
+  ) async {
+    await _dio.delete('/api/materiali/$materialeId/barcodes/$barcodeId');
+  }
+
+  Future<void> setPrimaryMaterialeBarcode(
+    String materialeId,
+    String barcodeId,
+  ) async {
+    await _dio.put('/api/materiali/$materialeId/barcodes/$barcodeId/primary');
+  }
+
+  // ── Materiale image ──────────────────────────────────────────────────────
+
+  /// Uploads (replacing any previous) image for a materiale — multipart, field name `file` to
+  /// match `MaterialiController.UploadImage(Guid id, IFormFile file, ...)`. Returns the content
+  /// URL to serve it back (`MaterialeImageResponse.ContentUrl`), never a storage key.
+  Future<String> uploadMaterialeImage(
+    String materialeId, {
+    required List<int> bytes,
+    required String fileName,
+    String? contentType,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+        contentType: contentType == null
+            ? null
+            : DioMediaType.parse(contentType),
+      ),
+    });
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/materiali/$materialeId/image',
+      data: formData,
+      options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+    );
+    return res.data!['contentUrl'] as String;
+  }
+
+  Future<void> deleteMaterialeImage(String materialeId) async {
+    await _dio.delete('/api/materiali/$materialeId/image');
+  }
+
+  /// Live materiale detail — `GET /api/materiali/{id}` (`MaterialiController.GetById`), the full
+  /// `MaterialeWithBarcodesDto`. Used to prefill fields the local Drift mirror does not carry
+  /// (`AliquotaIVA`, barcodes) when opening the edit form — best-effort, offline just leaves that
+  /// management unavailable this session rather than blocking the base-field prefill, which
+  /// already comes from Drift and works offline.
+  Future<Map<String, dynamic>?> fetchMaterialeDetail(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/materiali/$id');
+    return res.data;
+  }
+
+  /// Distinct, non-empty Marca/Category values already in use across the tenant's active
+  /// catalog — `GET /api/materiali/lookups` (`MaterialiController.GetLookups`). Feeds the
+  /// admin materiale form's Marca/Categoria `AppLookupField`: a convenience list, not a
+  /// constraint — a typed value that isn't here is still a valid save.
+  Future<Map<String, dynamic>?> fetchMaterialiLookups() async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/materiali/lookups');
+    return res.data;
+  }
+
+  // ── ProdottoAssistenza ──────────────────────────────────────────────────
+
+  /// [customerId], when given, filters server-side via `ProdottoAssistenzaController.GetAll`'s
+  /// own `customerId` query param (Gap 8 of the feature audit — a customer's Prodotti section
+  /// needs this scoped, not a client-side filter over an unpaginated fetch that could miss rows
+  /// past the default 20-item page).
+  Future<List<Map<String, dynamic>>> fetchProdottiAssistenza({
+    String? customerId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/prodottoassistenza',
+      queryParameters: {'customerId': ?customerId, 'pageSize': 100},
+    );
+    return pagedItems(res.data);
+  }
+
+  /// `GET /api/prodottoassistenza/{id}` (`ProdottoAssistenzaController.GetById`) — resolves a
+  /// single prodotto by id regardless of which customer it belongs to, unlike
+  /// [fetchProdottiAssistenza], which requires scoping by customer. Needed wherever only the id
+  /// is in hand (e.g. a contract's `prodottoAssistenzaId`, with no customer context loaded).
+  Future<Map<String, dynamic>?> fetchProdottoAssistenzaById(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/prodottoassistenza/$id',
+    );
+    return res.data;
+  }
+
+  /// Distinct, non-empty Modello values already in use across the tenant's active prodotti —
+  /// `GET /api/prodottoassistenza/lookups` (`ProdottoAssistenzaController.GetLookups`). Feeds
+  /// the admin prodotto form's Modello `AppLookupField`: a convenience list, not a constraint.
+  Future<Map<String, dynamic>?> fetchProdottoAssistenzaLookups() async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/prodottoassistenza/lookups',
+    );
+    return res.data;
+  }
+
+  /// [code]/[category]/[unitOfMeasure]/[purchasePrice]/[salePrice] are the commercial fields
+  /// (W6b Task 6 migration `AddProdottoAssistenzaCommercialFields`, Gap 1 of the feature audit);
+  /// [marca]/[modello]/[tipo]/[dataInstallazione]/[ultimaManutenzione]/[prossimaManutenzione]
+  /// are the lifecycle fields (W6b Task 6, Gap 2); [externalId] is the legacy gestionale id
+  /// (W6b Task 8, Gap 7). Dart param names follow this file's existing English
+  /// convention (matching [createMateriale]'s `code`/`category`/`unitOfMeasure`/`purchasePrice`/
+  /// `salePrice`), but the wire names are Italian per `ProdottoAssistenza.cs`'s
+  /// `[JsonPropertyName]` overrides — most notably [marca] → `"marchio"` on the wire, NOT
+  /// `"marca"` (that's Materiale's brand field name, a different entity with a different wire
+  /// name for the same concept).
   Future<String> createProdottoAssistenza({
     required String name,
     required String customerId,
@@ -369,6 +933,18 @@ class AdminApiClient {
     String? serialNumber,
     DateTime? warrantyExpiryDate,
     String? notes,
+    String? code,
+    String? category,
+    String? unitOfMeasure,
+    double? purchasePrice,
+    double? salePrice,
+    String? marca,
+    String? modello,
+    String? tipo,
+    DateTime? dataInstallazione,
+    DateTime? ultimaManutenzione,
+    DateTime? prossimaManutenzione,
+    String? externalId,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/prodottoassistenza',
@@ -383,11 +959,35 @@ class AdminApiClient {
         if (warrantyExpiryDate != null)
           'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (code != null && code.isNotEmpty) 'codice': code,
+        if (category != null && category.isNotEmpty) 'categoria': category,
+        if (unitOfMeasure != null && unitOfMeasure.isNotEmpty)
+          'um': unitOfMeasure,
+        'prezzoAcquisto': ?purchasePrice,
+        'prezzoVendita': ?salePrice,
+        if (marca != null && marca.isNotEmpty) 'marchio': marca,
+        if (modello != null && modello.isNotEmpty) 'modello': modello,
+        if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
+        if (dataInstallazione != null)
+          'dataInstallazione': dataInstallazione.toIso8601String(),
+        if (ultimaManutenzione != null)
+          'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
+        if (prossimaManutenzione != null)
+          'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
+        if (externalId != null && externalId.isNotEmpty)
+          'externalId': externalId,
       },
     );
-    return res.data!['prodottoAssistenzaId'] as String;
+    return res.data!['id'] as String;
   }
 
+  /// See [createProdottoAssistenza]'s doc comment for the field-name mapping. Following this
+  /// file's established update convention, every optional field here uses the null-aware `?`
+  /// map-entry spread — omitted (untouched server-side) only when null, sent (including empty
+  /// string, to clear) otherwise. The one exception is the four `DateTime?` fields, which the
+  /// backend's `UpdateProdottoAssistenzaRequest` can only ever *set* (each guarded by
+  /// `.HasValue` server-side, matching `warrantyExpiryDate`'s pre-existing behavior here) — there
+  /// is no way to clear a date once set via this endpoint.
   Future<void> updateProdottoAssistenza(
     String id, {
     String? name,
@@ -398,6 +998,18 @@ class AdminApiClient {
     DateTime? warrantyExpiryDate,
     String? notes,
     bool? isActive,
+    String? code,
+    String? category,
+    String? unitOfMeasure,
+    double? purchasePrice,
+    double? salePrice,
+    String? marca,
+    String? modello,
+    String? tipo,
+    DateTime? dataInstallazione,
+    DateTime? ultimaManutenzione,
+    DateTime? prossimaManutenzione,
+    String? externalId,
   }) async {
     await _dio.put(
       '/api/prodottoassistenza/$id',
@@ -411,29 +1023,122 @@ class AdminApiClient {
           'warrantyExpiryDate': warrantyExpiryDate.toIso8601String(),
         'notes': ?notes,
         'isActive': ?isActive,
+        'codice': ?code,
+        'categoria': ?category,
+        'um': ?unitOfMeasure,
+        'prezzoAcquisto': ?purchasePrice,
+        'prezzoVendita': ?salePrice,
+        'marchio': ?marca,
+        'modello': ?modello,
+        'tipo': ?tipo,
+        if (dataInstallazione != null)
+          'dataInstallazione': dataInstallazione.toIso8601String(),
+        if (ultimaManutenzione != null)
+          'ultimaManutenzione': ultimaManutenzione.toIso8601String(),
+        if (prossimaManutenzione != null)
+          'prossimaManutenzione': prossimaManutenzione.toIso8601String(),
+        'externalId': ?externalId,
       },
+    );
+  }
+
+  /// Hard-deletes a prodotto assistenza — mirrors `DELETE /api/prodottoassistenza/{id}`
+  /// (`ProdottoAssistenzaController.Delete`), which has no soft-delete/undo path (Gap 5 of the
+  /// feature audit — this action never existed on mobile before).
+  Future<void> deleteProdottoAssistenza(String id) async {
+    await _dio.delete('/api/prodottoassistenza/$id');
+  }
+
+  // ── Matricole (Gap 3 of the feature audit) ──────────────────────────────
+  //
+  // Real 1:N serial-number sub-resource replacing the deprecated scalar `serialNumber` field
+  // (which stays on the entity/form, just no longer the only way to record a serial — see
+  // ProdottoAssistenzaController.cs:253-313 and Matricola.cs). Soft-removed server-side
+  // (IsActive=false), same shape as Materiale barcodes / cantiere contacts: list/add/remove under
+  // the parent's id, no update route (the backend never added one — add a new matricola / remove
+  // the wrong one instead of editing in place).
+
+  Future<List<Map<String, dynamic>>> fetchMatricole(String prodottoId) async {
+    final res = await _dio.get<List<dynamic>>(
+      '/api/prodottoassistenza/$prodottoId/matricole',
+    );
+    return (res.data ?? const []).cast<Map<String, dynamic>>();
+  }
+
+  Future<String> addMatricola(
+    String prodottoId, {
+    required String numero,
+    String? note,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/prodottoassistenza/$prodottoId/matricole',
+      data: {'numero': numero, 'note': ?note},
+    );
+    return res.data!['id'] as String;
+  }
+
+  Future<void> deleteMatricola(String prodottoId, String matricolaId) async {
+    await _dio.delete(
+      '/api/prodottoassistenza/$prodottoId/matricole/$matricolaId',
     );
   }
 
   // ── Contracts ────────────────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> fetchContracts() async {
-    final res = await _dio.get<List<dynamic>>('/api/contracts');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+  /// [customerId], when given, filters server-side via `ContractsController.GetAll`'s own
+  /// `customerId` query param (Gap 7 of the feature audit — a customer's Contratti section needs
+  /// this scoped, not a client-side filter over an unpaginated fetch that could miss rows past the
+  /// default 20-item page).
+  Future<List<Map<String, dynamic>>> fetchContracts({
+    String? customerId,
+  }) async {
+    final res = await _dio.get<Map<String, dynamic>>(
+      '/api/contracts',
+      queryParameters: {'customerId': ?customerId, 'pageSize': 100},
+    );
+    return pagedItems(res.data);
   }
 
+  /// Live contract detail — `GET /api/contracts/{id}` (`ContractsController.GetById`). Feature
+  /// audit module #11, Gap D: a technician viewing a ticket/cantiere tied to a contract has no
+  /// local Drift mirror to read it from (contracts, like Contratti's other sub-resources, are
+  /// never synced to the device — see `fetchContracts`'s own doc comment), so this fetches the
+  /// single contract live the same way `fetchCantiereDetail`/`fetchSquadraDetail` do for their
+  /// entities.
+  Future<Map<String, dynamic>?> fetchContractById(String id) async {
+    final res = await _dio.get<Map<String, dynamic>>('/api/contracts/$id');
+    return res.data;
+  }
+
+  /// [frequencyUnit] is the backend's `ContractFrequencyUnit` enum, which carries its own
+  /// `[JsonConverter(typeof(JsonStringEnumConverter))]` (`Contract.cs`) — the wire shape is the
+  /// STRING `"Days"`/`"Months"`/`"Years"`, not an ordinal int. [tipo] is `ContractTipoEnum?`,
+  /// serialized the same way (`"Manutenzione"`/`"Assistenza"`/`"Garanzia"`).
+  ///
+  /// [numero]/[autoRenewal]/[scadenzaGiorni]/[condizioni]/[tipo]/[externalId]/[codice] are the
+  /// feature audit module #11 Gap A fields — `CreateContractRequest`'s full W6b Task 6/8 field
+  /// set, previously entirely uncollected on mobile.
   Future<String> createContract({
     required String name,
     required String customerId,
     required DateTime startDate,
     String? description,
     String? locationId,
-    String? prodottoAssistenzaId,
     DateTime? endDate,
     double? price,
     int frequencyValue = 1,
-    int frequencyUnit = 1,
+    String frequencyUnit = 'Months',
     String? notes,
+    String? numero,
+    bool autoRenewal = false,
+    int? scadenzaGiorni,
+    String? condizioni,
+    String? tipo,
+    String? externalId,
+    String? codice,
+
+    /// Assets this contract covers. Omitted/empty means none — the pre-existing behavior.
+    List<String>? prodottoAssistenzaIds,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/contracts',
@@ -444,17 +1149,39 @@ class AdminApiClient {
         if (description != null && description.isNotEmpty)
           'description': description,
         'locationId': ?locationId,
-        'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'price': ?price,
         'frequencyValue': frequencyValue,
         'frequencyUnit': frequencyUnit,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
+        if (numero != null && numero.isNotEmpty) 'numero': numero,
+        'autoRenewal': autoRenewal,
+        'scadenzaGiorni': ?scadenzaGiorni,
+        if (condizioni != null && condizioni.isNotEmpty)
+          'condizioni': condizioni,
+        if (tipo != null && tipo.isNotEmpty) 'tipo': tipo,
+        if (externalId != null && externalId.isNotEmpty)
+          'externalId': externalId,
+        if (codice != null && codice.isNotEmpty) 'codice': codice,
+        if (prodottoAssistenzaIds != null)
+          'prodottoAssistenzaIds': prodottoAssistenzaIds,
       },
     );
-    return res.data!['contractId'] as String;
+    return res.data!['id'] as String;
   }
 
+  /// See [createContract]'s doc comment for the `frequencyUnit`/`tipo` string-enum wire shape.
+  /// Every optional field here uses the null-aware `?` map-entry spread — omitted (untouched
+  /// server-side) only when null, sent (including empty string, to clear) otherwise — matching
+  /// this file's established update convention (`updateProdottoAssistenza`,
+  /// `UpdateContractRequest`'s own plain-`string?` bucket for name/description/notes/numero/
+  /// condizioni/externalId). `codice` is deliberately sent as `null` rather than `""` when
+  /// empty, never round-tripping a blank string back — `Contract.Codice` carries a partial
+  /// UNIQUE index and a second contract cleared to `""` in the same tenant would 500 on it (see
+  /// `ContrattoEditSheet.tsx`'s own header comment on the web side of this exact trap).
+  /// `locationId`/`endDate`/`price`/`scadenzaGiorni`/`tipo` can never be cleared through this
+  /// endpoint once set (`.HasValue`-gated server-side) — callers pass `null` for "leave
+  /// untouched", same as before Gap A.
   Future<void> updateContract(
     String id, {
     String? name,
@@ -462,13 +1189,25 @@ class AdminApiClient {
     DateTime? startDate,
     String? description,
     String? locationId,
-    String? prodottoAssistenzaId,
     DateTime? endDate,
     double? price,
     int? frequencyValue,
-    int? frequencyUnit,
+    String? frequencyUnit,
     String? notes,
     bool? isActive,
+    String? numero,
+    bool? autoRenewal,
+    int? scadenzaGiorni,
+    String? condizioni,
+    String? tipo,
+    String? externalId,
+    String? codice,
+
+    /// Null (the default) leaves the contract's covered assets untouched. A non-null list —
+    /// including an empty one — fully replaces them (`ContractsController.Update`'s own
+    /// comment): whatever the picker currently shows must always be sent here, never omitted,
+    /// or a removed asset silently stays linked.
+    List<String>? prodottoAssistenzaIds,
   }) async {
     await _dio.put(
       '/api/contracts/$id',
@@ -478,22 +1217,73 @@ class AdminApiClient {
         if (startDate != null) 'startDate': startDate.toIso8601String(),
         'description': ?description,
         'locationId': ?locationId,
-        'prodottoAssistenzaId': ?prodottoAssistenzaId,
         if (endDate != null) 'endDate': endDate.toIso8601String(),
         'price': ?price,
         'frequencyValue': ?frequencyValue,
         'frequencyUnit': ?frequencyUnit,
         'notes': ?notes,
         'isActive': ?isActive,
+        'numero': ?numero,
+        'autoRenewal': ?autoRenewal,
+        'scadenzaGiorni': ?scadenzaGiorni,
+        'condizioni': ?condizioni,
+        'tipo': ?tipo,
+        'externalId': ?externalId,
+        // Never "" — see the doc comment above.
+        'codice': ?codice,
+        'prodottoAssistenzaIds': ?prodottoAssistenzaIds,
       },
+    );
+  }
+
+  /// `DELETE /api/contracts/{id}`. Every foreign key in this database is
+  /// `DeleteBehavior.Restrict` — a contract referenced by a ProdottoAssistenza, a generated
+  /// Schedule, or a Ticket cannot be deleted at all, and the server answers 409 with a message
+  /// naming exactly that (`ContractsController.Delete`'s doc comment) rather than a raw 500.
+  /// [humanErrorMessage] already surfaces a 409's `message` field verbatim, so callers don't
+  /// need to special-case the status code — same treatment as `deleteProdottoAssistenza`.
+  Future<void> deleteContract(String id) async {
+    await _dio.delete('/api/contracts/$id');
+  }
+
+  /// `POST /api/contracts/{id}/genera-schedule` (`ContractsController.GeneraSchedule`) —
+  /// materializes recurring `Schedule` rows from the contract's own `FrequencyValue`/
+  /// `FrequencyUnit` over `[dateFrom ?? contract.StartDate, dateTo ?? contract.EndDate ?? +3
+  /// months]`. [userId] is required server-side (`GeneraScheduleRequest.UserId` is a plain
+  /// `Guid`, not `Guid?`) — every generated Schedule needs an assignee, there is no "unassigned"
+  /// bulk-generate. [locationId] falls back to the contract's own location server-side when
+  /// omitted; the request 400s if neither is set. Returns the created count and the server's
+  /// own Italian summary message ("N pianificazioni generate.") for the caller to display as-is.
+  Future<GeneraScheduleResult> generaSchedule(
+    String contractId, {
+    required String userId,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String? locationId,
+    int? statusId,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/api/contracts/$contractId/genera-schedule',
+      data: {
+        'userId': userId,
+        if (dateFrom != null) 'dateFrom': dateFrom.toIso8601String(),
+        if (dateTo != null) 'dateTo': dateTo.toIso8601String(),
+        'locationId': ?locationId,
+        'statusId': ?statusId,
+      },
+    );
+    final data = res.data ?? const {};
+    return GeneraScheduleResult(
+      created: data['created'] as int? ?? 0,
+      message: data['message'] as String? ?? '',
     );
   }
 
   // ── Squadre ─────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> fetchSquadre() async {
-    final res = await _dio.get<List<dynamic>>('/api/squadre');
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    final res = await _dio.get<Map<String, dynamic>>('/api/squadre');
+    return pagedItems(res.data);
   }
 
   Future<Map<String, dynamic>?> fetchSquadraDetail(String id) async {
@@ -521,7 +1311,7 @@ class AdminApiClient {
         if (note != null && note.isNotEmpty) 'note': note,
       },
     );
-    return res.data!['squadraId'] as String;
+    return res.data!['id'] as String;
   }
 
   Future<void> updateSquadra(
@@ -549,7 +1339,7 @@ class AdminApiClient {
   Future<void> addSquadraMember(
     String squadraId, {
     required String userId,
-    String ruolo = 'Membro',
+    int ruolo = SquadraRuolo.membro,
   }) async {
     await _dio.post(
       '/api/squadre/$squadraId/membri',
@@ -565,18 +1355,24 @@ class AdminApiClient {
 
   Future<List<Map<String, dynamic>>> fetchReports({
     String? stato,
+    // Rapportini documenting work on a cantiere (Gap 6) — `GET /api/reports?cantiereId=`, same
+    // filter web's RapportiniSection uses (frontend/src/features/cantieri/api.ts).
+    String? cantiereId,
     int page = 1,
     int pageSize = 50,
   }) async {
-    final res = await _dio.get<List<dynamic>>(
+    // Read as an envelope here and as a bare list in ticket_detail_api_client until now — the
+    // same endpoint, two shapes, one app. This was the broken one.
+    final res = await _dio.get<Map<String, dynamic>>(
       '/api/reports',
       queryParameters: {
         'stato': ?stato,
+        'cantiereId': ?cantiereId,
         'page': page,
         'pageSize': pageSize,
       },
     );
-    return (res.data ?? []).cast<Map<String, dynamic>>();
+    return pagedItems(res.data);
   }
 
   Future<void> controllaReport(String reportId) async {
@@ -585,6 +1381,21 @@ class AdminApiClient {
 
   Future<void> fatturaReport(String reportId) async {
     await _dio.post('/api/reports/$reportId/fattura');
+  }
+
+  /// `GET /api/reports/{id}/fattura-xml` — the FatturaPA-shaped XML for this report's billable
+  /// materials/labour (see `ReportFatturaXmlService` doc comment on the backend for the "not
+  /// SDI-submission-ready" scope caveat). Pure download, no stato side effect on the backend —
+  /// same shape as `_fetchPdfToTempFile`'s PDF download in `rapportino_view_screen.dart`, which
+  /// this mirrors so a caller can save-and-share the bytes the same way.
+  Future<List<int>> fatturaXml(String reportId) async {
+    final res = await _dio.get<List<int>>(
+      '/api/reports/$reportId/fattura-xml',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = res.data;
+    if (bytes == null) throw StateError('empty fattura-xml response');
+    return bytes;
   }
 }
 

@@ -39,10 +39,27 @@ final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
   return ref.watch(entitlementRepositoryProvider).read();
 });
 
+/// The effective clock-in method as a plain string ('Both'/'QrOnly'/'ButtonOnly'), defaulting to
+/// 'Both' before the first successful /auth/me — matching the same "no answer means allow"
+/// asymmetry the rest of this file's entitlement reads already use.
+final effectiveClockInMethodProvider = Provider<String>((ref) {
+  final cached = ref.watch(cachedEntitlementProvider).valueOrNull;
+  return cached?.clockInMethod ?? 'Both';
+});
+
 /// Call once on app start, alongside initAuthReconnectWatcher.
-void initEntitlementRefreshWatcher(WidgetRef ref) {
-  final connectivity = ref.read(connectivityProvider.notifier);
-  connectivity.onReconnect(() async {
+///
+/// Fetches immediately as well as on every reconnect. Reconnect alone was not enough and the
+/// omission was invisible: a device that is online at launch and never drops signal never
+/// reconnects, so it never fetched, so the cache stayed null and every screen reading it fell back
+/// to the field-seat baseline forever. An office user on good wifi would have been the *worst*
+/// served by a watcher that only listens for the network coming back.
+///
+/// Returns the cancel function to invoke from the caller's `dispose()` — without it, a widget
+/// remount (e.g. forced sign-out → re-login) leaves the old closure's `ref` in the listener list
+/// forever, and the next reconnect throws on that stale entry.
+VoidCallback initEntitlementRefreshWatcher(WidgetRef ref) {
+  Future<void> refresh() async {
     final updated = await ref.read(entitlementServiceProvider).refresh();
     // Only invalidate on a real change — a failed refresh must not churn the UI into
     // re-reading a cache that did not move.
@@ -50,5 +67,8 @@ void initEntitlementRefreshWatcher(WidgetRef ref) {
       ref.invalidate(cachedEntitlementProvider);
       ref.invalidate(hasFeatureProvider);
     }
-  });
+  }
+
+  refresh();
+  return ref.read(connectivityProvider.notifier).onReconnect(refresh);
 }

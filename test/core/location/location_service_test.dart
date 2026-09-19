@@ -9,28 +9,39 @@ import 'package:tasktap_mobile/core/location/location_service.dart';
 
 // ── Fake implementations ──────────────────────────────────────────────────────
 
-class _FakeLocationServiceReturnsCoords implements ILocationService {
+class _FakeLocationServiceReturnsCoords extends ILocationService {
   const _FakeLocationServiceReturnsCoords();
 
   @override
   Future<GpsCoords?> getCurrentPosition() async =>
-      (lat: 45.4654219, lng: 9.1859243);
+      (lat: 45.4654219, lng: 9.1859243, accuracy: 12.5);
 }
 
-class _FakeLocationServiceReturnsNull implements ILocationService {
+class _FakeLocationServiceReturnsNull extends ILocationService {
   const _FakeLocationServiceReturnsNull();
 
   @override
   Future<GpsCoords?> getCurrentPosition() async => null;
 }
 
-class _FakeLocationServiceThrows implements ILocationService {
+class _FakeLocationServiceThrows extends ILocationService {
   const _FakeLocationServiceThrows();
 
   @override
   Future<GpsCoords?> getCurrentPosition() async {
     throw Exception('GPS not available');
   }
+}
+
+class _FakeLocationServiceWithStatus extends ILocationService {
+  const _FakeLocationServiceWithStatus(this._status);
+  final GpsPermissionStatus _status;
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async => null;
+
+  @override
+  Future<GpsPermissionStatus> permissionStatus() async => _status;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -43,6 +54,7 @@ void main() {
       expect(result, isNotNull);
       expect(result!.lat, closeTo(45.465, 0.01));
       expect(result.lng, closeTo(9.185, 0.01));
+      expect(result.accuracy, 12.5);
     });
 
     test('returns null when location unavailable', () async {
@@ -67,10 +79,30 @@ void main() {
       expect(result, isNull);
     });
 
-    test('GpsCoords record exposes lat and lng fields', () {
-      const coords = (lat: 10.0, lng: 20.0);
+    test('GpsCoords record exposes lat, lng and accuracy fields', () {
+      const GpsCoords coords = (lat: 10.0, lng: 20.0, accuracy: 5.0);
       expect(coords.lat, 10.0);
       expect(coords.lng, 20.0);
+      expect(coords.accuracy, 5.0);
+    });
+
+    test('GpsCoords accuracy is null when the device reports none', () {
+      const GpsCoords coords = (lat: 10.0, lng: 20.0, accuracy: null);
+      expect(coords.accuracy, isNull);
+    });
+
+    test('permissionStatus defaults to notDetermined on the base contract', () async {
+      // The base class gives every existing fake (and DisabledLocationService) an honest default
+      // without each having to restate it — same trick willPromptForPermission already uses.
+      const service = _FakeLocationServiceReturnsNull();
+      expect(await service.permissionStatus(), GpsPermissionStatus.notDetermined);
+    });
+
+    test('permissionStatus can report every state a caller needs to branch on', () async {
+      for (final status in GpsPermissionStatus.values) {
+        final service = _FakeLocationServiceWithStatus(status);
+        expect(await service.permissionStatus(), status);
+      }
     });
   });
 }

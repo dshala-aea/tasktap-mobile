@@ -17,6 +17,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/features/timbra/cantiere_timbra_screen.dart' show cantieriProvider;
 import 'package:tasktap_mobile/presentation/providers/schedule_providers.dart';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -34,12 +35,14 @@ Map<String, dynamic> _syncPayload({
   DateTime? since,
   List<Map<String, dynamic>> schedules = const [],
   List<Map<String, dynamic>> draftReports = const [],
+  List<Map<String, dynamic>> submittedReports = const [],
   List<Map<String, dynamic>> customers = const [],
   List<Map<String, dynamic>> locations = const [],
   List<Map<String, dynamic>> tickets = const [],
   List<Map<String, dynamic>> ticketStatuses = const [],
   List<Map<String, dynamic>> ticketTypes = const [],
   List<Map<String, dynamic>> materiali = const [],
+  List<Map<String, dynamic>> materialiBarcodes = const [],
   List<Map<String, dynamic>> cantieri = const [],
   List<Map<String, dynamic>> colleagues = const [],
 }) {
@@ -48,61 +51,58 @@ Map<String, dynamic> _syncPayload({
     'since': since?.toIso8601String(),
     'schedules': schedules,
     'draftReports': draftReports,
+    'submittedReports': submittedReports,
     'customers': customers,
     'locations': locations,
     'tickets': tickets,
     'ticketStatuses': ticketStatuses,
     'ticketTypes': ticketTypes,
     'materiali': materiali,
+    'materialiBarcodes': materialiBarcodes,
     'cantieri': cantieri,
     'colleagues': colleagues,
   };
 }
 
-Map<String, dynamic> _customerJson({
-  String id = 'cust-1',
-  String companyName = 'ACME Srl',
-}) =>
-    {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'createdAt': '2026-01-01T00:00:00Z',
-      'updatedAt': null,
-      'companyName': companyName,
-      'taxId': null,
-      'address': 'Via Roma 1',
-      'city': 'Milano',
-      'postalCode': '20121',
-      'country': 'IT',
-      'phone': null,
-      'email': null,
-      'contactPerson': null,
-      'notes': null,
-      'isActive': true,
-    };
+Map<String, dynamic> _customerJson({String id = 'cust-1', String companyName = 'ACME Srl'}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-01-01T00:00:00Z',
+  'updatedAt': null,
+  'companyName': companyName,
+  'taxId': null,
+  'address': 'Via Roma 1',
+  'city': 'Milano',
+  'postalCode': '20121',
+  'country': 'IT',
+  'phone': null,
+  'email': null,
+  'contactPerson': null,
+  'notes': null,
+  'isActive': true,
+};
 
 Map<String, dynamic> _locationJson({
   String id = 'loc-1',
   String customerId = 'cust-1',
   String name = 'Sede principale',
-}) =>
-    {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'createdAt': '2026-01-01T00:00:00Z',
-      'updatedAt': null,
-      'customerId': customerId,
-      'name': name,
-      'address': 'Via Roma 1',
-      'city': 'Milano',
-      'postalCode': '20121',
-      'country': 'IT',
-      'latitude': null,
-      'longitude': null,
-      'phone': null,
-      'notes': null,
-      'isActive': true,
-    };
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-01-01T00:00:00Z',
+  'updatedAt': null,
+  'customerId': customerId,
+  'name': name,
+  'address': 'Via Roma 1',
+  'city': 'Milano',
+  'postalCode': '20121',
+  'country': 'IT',
+  'latitude': null,
+  'longitude': null,
+  'phone': null,
+  'notes': null,
+  'isActive': true,
+};
 
 Map<String, dynamic> _scheduleJson({
   String id = 'sched-1',
@@ -110,111 +110,106 @@ Map<String, dynamic> _scheduleJson({
   String? updatedAt,
   String activityDate = '2026-06-21T00:00:00Z',
   List<Map<String, dynamic>>? assignees,
-}) =>
-    {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'createdAt': '2026-01-01T00:00:00Z',
-      'updatedAt': updatedAt,
-      'ticketId': null,
-      'activityDate': activityDate,
-      'timeStart': '08:00:00',
-      'timeEnd': '17:00:00',
-      'userId': 'user-1',
-      'statusId': 1,
-      'locationId': 'loc-1',
-      'allDay': false,
-      'title': title,
-      'description': 'Descrizione intervento',
-      'assignees': assignees ??
-          [
-            {
-              'userId': 'user-1',
-              'isUserActive': true,
-              'isDirect': true,
-              'isLead': false,
-              'isTeam': false,
-              'isLegacyStaff': false,
-            },
-          ],
-    };
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-01-01T00:00:00Z',
+  'updatedAt': updatedAt,
+  'ticketId': null,
+  'activityDate': activityDate,
+  'timeStart': '08:00:00',
+  'timeEnd': '17:00:00',
+  'userId': 'user-1',
+  'statusId': 1,
+  'locationId': 'loc-1',
+  'allDay': false,
+  'title': title,
+  'description': 'Descrizione intervento',
+  'assignees':
+      assignees ??
+      [
+        {
+          'userId': 'user-1',
+          'isUserActive': true,
+          'isDirect': true,
+          'isLead': false,
+          'isTeam': false,
+          'isLegacyStaff': false,
+        },
+      ],
+};
 
 Map<String, dynamic> _ticketJson({String id = 'ticket-1'}) => {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'createdAt': '2026-01-01T00:00:00Z',
-      'updatedAt': null,
-      'title': 'Intervento urgente',
-      'description': null,
-      'customerId': 'cust-1',
-      'locationId': 'loc-1',
-      'assignedUserId': 'user-1',
-      'statusId': 1,
-      'typeId': 1,
-      'agentId': null,
-      'closedAt': null,
-      'technicianNotes': null,
-      'internalNotes': null,
-      'contractId': null,
-      'prodottoAssistenzaId': null,
-      'commessaId': null,
-    };
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-01-01T00:00:00Z',
+  'updatedAt': null,
+  'title': 'Intervento urgente',
+  'description': null,
+  'customerId': 'cust-1',
+  'locationId': 'loc-1',
+  'assignedUserId': 'user-1',
+  'statusId': 1,
+  'typeId': 1,
+  'agentId': null,
+  'closedAt': null,
+  'technicianNotes': null,
+  'internalNotes': null,
+  'contractId': null,
+  'prodottoAssistenzaId': null,
+  'commessaId': null,
+};
 
-Map<String, dynamic> _ticketStatusJson({
-  int id = 1,
-  String name = 'Aperto',
-}) =>
-    {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'name': name,
-      'isDefault': true,
-      'isClosed': false,
-    };
+Map<String, dynamic> _ticketStatusJson({int id = 1, String name = 'Aperto'}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'name': name,
+  'isDefault': true,
+  'isClosed': false,
+};
 
-Map<String, dynamic> _ticketTypeJson({
-  int id = 1,
-  String name = 'Assistenza',
-}) =>
-    {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'name': name,
-      'description': null,
-    };
+Map<String, dynamic> _ticketTypeJson({int id = 1, String name = 'Assistenza'}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'name': name,
+  'description': null,
+};
 
-Map<String, dynamic> _draftReportJson({String id = 'report-1'}) => {
-      'id': id,
-      'tenantId': 'tenant-1',
-      'createdAt': '2026-01-01T00:00:00Z',
-      'updatedAt': null,
-      'title': 'Rapportino bozza',
-      'scheduleId': null,
-      'ticketId': 'ticket-1',
-      'customerId': 'cust-1',
-      'details': null,
-      'insertedUserId': 'user-1',
-      'locationId': 'loc-1',
-      'startedAt': null,
-      'endedAt': null,
-      'documentTemplateId': null,
-      'customerSignatureAllegatoId': null,
-      'technicianSignatureAllegatoId': null,
-      'technicianNotes': null,
-      'closedAt': null,
-      'stato': 'Bozza',
-      'inviatoAt': null,
-      'controllatoAt': null,
-      'controllatoDa': null,
-      'fatturatoAt': null,
-      'materialiNotRequired': false,
-      'customerSignoffText': null,
-      'customerSignoffAt': null,
-    };
+Map<String, dynamic> _draftReportJson({
+  String id = 'report-1',
+  String stato = 'Bozza',
+  String? updatedAt,
+}) => {
+  'id': id,
+  'tenantId': 'tenant-1',
+  'createdAt': '2026-01-01T00:00:00Z',
+  'updatedAt': updatedAt,
+  'title': 'Rapportino bozza',
+  'scheduleId': null,
+  'ticketId': 'ticket-1',
+  'customerId': 'cust-1',
+  'details': null,
+  'insertedUserId': 'user-1',
+  'locationId': 'loc-1',
+  'startedAt': null,
+  'endedAt': null,
+  'documentTemplateId': null,
+  'customerSignatureAllegatoId': null,
+  'technicianSignatureAllegatoId': null,
+  'technicianNotes': null,
+  'closedAt': null,
+  'stato': stato,
+  'inviatoAt': null,
+  'controllatoAt': null,
+  'controllatoDa': null,
+  'fatturatoAt': null,
+  'materialiNotRequired': false,
+  'customerSignoffText': null,
+  'customerSignoffAt': null,
+};
 
 /// Stub a Dio GET response with the given JSON body.
-void _stubDioGet(MockDio mockDio, Map<String, dynamic> body,
-    {Map<String, dynamic>? queryParams}) {
+void _stubDioGet(MockDio mockDio, Map<String, dynamic> body, {Map<String, dynamic>? queryParams}) {
   when(
     () => mockDio.get<Map<String, dynamic>>(
       any(),
@@ -255,10 +250,7 @@ void main() {
 
   group('sync — insert new entities', () {
     test('inserts a new customer', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(customers: [_customerJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson()]));
 
       await svc.sync();
 
@@ -269,10 +261,7 @@ void main() {
     });
 
     test('inserts a new location', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(locations: [_locationJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(locations: [_locationJson()]));
 
       await svc.sync();
 
@@ -283,10 +272,7 @@ void main() {
     });
 
     test('inserts a new ticket', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(tickets: [_ticketJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(tickets: [_ticketJson()]));
 
       await svc.sync();
 
@@ -296,10 +282,7 @@ void main() {
     });
 
     test('inserts a new schedule with parsed time minutes', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(schedules: [_scheduleJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
 
       await svc.sync();
 
@@ -330,26 +313,30 @@ void main() {
     test('stores squadra members the old columns could not express', () async {
       _stubDioGet(
         mockDio,
-        _syncPayload(schedules: [
-          _scheduleJson(assignees: [
-            {
-              'userId': 'member-1',
-              'isUserActive': true,
-              'isDirect': false,
-              'isLead': false,
-              'isTeam': true,
-              'isLegacyStaff': false,
-            },
-            {
-              'userId': 'member-2',
-              'isUserActive': true,
-              'isDirect': false,
-              'isLead': false,
-              'isTeam': true,
-              'isLegacyStaff': false,
-            },
-          ]),
-        ]),
+        _syncPayload(
+          schedules: [
+            _scheduleJson(
+              assignees: [
+                {
+                  'userId': 'member-1',
+                  'isUserActive': true,
+                  'isDirect': false,
+                  'isLead': false,
+                  'isTeam': true,
+                  'isLegacyStaff': false,
+                },
+                {
+                  'userId': 'member-2',
+                  'isUserActive': true,
+                  'isDirect': false,
+                  'isLead': false,
+                  'isTeam': true,
+                  'isLegacyStaff': false,
+                },
+              ],
+            ),
+          ],
+        ),
       );
 
       await svc.sync();
@@ -367,9 +354,9 @@ void main() {
 
       _stubDioGet(
         mockDio,
-        _syncPayload(schedules: [
-          _scheduleJson(updatedAt: '2026-06-22T00:00:00Z', assignees: const []),
-        ]),
+        _syncPayload(
+          schedules: [_scheduleJson(updatedAt: '2026-06-22T00:00:00Z', assignees: const [])],
+        ),
       );
       await svc.sync();
 
@@ -377,10 +364,7 @@ void main() {
     });
 
     test('inserts a new draft report', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(draftReports: [_draftReportJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(draftReports: [_draftReportJson()]));
 
       await svc.sync();
 
@@ -419,17 +403,12 @@ void main() {
       // First sync — insert
       _stubDioGet(
         mockDio,
-        _syncPayload(
-            customers: [_customerJson(companyName: 'Vecchio Nome Srl')]),
+        _syncPayload(customers: [_customerJson(companyName: 'Vecchio Nome Srl')]),
       );
       await svc.sync();
 
       // Second sync — update same id with new company name
-      _stubDioGet(
-        mockDio,
-        _syncPayload(
-            customers: [_customerJson(companyName: 'Nuovo Nome Spa')]),
-      );
+      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson(companyName: 'Nuovo Nome Spa')]));
       await svc.sync();
 
       final rows = await db.select(db.customers).get();
@@ -438,12 +417,10 @@ void main() {
     });
 
     test('updates existing schedule on re-sync', () async {
-      _stubDioGet(
-          mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Primo')]));
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Primo')]));
       await svc.sync();
 
-      _stubDioGet(
-          mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Aggiornato')]));
+      _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson(title: 'Aggiornato')]));
       await svc.sync();
 
       final rows = await db.select(db.schedules).get();
@@ -451,8 +428,7 @@ void main() {
       expect(rows.first.title, 'Aggiornato');
     });
 
-    test('idempotent: calling sync twice with same payload yields one row',
-        () async {
+    test('idempotent: calling sync twice with same payload yields one row', () async {
       final payload = _syncPayload(customers: [_customerJson()]);
       _stubDioGet(mockDio, payload);
       await svc.sync();
@@ -465,14 +441,156 @@ void main() {
     });
   });
 
+  // ── Report lifecycle read-back (mobile audit item #1) ──────────────────────
+  //
+  // Mobile's rapportini list used to read only the local draft_reports rows this device itself
+  // created — an office rejection (POST /api/reports/{id}/respingi) never reached the phone.
+  // `submittedReports` (MobileUserSyncResult, backend) carries every report this technician
+  // submitted that has since left Bozza; these tests verify it reconciles into the same
+  // draft_reports table, converges on repeated syncs, and a Respinto change is picked up.
+
+  group('sync — submittedReports (server-side lifecycle read-back)', () {
+    test('upserts a submitted report even though it was never a local draft', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Inviato')]),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 1);
+      expect(rows.first.id, 'report-1');
+      expect(rows.first.stato, 'Inviato');
+      expect(rows.first.isLocalOnly, isFalse);
+    });
+
+    test('a Respinto status change from the office is picked up on the next sync', () async {
+      // First sync: submitted, awaiting review.
+      _stubDioGet(
+        mockDio,
+        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Inviato')]),
+      );
+      await svc.sync();
+      expect((await db.select(db.draftReports).get()).single.stato, 'Inviato');
+
+      // Office rejects it (POST /api/reports/{id}/respingi) — the next sync reflects that.
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          submittedReports: [
+            _draftReportJson(id: 'report-1', stato: 'Respinto', updatedAt: '2026-06-22T09:00:00Z'),
+          ],
+        ),
+      );
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 1, reason: 'must update in place, not duplicate');
+      expect(rows.first.stato, 'Respinto');
+    });
+
+    test('an already-synced status is a no-op on a repeated sync with the same payload', () async {
+      final payload = _syncPayload(
+        submittedReports: [_draftReportJson(id: 'report-1', stato: 'Respinto')],
+      );
+      _stubDioGet(mockDio, payload);
+      await svc.sync();
+
+      _stubDioGet(mockDio, payload);
+      await svc.sync();
+      _stubDioGet(mockDio, payload);
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 1);
+      expect(rows.first.stato, 'Respinto');
+    });
+
+    test('does not disturb a genuinely separate local-only draft with the same-shaped id space', () async {
+      // A local draft this device created and never submitted.
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'draft-local-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Bozza locale',
+              insertedUserId: 'user-1',
+              locationId: 'loc-1',
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+            ),
+          );
+
+      _stubDioGet(
+        mockDio,
+        _syncPayload(submittedReports: [_draftReportJson(id: 'report-1', stato: 'Respinto')]),
+      );
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows.length, 2);
+      final local = rows.firstWhere((r) => r.id == 'draft-local-1');
+      expect(local.isLocalOnly, isTrue);
+      expect(local.stato, 'Bozza');
+    });
+
+    // Regression: createCantiereReportDraft (cantiere-only rapportino creation) reuses the
+    // backend-issued Report id for the local draft row instead of a fresh client GUID. The
+    // mobile sync's own `draftReports` payload is "every Bozza this user authored" — which
+    // includes that same report id from the instant it exists server-side, carrying whatever the
+    // create call itself sent (a blank title) rather than what the technician has since typed and
+    // saved locally. A background sync tick (HomeShell's 60s Timer.periodic) must not silently
+    // revert that local editing — see _upsertDraftReports's own comment for the full story.
+    test('a local isLocalOnly draft survives a same-id sync payload with a blank title '
+        '(the cantiere-report id-reuse collision)', () async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'report-same-id',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 8, 1),
+              title: 'Rapportino — Cantiere Via Roma',
+              details: const Value('Note scritte sul posto'),
+              insertedUserId: 'user-1',
+              cantiereId: const Value('cant-1'),
+              locationId: 'loc-1',
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+            ),
+          );
+
+      // What the mobile sync would return for this same id right after
+      // createCantiereReportDraft's own backend call created it: blank title/details, no
+      // ticketId, as the create-from-worklogs endpoint itself sends none of those.
+      final serverPayload = _draftReportJson(id: 'report-same-id')
+        ..['title'] = ''
+        ..['ticketId'] = null;
+      _stubDioGet(mockDio, _syncPayload(draftReports: [serverPayload]));
+
+      await svc.sync();
+
+      final rows = await db.select(db.draftReports).get();
+      expect(rows, hasLength(1), reason: 'must not duplicate — same id, upsert semantics');
+      final row = rows.single;
+      expect(
+        row.title,
+        'Rapportino — Cantiere Via Roma',
+        reason: 'the technician\'s own title must survive a background sync tick',
+      );
+      expect(row.details, 'Note scritte sul posto');
+      expect(row.isLocalOnly, isTrue, reason: 'still a local draft in progress, not synced-down');
+    });
+  });
+
   // ── Ticket lookup tables ───────────────────────────────────────────────────
 
   group('sync — ticket lookup tables', () {
     test('inserts a new ticketStatus', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(ticketStatuses: [_ticketStatusJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(ticketStatuses: [_ticketStatusJson()]));
 
       await svc.sync();
 
@@ -485,10 +603,7 @@ void main() {
     });
 
     test('inserts a new ticketType', () async {
-      _stubDioGet(
-        mockDio,
-        _syncPayload(ticketTypes: [_ticketTypeJson()]),
-      );
+      _stubDioGet(mockDio, _syncPayload(ticketTypes: [_ticketTypeJson()]));
 
       await svc.sync();
 
@@ -522,10 +637,7 @@ void main() {
       final stored = await db.getLastSync();
       expect(stored, isNotNull);
       // Compare as UTC timestamps regardless of local vs UTC stored form.
-      expect(
-        stored!.millisecondsSinceEpoch,
-        ts.millisecondsSinceEpoch,
-      );
+      expect(stored!.millisecondsSinceEpoch, ts.millisecondsSinceEpoch);
     });
 
     test('sends since= param when lastSync is set', () async {
@@ -542,8 +654,7 @@ void main() {
         ),
       ).thenAnswer((invocation) async {
         capturedParams.add(
-          invocation.namedArguments[const Symbol('queryParameters')]
-              as Map<String, dynamic>?,
+          invocation.namedArguments[const Symbol('queryParameters')] as Map<String, dynamic>?,
         );
         return Response<Map<String, dynamic>>(
           requestOptions: RequestOptions(path: '/api/sync/mobile'),
@@ -558,10 +669,7 @@ void main() {
       final params = capturedParams.first;
       expect(params, isNotNull);
       expect(params!.containsKey('since'), isTrue);
-      expect(
-        params['since'],
-        lastSyncTs.toUtc().toIso8601String(),
-      );
+      expect(params['since'], lastSyncTs.toUtc().toIso8601String());
     });
 
     test('does NOT send since= param on first sync (no lastSync)', () async {
@@ -573,8 +681,7 @@ void main() {
         ),
       ).thenAnswer((invocation) async {
         capturedParams.add(
-          invocation.namedArguments[const Symbol('queryParameters')]
-              as Map<String, dynamic>?,
+          invocation.namedArguments[const Symbol('queryParameters')] as Map<String, dynamic>?,
         );
         return Response<Map<String, dynamic>>(
           requestOptions: RequestOptions(path: '/api/sync/mobile'),
@@ -628,13 +735,14 @@ void main() {
   // ── Provider emits cached data offline ────────────────────────────────────
 
   group('Riverpod providers — offline cache', () {
-    test('todaySchedulesProvider emits schedules from Drift without network',
-        () async {
+    test('todaySchedulesProvider emits schedules from Drift without network', () async {
       // Pre-seed DB directly (no network)
       final today = DateTime.now().toUtc();
       final todayDate = DateTime.utc(today.year, today.month, today.day);
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'offline-sched',
               tenantId: 'tenant-1',
@@ -650,15 +758,10 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-        ],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
-      final schedules =
-          await container.read(todaySchedulesProvider.future);
+      final schedules = await container.read(todaySchedulesProvider.future);
       expect(schedules.length, 1);
       expect(schedules.first.id, 'offline-sched');
       expect(schedules.first.title, 'Offline intervento');
@@ -666,13 +769,14 @@ void main() {
 
     test('weekSchedulesProvider emits schedules for next 7 days', () async {
       final now = DateTime.now().toUtc();
-      final day0 =
-          DateTime.utc(now.year, now.month, now.day); // today
+      final day0 = DateTime.utc(now.year, now.month, now.day); // today
       final day3 = day0.add(const Duration(days: 3)); // in window
       final day9 = day0.add(const Duration(days: 9)); // outside window
 
       Future<void> insertSched(String id, DateTime date) async {
-        await db.into(db.schedules).insert(
+        await db
+            .into(db.schedules)
+            .insert(
               SchedulesCompanion.insert(
                 id: id,
                 tenantId: 'tenant-1',
@@ -693,20 +797,19 @@ void main() {
       await insertSched('day3', day3);
       await insertSched('day9', day9);
 
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
-      final schedules =
-          await container.read(weekSchedulesProvider.future);
+      final schedules = await container.read(weekSchedulesProvider.future);
       final ids = schedules.map((s) => s.id).toList();
       expect(ids, containsAll(['today', 'day3']));
       expect(ids, isNot(contains('day9')));
     });
 
     test('draftReportsProvider emits Bozza reports only', () async {
-      await db.into(db.draftReports).insert(
+      await db
+          .into(db.draftReports)
+          .insert(
             DraftReportsCompanion.insert(
               id: 'r-bozza',
               tenantId: 'tenant-1',
@@ -717,7 +820,9 @@ void main() {
               stato: const Value('Bozza'),
             ),
           );
-      await db.into(db.draftReports).insert(
+      await db
+          .into(db.draftReports)
+          .insert(
             DraftReportsCompanion.insert(
               id: 'r-inviato',
               tenantId: 'tenant-1',
@@ -729,13 +834,10 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
-      final reports =
-          await container.read(draftReportsProvider.future);
+      final reports = await container.read(draftReportsProvider.future);
       expect(reports.length, 1);
       expect(reports.first.id, 'r-bozza');
     });
@@ -754,13 +856,15 @@ void main() {
     });
 
     test('parses nested entities', () {
-      final dto = SyncResultDto.fromJson(_syncPayload(
-        customers: [_customerJson()],
-        locations: [_locationJson()],
-        tickets: [_ticketJson()],
-        schedules: [_scheduleJson()],
-        draftReports: [_draftReportJson()],
-      ));
+      final dto = SyncResultDto.fromJson(
+        _syncPayload(
+          customers: [_customerJson()],
+          locations: [_locationJson()],
+          tickets: [_ticketJson()],
+          schedules: [_scheduleJson()],
+          draftReports: [_draftReportJson()],
+        ),
+      );
       expect(dto.customers.length, 1);
       expect(dto.locations.length, 1);
       expect(dto.tickets.length, 1);
@@ -769,19 +873,14 @@ void main() {
     });
 
     test('schedule timeStart 08:00:00 parsed to 480 minutes', () {
-      final dto = SyncResultDto.fromJson(
-          _syncPayload(schedules: [_scheduleJson()]));
-      expect(
-        ScheduleDto.parseTimeToMinutes(dto.schedules.first.timeStart),
-        480,
-      );
+      final dto = SyncResultDto.fromJson(_syncPayload(schedules: [_scheduleJson()]));
+      expect(ScheduleDto.parseTimeToMinutes(dto.schedules.first.timeStart), 480);
     });
 
     test('parses ticketStatuses and ticketTypes', () {
-      final dto = SyncResultDto.fromJson(_syncPayload(
-        ticketStatuses: [_ticketStatusJson()],
-        ticketTypes: [_ticketTypeJson()],
-      ));
+      final dto = SyncResultDto.fromJson(
+        _syncPayload(ticketStatuses: [_ticketStatusJson()], ticketTypes: [_ticketTypeJson()]),
+      );
       expect(dto.ticketStatuses.length, 1);
       expect(dto.ticketStatuses.first.name, 'Aperto');
       expect(dto.ticketTypes.length, 1);
@@ -794,11 +893,12 @@ void main() {
   group('Oggi — today schedules from cache', () {
     test('shows only today schedules, not future ones', () async {
       final today = DateTime.now().toUtc();
-      final todayDate =
-          DateTime.utc(today.year, today.month, today.day);
+      final todayDate = DateTime.utc(today.year, today.month, today.day);
       final tomorrow = todayDate.add(const Duration(days: 1));
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'oggi-sched',
               tenantId: 'tenant-1',
@@ -814,7 +914,9 @@ void main() {
             ),
           );
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'domani-sched',
               tenantId: 'tenant-1',
@@ -830,23 +932,21 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
-      final schedules =
-          await container.read(todaySchedulesProvider.future);
+      final schedules = await container.read(todaySchedulesProvider.future);
       expect(schedules.length, 1);
       expect(schedules.first.id, 'oggi-sched');
     });
 
     test('today schedules are ordered by timeStartMinutes ASC', () async {
       final today = DateTime.now().toUtc();
-      final todayDate =
-          DateTime.utc(today.year, today.month, today.day);
+      final todayDate = DateTime.utc(today.year, today.month, today.day);
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'late',
               tenantId: 'tenant-1',
@@ -862,7 +962,9 @@ void main() {
             ),
           );
 
-      await db.into(db.schedules).insert(
+      await db
+          .into(db.schedules)
+          .insert(
             SchedulesCompanion.insert(
               id: 'early',
               tenantId: 'tenant-1',
@@ -878,13 +980,10 @@ void main() {
             ),
           );
 
-      final container = ProviderContainer(
-        overrides: [appDatabaseProvider.overrideWithValue(db)],
-      );
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
       addTearDown(container.dispose);
 
-      final schedules =
-          await container.read(todaySchedulesProvider.future);
+      final schedules = await container.read(todaySchedulesProvider.future);
       expect(schedules.length, 2);
       expect(schedules.first.id, 'early');
       expect(schedules.last.id, 'late');
@@ -901,23 +1000,28 @@ void main() {
   /// the screen.
   group('sync — catalogue tables', () {
     test('materiali arrive in the local catalogue', () async {
-      _stubDioGet(mockDio, _syncPayload(materiali: [
-        {
-          'id': 'mat-1',
-          'tenantId': 'ten-1',
-          'createdAt': '2026-06-01T00:00:00Z',
-          'updatedAt': null,
-          'code': 'ART-001',
-          'name': 'Tubo rame 15mm',
-          'description': null,
-          'unitOfMeasure': 'm',
-          'category': 'Idraulica',
-          'marca': null,
-          'purchasePrice': 3.5,
-          'salePrice': 6.0,
-          'isActive': true,
-        }
-      ]));
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          materiali: [
+            {
+              'id': 'mat-1',
+              'tenantId': 'ten-1',
+              'createdAt': '2026-06-01T00:00:00Z',
+              'updatedAt': null,
+              'code': 'ART-001',
+              'name': 'Tubo rame 15mm',
+              'description': null,
+              'unitOfMeasure': 'm',
+              'category': 'Idraulica',
+              'marca': null,
+              'purchasePrice': 3.5,
+              'salePrice': 6.0,
+              'isActive': true,
+            },
+          ],
+        ),
+      );
 
       await svc.sync();
 
@@ -927,25 +1031,82 @@ void main() {
       expect(rows.first.salePrice, 6.0);
     });
 
+    test('materiale barcodes arrive in the local mirror, for offline scan-to-lookup', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          materialiBarcodes: [
+            {
+              'id': 'bc-1',
+              'tenantId': 'ten-1',
+              'createdAt': '2026-06-01T00:00:00Z',
+              'updatedAt': null,
+              'materialeId': 'mat-1',
+              'barcode': '8001234567890',
+              'barcodeType': 'EAN13',
+              'isPrimary': true,
+            },
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final rows = await db.select(db.materialeBarcodes).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.materialeId, 'mat-1');
+      expect(rows.first.barcode, '8001234567890');
+      expect(rows.first.barcodeType, 'EAN13');
+      expect(rows.first.isPrimary, isTrue);
+    });
+
+    test('a re-synced materiale barcode updates in place rather than duplicating', () async {
+      Map<String, dynamic> barcode(String value) => {
+        'id': 'bc-1',
+        'tenantId': 'ten-1',
+        'createdAt': '2026-06-01T00:00:00Z',
+        'updatedAt': null,
+        'materialeId': 'mat-1',
+        'barcode': value,
+        'barcodeType': 'EAN13',
+        'isPrimary': true,
+      };
+
+      _stubDioGet(mockDio, _syncPayload(materialiBarcodes: [barcode('8001111111111')]));
+      await svc.sync();
+
+      _stubDioGet(mockDio, _syncPayload(materialiBarcodes: [barcode('8002222222222')]));
+      await svc.sync();
+
+      final rows = await db.select(db.materialeBarcodes).get();
+      expect(rows, hasLength(1));
+      expect(rows.first.barcode, '8002222222222');
+    });
+
     test('cantieri arrive in the local catalogue', () async {
-      _stubDioGet(mockDio, _syncPayload(cantieri: [
-        {
-          'id': 'can-1',
-          'tenantId': 'ten-1',
-          'createdAt': '2026-06-01T00:00:00Z',
-          'updatedAt': null,
-          'name': 'Cantiere Via Roma',
-          'address': 'Via Roma 10',
-          'city': 'Milano',
-          'postalCode': '20121',
-          'notes': null,
-          'startDate': null,
-          'endDate': null,
-          'status': 'Active',
-          'customerId': 'cli-1',
-          'commessaId': null,
-        }
-      ]));
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          cantieri: [
+            {
+              'id': 'can-1',
+              'tenantId': 'ten-1',
+              'createdAt': '2026-06-01T00:00:00Z',
+              'updatedAt': null,
+              'name': 'Cantiere Via Roma',
+              'address': 'Via Roma 10',
+              'city': 'Milano',
+              'postalCode': '20121',
+              'notes': null,
+              'startDate': null,
+              'endDate': null,
+              'status': 'Active',
+              'customerId': 'cli-1',
+              'commessaId': null,
+            },
+          ],
+        ),
+      );
 
       await svc.sync();
 
@@ -955,23 +1116,65 @@ void main() {
       expect(rows.first.status, 0, reason: 'Active maps to 0');
     });
 
+    /// Closes the loop end-to-end: CantiereTimbraScreen's own `cantieriProvider` (not just the
+    /// raw Drift table) reflects a normal sync — proving the cantiere clock-in picker is
+    /// populated after a normal app session rather than permanently empty. See
+    /// cantiere_timbra_screen.dart's `cantieriProvider` doc comment.
+    test('cantieriProvider (the clock-in picker\'s own data source) reflects a normal sync', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          cantieri: [
+            {
+              'id': 'can-1',
+              'tenantId': 'ten-1',
+              'createdAt': '2026-06-01T00:00:00Z',
+              'updatedAt': null,
+              'name': 'Cantiere Via Roma',
+              'address': null,
+              'city': 'Milano',
+              'postalCode': null,
+              'notes': null,
+              'startDate': null,
+              'endDate': null,
+              'status': 'Active',
+              'customerId': 'cli-1',
+              'commessaId': null,
+            },
+          ],
+        ),
+      );
+
+      final container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
+      addTearDown(container.dispose);
+
+      // Before a sync has ever run, a fresh device's picker is genuinely empty.
+      expect(await container.read(cantieriProvider.future), isEmpty);
+
+      await svc.sync();
+
+      final cantieri = await container.read(cantieriProvider.future);
+      expect(cantieri, hasLength(1));
+      expect(cantieri.first.name, 'Cantiere Via Roma');
+    });
+
     /// A re-sync must not duplicate the catalogue — it runs on every reconnect.
     test('re-syncing the same materiale updates rather than duplicates', () async {
       Map<String, dynamic> materiale(String name) => {
-            'id': 'mat-1',
-            'tenantId': 'ten-1',
-            'createdAt': '2026-06-01T00:00:00Z',
-            'updatedAt': null,
-            'code': 'ART-001',
-            'name': name,
-            'description': null,
-            'unitOfMeasure': null,
-            'category': null,
-            'marca': null,
-            'purchasePrice': null,
-            'salePrice': null,
-            'isActive': true,
-          };
+        'id': 'mat-1',
+        'tenantId': 'ten-1',
+        'createdAt': '2026-06-01T00:00:00Z',
+        'updatedAt': null,
+        'code': 'ART-001',
+        'name': name,
+        'description': null,
+        'unitOfMeasure': null,
+        'category': null,
+        'marca': null,
+        'purchasePrice': null,
+        'salePrice': null,
+        'isActive': true,
+      };
 
       _stubDioGet(mockDio, _syncPayload(materiali: [materiale('Vecchio nome')]));
       await svc.sync();
@@ -986,7 +1189,6 @@ void main() {
   });
 }
 
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Colleagues — the list the rapportino staff picker reads.
 //
@@ -995,11 +1197,10 @@ void main() {
 // left blank, so hours reached payroll attributed to a person who does not exist.
 // ══════════════════════════════════════════════════════════════════════════════
 
-Map<String, dynamic> _colleagueJson({
-  String id = 'user-1',
-  String displayName = 'Mario Rossi',
-}) =>
-    {'id': id, 'displayName': displayName};
+Map<String, dynamic> _colleagueJson({String id = 'user-1', String displayName = 'Mario Rossi'}) => {
+  'id': id,
+  'displayName': displayName,
+};
 
 void _colleagueTests() {
   group('SyncService — colleagues', () {
@@ -1016,14 +1217,15 @@ void _colleagueTests() {
     tearDown(() async => db.close());
 
     void stubSync(List<Map<String, dynamic>> colleagues) {
-      when(() => dio.get<Map<String, dynamic>>(
-            any(),
-            queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer((_) async => Response(
-            requestOptions: RequestOptions(path: '/api/sync/mobile'),
-            statusCode: 200,
-            data: _syncPayload(colleagues: colleagues),
-          ));
+      when(
+        () => dio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
+      ).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: '/api/sync/mobile'),
+          statusCode: 200,
+          data: _syncPayload(colleagues: colleagues),
+        ),
+      );
     }
 
     test('stores the colleagues the server sent', () async {
@@ -1077,7 +1279,11 @@ void _colleagueTests() {
       await service.sync();
 
       final rows = await db.select(db.colleagues).get();
-      expect(rows, hasLength(1), reason: 'an absent list means "no change", not "nobody works here"');
+      expect(
+        rows,
+        hasLength(1),
+        reason: 'an absent list means "no change", not "nobody works here"',
+      );
     });
   });
 }

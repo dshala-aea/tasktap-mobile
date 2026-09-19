@@ -3,13 +3,16 @@ import 'package:flutter/services.dart';
 
 import 'app_colors.dart';
 import 'app_palette.dart';
+import 'app_rack.dart';
 import 'app_spacing.dart';
 import 'app_text_styles.dart';
+import 'app_vetro_palette.dart';
 
 /// Builds the TaskTap [ThemeData] for one [Brightness].
 ///
-/// Brand yellow Y `#FFF10E` is primary in both themes — it is the brand, and it reads on either
-/// ground. Everything else comes from [AppPalette], which is also attached as a theme extension so
+/// Brand accent Y (safety orange, `#FF5A1F`) is primary in both themes — it is the brand, and it
+/// reads on either ground. Everything else comes from [AppPalette], which is also attached as a
+/// theme extension so
 /// widgets can reach tokens the Material [ColorScheme] has no slot for (four background steps,
 /// three border weights, the card shadow).
 ///
@@ -18,6 +21,23 @@ import 'app_text_styles.dart';
 ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   final isDark = brightness == Brightness.dark;
   final p = isDark ? AppPalette.dark : AppPalette.light;
+  // Il Documento's AppPalette.shadow is empty (DESIGN.md bans shadows outright — "no floating
+  // cards... draw a line, not a box"), so `.first` would throw here without the empty-list
+  // fallback. `Colors.transparent` is not a behavior-preserving stand-in for the three call sites
+  // below — it is DESIGN.md's rule applied consistently everywhere a shadow colour used to live:
+  //   - appBarTheme.shadowColor: no visible change — the AppBar already renders at elevation 0.
+  //   - navigationBarTheme.shadowColor: a VISIBLE change — the bottom nav renders at elevation 4,
+  //     so this removes a real shadow that used to sit under it.
+  //   - colorScheme.shadow: Material's fallback shadow colour for *any* widget rendered at nonzero
+  //     elevation with no local shadowColor override — this app has no dialogTheme/bottomSheetTheme
+  //     override, so this also strips the shadow from every plain AlertDialog/showModalBottomSheet
+  //     app-wide, not just the two named slots above.
+  // All three are intentional consequences of DESIGN.md's blanket no-shadow rule, not scope creep
+  // limited to AppPalette's own three call sites — see task-1b-report.md's "Fix: shadow comment
+  // accuracy" note for the review that caught the original, inaccurate "no visible change" claim.
+  final shadowColor = p.shadow.isEmpty
+      ? Colors.transparent
+      : p.shadow.first.color;
 
   final colorScheme = ColorScheme(
     brightness: brightness,
@@ -43,7 +63,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     onSurfaceVariant: p.inkFaint,
     outline: p.borderMedium,
     outlineVariant: p.borderLight,
-    shadow: p.shadow.first.color,
+    shadow: shadowColor,
     scrim: Color(0x80000000),
     inverseSurface: p.surfaceInverse,
     onInverseSurface: p.inkInverse,
@@ -52,7 +72,10 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
 
   // The styles carry no colour of their own (see AppTextStyles), so it is applied here in one
   // place. `bodyColor` covers body/label/title, `displayColor` the display and headline sizes.
-  final textTheme = buildTextTheme().apply(bodyColor: p.ink, displayColor: p.ink);
+  final textTheme = buildTextTheme().apply(
+    bodyColor: p.ink,
+    displayColor: p.ink,
+  );
 
   return ThemeData(
     useMaterial3: true,
@@ -61,7 +84,14 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     textTheme: textTheme,
     // Everything the ColorScheme has no slot for: the four background steps, the three border
     // weights, the card shadow, and the ink/surface pair that must not be confused for each other.
-    extensions: <ThemeExtension<dynamic>>[p],
+    //
+    // AppVetroPalette rides alongside `p`, additive — see that file's own doc comment. Registering
+    // it here makes `context.vetro` resolve correctly on every screen without requiring each
+    // Vetro-redesigned screen to wire its own theme extension.
+    extensions: <ThemeExtension<dynamic>>[
+      p,
+      isDark ? AppVetroPalette.dark : AppVetroPalette.light,
+    ],
     scaffoldBackgroundColor: p.bg1,
 
     // ── AppBar ─────────────────────────────────────────────────────────────
@@ -70,11 +100,13 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       foregroundColor: p.ink,
       elevation: 0,
       scrolledUnderElevation: 1,
-      shadowColor: p.shadow.first.color,
+      shadowColor: shadowColor,
       surfaceTintColor: Colors.transparent,
       titleTextStyle: AppTextStyles.titleLarge.copyWith(color: p.ink),
       // Status-bar icons are the inverse of the bar behind them.
-      systemOverlayStyle: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      systemOverlayStyle: isDark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
     ),
 
     // ── Bottom Navigation Bar ──────────────────────────────────────────────
@@ -103,16 +135,20 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       }),
       height: AppSpacing.bottomNavHeight,
       elevation: 4,
-      shadowColor: p.shadow.first.color,
+      shadowColor: shadowColor,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
     ),
 
     // ── Card ───────────────────────────────────────────────────────────────
+    //
+    // Material's own Card, for the places Flutter reaches for one on our behalf (dialogs, menus,
+    // banners). Given the rack's material and corner language so a framework-supplied surface
+    // does not arrive wearing the previous design system.
     cardTheme: CardThemeData(
-      color: p.bg1,
+      color: p.labelCard,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.cardRadius),
+        borderRadius: AppRack.freeShape,
         side: BorderSide(color: p.borderLight),
       ),
       margin: EdgeInsets.zero,
@@ -122,7 +158,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.Y,
-        foregroundColor: p.ink,
+        foregroundColor: p.brandOn,
         elevation: 0,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xl,
@@ -166,20 +202,35 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
 
     // ── Input Decoration ───────────────────────────────────────────────────
+    //
+    // Quiet by default, loud only on focus.
+    //
+    // Every field used to be filled *and* boxed on all four sides with a mid-weight border, which
+    // is what a Material floating label needs — something to notch itself into. AppTextField puts
+    // the label above the field now, so the box has nothing to hold and the border can go back to
+    // being a hairline. A form of eight fields was eight heavy rectangles competing with each
+    // other and with the content; it is now eight inset panels.
+    //
+    // Focus keeps the full 2px yellow. It is the one state that has to be unmistakable at arm's
+    // length, and it is the app's own colour rather than the platform's.
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: p.surface,
+      fillColor: p.bg3,
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.base,
+        horizontal: AppSpacing.md,
         vertical: AppSpacing.md,
       ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: BorderSide(color: p.borderMedium),
+        borderSide: BorderSide(color: p.borderLight),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-        borderSide: BorderSide(color: p.borderMedium),
+        borderSide: BorderSide(color: p.borderLight),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
+        borderSide: BorderSide(color: p.borderLight),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
@@ -193,24 +244,14 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
         borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
         borderSide: BorderSide(color: p.red, width: 2),
       ),
-      labelStyle: AppTextStyles.bodyMedium.copyWith(
-        color: p.inkFaint,
-      ),
-      hintStyle: AppTextStyles.bodyMedium.copyWith(
-        color: p.inkDisabled,
-      ),
+      labelStyle: AppTextStyles.bodyMedium.copyWith(color: p.inkFaint),
+      hintStyle: AppTextStyles.bodyMedium.copyWith(color: p.inkDisabled),
       errorStyle: AppTextStyles.bodySmall.copyWith(color: p.red),
-      floatingLabelStyle: AppTextStyles.labelMedium.copyWith(
-        color: p.ink,
-      ),
+      floatingLabelStyle: AppTextStyles.labelMedium.copyWith(color: p.ink),
     ),
 
     // ── Divider ────────────────────────────────────────────────────────────
-    dividerTheme: DividerThemeData(
-      color: p.divider,
-      space: 1,
-      thickness: 1,
-    ),
+    dividerTheme: DividerThemeData(color: p.divider, space: 1, thickness: 1),
 
     // ── Chip ───────────────────────────────────────────────────────────────
     chipTheme: ChipThemeData(
@@ -230,7 +271,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     // ── FAB ────────────────────────────────────────────────────────────────
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: AppColors.Y,
-      foregroundColor: p.ink,
+      foregroundColor: p.brandOn,
       elevation: 2,
     ),
 

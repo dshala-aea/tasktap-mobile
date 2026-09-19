@@ -26,9 +26,12 @@ class PendingTicketRepository {
     String? assignedUserId,
     required int statusId,
     required int typeId,
+    String priorita = 'Media',
     required PendingTicketState state,
   }) async {
-    await _db.into(_db.pendingTickets).insert(
+    await _db
+        .into(_db.pendingTickets)
+        .insert(
           PendingTicketsCompanion.insert(
             id: id,
             createdAt: DateTime.now().toUtc(),
@@ -39,29 +42,27 @@ class PendingTicketRepository {
             assignedUserId: Value(assignedUserId),
             statusId: statusId,
             typeId: typeId,
+            priorita: Value(priorita),
             state: Value(state.toPersistedString()),
           ),
         );
   }
 
   Future<PendingTicket?> getById(String id) async {
-    return (_db.select(_db.pendingTickets)..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    return (_db.select(_db.pendingTickets)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   Future<List<PendingTicket>> getByState(PendingTicketState state) async {
-    return (_db.select(_db.pendingTickets)
-          ..where((t) => t.state.equals(state.toPersistedString())))
-        .get();
+    return (_db.select(
+      _db.pendingTickets,
+    )..where((t) => t.state.equals(state.toPersistedString()))).get();
   }
 
   /// Everything not yet successfully submitted — surfaced in the UI so a
   /// technician can see it, and, for `failed` rows, retry manually.
   Stream<List<PendingTicket>> watchUnresolved() {
     return (_db.select(_db.pendingTickets)
-          ..where((t) => t.state.equals(
-                  PendingTicketState.submitted.toPersistedString(),
-                ).not())
+          ..where((t) => t.state.equals(PendingTicketState.submitted.toPersistedString()).not())
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch();
   }
@@ -72,8 +73,7 @@ class PendingTicketRepository {
     String? error,
     bool clearError = false,
   }) async {
-    await (_db.update(_db.pendingTickets)..where((t) => t.id.equals(id)))
-        .write(
+    await (_db.update(_db.pendingTickets)..where((t) => t.id.equals(id))).write(
       PendingTicketsCompanion(
         state: Value(state.toPersistedString()),
         error: clearError || error == null ? const Value(null) : Value(error),
@@ -81,12 +81,8 @@ class PendingTicketRepository {
     );
   }
 
-  Future<void> markSubmitted({
-    required String id,
-    required String serverTicketId,
-  }) async {
-    await (_db.update(_db.pendingTickets)..where((t) => t.id.equals(id)))
-        .write(
+  Future<void> markSubmitted({required String id, required String serverTicketId}) async {
+    await (_db.update(_db.pendingTickets)..where((t) => t.id.equals(id))).write(
       PendingTicketsCompanion(
         state: Value(PendingTicketState.submitted.toPersistedString()),
         serverTicketId: Value(serverTicketId),

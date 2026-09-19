@@ -1,19 +1,25 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
+import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
+import 'admin_squadra_list_screen.dart' show allUsersWithSquadraProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Fetches squadra detail with membri from backend API.
-final adminSquadraDetailProvider = FutureProvider.autoDispose
-    .family<Map<String, dynamic>?, String>((ref, id) async {
-  final api = ref.watch(adminApiClientProvider);
-  return api.fetchSquadraDetail(id);
-});
+final adminSquadraDetailProvider = FutureProvider.autoDispose.family<Map<String, dynamic>?, String>(
+  (ref, id) async {
+    final api = ref.watch(adminApiClientProvider);
+    return api.fetchSquadraDetail(id);
+  },
+);
 
 /// Admin squadra detail — shows membri, allows add/remove.
 class AdminSquadraDetailScreen extends ConsumerWidget {
@@ -23,27 +29,39 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync =
-        ref.watch(adminSquadraDetailProvider(squadra['id'] as String));
+    final detailAsync = ref.watch(adminSquadraDetailProvider(squadra['id'] as String));
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: AppFab(
-        icon: LucideIcons.userPlus,
-        tooltip: 'Aggiungi membro',
-        onPressed: () => _showAddMemberSheet(context, ref),
+      floatingActionButton: Padding(
+        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
+        child: AppFab(
+          icon: LucideIcons.userPlus,
+          tooltip: 'Aggiungi membro',
+          onPressed: () => _showAddMemberSheet(context, ref),
+        ),
       ),
-      body: detailAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Errore: $e')),
-        data: (detail) {
-          final data = detail ?? squadra;
-          final membri = (data['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-          return _SquadraDetailBody(
-            squadra: data,
-            membri: membri,
-          );
-        },
+      body: SafeArea(
+        child: detailAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => ErrorState(
+            onRetry: () => ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String)),
+          ),
+          data: (detail) {
+            // GET /api/squadre/{id} wraps the squadra's own fields under a "squadra" key
+            // (backend record SquadraDetailResponse(Squadra Squadra, List<SquadraMembro> Membri) —
+            // see SquadraDetailResponse.cs), with "membri" as the sibling key holding the member
+            // list. Reading squadra fields off the un-unwrapped envelope left nome/descrizione/
+            // specializzazione/note (and capSquadraNome, added below) blank on every real fetch;
+            // only "membri" happened to work because it is genuinely top-level.
+            //
+            // The `?? squadra` fallback is the flat row the list screen already has in hand
+            // (`extra: squadra` in admin_squadra_list_screen.dart) — no such wrapper there.
+            final data = (detail?['squadra'] as Map<String, dynamic>?) ?? squadra;
+            final membri = (detail?['membri'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            return _SquadraDetailBody(squadra: data, membri: membri);
+          },
+        ),
       ),
     );
   }
@@ -63,21 +81,31 @@ class AdminSquadraDetailScreen extends ConsumerWidget {
   }
 }
 
-class _SquadraDetailBody extends StatelessWidget {
-  const _SquadraDetailBody({
-    required this.squadra,
-    required this.membri,
-  });
+class _SquadraDetailBody extends ConsumerWidget {
+  const _SquadraDetailBody({required this.squadra, required this.membri});
 
   final Map<String, dynamic> squadra;
   final List<Map<String, dynamic>> membri;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final nome = squadra['nome'] as String? ?? '';
     final descrizione = squadra['descrizione'] as String? ?? '';
     final spec = squadra['specializzazione'] as String? ?? '';
     final note = squadra['note'] as String? ?? '';
+    // Derived on every /api/squadre/{id} response (PopulateCapiSquadraAsync in
+    // SquadreController) — never read on mobile before.
+    final capoNome = squadra['capSquadraNome'] as String?;
+
+    // Gap 6 of the feature audit: `lastAccessAt` is a real column on `User`, returned on every
+    // `/api/users` response, but was surfaced nowhere on mobile. `allUsersWithSquadraProvider` is
+    // the same bulk fetch the list screen uses for member counts (Gap 7) — reused here rather than
+    // a live per-member `/api/users/{id}` call, so this row list still costs one network request
+    // for the whole screen, not one per member.
+    final usersById = {
+      for (final u in ref.watch(allUsersWithSquadraProvider).valueOrNull ?? const [])
+        u['id'] as String: u,
+    };
 
     return CustomScrollView(
       slivers: [
@@ -86,166 +114,159 @@ class _SquadraDetailBody extends StatelessWidget {
             title: nome,
             subtitle: spec.isNotEmpty ? spec : '',
             showBack: true,
+            // The FAB on this screen is "Aggiungi membro" — a different action on different data
+            // (membership, not the squadra's own fields) — so unlike the other admin detail
+            // screens, this header action is not a duplicate of the FAB and stays.
             actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(LucideIcons.moreVertical, size: 20),
-                itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Modifica'),
-                  ),
-                ],
-                onSelected: (v) {
-                  if (v == 'edit') {
-                    context.push(
-                      '/altro/squadre/${squadra['id']}/modifica',
-                      extra: squadra,
-                    );
+              // Gap 9 of the feature audit — no link existed from a squadra to its own schedule.
+              // AdminScheduleListScreen already supports a squadra filter (its filter sheet), this
+              // just pre-applies it via `initialSquadraId` instead of making the admin open the
+              // filter sheet and pick this same squadra by name right after tapping in from here.
+              HeaderIconBtn(
+                icon: LucideIcons.calendarDays,
+                label: 'Pianificazioni squadra',
+                glass: true,
+                onTap: () => context.push('/altro/pianificazioni', extra: squadra['id'] as String?),
+              ),
+              HeaderIconBtn(
+                icon: LucideIcons.pencil,
+                label: 'Modifica squadra',
+                glass: true,
+                // Awaited so a saved edit is reflected the moment the admin pops back here —
+                // without this, the fire-and-forget push left the header/detail card showing
+                // pre-edit values until the admin left and re-entered the screen.
+                onTap: () async {
+                  await context.push('/altro/squadre/${squadra['id']}/modifica', extra: squadra);
+                  if (context.mounted) {
+                    ref.invalidate(adminSquadraDetailProvider(squadra['id'] as String));
                   }
                 },
               ),
             ],
           ),
         ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(19),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (descrizione.isNotEmpty)
-                  _InfoRow(label: 'Descrizione', value: descrizione),
-                _InfoRow(
-                    label: 'Specializzazione',
-                    value: spec.isNotEmpty ? spec : '—'),
-                if (note.isNotEmpty)
-                  _InfoRow(label: 'Note', value: note),
-              ],
+        if (descrizione.isNotEmpty ||
+            spec.isNotEmpty ||
+            note.isNotEmpty ||
+            (capoNome?.isNotEmpty ?? false))
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              child: AppCard(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                child: Column(
+                  children: [
+                    if (descrizione.isNotEmpty) KeyVal(label: 'Descrizione', value: descrizione),
+                    KeyVal(
+                      label: 'Specializzazione',
+                      value: spec.isNotEmpty ? spec : '—',
+                      showDivider: true,
+                    ),
+                    KeyVal(
+                      label: 'Capo squadra',
+                      value: capoNome?.isNotEmpty == true ? capoNome! : '—',
+                      showDivider: note.isNotEmpty,
+                    ),
+                    if (note.isNotEmpty) KeyVal(label: 'Note', value: note, showDivider: false),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
         // ── Membri section ─────────────────────────────────────────────
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(19, 0, 19, 8),
-            child: Text(
-              'MEMBRI (${membri.length})',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: context.colors.inkMuted,
-                    letterSpacing: 1.2,
-                  ),
-            ),
-          ),
+          child: SectionTitle(title: 'Membri', trailing: '${membri.length}'),
         ),
         if (membri.isEmpty)
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(19),
-              child: Text('Nessun membro nella squadra.'),
+          SliverToBoxAdapter(
+            child: EmptyState(
+              icon: LucideIcons.users,
+              title: 'Nessun membro',
+              body: 'Aggiungi un tecnico con il pulsante +.',
             ),
           )
         else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final membro = membri[i];
                 final userId = membro['userId'] as String? ?? '';
-                final ruolo = membro['ruolo'] as String? ?? 'Membro';
+                // Backend `SquadraRuoloEnum` has no JsonStringEnumConverter — the wire value is a
+                // bare int (Membro=0, Capo=1), never a string. See SquadraRuolo in
+                // admin_api_client.dart.
+                final ruolo = SquadraRuolo.label(membro['ruolo']);
+                // A crew member was listed by `userId.substring(0, 8)` — a person, named at their
+                // own colleagues with eight characters of a GUID. `/api/squadre/{id}` returns raw
+                // SquadraMember rows and carries no name, so the name comes from the colleagues
+                // mirror the app already syncs for the rapportino staff picker.
+                //
+                // That substring was also a crash: `userId` defaults to '' when the key is missing,
+                // and `''.substring(0, 8)` throws RangeError, taking the whole list with it.
+                final nome = userId.isEmpty
+                    ? null
+                    : ref.watch(colleagueNameProvider(userId)).valueOrNull;
+                // Only claim "Mai" (never) when the bulk fetch actually resolved this user and
+                // found no access timestamp — a userId absent from the fetch (page-size cap,
+                // deactivated, or not yet loaded) is unknown, not "never accessed", so the row
+                // falls back to just the role in that case rather than asserting something false.
+                final user = usersById[userId];
+                final subtitle = user == null
+                    ? ruolo
+                    : '$ruolo · Ultimo accesso: ${_formatLastAccess(user['lastAccessAt'] as String?)}';
                 return ListRow(
-                  leading: const CircleAvatar(
-                    radius: 18,
-                    child: Icon(LucideIcons.user, size: 18),
-                  ),
-                  title: userId.substring(0, 8),
-                  subtitle: ruolo,
+                  leading: AppAvatar(name: nome ?? '?', size: 36),
+                  title: nome ?? 'Membro non sincronizzato',
+                  subtitle: subtitle,
                   meta: IconButton(
                     icon: const Icon(LucideIcons.userMinus, size: 18),
+                    tooltip: 'Rimuovi dalla squadra',
                     onPressed: () => _removeMember(context, userId),
                   ),
                   showDivider: i < membri.length - 1,
                 );
-              },
-              childCount: membri.length,
+              }, childCount: membri.length),
             ),
           ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        SliverPadding(padding: EdgeInsets.only(bottom: context.fabSafeBottom)),
       ],
     );
   }
 
   Future<void> _removeMember(BuildContext context, String userId) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rimuovi membro'),
-        content: const Text('Vuoi rimuovere questo membro dalla squadra?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annulla'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Rimuovi'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Rimuovi membro',
+      message: 'Vuoi rimuovere questo membro dalla squadra?',
+      confirmLabel: 'Rimuovi',
     );
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       try {
-        final api = ProviderScope.containerOf(context)
-            .read(adminApiClientProvider);
-        await api.removeSquadraMember(
-          squadra['id'] as String,
-          userId,
-        );
+        final container = ProviderScope.containerOf(context);
+        final api = container.read(adminApiClientProvider);
+        await api.removeSquadraMember(squadra['id'] as String, userId);
+        // Without this, the member list keeps showing the just-removed row until the admin
+        // leaves and re-enters this screen — nothing else refetches adminSquadraDetailProvider.
+        container.invalidate(adminSquadraDetailProvider(squadra['id'] as String));
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Membro rimosso')),
-          );
+          showAppToast(context, message: 'Membro rimosso', tone: ToastTone.success);
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Errore: $e')),
-          );
+          showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
         }
       }
     }
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: context.colors.inkMuted,
-                  letterSpacing: 1.2,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.colors.ink,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
+/// Formats a `User.lastAccessAt` ISO timestamp (or its absence) for the member row — "Mai" for a
+/// user who has never accessed the app (the field is `null`), otherwise the same absolute
+/// `dd/MM/yyyy HH:mm` timestamp style this app already uses for other point-in-time fields
+/// (`signedAt` in `rapportino_view_screen.dart`), converted to local time.
+String _formatLastAccess(String? iso) {
+  if (iso == null) return 'Mai';
+  return DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(iso).toLocal());
 }
 
 /// Bottom sheet to add a member to a squadra.
@@ -261,7 +282,7 @@ class _AddMemberSheet extends StatefulWidget {
 
 class _AddMemberSheetState extends State<_AddMemberSheet> {
   String? _selectedUserId;
-  String _ruolo = 'Membro';
+  int _ruolo = SquadraRuolo.membro;
   bool _isLoading = true;
   bool _isSaving = false;
   List<Map<String, dynamic>> _technicians = [];
@@ -290,22 +311,17 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
     if (_selectedUserId == null) return;
     setState(() => _isSaving = true);
     try {
-      await widget.api.addSquadraMember(
-        widget.squadraId,
-        userId: _selectedUserId!,
-        ruolo: _ruolo,
-      );
+      await widget.api.addSquadraMember(widget.squadraId, userId: _selectedUserId!, ruolo: _ruolo);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Membro aggiunto')),
-        );
+        // Without this, the new member is invisible on the detail screen behind this sheet
+        // until the admin leaves and re-enters it — nothing else refetches this provider.
+        ProviderScope.containerOf(context).invalidate(adminSquadraDetailProvider(widget.squadraId));
+        showAppToast(context, message: 'Membro aggiunto', tone: ToastTone.success);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -316,56 +332,57 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-        19,
-        19,
-        19,
-        MediaQuery.of(context).viewInsets.bottom + 19,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Aggiungi membro',
-            style: Theme.of(context).textTheme.titleMedium,
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
+            child: SheetHandle(),
           ),
+          Text('Aggiungi membro', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else
-            DropdownButtonFormField<String>(
-              // ignore: deprecated_member_use — controlled field, needs value not initialValue
-              value: _selectedUserId,
-              decoration: const InputDecoration(
-                labelText: 'Tecnico *',
-                border: OutlineInputBorder(),
-              ),
-              items: _technicians
-                  .map((t) => DropdownMenuItem(
+            AppFieldShell(
+              label: 'Tecnico *',
+              child: DropdownButtonFormField<String>(
+                // ignore: deprecated_member_use — controlled field, needs value not initialValue
+                value: _selectedUserId,
+                items: _technicians
+                    .map(
+                      (t) => DropdownMenuItem(
                         value: t['id'] as String,
-                        child: Text(
-                          t['displayName'] as String? ??
-                              t['email'] as String? ??
-                              '',
-                        ),
-                      ))
-                  .toList(),
-              onChanged: (v) => setState(() => _selectedUserId = v),
+                        child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedUserId = v),
+              ),
             ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            // ignore: deprecated_member_use — controlled field, needs value not initialValue
-            value: _ruolo,
-            decoration: const InputDecoration(
-              labelText: 'Ruolo',
-              border: OutlineInputBorder(),
+          AppFieldShell(
+            label: 'Ruolo',
+            // Backend `SquadraRuoloEnum` (WorkEnums.cs) only has Membro=0/Capo=1 — no "TeamLead"
+            // value exists, so offering it here (as this dropdown used to) always fails
+            // deserialization server-side. See SquadraRuolo in admin_api_client.dart.
+            child: DropdownButtonFormField<int>(
+              // ignore: deprecated_member_use — controlled field, needs value not initialValue
+              value: _ruolo,
+              items: const [
+                DropdownMenuItem(value: SquadraRuolo.membro, child: Text('Membro')),
+                DropdownMenuItem(value: SquadraRuolo.capo, child: Text('Capo squadra')),
+              ],
+              onChanged: (v) => setState(() => _ruolo = v ?? SquadraRuolo.membro),
             ),
-            items: const [
-              DropdownMenuItem(value: 'Membro', child: Text('Membro')),
-              DropdownMenuItem(
-                  value: 'TeamLead', child: Text('Team Lead')),
-            ],
-            onChanged: (v) => setState(() => _ruolo = v ?? 'Membro'),
           ),
           const SizedBox(height: 16),
           SizedBox(

@@ -1,0 +1,166 @@
+// dart format width=100
+// lib/features/cantiere/cantieri_list_screen.dart
+//
+// Technician-facing list of the operator's own cantieri (worksites) — the Cantieri tab.
+// Deliberately not a reuse of admin_cantiere_list_screen.dart: that one is CRUD-oriented,
+// office/admin-only. This one reads cantieriProvider exactly as CantiereTimbraScreen's picker
+// already does — already scoped server-side to the technician's own CantiereAssignment rows
+// (falling back to all active cantieri when they have none). A client-side name/address search
+// (AppSearchBar) narrows that same local list further — same pattern the Ticket/Rapportini/
+// Magazzino lists already use, since cantieriProvider is the whole synced mirror, not a query.
+//
+// Structured as one always-present CustomScrollView wrapped in a single RefreshIndicator —
+// loading/error/empty/populated content all live as slivers inside it — mirroring
+// ticket_list_screen.dart's own convention exactly. A RefreshIndicator only fires over a
+// Scrollable descendant; an earlier version of this screen put it around
+// `cantieriAsync.when(...)` with only the populated (ListView.builder) branch containing one, so
+// pull-to-refresh silently did nothing in the loading/error/empty states despite the empty-state
+// copy telling the technician to do exactly that.
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+
+import '../../core/router/app_router.dart';
+import '../../core/theme/app_palette.dart';
+import '../../core/theme/app_rack.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/widgets/widgets.dart';
+import '../../data/sync/sync_service.dart';
+import '../timbra/cantiere_timbra_screen.dart'
+    show cantiereActiveSessionProvider, cantiereTodayHoursProvider, cantieriProvider;
+
+class CantieriListScreen extends ConsumerStatefulWidget {
+  const CantieriListScreen({super.key});
+
+  @override
+  ConsumerState<CantieriListScreen> createState() => _CantieriListScreenState();
+}
+
+class _CantieriListScreenState extends ConsumerState<CantieriListScreen> {
+  String _query = '';
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cantieriAsync = ref.watch(cantieriProvider);
+    final allCantieri = cantieriAsync.valueOrNull ?? const [];
+    // Client-side filter, same as the Ticket/Rapportini/Magazzino lists — cantieriProvider is
+    // already the whole local (synced) mirror, not a server query.
+    final cantieri = _query.isEmpty
+        ? allCantieri
+        : allCantieri.where((c) {
+            final q = _query.toLowerCase();
+            return c.name.toLowerCase().contains(q) ||
+                (c.address?.toLowerCase().contains(q) ?? false);
+          }).toList();
+    // For the "Timbrato oggi" per-row indicator below — the currently-active cantiere (if any)
+    // counts as "timbrato oggi" even before it has a closed interval of its own yet.
+    final activeCantiereId = ref.watch(cantiereActiveSessionProvider)?.cantiereId;
+
+    return Scaffold(
+      backgroundColor: context.colors.bg2,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(syncProvider.notifier).performSync(),
+          child: CustomScrollView(
+            slivers: [
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.base,
+                    AppSpacing.pagePadding,
+                    AppSpacing.sm,
+                  ),
+                  child: ScreenHeader(title: 'Cantieri'),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: AppSearchBar(
+                  controller: _searchCtrl,
+                  hint: 'Cerca per nome o indirizzo…',
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              if (cantieriAsync.isLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppSpacing.xxxl),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                )
+              else if (cantieriAsync.hasError)
+                const SliverToBoxAdapter(
+                  child: UnavailableState(
+                    icon: LucideIcons.hardHat,
+                    titolo: 'Impossibile caricare i cantieri',
+                    motivo: 'Trascina in basso per aggiornare, oppure riprova tra poco.',
+                  ),
+                )
+              else if (allCantieri.isEmpty)
+                const SliverToBoxAdapter(
+                  child: UnavailableState(
+                    icon: LucideIcons.hardHat,
+                    titolo: 'Nessun cantiere disponibile',
+                    motivo:
+                        'Non risultano cantieri sincronizzati su questo dispositivo. Trascina in '
+                        'basso per aggiornare, oppure riprova tra poco.',
+                  ),
+                )
+              // An empty *filter* is not the same claim as an empty catalogue — same distinction
+              // magazzino_screen.dart's Articoli tab already draws.
+              else if (cantieri.isEmpty)
+                SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: LucideIcons.searchX,
+                    title: 'Nessun risultato',
+                    body: 'Nessun cantiere corrisponde a "$_query".',
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate((context, i) {
+                    final c = cantieri[i];
+                    return Consumer(
+                      // Scoped so a `cantiereTodayHoursProvider(c.id)` update only rebuilds this
+                      // one row, not the whole list — same reasoning as the batch-failures
+                      // dialog's own per-row Consumer in cantiere_timbra_screen.dart.
+                      builder: (context, ref, _) {
+                        final todayHours = ref.watch(cantiereTodayHoursProvider(c.id));
+                        final timbratoOggi = todayHours > Duration.zero || activeCantiereId == c.id;
+
+                        return ListRow(
+                          leading: Icon(LucideIcons.hardHat, color: context.colors.inkMuted),
+                          title: c.name,
+                          subtitle: c.address,
+                          meta: timbratoOggi
+                              ? AppBadge(
+                                  label: 'Timbrato oggi',
+                                  small: true,
+                                  bgColor: context.colors.green.withAlpha(31),
+                                  fgColor: context.colors.green,
+                                )
+                              : null,
+                          showDivider: i != cantieri.length - 1,
+                          onTap: () => context.push(AppRoutes.cantieriDetailPath(c.id)),
+                        );
+                      },
+                    );
+                  }, childCount: cantieri.length),
+                ),
+              SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

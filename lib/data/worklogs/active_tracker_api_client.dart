@@ -95,7 +95,9 @@ class ActiveTrackerApiClient {
     final response = await _dio.get('/api/worklog/active');
 
     final data = response.data;
-    final items = data is List ? data : (data is Map ? data['items'] as List? ?? const [] : const []);
+    final items = data is List
+        ? data
+        : (data is Map ? data['items'] as List? ?? const [] : const []);
 
     return items
         .whereType<Map<String, dynamic>>()

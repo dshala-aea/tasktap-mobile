@@ -10,17 +10,22 @@
 //   4. AppFab is present.
 //   5. Submitted draft tap navigates to view route (not editor).
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
+
+class MockDio extends Mock implements Dio {}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +38,9 @@ Future<void> _seedDraft(
   String submissionState = 'draft',
   String stato = 'Bozza',
 }) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: id,
           tenantId: 'tenant-1',
@@ -50,12 +57,8 @@ Future<void> _seedDraft(
 
 Widget _buildList({required AppDatabase db}) {
   return ProviderScope(
-    overrides: [
-      appDatabaseProvider.overrideWithValue(db),
-    ],
-    child: const MaterialApp(
-      home: RapportiniListScreen(),
-    ),
+    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    child: const MaterialApp(home: RapportiniListScreen()),
   );
 }
 
@@ -72,38 +75,38 @@ void main() {
   tearDown(() async => db.close());
 
   group('RapportiniListScreen — row rendering', () {
-    testWidgets('renders one ListRow per seeded draft', (tester) async {
+    testWidgets('renders one row per seeded draft, titled', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Intervento idraulico');
       await _seedDraft(db, id: 'draft-2', title: 'Revisione caldaia');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
+      // Vetro (module #3) replaced ListRow with a bespoke priority-striped row, same as the
+      // ticket list — the behaviour that matters is "one row per draft, showing its title."
       expect(find.text('Intervento idraulico'), findsOneWidget);
       expect(find.text('Revisione caldaia'), findsOneWidget);
-      // Two ListRows rendered
-      expect(find.byType(ListRow), findsNWidgets(2));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatusPill with Bozza for a draft-state report',
-        (tester) async {
+    testWidgets('shows StatusPill with Bozza for a draft-state report', (tester) async {
       await _seedDraft(db, id: 'draft-1', submissionState: 'draft');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
       expect(find.byType(StatusPill), findsWidgets);
-      expect(find.text('Bozza'), findsWidgets);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('BOZZA'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('shows StatusPill with Inviata for a submitted report',
-        (tester) async {
+    testWidgets('shows StatusPill with Inviata for a submitted report', (tester) async {
       await _seedDraft(
         db,
         id: 'draft-1',
@@ -114,7 +117,9 @@ void main() {
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
 
-      expect(find.text('Inviata'), findsWidgets);
+      // Uppercased by StatusStamp now (Il Documento's stamp device) — see
+      // status_pill_test.dart's own note on this rendering change.
+      expect(find.text('INVIATA'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -124,12 +129,7 @@ void main() {
   group('RapportiniListScreen — filter chip', () {
     testWidgets('filter Bozza shows only bozza drafts', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Bozza A', submissionState: 'draft');
-      await _seedDraft(
-        db,
-        id: 'draft-2',
-        title: 'Inviata B',
-        submissionState: 'submitted',
-      );
+      await _seedDraft(db, id: 'draft-2', title: 'Inviata B', submissionState: 'submitted');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
@@ -154,12 +154,7 @@ void main() {
 
     testWidgets('filter Inviata shows only submitted drafts', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Bozza locale', submissionState: 'draft');
-      await _seedDraft(
-        db,
-        id: 'draft-2',
-        title: 'Già inviato',
-        submissionState: 'submitted',
-      );
+      await _seedDraft(db, id: 'draft-2', title: 'Già inviato', submissionState: 'submitted');
 
       await tester.pumpWidget(_buildList(db: db));
       await tester.pumpAndSettle();
@@ -176,8 +171,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('filter Pagata shows empty state (no local data yet)',
-        (tester) async {
+    testWidgets('filter Pagata shows empty state (no local data yet)', (tester) async {
       await _seedDraft(db, id: 'draft-1', title: 'Bozza A');
 
       await tester.pumpWidget(_buildList(db: db));
@@ -214,6 +208,120 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(AppFab), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  // Item 13: edit/delete now follow the backend's own "before office review" boundary
+  // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
+  group('RapportiniListScreen — delete a draft (swipe, before office review)', () {
+    late MockDio mockDio;
+
+    setUp(() {
+      mockDio = MockDio();
+      when(() => mockDio.delete<void>(any())).thenAnswer(
+        (_) async => Response<void>(requestOptions: RequestOptions(path: ''), statusCode: 204),
+      );
+    });
+
+    Widget buildWithDio({required AppDatabase db}) => ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        dioProvider.overrideWithValue(mockDio),
+      ],
+      child: const MaterialApp(home: RapportiniListScreen()),
+    );
+
+    testWidgets('swiping a Bozza row and confirming removes it locally', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Da eliminare', submissionState: 'draft');
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da eliminare'), findsOneWidget);
+
+      await tester.drag(find.text('Da eliminare'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Eliminare il rapportino?'), findsOneWidget);
+      await tester.tap(find.text('Elimina'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da eliminare'), findsNothing);
+      expect(await db.select(db.draftReports).get(), isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('cancelling the confirmation keeps the row', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Non eliminare', submissionState: 'draft');
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.text('Non eliminare'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Annulla'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Non eliminare'), findsOneWidget);
+      expect(await db.select(db.draftReports).get(), hasLength(1));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a report sent but not yet reviewed by the office (Inviato) can still be swiped', (
+      tester,
+    ) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'In attesa di revisione',
+        stato: 'Inviato',
+        submissionState: 'submitted',
+      );
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dismissible), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a rejected report (Respinto) can still be swiped', (tester) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Respinto dall\'ufficio',
+        stato: 'Respinto',
+        submissionState: 'submitted',
+      );
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dismissible), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a report already reviewed by the office (Controllato) has no swipe-to-delete '
+        'affordance', (tester) async {
+      await _seedDraft(
+        db,
+        id: 'draft-1',
+        title: 'Già controllato',
+        stato: 'Controllato',
+        submissionState: 'submitted',
+      );
+      await tester.pumpWidget(buildWithDio(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dismissible), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

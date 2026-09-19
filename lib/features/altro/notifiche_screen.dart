@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/notifications/notification_service.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/widgets/widgets.dart';
 import 'notifiche_provider.dart';
-import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Filter enum
@@ -19,9 +19,9 @@ enum _NotificaFilter { tutte, nonLette }
 
 extension _FilterLabel on _NotificaFilter {
   String get label => switch (this) {
-        _NotificaFilter.tutte => 'Tutte',
-        _NotificaFilter.nonLette => 'Non lette',
-      };
+    _NotificaFilter.tutte => 'Tutte',
+    _NotificaFilter.nonLette => 'Non lette',
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -73,6 +73,7 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
   @override
   Widget build(BuildContext context) {
     final all = ref.watch(notificheProvider);
+    final hasError = ref.watch(notificheHasErrorProvider);
     final unread = all.where((n) => !n.letta).length;
 
     final filtered = switch (_filter) {
@@ -83,69 +84,110 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
     return Scaffold(
       backgroundColor: context.colors.bg2,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: ScreenHeader(
-                title: 'Notifiche',
-                showBack: true,
-                actions: [
-                  if (unread > 0)
-                    // A bare text action, so the splash is the only thing that confirms the
-                    // press at all — the list it clears is below the fold on a full inbox.
-                    AppTappable(
-                      onTap: () =>
-                          ref.read(notificheProvider.notifier).segnaLette(),
-                      borderRadius: BorderRadius.circular(6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                      child: Text(
-                        'Segna tutte',
-                        style: GoogleFonts.manrope(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.blue,
+        // Same RefreshIndicator pattern as the rest of the app; the refresh action is this
+        // screen's own notificheProvider.refresh() rather than the general performSync() — the
+        // notification badge/list isn't part of that sync loop (see notifiche_provider.dart).
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(notificheProvider.notifier).refresh(),
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: ScreenHeader(
+                  title: 'Notifiche',
+                  showBack: true,
+                  actions: [
+                    if (unread > 0)
+                      // A bare text action, so the splash is the only thing that confirms the
+                      // press at all — the list it clears is below the fold on a full inbox.
+                      // ConstrainedBox guarantees the 44dp touch-target floor the padding alone
+                      // (sm/md around 12px text) falls short of — same guarantee HeaderIconBtn
+                      // gives its own action buttons.
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 44),
+                        child: AppTappable(
+                          onTap: () =>
+                              ref.read(notificheProvider.notifier).segnaLette(),
+                          borderRadius: BorderRadius.circular(6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: AppSpacing.md,
+                          ),
+                          child: Text(
+                            'Segna tutte',
+                            style: TextStyle(
+                              fontFamily: 'Archivo',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              // accentInk, not raw Y — the header is a flipping ScreenHeader (see
+                              // this comment's own history: fixed white was unreadable in light
+                              // mode), but raw Y as text only clears ~2.91:1 in dark mode. See
+                              // AppPalette.accentInk's own doc comment for the bug this avoids.
+                              color: context.colors.accentInk,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-            // ── Filter chips ───────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(19, 0, 19, 12),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _NotificaFilter.values.map((f) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: AppChip(
-                          label: f.label,
-                          active: _filter == f,
-                          onTap: () => setState(() => _filter = f),
-                        ),
-                      );
-                    }).toList(),
+              // ── Filter chips ───────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    0,
+                    AppSpacing.pagePadding,
+                    AppSpacing.md,
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _NotificaFilter.values.map((f) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: AppSpacing.sm),
+                          child: AppChip(
+                            label: f.label,
+                            active: _filter == f,
+                            onTap: () => setState(() => _filter = f),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // ── List or Empty ──────────────────────────────────────────────
-            if (filtered.isEmpty)
-              const SliverToBoxAdapter(
-                child: EmptyState(
-                  icon: LucideIcons.bellOff,
-                  title: 'Nessuna notifica',
-                  body: 'Le notifiche ricevute appariranno qui.',
-                ),
-              )
-            else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
+              // ── List or Empty ──────────────────────────────────────────────
+              // hasError only overrides the empty state — a failed refresh keeps whatever the
+              // Drift cache already had, so a non-empty `all` here means the cache is still good
+              // even if the latest refresh() didn't reach the server.
+              if (filtered.isEmpty && hasError)
+                SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: LucideIcons.wifiOff,
+                    title: 'Impossibile caricare le notifiche',
+                    body: 'Controlla la connessione e riprova.',
+                    action: AppButton(
+                      label: 'Riprova',
+                      size: AppButtonSize.sm,
+                      fullWidth: false,
+                      onPressed: () =>
+                          ref.read(notificheProvider.notifier).refresh(),
+                    ),
+                  ),
+                )
+              else if (filtered.isEmpty)
+                const SliverToBoxAdapter(
+                  child: EmptyState(
+                    icon: LucideIcons.bellOff,
+                    title: 'Nessuna notifica',
+                    body: 'Le notifiche ricevute appariranno qui.',
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate((context, i) {
                     final n = filtered[i];
                     return _NotificaRow(
                       notifica: n,
@@ -159,13 +201,14 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
                         _openRelatedEntity(context, n);
                       },
                     );
-                  },
-                  childCount: filtered.length,
+                  }, childCount: filtered.length),
                 ),
-              ),
 
-            const SliverPadding(padding: EdgeInsets.only(bottom: 40)),
-          ],
+              SliverPadding(
+                padding: EdgeInsets.only(bottom: context.navClearance),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -175,6 +218,31 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
 // ══════════════════════════════════════════════════════════════════════════════
 // Notification row
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// Icon for a notification's `tipo` (the wire `NotificationTypeEnum` name — see
+/// notification_api_client.dart's `_kNotificationTypeNames`). Falls back to the generic bell for
+/// any type not covered here — this deliberately doesn't attempt full 1:1 coverage of every
+/// notification type, only the ones with an unambiguous, already-established icon elsewhere in
+/// this app (ticket icons match ticket_list_screen.dart; report icons match
+/// ticket_detail_screen.dart's 'Report' tab / step_riepilogo.dart's own alertTriangle for a
+/// problem state; hardHat matches cantiere/worksite iconography app-wide).
+IconData _iconForTipo(String? tipo) {
+  return switch (tipo) {
+    'TicketAssigned' || 'TicketCreated' => LucideIcons.ticket,
+    'TicketStatusChanged' || 'TicketCompleted' => LucideIcons.clipboardCheck,
+    'TicketOverdue' => LucideIcons.alertTriangle,
+    'ScheduleReminder' || 'ScheduleStarting' => LucideIcons.calendar,
+    'WorkLogSubmitted' => LucideIcons.fileText,
+    'ReportReviewed' => LucideIcons.clipboardCheck,
+    'ReportRejected' => LucideIcons.fileX,
+    'ReportCancelled' => LucideIcons.calendarX,
+    'AbsenceRequestSubmitted' ||
+    'AbsenceRequestDecided' => LucideIcons.calendarCheck,
+    'CantiereAssigned' => LucideIcons.hardHat,
+    'SeatLimitAlert' => LucideIcons.alertTriangle,
+    _ => LucideIcons.bell,
+  };
+}
 
 class _NotificaRow extends StatelessWidget {
   const _NotificaRow({
@@ -198,10 +266,13 @@ class _NotificaRow extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               color: context.colors.blue.withAlpha(26),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: AppRack.insetShape,
             ),
-            child:
-                Icon(LucideIcons.bell, size: 20, color: context.colors.blue),
+            child: Icon(
+              _iconForTipo(notifica.tipo),
+              size: 20,
+              color: context.colors.blue,
+            ),
           ),
           if (!notifica.letta)
             Positioned(
@@ -223,7 +294,11 @@ class _NotificaRow extends StatelessWidget {
       subtitle: notifica.corpo,
       meta: Text(
         _formatTime(notifica.timestamp),
-        style: GoogleFonts.manrope(fontSize: 10, color: context.colors.inkMuted),
+        style: TextStyle(
+          fontFamily: 'Archivo',
+          fontSize: 10,
+          color: context.colors.inkMuted,
+        ),
       ),
       showDivider: !isLast,
       onTap: onTap,

@@ -65,8 +65,7 @@ class ConnectivityNotifier extends AsyncNotifier<bool> {
 typedef VoidCallback = void Function();
 
 /// Global connectivity state provider.
-final connectivityProvider =
-    AsyncNotifierProvider<ConnectivityNotifier, bool>(
+final connectivityProvider = AsyncNotifierProvider<ConnectivityNotifier, bool>(
   ConnectivityNotifier.new,
 );
 

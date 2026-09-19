@@ -30,13 +30,13 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 AuthUser _fakeUser({String? displayName}) => AuthUser(
-      id: 'u1',
-      email: 'mario@tasktap.io',
-      displayName: displayName,
-      accessToken: 'tok',
-      refreshToken: 'ref',
-      expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-    );
+  id: 'u1',
+  email: 'mario@tasktap.io',
+  displayName: displayName,
+  accessToken: 'tok',
+  refreshToken: 'ref',
+  expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+);
 
 Widget _buildScreen(MockAuthRepository repo) {
   return ProviderScope(
@@ -94,12 +94,37 @@ void main() {
     await drain(tester);
   });
 
-  // ── 3. Notifiche section ───────────────────────────────────────────────────
-  testWidgets('renders Notifiche section toggle rows', (tester) async {
+  // ── 3. Notifiche section — canali ──────────────────────────────────────────
+  testWidgets('renders Notifiche channel toggle rows', (tester) async {
     final user = _fakeUser(displayName: 'Mario');
     await pump(tester, user: user);
 
     expect(find.text('Notifiche push'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Notifiche in app'), findsOneWidget);
+    await drain(tester);
+  });
+
+  // ── 3b. Notifiche section — categorie (gap #8: all backend-enforced categories, not just
+  // Interventi/Rapportini) ─────────────────────────────────────────────────────
+  testWidgets('renders Notifiche category toggle rows', (tester) async {
+    final user = _fakeUser(displayName: 'Mario');
+    await pump(tester, user: user);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Menzioni'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
+
+    expect(find.text('Interventi'), findsOneWidget);
+    expect(find.text('Pianificazione'), findsOneWidget);
+    expect(find.text('Licenza e abbonamento'), findsOneWidget);
+    expect(find.text('Ore e presenze'), findsOneWidget);
+    expect(find.text('Rapportini'), findsOneWidget);
+    expect(find.text('Menzioni'), findsOneWidget);
     await drain(tester);
   });
 
@@ -107,6 +132,14 @@ void main() {
   testWidgets('renders App section toggle rows', (tester) async {
     final user = _fakeUser(displayName: 'Mario');
     await pump(tester, user: user);
+
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Modalità offline'),
+      scroller,
+      const Offset(0, -200),
+    );
+    await tester.pump();
 
     expect(find.text('Modalità offline'), findsOneWidget);
     expect(find.text('Geolocalizzazione'), findsOneWidget);
@@ -118,8 +151,14 @@ void main() {
     final user = _fakeUser(displayName: 'Mario');
     await pump(tester, user: user);
 
-    // Scroll to find the Account section.
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+    // Scroll to find the Account section — further down now than before gap #8 added six more
+    // notification toggles above it.
+    final scroller = find.byType(CustomScrollView);
+    await tester.dragUntilVisible(
+      find.text('Autenticazione biometrica'),
+      scroller,
+      const Offset(0, -200),
+    );
     await tester.pump();
 
     expect(find.text('Autenticazione biometrica'), findsOneWidget);
@@ -159,8 +198,7 @@ void main() {
   // line — it never exercises this branch. This test stubs a real,
   // non-empty access token so the guard in `_syncPushRegistration` is
   // actually the thing preventing the crash.
-  testWidgets(
-      'tapping push toggle with a logged-in user does not crash '
+  testWidgets('tapping push toggle with a logged-in user does not crash '
       'when Firebase is unavailable', (tester) async {
     final user = _fakeUser(displayName: 'Mario');
     when(() => repo.currentUser).thenReturn(user);
@@ -188,13 +226,14 @@ void main() {
     final user = _fakeUser(displayName: 'Mario');
     await pump(tester, user: user);
 
-    // Scroll past all sections to the logout row in multiple steps.
+    // Scroll past all sections (now longer than before gap #8 added six more notification
+    // toggles) to the logout row.
     final scroller = find.byType(CustomScrollView);
-    await tester.drag(scroller, const Offset(0, -400));
-    await tester.pump();
-    await tester.drag(scroller, const Offset(0, -400));
-    await tester.pump();
-    await tester.drag(scroller, const Offset(0, -400));
+    await tester.dragUntilVisible(
+      find.text("Esci dall'account"),
+      scroller,
+      const Offset(0, -200),
+    );
     await tester.pump();
 
     final logoutFinder = find.text("Esci dall'account");
@@ -202,7 +241,9 @@ void main() {
     await tester.tap(logoutFinder);
     await tester.pumpAndSettle();
 
-    expect(find.byType(AlertDialog), findsOneWidget);
+    // Vetro chrome (a Dialog wrapping VetroCard), not a stock AlertDialog — see this screen's
+    // own _confirmLogout comment.
+    expect(find.byType(Dialog), findsOneWidget);
 
     // Dismiss.
     await tester.tap(find.text('Annulla'));

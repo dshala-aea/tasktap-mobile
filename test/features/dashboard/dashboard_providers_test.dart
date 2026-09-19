@@ -13,9 +13,7 @@ void main() {
   setUp(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     db = AppDatabase(NativeDatabase.memory());
-    container = ProviderContainer(
-      overrides: [appDatabaseProvider.overrideWithValue(db)],
-    );
+    container = ProviderContainer(overrides: [appDatabaseProvider.overrideWithValue(db)]);
   });
 
   tearDown(() async {

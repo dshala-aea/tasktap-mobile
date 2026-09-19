@@ -1,5 +1,6 @@
 // dart format width=100
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
@@ -10,8 +11,7 @@ import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Fetches contracts from backend API.
-final adminContractsProvider =
-    FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+final adminContractsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
   final api = ref.watch(adminApiClientProvider);
   return api.fetchContracts();
 });
@@ -29,13 +29,18 @@ class AdminContractListScreen extends ConsumerWidget {
       body: SafeArea(
         child: contractsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Errore: $e')),
+          error: (e, _) => ErrorState(onRetry: () => ref.invalidate(adminContractsProvider)),
           data: (contracts) => _ContractListBody(contracts: contracts),
         ),
       ),
-      floatingActionButton: AppFab(
-        tooltip: 'Nuovo contratto',
-        onPressed: () => context.push('/altro/contratti/nuovo'),
+      floatingActionButton: Padding(
+        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
+        // this same change.
+        padding: EdgeInsets.only(bottom: context.navClearance),
+        child: AppFab(
+          tooltip: 'Nuovo contratto',
+          onPressed: () => context.push('/altro/contratti/nuovo'),
+        ),
       ),
     );
   }
@@ -75,33 +80,42 @@ class _ContractListBodyState extends ConsumerState<_ContractListBody> {
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminContractsProvider.future),
       child: CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: ScreenHeader(
-            title: 'Contratti',
-            subtitle: '${filtered.length} totali',
-            showBack: true,
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: AppSearchBar(
-            controller: _searchCtrl,
-            hint: 'Cerca per nome…',
-            onChanged: (q) => setState(() => _query = q),
-          ),
-        ),
-        if (filtered.isEmpty)
+        slivers: [
           SliverToBoxAdapter(
-            child: EmptyState(
-              icon: LucideIcons.fileSignature,
-              title: 'Nessun contratto',
-              body: 'Crea un nuovo contratto con il pulsante +.',
+            child: ScreenHeader(
+              title: 'Contratti',
+              subtitle: '${filtered.length} totali',
+              showBack: true,
             ),
-          )
-        else
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
+          ),
+          SliverToBoxAdapter(
+            child: AppSearchBar(
+              controller: _searchCtrl,
+              hint: 'Cerca per nome…',
+              onChanged: (q) => setState(() => _query = q),
+            ),
+          ),
+          if (widget.contracts.isEmpty)
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.fileSignature,
+                title: 'Nessun contratto',
+                body: 'Crea un nuovo contratto con il pulsante +.',
+              ),
+            )
+          else if (filtered.isEmpty)
+            // A search with no matches is a different situation from having no contracts at
+            // all — the "create one" prompt above doesn't apply here.
+            SliverToBoxAdapter(
+              child: EmptyState(
+                icon: LucideIcons.fileSignature,
+                title: 'Nessun risultato',
+                body: 'Nessun contratto corrisponde alla ricerca.',
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate((context, i) {
                 final contract = filtered[i];
                 final name = contract['name'] as String? ?? '';
                 final customerId = contract['customerId'] as String? ?? '';
@@ -112,17 +126,12 @@ class _ContractListBodyState extends ConsumerState<_ContractListBody> {
                   customerName: customerName,
                   isActive: isActive,
                   isLast: i == filtered.length - 1,
-                  onTap: () => context.push(
-                    '/altro/contratti/${contract['id']}',
-                    extra: contract,
-                  ),
+                  onTap: () => context.push('/altro/contratti/${contract['id']}', extra: contract),
                 );
-              },
-              childCount: filtered.length,
+              }, childCount: filtered.length),
             ),
-          ),
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-      ],
+          SliverPadding(padding: EdgeInsets.only(bottom: context.navClearance)),
+        ],
       ),
     );
   }
@@ -146,26 +155,10 @@ class _ContractRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListRow(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.colors.bg3,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(
-          LucideIcons.fileSignature,
-          size: 20,
-          color: context.colors.inkMuted,
-        ),
-      ),
+      leading: const RowIconTile(icon: LucideIcons.fileSignature),
       title: name,
       subtitle: customerName,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
+      meta: isActive ? null : const StatusPill(stato: 'Inattivo', small: true),
       showDivider: !isLast,
       onTap: onTap,
     );

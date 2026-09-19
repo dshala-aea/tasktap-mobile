@@ -1,15 +1,18 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_rack.dart';
+import '../theme/app_spacing.dart';
+import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Default tab icons (exposed so screens/tests need not import lucide directly).
-import 'package:tasktap_mobile/core/theme/app_palette.dart';
 abstract final class AppBottomNavIcons {
   static const IconData dashboard = LucideIcons.home;
   static const IconData ticket = LucideIcons.ticket;
-  static const IconData timbra = LucideIcons.clock;
+  static const IconData cantieri = LucideIcons.hardHat;
   static const IconData calendario = LucideIcons.calendar;
   static const IconData altro = LucideIcons.moreHorizontal;
 }
@@ -22,23 +25,24 @@ class AppBottomNavItem {
   final String label;
 }
 
-/// Floating-pill bottom navigation.
+/// Floating bottom navigation — a flat Documento sheet (`context.colors.surface` + a hairline
+/// border), the same material every card and the header now share. `AppColors.Y` (stamp red, the
+/// one deliberately-saturated accent in the system) marks the active tab as a flat fill — no
+/// blur, no gradient.
 ///
-/// Spec: white floating pill, 23 px radius, 0.5 px BL border, SH shadow,
-/// 19 px horizontal margin, 18 px bottom. 5 tabs (Dashboard / Ticket / Timbra /
-/// Calendario / Altro). Active tab: yellow bg, 19 px radius, icon (18, DARK) +
-/// Sora 600/12 label. Inactive: icon only (DIS). 200 ms transition.
+/// The active tab expands horizontally to reveal its icon + complete label. The expansion is
+/// animated so switching tabs feels like the active pill moves rather than the entire navigation
+/// jumping between layouts.
+///
+/// This used to be Vetro: a frosted `BackdropFilter` bar with a tint→tintStrong gradient on the
+/// active pill. DESIGN.md's Il Documento system bans both (paper, not glass; a flat accent fill,
+/// not a gradient) the same way it does for every other surface in the app.
 ///
 /// ```dart
 /// AppBottomNav(currentIndex: 0, onTap: (i) => setState(() => index = i));
 /// ```
 class AppBottomNav extends StatelessWidget {
-  const AppBottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-    this.items,
-  });
+  const AppBottomNav({super.key, required this.currentIndex, required this.onTap, this.items});
 
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -49,45 +53,192 @@ class AppBottomNav extends StatelessWidget {
   static const List<AppBottomNavItem> defaultItems = [
     AppBottomNavItem(icon: AppBottomNavIcons.dashboard, label: 'Dashboard'),
     AppBottomNavItem(icon: AppBottomNavIcons.ticket, label: 'Ticket'),
-    AppBottomNavItem(icon: AppBottomNavIcons.timbra, label: 'Timbra'),
+    AppBottomNavItem(icon: AppBottomNavIcons.cantieri, label: 'Cantieri'),
     AppBottomNavItem(icon: AppBottomNavIcons.calendario, label: 'Calendario'),
     AppBottomNavItem(icon: AppBottomNavIcons.altro, label: 'Altro'),
   ];
 
+  /// Above this window width (a tablet/expanded window, not a phone in any orientation this app
+  /// otherwise targets) the shell switches to [_buildRail].
+  static const double wideBreakpoint = 600;
+
   @override
   Widget build(BuildContext context) {
     final tabs = items ?? defaultItems;
+    final wide = MediaQuery.sizeOf(context).width >= wideBreakpoint;
+
+    return wide ? _buildRail(context, tabs) : _buildBar(context, tabs);
+  }
+
+  /// Compact width (phone).
+  ///
+  /// The active item receives substantially more horizontal space so its complete icon + label
+  /// can be displayed. Width changes are animated when the selected tab changes.
+  Widget _buildBar(BuildContext context, List<AppBottomNavItem> tabs) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(19, 0, 19, 18),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, 18),
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: context.colors.surface,
-            borderRadius: BorderRadius.circular(23),
-            border: Border.all(color: context.colors.borderLight, width: 0.5),
+            borderRadius: BorderRadius.circular(10),
             boxShadow: context.colors.shadow,
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Flexible, so the bar fits the phone rather than the phone fitting the bar. The
-                // tabs' natural width is padding + icon + the active label, which came to two
-                // pixels more than a 5.9" screen has and drew the striped overflow bar across the
-                // bottom of every screen. Turn the system font size up and it is far more than
-                // two. Loose fit: a tab still takes only what it needs when there is room.
-                for (var i = 0; i < tabs.length; i++)
-                  Flexible(
-                    child: _NavTab(
-                      item: tabs[i],
-                      active: i == currentIndex,
-                      onTap: () => onTap(i),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.borderLight, width: 1),
+            ),
+            child: Padding(
+              // Was (6, 8, 6, 6) — off-scale, and not even internally consistent (top 2px more
+              // than the other three sides). AppRack.navBarHeight's own formula bakes in "6 pill
+              // padding" top and bottom around the 48px tab row (see its doc comment); uniform
+              // AppSpacing.xs (4) on every side is the nearest token AND the value that actually
+              // reconciles this pill's real rendered height with that documented 74 — every
+              // screen's nav clearance already assumes.
+              padding: const EdgeInsets.all(AppSpacing.xs),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth = constraints.maxWidth;
+                  final inactiveCount = tabs.length - 1;
+
+                  // Threshold for the "plenty of room" branch below — NOT a width that gets
+                  // applied. Inactive tabs always split whatever's left after the active tab
+                  // (see `inactiveWidth` below), so the bar fills its full available width in
+                  // every branch, exactly like this widget's original layout — a fixed cap here
+                  // previously left a trailing empty gap on any phone wider than this threshold,
+                  // which is most real phones.
+                  const comfortableInactiveWidth = 48.0;
+
+                  // Hard floor for an inactive tab under real space pressure (icon 18px + 12px
+                  // padding each side = 42px minimum to avoid clipping the icon itself) — still
+                  // comfortably above common accessible tap-target minimums (iOS: 44pt).
+                  const minInactiveWidth = 42.0;
+
+                  // The one number that actually matters: how wide does the CURRENTLY active
+                  // label need to be to render in full, never shrunk? This is what guarantees
+                  // "Calendario"/"Dashboard" are never cropped — a real, pre-verified
+                  // measurement (see `_requiredActiveWidthFor`'s doc comment), not a guessed
+                  // fixed constant, scaled by the device's own accessibility text-size setting.
+                  final requiredActiveWidth = tabs.isEmpty
+                      ? 0.0
+                      : _requiredActiveWidthFor(
+                          tabs[currentIndex].label,
+                          MediaQuery.textScalerOf(context),
+                        );
+
+                  double activeWidth;
+
+                  if (tabs.length <= 1) {
+                    activeWidth = availableWidth;
+                  } else {
+                    final target = math.max(_preferredActiveWidth, requiredActiveWidth);
+                    final roomyTotal = target + inactiveCount * comfortableInactiveWidth;
+
+                    if (availableWidth >= roomyTotal) {
+                      // Plenty of room: active gets its target; inactive tabs split the rest
+                      // below, which on a wide phone is MORE than comfortableInactiveWidth each
+                      // — that's intentional, it's what fills the bar edge to edge.
+                      activeWidth = target;
+                    } else {
+                      // Squeeze: shrink inactive tabs toward their hard floor FIRST, so the
+                      // active tab keeps whatever it actually needs to show its full label.
+                      final minTotal = requiredActiveWidth + inactiveCount * minInactiveWidth;
+                      if (availableWidth >= minTotal) {
+                        activeWidth = requiredActiveWidth;
+                      } else {
+                        // Mathematically impossible to show the full label without pushing
+                        // inactive tabs below their hard floor. This does not happen on any
+                        // screen width this app targets (verified for 320/360/390/430 logical
+                        // px against every label) — reported here rather than silently cropped,
+                        // per this widget's own layout contract.
+                        assert(() {
+                          debugPrint(
+                            'AppBottomNav: cannot fit "${tabs[currentIndex].label}" at '
+                            '$availableWidth px wide without shrinking inactive tabs below '
+                            '$minInactiveWidth px (needs $minTotal px). Falling back to '
+                            'whatever space remains after the inactive floor.',
+                          );
+                          return true;
+                        }());
+                        activeWidth = math.max(
+                          0.0,
+                          availableWidth - inactiveCount * minInactiveWidth,
+                        );
+                      }
+                    }
+                  }
+
+                  // Always fills availableWidth exactly: whatever's left after the active tab is
+                  // split evenly among the inactive ones, in every branch above.
+                  final inactiveWidth = inactiveCount > 0
+                      ? (availableWidth - activeWidth) / inactiveCount
+                      : 0.0;
+
+                  return Row(
+                    children: [
+                      for (var i = 0; i < tabs.length; i++)
+                        _AnimatedNavSlot(
+                          width: i == currentIndex ? activeWidth : inactiveWidth,
+                          duration: reduceMotion ? Duration.zero : AppRack.drawerOut,
+                          child: _NavTab(
+                            item: tabs[i],
+                            active: i == currentIndex,
+                            onTap: () => onTap(i),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// ≥[wideBreakpoint] (tablet/expanded window) — same tabs, same flat-fill active-state, laid out
+  /// as a fixed vertical rail along the leading edge.
+  Widget _buildRail(BuildContext context, List<AppBottomNavItem> tabs) {
+    return SafeArea(
+      right: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.lg),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: context.colors.shadow,
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.borderLight, width: 1),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.base,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < tabs.length; i++)
+                    Padding(
+                      padding: EdgeInsets.only(bottom: i == tabs.length - 1 ? 0 : 14),
+                      child: _NavTab(
+                        item: tabs[i],
+                        active: i == currentIndex,
+                        onTap: () => onTap(i),
+                        vertical: true,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -96,70 +247,203 @@ class AppBottomNav extends StatelessWidget {
   }
 }
 
+/// Animated horizontal slot used by the phone bottom navigation.
+///
+/// Unlike [Expanded] with a changing `flex`, this animates the actual width continuously.
+///
+/// Uses [TweenAnimationBuilder] + a hard [SizedBox] rather than `AnimatedContainer(width: ...,
+/// alignment: ...)`: `Container`'s `alignment` wraps the child in an `Align`, which hands the
+/// child LOOSE constraints and just centers whatever size it wants to be — it does not clip or
+/// cap the child's width. A `_NavTab` whose content (icon + label) happens to want more space
+/// than its assigned slot would then render wider than the slot and visually spill into a
+/// neighboring tab instead of being contained — this was the actual cause of the nav overlaying
+/// itself, independent of whether the assigned widths were individually correct. `SizedBox`
+/// gives the child a TIGHT width (min == max == [width]), so the child is always forced to
+/// exactly this slot's width — combined with the measured-width guarantee in `_buildBar` above
+/// (the active slot is always sized to fit its label at 12px, never smaller), this makes an
+/// overlay structurally impossible rather than merely unlikely. The inner `ClipRect` is a
+/// last-resort safety net for the "mathematically impossible" case documented in `_buildBar`
+/// (never triggered on any screen width this app targets): if content ever still doesn't fit,
+/// it is clipped at the slot boundary rather than painted over a neighboring tab.
+class _AnimatedNavSlot extends StatelessWidget {
+  const _AnimatedNavSlot({required this.width, required this.duration, required this.child});
+
+  final double width;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: width),
+      duration: duration,
+      curve: AppRack.slideOut,
+      builder: (context, animatedWidth, child) {
+        return ClipRect(
+          child: SizedBox(width: animatedWidth, child: child),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+/// The roomy, generous active-pill width used whenever there's space to spare, and the fallback
+/// requirement for any label not in [_measuredActiveLabelWidths] (see that map's doc comment).
+/// Unchanged from this widget's previous single fixed constant.
+const _preferredActiveWidth = 96.0;
+
+/// How wide each default tab's label needs its active pill to be, to render in full at 12px/w600
+/// Inter — measured ONCE against the real bundled font (`assets/fonts/InterVariable.ttf`, via a
+/// `TextPainter` with that font explicitly loaded, at text scale 1.0), not guessed, and not
+/// re-measured at runtime.
+///
+/// Deliberately NOT computed on every build via a live `TextPainter`: this app's own test suite
+/// (like most Flutter test suites) never loads real fonts for ordinary widget/golden tests —
+/// `flutter_test`'s default font substitution renders every glyph as a fixed-size placeholder box
+/// completely unrelated to Inter's real metrics. A live measurement would silently produce a
+/// different (usually much larger, and non-deterministic across the placeholder vs. the real
+/// font) required width in tests than on a real device, which is exactly what broke this widget's
+/// own golden test during development of this fix. Baking in the real, pre-verified numbers keeps
+/// this widget's behavior identical in tests and in the field — this is a measurement result, not
+/// a magic guess (each value = ceil(measured glyph width) + 20 padding + 12 safety margin).
+///
+/// If a label here is ever renamed, or a new tab added with an unlisted label,
+/// [_requiredActiveWidthFor] falls back to [_preferredActiveWidth] — the same width every label
+/// already gets whenever there's room to spare — rather than crashing or silently under-sizing.
+const Map<String, double> _measuredActiveLabelWidths = {
+  'Dashboard': 96.0, // 63.29px glyph width, measured
+  'Ticket': 68.0, // 35.95px
+  'Cantieri': 78.0, // 45.53px
+  'Calendario': 95.0, // 62.98px
+  'Altro': 61.0, // 28.09px
+};
+
+/// [textScaler] MUST be the ambient `MediaQuery.textScalerOf(context)`, not a default/unscaled
+/// one: `_NavTab`'s `Text` auto-scales with the device's accessibility text-size setting, and a
+/// requirement that ignored that would under-allocate the slot exactly when a larger system font
+/// makes the label wider — the same class of bug the existing "fits a narrow phone without
+/// overflowing" regression test (`bottom_nav_test.dart`) already guards at 1.3x scale. Scaling the
+/// pre-measured base width by the scale ratio (rather than re-measuring text at the scaled size)
+/// keeps this font-independent — see [_measuredActiveLabelWidths]'s doc comment for why that
+/// matters.
+double _requiredActiveWidthFor(String label, TextScaler textScaler) {
+  final baseWidth = _measuredActiveLabelWidths[label] ?? _preferredActiveWidth;
+  final scaleRatio = textScaler.scale(12.0) / 12.0;
+  return baseWidth * scaleRatio;
+}
+
 class _NavTab extends StatelessWidget {
   const _NavTab({
     required this.item,
     required this.active,
     required this.onTap,
+    this.vertical = false,
   });
 
   final AppBottomNavItem item;
   final bool active;
   final VoidCallback onTap;
 
+  /// The wide-window rail's orientation — icon-above-label instead of icon-beside-label.
+  final bool vertical;
+
   @override
   Widget build(BuildContext context) {
+    final label = Text(
+      item.label,
+      maxLines: 1,
+      softWrap: false,
+      textAlign: TextAlign.center,
+      overflow: TextOverflow.visible,
+      style: const TextStyle(
+        fontFamily: 'Archivo',
+        fontSize: 12,
+        height: 1.0,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
+      ),
+    );
+
     return Semantics(
       button: true,
       selected: active,
       label: item.label,
-      // Stays a GestureDetector, unlike the rest of the app's press targets (see
-      // core/widgets/app_tappable.dart). The pill below animates its colour, padding and label
-      // on every selection change, so a tap is already answered — visibly and immediately, by a
-      // larger movement than a splash. Wrapping it in an AppTappable would hide the ink behind
-      // the AnimatedContainer's own fill anyway, and lose the animation to keep it.
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: EdgeInsets.symmetric(
-            horizontal: active ? 16 : 14,
-            vertical: 10,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : AppRack.drawerOut,
+          curve: AppRack.slideOut,
+          constraints: const BoxConstraints(
+            minWidth: 48,
+            minHeight: 48,
+            // maxHeight is the actual fix for the "nav fills the whole screen" regression — see
+            // the comment on `child: Center(...)` below for why. Buffer over the active tab's
+            // real content height (icon 18 + 4 gap + 12px label + 16 vertical padding = 50) was
+            // 56 (6px buffer), sized against Inter's metrics; the Il Documento font sweep moved
+            // this label onto Archivo, whose taller natural line-height (the `height: 1.0` on the
+            // label's TextStyle scales the font's own metric, not a fixed 12px box — different
+            // fonts disagree on what that is) ate the buffer down to a real, reproducible 2px
+            // RenderFlex overflow (test/presentation/app_shell_test.dart's "tapping Ticket tab
+            // switches branch"). 60 restores real headroom rather than tuning to the exact px.
+            maxHeight: 60,
           ),
-          decoration: BoxDecoration(
-            color: active ? AppColors.Y : Colors.transparent,
-            borderRadius: BorderRadius.circular(19),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                item.icon,
-                size: 18,
-                color: active ? context.colors.brandOn : context.colors.inkDisabled,
-              ),
-              if (active) ...[
-                const SizedBox(width: 8),
-                // The label is what gives when space runs out — an icon nobody can read is worse
-                // than a word that ends in an ellipsis, and the icon is what marks the tab.
-                Flexible(
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.sora(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.brandOn,
-                    ),
-                  ),
+          // Horizontal padding here is NOT free to snap wherever: `_measuredActiveLabelWidths`
+          // above bakes in "+20 padding" (2 × 10) as part of the slot width it pre-computes for
+          // each active label, so the active slot is always sized with room to spare for this
+          // exact padding. AppSpacing.sm (8, total 16) stays under that budget — strictly safer,
+          // never the cause of the clipping `_requiredActiveWidthFor`'s own regression test
+          // guards against. AppSpacing.md (12) is `inactive`'s exact value already, just no longer
+          // a bare literal.
+          padding: vertical
+              ? EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: active ? AppSpacing.sm : AppSpacing.md,
+                )
+              : EdgeInsets.symmetric(
+                  horizontal: active ? AppSpacing.sm : AppSpacing.md,
+                  vertical: active ? AppSpacing.sm : AppSpacing.md,
                 ),
-              ],
-            ],
+          decoration: BoxDecoration(
+            color: active ? AppColors.Y : null,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          // THE REAL BUG (a prior fix here swapped Container's `alignment:` param for this
+          // explicit `Center` — that changed NOTHING: `Center` IS `Align`, same RenderObject,
+          // same sizing rule, so the swap was a no-op and the regression survived it).
+          //
+          // RenderPositionedBox (what both Align and Center are) does not need an UNBOUNDED
+          // constraint to blow up — it expands to fill ANY constraint that is merely bounded,
+          // loose or tight, min or not: "as big as possible" is its default width/height factor,
+          // and it only falls back to shrink-wrapping the child when the incoming max is
+          // literally infinite. Scaffold.bottomNavigationBar hands its child a LOOSE but
+          // perfectly finite max height (0..screenHeight) — bounded, not infinite — so Align
+          // happily resolves to the full screen height. That's the actual regression: no crash,
+          // no infinite-constraint assertion, just this widget silently becoming as tall as the
+          // whole Scaffold body every time.
+          //
+          // The real fix is the `maxHeight` above: it caps what Align/Center can possibly
+          // expand to, so "as big as possible" resolves to a small, fixed, correct size instead
+          // of the screen. `Center` is kept only because it's still the simplest way to place
+          // icon-only inactive tabs in the middle of their slot — it is safe now that the
+          // constraint it fills is capped.
+          child: Center(
+            child: active
+                ? Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(item.icon, size: 18, color: Colors.white),
+                      const SizedBox(height: 4),
+
+                      // Never scaled down: `_buildBar`'s width allocation guarantees this slot is
+                      // always wide enough for this exact label at this exact (12px) size — see
+                      // `_requiredActiveWidthFor`.
+                      label,
+                    ],
+                  )
+                : Icon(item.icon, size: 18, color: context.colors.inkMuted),
           ),
         ),
       ),

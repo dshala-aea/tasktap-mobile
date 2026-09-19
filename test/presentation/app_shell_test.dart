@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
@@ -25,24 +26,20 @@ class MockDio extends Mock implements Dio {}
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 Map<String, dynamic> _emptySyncPayload() => {
-      'syncedAt': DateTime.utc(2026, 6, 21).toIso8601String(),
-      'since': null,
-      'schedules': <dynamic>[],
-      'draftReports': <dynamic>[],
-      'customers': <dynamic>[],
-      'locations': <dynamic>[],
-      'tickets': <dynamic>[],
-    };
+  'syncedAt': DateTime.utc(2026, 6, 21).toIso8601String(),
+  'since': null,
+  'schedules': <dynamic>[],
+  'draftReports': <dynamic>[],
+  'customers': <dynamic>[],
+  'locations': <dynamic>[],
+  'tickets': <dynamic>[],
+};
 
 /// Builds a [TaskTapApp] with:
 /// - Mock auth repository emitting an authenticated user.
 /// - A provided in-memory Drift DB.
 /// - Stub Dio that returns an empty sync payload.
-Widget _buildAuthenticatedApp(
-  MockAuthRepository repo,
-  AppDatabase db,
-  MockDio mockDio,
-) {
+Widget _buildAuthenticatedApp(MockAuthRepository repo, AppDatabase db, MockDio mockDio) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
@@ -54,10 +51,13 @@ Widget _buildAuthenticatedApp(
 }
 
 void main() {
-  setUpAll(() {
+  setUpAll(() async {
     // Suppress the "multiple AppDatabase instances" Drift warning in tests.
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     registerFallbackValue(RequestOptions(path: '/'));
+    // The dashboard's ID-plate hero formats today's date in Italian; without this, mounting the
+    // real app tree throws LocaleDataException the moment it builds.
+    await initializeDateFormatting('it', null);
   });
 
   late MockAuthRepository repo;
@@ -73,10 +73,8 @@ void main() {
 
     // Stub sync endpoint to return an empty payload.
     when(
-      () => mockDio.get<Map<String, dynamic>>(
-        any(),
-        queryParameters: any(named: 'queryParameters'),
-      ),
+      () =>
+          mockDio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')),
     ).thenAnswer(
       (_) async => Response<Map<String, dynamic>>(
         requestOptions: RequestOptions(path: '/api/sync/mobile'),

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
 /// Button variant.
 ///
-/// - [primary]   — Y bg / DARK fg / SH shadow  (default)
+/// - [primary]   — flat AppColors.Y fill / white fg
 /// - [secondary] — BG3 bg / MUTED fg
-/// - [dark]      — DARK bg / INV fg / SH shadow
+/// - [dark]      — DARK bg / INV fg
 /// - [ghost]     — transparent bg / DARK fg
 /// - [danger]    — REDSOFT bg / #c00 fg
 enum AppButtonVariant { primary, secondary, dark, ghost, danger }
 
 /// Button size.
 ///
-/// - [lg] — vPad 14, hPad 24, fontSize 16, radius 20, iconSize 18
-/// - [md] — vPad 11, hPad 20, fontSize 14, radius 18, iconSize 16  (default)
-/// - [sm] — vPad 6,  hPad 14, fontSize 10, radius 10, iconSize 12
+/// - [lg] — vPad 14, hPad 24, fontSize 16, radius 10, iconSize 18
+/// - [md] — vPad 11, hPad 20, fontSize 14, radius 8, iconSize 16  (default)
+/// - [sm] — vPad 6,  hPad 14, fontSize 10, radius 6, iconSize 12
 enum AppButtonSize { lg, md, sm }
 
 /// TaskTap brand button — 5 variants × 3 sizes.
@@ -53,8 +53,8 @@ class AppButton extends StatelessWidget {
     this.size = AppButtonSize.md,
     bool? expand,
     this.fullWidth,
-  })  : variant = AppButtonVariant.secondary,
-        _expandLegacy = expand;
+  }) : variant = AppButtonVariant.secondary,
+       _expandLegacy = expand;
 
   const AppButton.dark({
     super.key,
@@ -64,8 +64,8 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.size = AppButtonSize.md,
     this.fullWidth,
-  })  : variant = AppButtonVariant.dark,
-        _expandLegacy = null;
+  }) : variant = AppButtonVariant.dark,
+       _expandLegacy = null;
 
   const AppButton.ghost({
     super.key,
@@ -75,8 +75,8 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.size = AppButtonSize.md,
     this.fullWidth,
-  })  : variant = AppButtonVariant.ghost,
-        _expandLegacy = null;
+  }) : variant = AppButtonVariant.ghost,
+       _expandLegacy = null;
 
   const AppButton.danger({
     super.key,
@@ -87,8 +87,8 @@ class AppButton extends StatelessWidget {
     this.size = AppButtonSize.md,
     bool? expand,
     this.fullWidth,
-  })  : variant = AppButtonVariant.danger,
-        _expandLegacy = expand;
+  }) : variant = AppButtonVariant.danger,
+       _expandLegacy = expand;
 
   final String label;
   final VoidCallback? onPressed;
@@ -107,83 +107,120 @@ class AppButton extends StatelessWidget {
   bool get _isFullWidth => fullWidth ?? (_expandLegacy ?? _defaultFullWidth);
 
   bool get _defaultFullWidth => switch (variant) {
-        AppButtonVariant.ghost => false,
-        _ => true,
-      };
+    AppButtonVariant.ghost => false,
+    _ => true,
+  };
 
   // ── Size tokens ──────────────────────────────────────────────────────────
 
   double get _vPad => switch (size) {
-        AppButtonSize.lg => 14,
-        AppButtonSize.md => 11,
-        AppButtonSize.sm => 6,
-      };
+    AppButtonSize.lg => 14,
+    AppButtonSize.md => 11,
+    AppButtonSize.sm => 6,
+  };
 
   double get _hPad => switch (size) {
-        AppButtonSize.lg => 24,
-        AppButtonSize.md => 20,
-        AppButtonSize.sm => 14,
-      };
+    AppButtonSize.lg => 24,
+    AppButtonSize.md => 20,
+    AppButtonSize.sm => 14,
+  };
 
   double get _fontSize => switch (size) {
-        AppButtonSize.lg => 16,
-        AppButtonSize.md => 14,
-        AppButtonSize.sm => 10,
-      };
+    AppButtonSize.lg => 16,
+    AppButtonSize.md => 14,
+    AppButtonSize.sm => 10,
+  };
 
+  // Matches VetroButton's own two-tier scale (16 full-size, 12 compact) rather than a third,
+  // independent radius set — a form still on AppButton and a Vetro screen next to it used to
+  // round their buttons by two unrelated amounts.
   double get _radius => switch (size) {
-        AppButtonSize.lg => 20,
-        AppButtonSize.md => 18,
-        AppButtonSize.sm => 10,
-      };
+    AppButtonSize.lg => 16,
+    AppButtonSize.md => 16,
+    AppButtonSize.sm => 12,
+  };
 
   double get _iconSize => switch (size) {
-        AppButtonSize.lg => 18,
-        AppButtonSize.md => 16,
-        AppButtonSize.sm => 12,
-      };
+    AppButtonSize.lg => 18,
+    AppButtonSize.md => 16,
+    AppButtonSize.sm => 12,
+  };
+
+  /// `sm`'s own padding (vPad 6, fontSize 10) is deliberately tiny — it exists for exactly the
+  /// tight inline-row contexts (a status row's "Prendi in carico", a timer bar's Avvia/Ferma) that
+  /// a blanket 44pt floor defeats outright: forced to the same height as `lg`, `sm` reads as
+  /// stretched/oversized next to the compact pills and chips those rows already run at. 32
+  /// (AppSpacing.xxl) still clears WCAG's 24px AA minimum; `md`/`lg` keep the full AAA 44pt floor
+  /// since those are primary, standalone actions.
+  double get _minTapSize => switch (size) {
+    AppButtonSize.sm => AppSpacing.xxl,
+    AppButtonSize.md || AppButtonSize.lg => 44,
+  };
 
   // ── Colour tokens ────────────────────────────────────────────────────────
 
+  /// Solid fill for every variant, including [primary] — DESIGN.md has no gradient fills
+  /// ("no glassy gradients"). [primary] is now a flat [AppColors.Y] fill, matching every other
+  /// variant's flat-fill treatment.
   Color _bg(BuildContext context) => switch (variant) {
-        AppButtonVariant.primary   => AppColors.Y,
-        AppButtonVariant.secondary => context.colors.bg3,
-        AppButtonVariant.dark      => context.colors.surfaceInverse,
-        AppButtonVariant.ghost     => Colors.transparent,
-        AppButtonVariant.danger    => context.colors.redSoft,
-      };
+    AppButtonVariant.primary => AppColors.Y,
+    AppButtonVariant.secondary => context.colors.bg3,
+    AppButtonVariant.dark => context.colors.surfaceInverse,
+    AppButtonVariant.ghost => Colors.transparent,
+    AppButtonVariant.danger => context.colors.redSoft,
+  };
 
   Color _fg(BuildContext context) => switch (variant) {
-        AppButtonVariant.primary   => context.colors.brandOn,
-        AppButtonVariant.secondary => context.colors.inkMuted,
-        AppButtonVariant.dark      => context.colors.inkInverse,
-        AppButtonVariant.ghost     => context.colors.ink,
-        AppButtonVariant.danger    => const Color(0xFFB80000),
-      };
+    AppButtonVariant.primary => Colors.white,
+    AppButtonVariant.secondary => context.colors.inkMuted,
+    AppButtonVariant.dark => context.colors.inkInverse,
+    AppButtonVariant.ghost => context.colors.ink,
+    // context.colors.red, not a fixed hex — the fixed value paired fine with redSoft in light
+    // mode but measured ~1.96:1 in dark mode, far under the 4.5:1 AA floor; the themed token is
+    // tuned against both themes already (it's the same red every other destructive label in the
+    // app uses).
+    AppButtonVariant.danger => context.colors.red,
+  };
 
-  List<BoxShadow> _shadows(BuildContext context) => switch (variant) {
-        AppButtonVariant.primary => context.colors.shadow,
-        AppButtonVariant.dark    => context.colors.shadow,
-        _                        => const [],
-      };
+  // No shadow on primary/dark, deliberately. This button sits in normal page flow, not as a
+  // floating overlay (compare AppFab, which stays shadowed because it genuinely floats above
+  // content) — and every modern reference this session's design research checked (Linear, Vercel,
+  // Stripe, Notion) reserves box-shadow for transient overlays, never a static in-flow control.
+  // A soft shadow is also invisible outdoors in direct sun, which this app cannot afford to rely
+  // on: the accent fill and the ink-on-accent contrast already carry the button with no shadow
+  // needed at all.
+  List<BoxShadow> _shadows(BuildContext context) => const [];
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = GoogleFonts.manrope(
+    final textStyle = TextStyle(
+      fontFamily: 'Archivo Narrow',
       fontSize: _fontSize,
       fontWeight: FontWeight.w700,
-      color: onPressed == null && !isLoading ? _fg(context).withAlpha(100) : _fg(context),
+      color: onPressed == null && !isLoading
+          ? _fg(context).withAlpha(100)
+          : _fg(context),
       letterSpacing: 0.1,
     );
 
     Widget content;
     if (isLoading) {
-      content = SizedBox(
-        width: _fontSize,
-        height: _fontSize,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation<Color>(_fg(context)),
+      // Center, not a bare SizedBox: a full-width button hands the tree below it a *tight*
+      // infinite-width constraint (from the `SizedBox(width: double.infinity)` at the bottom of
+      // this method), and nothing between it and here loosens that constraint. A ConstrainedBox
+      // (which is what SizedBox compiles to) enforces its own request within the incoming bounds
+      // rather than overriding them — so the spinner's own "be exactly 16x16" was being clamped
+      // into "be exactly as wide as the button," stretching a circle into an oval the width of
+      // the screen. Center loosens the constraint back to loose-infinite, which is what a child
+      // that wants its own intrinsic size actually needs.
+      content = Center(
+        child: SizedBox(
+          width: _fontSize,
+          height: _fontSize,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(_fg(context)),
+          ),
         ),
       );
     } else if (icon != null) {
@@ -195,11 +232,27 @@ class AppButton extends StatelessWidget {
             child: icon!,
           ),
           SizedBox(width: _hPad * 0.4),
-          Text(label, style: textStyle),
+          // Flexible, not a bare Text: an icon plus a two-word label ("Timbra cantiere") in a
+          // half-width Expanded slot overflowed its render box with no wrap boundary — a real
+          // RenderFlex overflow on a real device, not a hypothetical one. Ellipsis over a second
+          // line: this Row has no height budget for a wrapped label.
+          Flexible(
+            child: Text(
+              label,
+              style: textStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       );
     } else {
-      content = Text(label, style: textStyle);
+      content = Text(
+        label,
+        style: textStyle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
     }
 
     final bgDisabled = _bg(context) == Colors.transparent
@@ -207,9 +260,10 @@ class AppButton extends StatelessWidget {
         : _bg(context).withAlpha(120);
     final fgDisabled = _fg(context).withAlpha(100);
 
+    final enabled = onPressed != null || isLoading;
     Widget button = DecoratedBox(
       decoration: BoxDecoration(
-        color: onPressed != null || isLoading ? _bg(context) : bgDisabled,
+        color: enabled ? _bg(context) : bgDisabled,
         borderRadius: BorderRadius.circular(_radius),
         boxShadow: onPressed != null ? _shadows(context) : const [],
       ),
@@ -222,24 +276,30 @@ class AppButton extends StatelessWidget {
           splashColor: _fg(context).withAlpha(30),
           highlightColor: _fg(context).withAlpha(15),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: _hPad,
-              vertical: _vPad,
-            ),
-            child: DefaultTextStyle(
-              style: textStyle.copyWith(
-                color: onPressed == null && !isLoading ? fgDisabled : _fg(context),
+            padding: EdgeInsets.symmetric(horizontal: _hPad, vertical: _vPad),
+            // Center: the ≥44pt ConstrainedBox below forces this Padding to grow past its
+            // natural content height on sm/md sizes, but RenderPadding always places its child at
+            // (padding.left, padding.top) rather than redistributing the extra space — without
+            // Center the label sits top-aligned in the enforced touch target instead of centered.
+            child: Center(
+              child: DefaultTextStyle(
+                style: textStyle.copyWith(
+                  color: onPressed == null && !isLoading
+                      ? fgDisabled
+                      : _fg(context),
+                ),
+                textAlign: TextAlign.center,
+                child: content,
               ),
-              child: content,
             ),
           ),
         ),
       ),
     );
 
-    // ≥44pt minimum touch target (accessibility)
+    // Minimum touch target — see _minTapSize's own doc comment on why `sm` gets a smaller floor.
     button = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+      constraints: BoxConstraints(minHeight: _minTapSize, minWidth: _minTapSize),
       child: button,
     );
 

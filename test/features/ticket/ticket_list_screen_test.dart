@@ -22,8 +22,7 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildList(
-    {required AppDatabase db, required MockAuthRepository repo}) {
+Widget _buildList({required AppDatabase db, required MockAuthRepository repo}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
@@ -81,31 +80,40 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('renders a ListRow per ticket', (tester) async {
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Perdita idrica',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't2',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 2),
-            title: 'Manutenzione caldaia',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 2,
-            typeId: 1,
-          ));
+    testWidgets('renders a row per ticket, titled', (tester) async {
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Perdita idrica',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 2),
+              title: 'Manutenzione caldaia',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 2,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 
-      expect(find.byType(ListRow), findsNWidgets(2));
+      // Vetro (module #2) replaced ListRow with a bespoke priority-striped row — the behaviour
+      // that matters is "one row per ticket, showing its title," not the widget type underneath.
       expect(find.text('Perdita idrica'), findsOneWidget);
       expect(find.text('Manutenzione caldaia'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -114,31 +122,53 @@ void main() {
 
     testWidgets('filter chip narrows list to matching status', (tester) async {
       // Seed a status map
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-          id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'));
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-          id: const Value(2), tenantId: 'tenant-1', name: 'In corso'));
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(2),
+              tenantId: 'tenant-1',
+              name: 'In corso',
+            ),
+          );
 
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Ticket aperto',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't2',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 2),
-            title: 'Ticket in corso',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 2,
-            typeId: 1,
-          ));
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket aperto',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 2),
+              title: 'Ticket in corso',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 2,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 
@@ -153,23 +183,36 @@ void main() {
     });
 
     testWidgets('shows StatusPill with resolved status name', (tester) async {
-      await db.into(db.ticketStatuses).insert(TicketStatusesCompanion.insert(
-          id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'));
-      await db.into(db.tickets).insert(TicketsCompanion.insert(
-            id: 't1',
-            tenantId: 'tenant-1',
-            createdAt: DateTime.utc(2026, 6, 1),
-            title: 'Un ticket',
-            customerId: 'cust-1',
-            locationId: 'loc-1',
-            statusId: 1,
-            typeId: 1,
-          ));
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(1),
+              tenantId: 'tenant-1',
+              name: 'Aperto',
+            ),
+          );
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 't1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Un ticket',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
 
       await pump(tester);
 
       expect(find.byType(StatusPill), findsOneWidget);
-      expect(find.text('Aperto'), findsOneWidget);
+      // StatusPill renders through StatusStamp now, which uppercases per Il Documento's
+      // all-caps stamp spec — see status_pill_test.dart's own note on this.
+      expect(find.text('APERTO'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
@@ -177,6 +220,66 @@ void main() {
     testWidgets('shows AppFab', (tester) async {
       await pump(tester);
       expect(find.byType(AppFab), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    // ── Pending tickets (2026-08-30 polish pass) ────────────────────────────
+    //
+    // A queued-offline ticket that fails on retry used to flip its row's background and icon
+    // instantly. AnimatedContainer/AnimatedSwitcher animate that now (see _PendingTicketRow) —
+    // the assertions below cover the end state pumpAndSettle lands on, not the animation itself,
+    // which is exactly what a widget test can verify without a golden/frame-by-frame capture.
+
+    testWidgets('a failed pending ticket shows the retry button and failure styling', (
+      tester,
+    ) async {
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket in sospeso',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('failed'),
+            ),
+          );
+
+      await pump(tester);
+
+      expect(find.text('In sospeso (1)'), findsOneWidget);
+      expect(find.text('Ticket in sospeso'), findsOneWidget);
+      expect(find.textContaining('Invio non riuscito'), findsOneWidget);
+      expect(find.text('Riprova'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a queued-offline pending ticket has no retry button', (tester) async {
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-2',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Ticket in coda',
+              customerId: 'cust-1',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('pendingSync'),
+            ),
+          );
+
+      await pump(tester);
+
+      expect(find.text('Ticket in coda'), findsOneWidget);
+      expect(find.textContaining('attesa di connessione'), findsOneWidget);
+      expect(find.text('Riprova'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

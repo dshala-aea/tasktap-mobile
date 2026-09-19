@@ -1,14 +1,15 @@
 // dart format width=100
 // test/features/rapportino/rapportino_form_screen_test.dart
 //
-// Widget tests for the 4-step rapportino form (D3b).
+// Widget tests for the rapportino checklist (Dettagli/Ore/Materiali tiles + the completion
+// card that opens Riepilogo as the pre-confirm review, not a fourth peer tile).
 //
 // Covers:
-//   1. All 4 steps render without errors.
-//   2. "Avanti" navigates forward through steps.
-//   3. "Indietro" navigates backward.
-//   4. Validate blocks submit on step 4 when firma is missing.
-//   5. Submit calls the queue (fake realSubmissionQueueProvider).
+//   1. All 3 tiles render.
+//   2. Each tile opens its step's content in a bottom sheet.
+//   3. The completion card opens Riepilogo.
+//   4. Submit blocks when validation not satisfied.
+//   5. Submit calls the queue when the draft is valid.
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -17,24 +18,45 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/submission_queue.dart';
 import 'package:tasktap_mobile/data/sync/submission_queue_watcher.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_form_screen.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 class MockSubmissionQueue extends Mock implements SubmissionQueue {}
 
+/// A fake location service, injected per `location_service.dart`'s own doc comment ("tested via a
+/// fake injected implementation"). Never touches real GPS/platform channels — returns a fixed
+/// fix immediately, with no permission prompt (the `ILocationService` base already answers
+/// `willPromptForPermission` with `false`, i.e. "permission already decided").
+class _FakeLocationServiceWithFix extends ILocationService {
+  const _FakeLocationServiceWithFix();
+
+  @override
+  Future<GpsCoords?> getCurrentPosition() async =>
+      (lat: 45.4642, lng: 9.1900, accuracy: 8.0);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 
+/// The Ore tile seeds this (when the staff list is still empty) on first open — a fixed test
+/// value so assertions can check exactly who got added, distinct from any AuthUser id in this
+/// file to make it obvious which provider a given assertion is really reading.
+const _testInternalUserId = 'internal-guid-1';
+
 Future<void> _seedDraft(AppDatabase db, String reportId) async {
-  await db.into(db.draftReports).insert(
+  await db
+      .into(db.draftReports)
+      .insert(
         DraftReportsCompanion.insert(
           id: reportId,
           tenantId: 'tenant-1',
@@ -52,17 +74,26 @@ Widget _buildForm({
   required AppDatabase db,
   required String reportId,
   SubmissionQueue? fakeQueue,
+  String? internalUserId = _testInternalUserId,
 }) {
   return ProviderScope(
     overrides: [
       appDatabaseProvider.overrideWithValue(db),
-      if (fakeQueue != null)
-        realSubmissionQueueProvider.overrideWithValue(fakeQueue),
+      if (fakeQueue != null) realSubmissionQueueProvider.overrideWithValue(fakeQueue),
+      internalUserIdProvider.overrideWith((ref) async => internalUserId),
     ],
-    child: MaterialApp(
-      home: RapportinoFormScreen(reportId: reportId),
-    ),
+    child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
   );
+}
+
+Future<void> _openTile(WidgetTester tester, String label) async {
+  await tester.tap(find.text(label));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openRiepilogo(WidgetTester tester) async {
+  await tester.tap(find.text('Rivedi e invia'));
+  await tester.pumpAndSettle();
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -79,73 +110,55 @@ void main() {
 
   const reportId = 'draft-test-1';
 
-  group('RapportinoFormScreen — step rendering', () {
-    testWidgets('step 1 (Dettagli) renders titolo field', (tester) async {
+  group('RapportinoFormScreen — checklist tiles', () {
+    testWidgets('renders all three tiles + the review-and-send completion card', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // The step should contain a titolo text field
-      expect(find.text('Titolo *'), findsWidgets);
-      // Avanti button visible on step 1
-      expect(find.text('Avanti'), findsOneWidget);
-      // Indietro NOT visible on step 1
-      expect(find.text('Indietro'), findsNothing);
+      expect(find.text('Dettagli'), findsOneWidget);
+      expect(find.text('Ore'), findsOneWidget);
+      expect(find.text('Materiali'), findsOneWidget);
+      expect(find.text('Rivedi e invia'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Avanti navigates from step 1 to step 2', (tester) async {
+    testWidgets('Dettagli tile opens a sheet with the titolo field', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
+      await _openTile(tester, 'Dettagli');
 
-      // Step 2 shows staff-related text
-      expect(find.text('Aggiungi tecnico'), findsOneWidget);
-      // Indietro now visible
-      expect(find.text('Indietro'), findsOneWidget);
+      // Field labels are static text above the field now, not Material floating labels inside
+      // it, and a required marker is a coloured span — so this is rich text.
+      expect(find.textContaining('TITOLO', findRichText: true), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('Indietro navigates from step 2 back to step 1', (tester) async {
+    testWidgets('Ore tile opens a sheet with staff-related content', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // Go to step 2
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
+      await _openTile(tester, 'Ore');
+
       expect(find.text('Aggiungi tecnico'), findsOneWidget);
 
-      // Go back
-      await tester.tap(find.text('Indietro'));
-      await tester.pumpAndSettle();
-
-      // Back on step 1
-      expect(find.text('Titolo *'), findsWidgets);
-      expect(find.text('Indietro'), findsNothing);
-
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
 
-    testWidgets('step 3 (Materiali) renders Aggiungi materiale button',
-        (tester) async {
+    testWidgets('Materiali tile opens a sheet with Aggiungi materiale button', (tester) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // Navigate to step 3
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
+      await _openTile(tester, 'Materiali');
 
       expect(find.text('Aggiungi materiale'), findsOneWidget);
 
@@ -153,24 +166,19 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('step 4 (Riepilogo) renders firma blocks + validation panel',
-        (tester) async {
+    testWidgets('completion card opens Riepilogo with firma blocks + validation panel', (
+      tester,
+    ) async {
       await _seedDraft(db, reportId);
       await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
       await tester.pumpAndSettle();
 
-      // Navigate to step 4
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-      }
+      await _openRiepilogo(tester);
 
       // Invia button present but disabled (missing sigs)
       expect(find.text('Invia rapportino'), findsOneWidget);
       // Validation messages visible
       expect(find.text('Da completare prima dell\'invio:'), findsOneWidget);
-      // No Avanti on last step
-      expect(find.text('Avanti'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -178,24 +186,21 @@ void main() {
   });
 
   group('RapportinoFormScreen — submit flow', () {
-    testWidgets(
-        'Invia rapportino button is disabled when validation not satisfied',
-        (tester) async {
+    testWidgets('Invia rapportino button is disabled when validation not satisfied', (
+      tester,
+    ) async {
       await _seedDraft(db, reportId);
       final fakeQueue = MockSubmissionQueue();
-      await tester.pumpWidget(
-          _buildForm(db: db, reportId: reportId, fakeQueue: fakeQueue));
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId, fakeQueue: fakeQueue));
       await tester.pumpAndSettle();
 
-      // Navigate to step 4
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-      }
+      await _openRiepilogo(tester);
 
       // Tap "Invia rapportino" — should be no-op because validation fails
       final inviaBtn = find.text('Invia rapportino');
       expect(inviaBtn, findsOneWidget);
+      await tester.ensureVisible(inviaBtn);
+      await tester.pumpAndSettle();
       await tester.tap(inviaBtn);
       await tester.pumpAndSettle();
 
@@ -206,8 +211,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('submit calls queue.enqueue + processAll when draft is valid',
-        (tester) async {
+    testWidgets('submit calls queue.enqueue + processAll when draft is valid', (tester) async {
       await _seedDraft(db, reportId);
       final fakeQueue = MockSubmissionQueue();
       when(() => fakeQueue.enqueue(any())).thenAnswer((_) async {});
@@ -215,6 +219,13 @@ void main() {
 
       // Pre-populate editor state with customer + signatures using the repo
       // so validateDraft() returns isValid=true.
+      //
+      // This is the seed the real ReportEditorNotifier hydrates from (see
+      // ReportEditorNotifier._hydrate) — the ProviderScope override below is only the state's
+      // starting point for the brief window before hydration completes and replaces it, so this
+      // row has to be complete on its own, not just enough to make the override look right.
+      // materialiNotRequired must be true here for the same reason the override sets it: without
+      // it, hydration would reload a draft that still needs a materiali row.
       final repo = DraftReportRepository(db);
       // Update draft to have customer, staff, and mark sigs
       await repo.saveDraft(
@@ -229,12 +240,15 @@ void main() {
           customerId: const Value('cust-1'),
           customerSignatureAllegatoId: const Value('sig-c-1'),
           technicianSignatureAllegatoId: const Value('sig-t-1'),
+          materialiNotRequired: const Value(true),
           stato: const Value('Bozza'),
           isLocalOnly: const Value(true),
         ),
       );
       // Insert a staff row so staffCount >= 1
-      await db.into(db.reportStaffTable).insert(
+      await db
+          .into(db.reportStaffTable)
+          .insert(
             ReportStaffTableCompanion.insert(
               id: 'staff-1',
               tenantId: 'tenant-1',
@@ -246,49 +260,45 @@ void main() {
             ),
           );
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          appDatabaseProvider.overrideWithValue(db),
-          realSubmissionQueueProvider.overrideWithValue(fakeQueue),
-          // Pre-fill editor state directly
-          reportEditorProvider(reportId).overrideWith(
-            (ref) => ReportEditorNotifier(
-              initialState: ReportEditorState(
-                reportId: reportId,
-                tenantId: 'tenant-1',
-                insertedUserId: 'user-1',
-                title: 'Test',
-                customerId: 'cust-1',
-                locationId: 'loc-1',
-                customerSignatureAllegatoId: 'sig-c-1',
-                customerSignatureLocalPath: '/tmp/sig-c.png',
-                technicianSignatureAllegatoId: 'sig-t-1',
-                technicianSignatureLocalPath: '/tmp/sig-t.png',
-                materialiNotRequired: true,
-                staffRows: [
-                  StaffRow(
-                    id: 'staff-1',
-                    userId: 'user-1',
-                    displayName: 'Mario Rossi',
-                    hoursWorked: 8.0,
-                  ),
-                ],
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            realSubmissionQueueProvider.overrideWithValue(fakeQueue),
+            // Pre-fill editor state directly
+            reportEditorProvider(reportId).overrideWith(
+              (ref) => ReportEditorNotifier(
+                initialState: ReportEditorState(
+                  reportId: reportId,
+                  tenantId: 'tenant-1',
+                  insertedUserId: 'user-1',
+                  title: 'Test',
+                  customerId: 'cust-1',
+                  locationId: 'loc-1',
+                  customerSignatureAllegatoId: 'sig-c-1',
+                  customerSignatureLocalPath: '/tmp/sig-c.png',
+                  technicianSignatureAllegatoId: 'sig-t-1',
+                  technicianSignatureLocalPath: '/tmp/sig-t.png',
+                  materialiNotRequired: true,
+                  staffRows: [
+                    StaffRow(
+                      id: 'staff-1',
+                      userId: 'user-1',
+                      displayName: 'Mario Rossi',
+                      hoursWorked: 8.0,
+                    ),
+                  ],
+                ),
+                repo: DraftReportRepository(db),
               ),
-              repo: DraftReportRepository(db),
             ),
-          ),
-        ],
-        child: MaterialApp(
-          home: RapportinoFormScreen(reportId: reportId),
+          ],
+          child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
-      // Navigate to step 4
-      for (var i = 0; i < 3; i++) {
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-      }
+      await _openRiepilogo(tester);
 
       // Invia button present + enabled
       final inviaBtn = find.text('Invia rapportino');
@@ -301,6 +311,98 @@ void main() {
       // Queue must have been called
       verify(() => fakeQueue.enqueue(reportId)).called(1);
       verify(() => fakeQueue.processAll()).called(1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoFormScreen — GPS auto-capture', () {
+    // The exact integration gap the diagnosis found: `_seedDraft` gives the draft a non-empty
+    // title, the same shape every real draft-creation entry point (ticket detail's "Crea
+    // rapportino", the rapportini list's "Nuovo rapportino", create_draft.dart's
+    // createCantiereReportDraft) leaves a fresh draft in. That title means the Dettagli auto-open
+    // never fires and the technician never taps the Dettagli tile in this test — so a coordinate
+    // landing on the draft anyway proves the capture is reachable independently of Dettagli, not
+    // just that the notifier method works in isolation.
+    testWidgets(
+      'captures GPS silently on screen load for a title-prefilled draft, with no tap at all',
+      (tester) async {
+        await _seedDraft(db, reportId);
+
+        final container = ProviderContainer(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+            gpsPreferenceProvider.overrideWithValue(true),
+            locationServiceProvider.overrideWithValue(const _FakeLocationServiceWithFix()),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final state = container.read(reportEditorProvider(reportId));
+        expect(state.gpsLatitude, closeTo(45.4642, 0.0001));
+        expect(state.gpsLongitude, closeTo(9.1900, 0.0001));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('does not capture GPS when the draft already has a coordinate (rework)', (
+      tester,
+    ) async {
+      // Pre-fills editor state directly with an existing coordinate, same override pattern as the
+      // "submit calls queue" test above — the point here is the gpsLatitude == null guard, which
+      // doesn't care how the draft got its state, only what it already holds by the time this
+      // screen's first build runs.
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          internalUserIdProvider.overrideWith((ref) async => _testInternalUserId),
+          gpsPreferenceProvider.overrideWithValue(true),
+          locationServiceProvider.overrideWithValue(const _FakeLocationServiceWithFix()),
+          reportEditorProvider(reportId).overrideWith(
+            (ref) => ReportEditorNotifier(
+              initialState: ReportEditorState(
+                reportId: reportId,
+                tenantId: 'tenant-1',
+                insertedUserId: 'user-1',
+                title: 'Test draft',
+                gpsLatitude: 41.9,
+                gpsLongitude: 12.5,
+              ),
+              repo: DraftReportRepository(db),
+              // The fake with a fix, not DisabledLocationService — so if the gpsLatitude == null
+              // guard were ever broken, this test would actually catch it (the coordinate would
+              // change to the fake's fix) instead of passing vacuously because nothing captures.
+              locationService: const _FakeLocationServiceWithFix(),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(home: RapportinoFormScreen(reportId: reportId)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final state = container.read(reportEditorProvider(reportId));
+      // Untouched — the pre-existing coordinate, not the fake service's fix.
+      expect(state.gpsLatitude, 41.9);
+      expect(state.gpsLongitude, 12.5);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

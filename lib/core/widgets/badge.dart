@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_tappable.dart';
+import 'package:tasktap_mobile/core/theme/app_colors.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_rack.dart';
 
 /// Compact rounded badge pill.
 ///
-/// Spec: rounded 9 px radius, Manrope 500/10 (sm: 9), pad 3/9 (sm: 2/7).
+/// Spec: rounded 9 px radius, Inter 500/10 (sm: 9), pad 3/9 (sm: 2/7).
 ///
 /// ```dart
 /// AppBadge(label: '3');
 /// AppBadge(label: 'Nuovo', small: true);
-/// AppBadge(label: 'Tag', bgColor: AppColors.Y, fgColor: context.colors.ink);
+/// AppBadge(label: 'Tag', bgColor: AppColors.Y.withAlpha(31), fgColor: AppColors.Y);
 /// ```
 class AppBadge extends StatelessWidget {
   const AppBadge({
@@ -20,12 +21,18 @@ class AppBadge extends StatelessWidget {
     this.small = false,
     this.bgColor,
     this.fgColor,
+    this.outlined = false,
   });
 
   final String label;
   final bool small;
   final Color? bgColor;
   final Color? fgColor;
+
+  /// A rule-bordered flat badge instead of a filled pill — a stamped placard label, not a soft
+  /// SaaS status chip. [fgColor] becomes the border and text; the fill stays the page's own
+  /// surface, since a signage world reads status from an outline and a word, not a color fill.
+  final bool outlined;
 
   @override
   Widget build(BuildContext context) {
@@ -37,18 +44,20 @@ class AppBadge extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(9),
+        color: outlined ? Colors.transparent : bg,
+        border: outlined ? Border.all(color: fg, width: 1.5) : null,
+        borderRadius: AppRack.insetShape,
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
         child: Text(
           label,
-          style: GoogleFonts.manrope(
+          style: TextStyle(
+            fontFamily: 'Archivo',
             fontSize: fontSize,
-            fontWeight: FontWeight.w500,
+            fontWeight: outlined ? FontWeight.w700 : FontWeight.w500,
             color: fg,
-            letterSpacing: 0.1,
+            letterSpacing: outlined ? 0.4 : 0.1,
           ),
         ),
       ),
@@ -56,54 +65,68 @@ class AppBadge extends StatelessWidget {
   }
 }
 
-/// Selection chip — white/DARK (inactive) or DARK/white (active).
+/// Selection chip — neutral (inactive) or Vetro tint fill / white (active).
 ///
-/// Spec: 1 px border, 5 px radius, Manrope 500/11, pad 5/10.
+/// Spec: 1 px border, 8 px radius, Inter 500/11, pad 5/10.
 ///
 /// ```dart
 /// AppChip(label: 'Oggi', active: true, onTap: () {});
 /// AppChip(label: 'Settimana', onTap: () {});
 /// ```
 class AppChip extends StatelessWidget {
-  const AppChip({
-    super.key,
-    required this.label,
-    this.active = false,
-    this.onTap,
-  });
+  const AppChip({super.key, required this.label, this.active = false, this.onTap, this.icon});
 
   final String label;
   final bool active;
   final VoidCallback? onTap;
 
+  /// A leading glyph — a suggestion chip's "tap to add" cue, for instance. Was reason enough for
+  /// one call site (the rapportino wizard's fabbisogno suggestions) to reach for a raw Material
+  /// `ActionChip` instead of this widget; this closes that gap.
+  final IconData? icon;
+
   @override
   Widget build(BuildContext context) {
-    final bg = active ? context.colors.surfaceInverse : context.colors.surface;
-    final fg = active ? context.colors.inkInverse : context.colors.ink;
-    final borderColor = active ? context.colors.surfaceInverse : context.colors.borderMedium;
+    final bg = active ? AppColors.Y : context.colors.surface;
+    final fg = active ? Colors.white : context.colors.ink;
+    final borderColor = active ? AppColors.Y : context.colors.borderMedium;
 
-    const radius = 5.0;
+    const radius = AppRack.insetRadius;
+    final textStyle = TextStyle(
+      fontFamily: 'Archivo',
+      fontSize: 11,
+      fontWeight: FontWeight.w500,
+      color: fg,
+      letterSpacing: 0.1,
+    );
 
+    final chip = AppTappable(
+      onTap: onTap,
+      color: bg,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: borderColor, width: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Center(
+        child: icon == null
+            ? Text(label, style: textStyle)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 14, color: fg),
+                  const SizedBox(width: 4),
+                  Text(label, style: textStyle),
+                ],
+              ),
+      ),
+    );
+
+    // The 44pt touch-target floor only makes sense when this chip actually answers a tap — a
+    // read-only label (e.g. a ticket's type chip, no onTap) forced into a 44px box next to a
+    // normal-height StatusPill read as two mismatched, misaligned boxes on the same row.
+    if (onTap == null) return chip;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
-      child: AppTappable(
-        onTap: onTap,
-        color: bg,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: borderColor, width: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Center(
-          child: Text(
-            label,
-            style: GoogleFonts.manrope(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: fg,
-              letterSpacing: 0.1,
-            ),
-          ),
-        ),
-      ),
+      child: chip,
     );
   }
 }

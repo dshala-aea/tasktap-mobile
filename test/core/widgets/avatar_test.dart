@@ -39,10 +39,7 @@ void main() {
       await tester.pumpWidget(_wrap(const AppAvatar(name: 'Test User')));
       await tester.pump();
       final sizedBox = tester.widget<SizedBox>(
-        find.descendant(
-          of: find.byType(AppAvatar),
-          matching: find.byType(SizedBox),
-        ).first,
+        find.descendant(of: find.byType(AppAvatar), matching: find.byType(SizedBox)).first,
       );
       expect(sizedBox.width, equals(36));
       expect(sizedBox.height, equals(36));
@@ -52,10 +49,7 @@ void main() {
       await tester.pumpWidget(_wrap(const AppAvatar(name: 'Test User', size: 48)));
       await tester.pump();
       final sizedBox = tester.widget<SizedBox>(
-        find.descendant(
-          of: find.byType(AppAvatar),
-          matching: find.byType(SizedBox),
-        ).first,
+        find.descendant(of: find.byType(AppAvatar), matching: find.byType(SizedBox)).first,
       );
       expect(sizedBox.width, equals(48));
       expect(sizedBox.height, equals(48));

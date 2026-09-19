@@ -1,6 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
+import '../../data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
+import '../../data/sync/sync_service.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
@@ -40,14 +45,28 @@ final currentUserProvider = Provider<AuthUser?>((ref) {
   return ref.watch(authStateProvider).valueOrNull;
 });
 
+/// The signed-in user's INTERNAL database Guid (`Users.Id` on the backend) — never the Zitadel
+/// OIDC `sub` claim `currentUserProvider.id` carries. Use this, not `currentUserProvider.id`,
+/// anywhere a value needs to match a row in the local `colleagues`/`users` mirror or a
+/// server-side foreign key expecting the real user Guid (report author/staff rows, cantiere crew
+/// lookups, per-technician resource lookups like the assigned van). `currentUserProvider` is
+/// still the right choice for "is anyone signed in" / route guards / anything reading the OIDC
+/// token itself.
+///
+/// Persisted by `EntitlementService.refresh()` from `/api/Auth/me`'s `user.id` field — see that
+/// method's doc comment for why entitlement refresh, not a dedicated endpoint, is what populates
+/// this. Null before the first successful refresh (fresh install, never online yet) or after
+/// sign-out (`LoginNotifier.signOut` clears all of SharedPreferences, this key included).
+final internalUserIdProvider = FutureProvider<String?>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString(internalUserIdPrefsKey);
+});
+
 // ── Login state notifier ───────────────────────────────────────────────────
 
 /// State for the login screen.
 class LoginState {
-  const LoginState({
-    this.isLoading = false,
-    this.failure,
-  });
+  const LoginState({this.isLoading = false, this.failure});
 
   final bool isLoading;
   final AuthFailure? failure;
@@ -65,9 +84,10 @@ class LoginState {
 
 /// Notifier that drives the login screen's loading + error state.
 class LoginNotifier extends StateNotifier<LoginState> {
-  LoginNotifier(this._repo) : super(const LoginState());
+  LoginNotifier(this._repo, this._ref) : super(const LoginState());
 
   final IAuthRepository _repo;
+  final Ref _ref;
 
   Future<void> signIn() async {
     state = const LoginState(isLoading: true);
@@ -80,8 +100,45 @@ class LoginNotifier extends StateNotifier<LoginState> {
     }
   }
 
+  Future<void> signInWithPassword(String loginName, String password) async {
+    state = const LoginState(isLoading: true);
+    final result = await _repo.signInWithPassword(loginName, password);
+
+    if (result.failure is AdditionalFactorRequired) {
+      // The account needs more than a password — fall back to the browser flow, which can
+      // satisfy MFA/passkey/whatever Zitadel's hosted UI supports. No error shown; this is a
+      // transition, not a failure the technician needs to see or act on.
+      await signIn();
+      return;
+    }
+
+    if (result.failure != null) {
+      state = LoginState(failure: result.failure);
+    } else {
+      state = const LoginState();
+    }
+  }
+
   Future<void> signOut() async {
+    // Unregister this device's FCM token BEFORE signing out — the access token this call needs
+    // is gone the moment signOut() completes, and a device that stays registered keeps receiving
+    // push for an account no longer signed in on it. Mirrors the same guard/token-source
+    // `_syncPushRegistration` already uses in impostazioni_provider.dart.
+    if (NotificationService.isAvailable) {
+      final token = _repo.currentUser?.accessToken;
+      if (token != null && token.isNotEmpty) {
+        await NotificationService.instance.unregisterDeviceToken(token);
+      }
+    }
     await _repo.signOut();
+
+    // This is a shared/rotating-device field-service app (van tablets, rotating technicians) —
+    // leaving the local Drift DB and SharedPreferences populated after sign-out would let the
+    // next person to sign in on this device (possibly a different tenant entirely) see the
+    // previous account's full cached tickets/customers/cantieri/notifications and settings.
+    await _ref.read(appDatabaseProvider).wipeAllData();
+    await (await SharedPreferences.getInstance()).clear();
+
     state = const LoginState();
   }
 
@@ -92,5 +149,5 @@ class LoginNotifier extends StateNotifier<LoginState> {
 
 final loginProvider =
     StateNotifierProvider.autoDispose<LoginNotifier, LoginState>((ref) {
-  return LoginNotifier(ref.watch(authRepositoryProvider));
-});
+      return LoginNotifier(ref.watch(authRepositoryProvider), ref);
+    });

@@ -78,6 +78,13 @@ class Tickets extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   TextColumn get title => text()();
+
+  /// The per-tenant display number the office and the customer use for this job.
+  ///
+  /// Nullable because tickets created before numbering existed do not have one. Absent means the
+  /// ticket has no number — never a reason to fall back to the id.
+  TextColumn get numero => text().nullable()();
+
   TextColumn get description => text().nullable()();
   TextColumn get customerId => text()();
   TextColumn get locationId => text()();
@@ -92,6 +99,21 @@ class Tickets extends Table {
   TextColumn get prodottoAssistenzaId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
 
+  /// The cantiere (worksite) this ticket is linked to, when it has one — a ticket may or may not
+  /// be linked to a cantiere. Already on the wire the whole time (mobile sync returns the full
+  /// `Ticket` entity, which has carried `CantiereId` since it was added server-side), just never
+  /// parsed or stored — same situation as `numero` (schema 12) and `priority`/`dueDate`
+  /// (schema 20). See `syncCursorGeneration`'s own doc comment for why this needs a bump too.
+  TextColumn get cantiereId => text().nullable()();
+
+  /// Wire form is the enum name ("Bassa"/"Media"/"Alta"/"Urgente" — backend `TicketPriorityEnum`
+  /// carries `[JsonConverter(typeof(JsonStringEnumConverter))]`), not an int. Stored as the same
+  /// string rather than parsed to an enum locally, matching how `statusId`/`typeId` are looked up
+  /// through `ticketStatusMapProvider` instead of a client-side enum.
+  TextColumn get priority => text().nullable()();
+
+  DateTimeColumn get dueDate => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -105,8 +127,10 @@ class Schedules extends Table {
 
   TextColumn get ticketId => text().nullable()();
   DateTimeColumn get activityDate => dateTime()();
+
   /// TimeStart stored as total minutes since midnight (TimeSpan has no Drift equivalent)
   IntColumn get timeStartMinutes => integer()();
+
   /// TimeEnd stored as total minutes since midnight
   IntColumn get timeEndMinutes => integer()();
   TextColumn get userId => text()();
@@ -158,10 +182,19 @@ class Cantieri extends Table {
   TextColumn get notes => text().nullable()();
   DateTimeColumn get startDate => dateTime().nullable()();
   DateTimeColumn get endDate => dateTime().nullable()();
+
   /// CantiereStatusEnum: Active=0, Completed=1, Cancelled=2
   IntColumn get status => integer().withDefault(const Constant(0))();
   TextColumn get customerId => text().nullable()();
   TextColumn get commessaId => text().nullable()();
+
+  /// Client-side geocode cache for [address]/[city]/[postalCode] — there is no lat/lng anywhere
+  /// on the backend `Cantiere` entity to sync instead. Populated lazily by
+  /// `cantiereGeocodedLocationProvider` (cantiere_providers.dart) the first time this cantiere's
+  /// detail screen is opened and geocoding succeeds; null forever for a cantiere with no address
+  /// or one Nominatim couldn't resolve. Both null or both set — never written independently.
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -225,6 +258,16 @@ class Entitlements extends Table {
   /// When this was last confirmed by the server. Shown to the user, never used to expire the row.
   DateTimeColumn get fetchedAt => dateTime()();
 
+  /// `Trialing` / `Active` / `PastDue` / `GracePeriod` / `Suspended` / `Canceled` — mirrors the
+  /// server's `SubscriptionStatusEnum`. Nullable only for rows written before this column existed;
+  /// treated as unknown, not as active, everywhere it is read.
+  TextColumn get subscriptionStatus => text().nullable()();
+
+  /// "Both" (default) / "QrOnly" / "ButtonOnly" — the EFFECTIVE value the server already resolved
+  /// (tenant default + user override + Kiosk-entitlement downgrade), never recomputed on-device.
+  /// Nullable only for rows written before this column existed — read as "Both" everywhere.
+  TextColumn get clockInMethod => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -250,6 +293,50 @@ class Materiali extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── ticket_materiali ─────────────────────────────────────────────────────────
+// Fabbisogno: a ticket's planned/required materials. Mirrors the backend `TicketMateriale`
+// entity 1:1 (raw field names, not the Italian-translated shape the per-ticket detail REST
+// endpoint's own response DTO uses — that endpoint stays as the online source of truth; this
+// table is the offline mirror synced via MobileUserSyncResult.TicketMateriali). Read-only on the
+// device: mobile only ever reads fabbisogno, never writes to it.
+class TicketMateriali extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get ticketId => text()();
+  TextColumn get materialeId => text().nullable()();
+  TextColumn get freeTextName => text().nullable()();
+  RealColumn get quantity => real()();
+  TextColumn get unitOfMeasure => text().nullable()();
+  TextColumn get notes => text().nullable()();
+  BoolColumn get isAvailable => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── materiale_barcodes ──────────────────────────────────────────────────────
+//
+// Local mirror of MaterialeBarcode (backend), synced alongside its parent Materiali row so a
+// barcode scan can resolve to a material offline. See SyncMaterialeBarcodeDto's own doc comment
+// (backend) for why this is delta-filtered independently of Materiali's own UpdatedAt.
+class MaterialeBarcodes extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get materialeId => text()();
+  TextColumn get barcode => text()();
+  TextColumn get barcodeType => text().nullable()();
+  BoolColumn get isPrimary => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── draft_reports ─────────────────────────────────────────────────────────────
 /// Mirrors Report entity. Holds both server-synced drafts and locally-created ones.
 class DraftReports extends Table {
@@ -262,7 +349,23 @@ class DraftReports extends Table {
   TextColumn get scheduleId => text().nullable()();
   TextColumn get ticketId => text().nullable()();
   TextColumn get customerId => text().nullable()();
+
+  /// The cantiere this rapportino is about, when it was created from a Cantiere rather than a
+  /// Ticket. Was tracked only in `ReportEditorState.cantiereId` — never a DB column — so it
+  /// never survived an autosave: `_buildHeaderCompanion()` had no column to put it in, and
+  /// only `cantiereFreeText` (the display fallback) made it into `metadataJson`. See schema v21.
+  TextColumn get cantiereId => text().nullable()();
   TextColumn get details => text().nullable()();
+
+  /// GPS/free-text fallback metadata (customerFreeText, locationFreeText, ticketFreeText,
+  /// cantiereFreeText, workAddress, gpsLatitude, gpsLongitude) packed as a JSON string.
+  ///
+  /// Deliberately a separate column from [details]: the editor's autosave used to pack this same
+  /// metadata directly into [details], silently overwriting the technician's actual typed
+  /// description on every keystroke before it ever reached the backend or the customer-facing
+  /// PDF. See ReportEditorNotifier._buildMetadataJson in report_editor_providers.dart.
+  TextColumn get metadataJson => text().nullable()();
+
   TextColumn get insertedUserId => text()();
   TextColumn get locationId => text()();
   DateTimeColumn get startedAt => dateTime().nullable()();
@@ -272,23 +375,31 @@ class DraftReports extends Table {
   TextColumn get technicianSignatureAllegatoId => text().nullable()();
   TextColumn get technicianNotes => text().nullable()();
   DateTimeColumn get closedAt => dateTime().nullable()();
+
+  /// Whether a model produced any of this rapportino's text.
+  ///
+  /// Persisted on the draft rather than held in memory: a technician generates a draft, closes
+  /// the app, comes back an hour later and submits. If the flag lived only in the editor state
+  /// the provenance would quietly disappear across that restart, and a report that was in fact
+  /// AI-assisted would be filed as hand-written.
+  BoolColumn get isAiAssisted => boolean().withDefault(const Constant(false))();
+
   /// ReportStatoEnum string: Bozza, Inviato, Controllato, Fatturato
   TextColumn get stato => text().withDefault(const Constant('Bozza'))();
   DateTimeColumn get inviatoAt => dateTime().nullable()();
   DateTimeColumn get controllatoAt => dateTime().nullable()();
   TextColumn get controllatoDa => text().nullable()();
   DateTimeColumn get fatturatoAt => dateTime().nullable()();
-  BoolColumn get materialiNotRequired =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get materialiNotRequired => boolean().withDefault(const Constant(false))();
   TextColumn get customerSignoffText => text().nullable()();
   DateTimeColumn get customerSignoffAt => dateTime().nullable()();
+
   /// True for drafts that only exist locally (not yet submitted).
   BoolColumn get isLocalOnly => boolean().withDefault(const Constant(false))();
 
   /// Submission state machine:
   /// draft | readyToSubmit | uploadingMedia | submitting | submitted | failed
-  TextColumn get submissionState =>
-      text().withDefault(const Constant('draft'))();
+  TextColumn get submissionState => text().withDefault(const Constant('draft'))();
 
   /// Stable idempotency key (UUID string) persisted on first submit attempt.
   /// Reused on retries so the server deduplicates duplicate submits.
@@ -296,6 +407,20 @@ class DraftReports extends Table {
 
   /// Human-readable error message from the last failed attempt (null when ok).
   TextColumn get submissionError => text().nullable()();
+
+  /// True once the technician has explicitly cleared their technician signature via the
+  /// "Cancella" button (`ReportEditorNotifier.clearTechnicianSignature`).
+  ///
+  /// `StepRiepilogo` is recreated (fresh `initState`) every time its containing bottom sheet is
+  /// reopened, and its pre-fill logic's only other guard (`technicianSignatureAllegatoId == null`)
+  /// is exactly the state Cancella itself produces — so without this column, closing and
+  /// reopening the sheet after an explicit Cancella would silently re-fetch and reinstate the
+  /// very signature the technician just removed. This flag survives that recreation (it's on the
+  /// persisted draft row, not in memory) and is checked — never auto-reset — by the pre-fill
+  /// logic before it fetches. It resets to false the moment a genuine new technician signature is
+  /// saved (drawn or typed), since that is itself a fresh, deliberate signing act.
+  BoolColumn get technicianSignaturePrefillSuppressed =>
+      boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -359,8 +484,35 @@ class ReportControlli extends Table {
   BoolColumn get boolValue => boolean().nullable()();
   DateTimeColumn get dateValue => dateTime().nullable()();
 
+  /// The answer for a Number-type control (backend's ControlTypeEnum.Number, migration 27).
+  RealColumn get numberValue => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
+}
+
+// ── cached_ticket_controls ──────────────────────────────────────────────────
+/// Last successfully fetched checklist (`GET /api/tickets/{id}/controls`) for a ticket, so the
+/// rapportino's Controlli step can still be viewed and answered while offline mid-draft.
+///
+/// Every other section of the offline-first rapportino form (materials, staff, photos,
+/// signatures, GPS) works with zero network at capture time; the checklist used to be the one
+/// exception, throwing [TicketDetailOfflineException] with nothing to show. One row per ticket,
+/// overwritten on every successful online fetch — see `TicketControlsCacheRepository`. Answers
+/// recorded against a cached checklist are ordinary [ReportControlli] rows, already queued for
+/// submit the same way as the rest of the draft; caching the checklist's *questions* is the only
+/// piece that was missing.
+class CachedTicketControls extends Table {
+  TextColumn get ticketId => text()();
+
+  /// The raw `List<TicketControlGroupDto>` tree, serialized to JSON by
+  /// `TicketControlsCacheRepository` (that DTO has no `toJson` of its own — it only ever came
+  /// from the server before now).
+  TextColumn get controlsJson => text()();
+  DateTimeColumn get cachedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {ticketId};
 }
 
 // ── work_sessions (Timbra) ────────────────────────────────────────────────────
@@ -378,13 +530,29 @@ class WorkSessions extends Table {
 
   TextColumn get id => text()();
   DateTimeColumn get eventTime => dateTime()();
+
   /// One of: ingresso | fine | pausa | ripresa
   TextColumn get eventType => text()();
+
   /// Optional notes (future use).
   TextColumn get notes => text().nullable()();
+
   /// True while not yet synced to the backend.
-  BoolColumn get isPendingSync =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
+
+  /// GPS position captured at punch time, for `ingresso`/`ripresa` (interval-opening) events —
+  /// null for `fine`/`pausa` and whenever the technician has GPS off or permission was never
+  /// granted. Simple timbra still works with no position at all (see cantiere_timbra_screen's own
+  /// copy: "La timbratura normale... funziona senza GPS"); this only stops the app from silently
+  /// discarding a position it could have captured for free instead of ever sending it. Mirrors the
+  /// single "GPS latitude/longitude at punch time" pair `MobileSessionDto` accepts server-side.
+  RealColumn get latitude => real().nullable()();
+  RealColumn get longitude => real().nullable()();
+
+  /// Device-reported GPS accuracy radius, in meters, at the moment latitude/longitude were
+  /// captured. Capture-only, mirrors `WorkLog.GpsAccuracyMeters` server-side — null whenever no
+  /// position was captured or the device didn't report an accuracy value.
+  RealColumn get gpsAccuracyMeters => real().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -406,8 +574,10 @@ class WorkSessions extends Table {
 class CantierePunches extends Table {
   TextColumn get id => text()();
   DateTimeColumn get eventTime => dateTime()();
+
   /// One of: ingresso | uscita
   TextColumn get eventType => text()();
+
   /// Site context — set on 'ingresso', null on 'uscita' (inherited from the
   /// paired opener by the assembler).
   TextColumn get cantiereId => text().nullable()();
@@ -415,11 +585,22 @@ class CantierePunches extends Table {
   TextColumn get ticketId => text().nullable()();
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
+
+  /// Free-text work description, carried through to `CantiereMobileSessionDto.description` on
+  /// sync — the one rich field the offline batch endpoint accepts (see
+  /// `CantiereWorkLogController.MobileSessions`). Set on 'ingresso'; null on 'uscita'.
+  TextColumn get description => text().nullable()();
+
   /// True while not yet synced to the backend.
-  BoolColumn get isPendingSync =>
-      boolean().withDefault(const Constant(true))();
+  BoolColumn get isPendingSync => boolean().withDefault(const Constant(true))();
+
   /// Human-readable error message from the last failed sync attempt (null when ok).
   TextColumn get syncError => text().nullable()();
+
+  /// Reconciliation marker — mirrors `WorkSessions.notes` (`reconciledOrphanMarker`). Set by
+  /// `CantiereWorkLogReconciler` on an 'ingresso' the server has already closed elsewhere, so
+  /// `CantiereTimbraSyncService` never resends it. See cantiere_work_log_reconciler.dart.
+  TextColumn get notes => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -441,8 +622,10 @@ class AppNotifications extends Table {
   TextColumn get userId => text()();
   TextColumn get title => text()();
   TextColumn get message => text()();
+
   /// Notification type string (e.g. TicketAssigned, ScheduleReminder)
   TextColumn get type => text()();
+
   /// Delivery type string (InApp, Push, Email)
   TextColumn get deliveryType => text()();
   BoolColumn get isRead => boolean().withDefault(const Constant(false))();
@@ -451,8 +634,7 @@ class AppNotifications extends Table {
   TextColumn get relatedEntityType => text().nullable()();
   DateTimeColumn get scheduledFor => dateTime().nullable()();
   DateTimeColumn get sentAt => dateTime().nullable()();
-  BoolColumn get isDelivered =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get isDelivered => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -471,14 +653,26 @@ class ReportAllegati extends Table {
   IntColumn get sizeBytes => integer()();
   TextColumn get storagePath => text()();
   TextColumn get url => text()();
+
   /// AllegatoEntityTypeEnum: Ticket=0, Report=1, Materiale=2
   IntColumn get entityType => integer()();
   TextColumn get entityId => text()();
   TextColumn get uploadedByUserId => text()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
   /// True when this file has not yet been uploaded to the server.
-  BoolColumn get isPendingUpload =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get isPendingUpload => boolean().withDefault(const Constant(false))();
+
+  /// GPS position captured at the moment this allegato was recorded (signatures only — see
+  /// `ReportEditorNotifier.saveCustomerSignature`/`saveTechnicianSignature`). Null when the
+  /// device denied/lacked location, or for allegati that never carry a position (photos):
+  /// GPS must never block capture, so a missing value here means exactly that, not a bug.
+  RealColumn get capturedLatitude => real().nullable()();
+  RealColumn get capturedLongitude => real().nullable()();
+
+  /// UTC timestamp of capture — set unconditionally alongside the (possibly null) coordinates
+  /// above, so every signature carries a "when" even on the devices/moments GPS is unavailable.
+  DateTimeColumn get capturedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -513,13 +707,56 @@ class PendingTickets extends Table {
   IntColumn get statusId => integer()();
   IntColumn get typeId => integer()();
 
+  /// TicketPriorityEnum: Bassa | Media | Alta | Urgente. Sent on the wire as `priorita`
+  /// (backend's `[JsonPropertyName("priorita")]`, string-serialized — see TicketPriorityEnum.cs).
+  /// Defaults to "Media" to match the backend's own default when a mobile-created ticket predates
+  /// this column or the picker is left untouched.
+  TextColumn get priorita => text().withDefault(const Constant('Media'))();
+
   /// pendingSync | submitting | submitted | failed
-  TextColumn get state =>
-      text().withDefault(const Constant('pendingSync'))();
+  TextColumn get state => text().withDefault(const Constant('pendingSync'))();
+
   /// Human-readable error from the last failed attempt (null when ok).
   TextColumn get error => text().nullable()();
+
   /// Set once the server confirms creation — the real Ticket.id.
   TextColumn get serverTicketId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Local outbox for a ticket attachment picked (camera/gallery) from the ticket-detail Allegati
+/// tab while offline, or whose upload otherwise didn't complete immediately.
+///
+/// Mirrors [PendingTickets]'s shape, but the retry policy is stricter: unlike ticket creation
+/// (which carries `clientId` so a resend is deduplicated server-side — see
+/// TicketCreationQueue's doc comment), `POST /api/tickets/{id}/attachments` has no
+/// client-supplied idempotency key. A `failed` row's outcome on the server is therefore genuinely
+/// unknown, and auto-retrying it risks attaching the same photo twice. Only `pendingSync` rows —
+/// created while genuinely offline, so the request was never sent — are safe to retry
+/// automatically; `failed` requires an explicit, user-initiated retry (see
+/// TicketAttachmentUploadQueue).
+class PendingTicketAttachments extends Table {
+  TextColumn get id => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  TextColumn get ticketId => text()();
+
+  /// Absolute path to the locally captured/picked file — the source for the eventual upload.
+  TextColumn get localPath => text()();
+  TextColumn get fileName => text()();
+  TextColumn get contentType => text()();
+  IntColumn get sizeBytes => integer()();
+
+  /// pendingSync | submitting | submitted | failed
+  TextColumn get state => text().withDefault(const Constant('pendingSync'))();
+
+  /// Human-readable error from the last failed attempt (null when ok).
+  TextColumn get error => text().nullable()();
+
+  /// Set once the server confirms the upload — the real Allegato id.
+  TextColumn get serverAttachmentId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -541,6 +778,8 @@ class PendingTickets extends Table {
     TicketStatuses,
     TicketTypes,
     Materiali,
+    TicketMateriali,
+    MaterialeBarcodes,
     DraftReports,
     ReportStaffTable,
     ReportMateriali,
@@ -552,13 +791,15 @@ class PendingTickets extends Table {
     PendingTickets,
     Colleagues,
     Entitlements,
+    PendingTicketAttachments,
+    CachedTicketControls,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration {
@@ -569,8 +810,7 @@ class AppDatabase extends _$AppDatabase {
       onUpgrade: (m, from, to) async {
         if (from < 2) {
           // M5: add submission state fields to draft_reports
-          await m.addColumn(
-              draftReports, draftReports.submissionState);
+          await m.addColumn(draftReports, draftReports.submissionState);
           await m.addColumn(draftReports, draftReports.idempotencyKey);
           await m.addColumn(draftReports, draftReports.submissionError);
         }
@@ -618,23 +858,210 @@ class AppDatabase extends _$AppDatabase {
           // B-05: cache entitlements so feature gating survives loss of signal.
           await m.createTable(entitlements);
         }
+        if (from < 11) {
+          // AI provenance: whether a model wrote any of a draft's text. Defaults to false, which
+          // is the honest answer for every rapportino that predates the column.
+          await m.addColumn(draftReports, draftReports.isAiAssisted);
+        }
+        if (from < 12) {
+          // The ticket's display number, which the server has been sending all along.
+          //
+          // Adding the column is not enough on its own: existing rows are null, and the delta
+          // cursor means an unchanged ticket is never sent again — so on every device already in
+          // the field the number would stay null forever and the UI would keep falling back to a
+          // GUID fragment. `syncCursorGeneration` is bumped alongside this for that reason. A new
+          // column on a delta-synced table always needs both.
+          await m.addColumn(tickets, tickets.numero);
+        }
+        if (from < 13) {
+          // Suspended/canceled tenants keep read access but every write 403s — the app must be
+          // able to say why instead of showing an unexplained failure, so subscription status is
+          // now cached alongside the rest of the entitlement.
+          await m.addColumn(entitlements, entitlements.subscriptionStatus);
+        }
+        if (from < 14) {
+          // Rapportino autosave was packing GPS/free-text metadata into `details` — the same
+          // column that holds the technician's actual typed description — silently overwriting
+          // it on every keystroke. Splitting metadata into its own column stops the collision;
+          // see the doc comment on `DraftReports.metadataJson`.
+          await m.addColumn(draftReports, draftReports.metadataJson);
+        }
+        if (from < 15) {
+          // The mobile ticket creation form had no priority field at all — every ticket created
+          // from a phone landed at the backend's implicit default with no way to say otherwise.
+          await m.addColumn(pendingTickets, pendingTickets.priorita);
+        }
+        if (from < 16) {
+          // Simple attendance punch always sent GPS as null even when a position was available
+          // for free (permission already granted). See `WorkSessions.latitude`/`longitude`.
+          await m.addColumn(workSessions, workSessions.latitude);
+          await m.addColumn(workSessions, workSessions.longitude);
+        }
+        if (from < 17) {
+          // Cantiere timbra goes offline-first (see cantiere_timbra_sync_service.dart /
+          // cantiere_work_log_reconciler.dart): `description` carries the one rich field the
+          // offline batch endpoint accepts, `notes` mirrors `WorkSessions.notes`'s
+          // reconciliation marker. Device-reported GPS accuracy was captured and discarded on
+          // every punch; `WorkSessions.gpsAccuracyMeters` stops throwing it away.
+          await m.addColumn(cantierePunches, cantierePunches.description);
+          await m.addColumn(cantierePunches, cantierePunches.notes);
+          await m.addColumn(workSessions, workSessions.gpsAccuracyMeters);
+        }
+        if (from < 18) {
+          // Ticket detail's Allegati tab gained upload (camera/gallery), and a technician on
+          // site cannot be relied on to have signal. Same offline-outbox shape as pendingTickets:
+          // see PendingTicketAttachments' own doc comment for why its retry policy is stricter.
+          await m.createTable(pendingTicketAttachments);
+        }
+        if (from < 19) {
+          // Offline cache for the rapportino Controlli checklist — see
+          // `CachedTicketControls`'s own doc comment.
+          await m.createTable(cachedTicketControls);
+        }
+        if (from < 20) {
+          // Vetro (module #2, Tickets): the list/detail redesign needs priority and due date to
+          // triage a ticket without opening it — both already arrive over the wire (sync returns
+          // the `Ticket` entity itself, same as `numero` before it), just never parsed or stored.
+          // Same two-part fix as `numero` (schema 12): the column alone leaves every ticket that
+          // predates this migration permanently null, because a delta sync only re-sends rows that
+          // changed — see `syncCursorGeneration`'s own doc comment, bumped to v4 alongside this.
+          await m.addColumn(tickets, tickets.priority);
+          await m.addColumn(tickets, tickets.dueDate);
+        }
+        if (from < 21) {
+          // See `DraftReports.cantiereId`'s own doc comment — this was client-only state that
+          // never had anywhere to persist to. No syncCursorGeneration bump needed: this column is
+          // authored locally by the mobile client, never delta-synced from the server.
+          await m.addColumn(draftReports, draftReports.cantiereId);
+        }
+        if (from < 22) {
+          // Barcode scan-to-lookup for the materiali catalog — see MaterialeBarcodes' own doc
+          // comment. Unlike schema 21's cantiereId (client-authored, no server rows to backfill),
+          // MaterialeBarcode rows already exist on the backend for materials a device may have
+          // synced long ago — a delta sync past an old cursor would only pick up barcodes updated
+          // after this point forward, never backfilling the rest. Same reasoning as tickets.numero
+          // (schema 12) / tickets.priority (schema 20): syncCursorGeneration bumped to v5 below.
+          await m.createTable(materialeBarcodes);
+        }
+        if (from < 23) {
+          // Ticket<->Cantiere link — see Tickets.cantiereId's own doc comment. Same reasoning as
+          // schema 20 (tickets.priority/dueDate): already on the wire, needs syncCursorGeneration
+          // bumped below or an already-synced device never backfills it.
+          await m.addColumn(tickets, tickets.cantiereId);
+        }
+        if (from < 24) {
+          // Fabbisogno offline mirror — see TicketMateriali's own doc comment. New table, not a
+          // column, but the same delta blind spot as materiale_barcodes (schema 22): existing
+          // TicketMateriale rows on the backend would never backfill for a device whose cursor is
+          // already past the owning ticket's last change — syncCursorGeneration bumped below.
+          await m.createTable(ticketMateriali);
+        }
+        if (from < 25) {
+          // Every signature now carries GPS + a capture timestamp (mobile: this schema bump;
+          // backend: matching `capturedLatitude`/`capturedLongitude`/`capturedAt` upload fields).
+          // Nullable — GPS must never block signature capture — so a denied/unavailable position
+          // stores null rather than failing the save. Client-authored only, never delta-synced:
+          // no syncCursorGeneration bump needed.
+          await m.addColumn(reportAllegati, reportAllegati.capturedLatitude);
+          await m.addColumn(reportAllegati, reportAllegati.capturedLongitude);
+          await m.addColumn(reportAllegati, reportAllegati.capturedAt);
+        }
+        if (from < 26) {
+          // See DraftReports.technicianSignaturePrefillSuppressed's own doc comment. Client-
+          // authored only (set locally by Cancella, read locally by the pre-fill guard), never
+          // delta-synced: no syncCursorGeneration bump needed.
+          await m.addColumn(draftReports, draftReports.technicianSignaturePrefillSuppressed);
+        }
+        if (from < 27) {
+          // Backend's ControlTypeEnum gained a Number type (was only Checkbox/Text/DateTime/
+          // TrueFalse/Options) — see ReportControlli.numberValue's own doc comment. Additive and
+          // nullable, so a draft saved before this column existed just reads null for it, same
+          // as every other addColumn migration above.
+          await m.addColumn(reportControlli, reportControlli.numberValue);
+        }
+        if (from < 28) {
+          // Client-side geocode cache for the cantiere detail screen's embedded map — see
+          // Cantieri.latitude/longitude's own doc comment. Client-authored only (never sent by
+          // the backend, which has no lat/lng on Cantiere at all): no syncCursorGeneration bump
+          // needed, same reasoning as schema 21/25/26's own client-authored columns.
+          await m.addColumn(cantieri, cantieri.latitude);
+          await m.addColumn(cantieri, cantieri.longitude);
+        }
+        if (from < 29) {
+          // Effective clock-in method (tenant default + per-user override), mirrored from /auth/me
+          // the same way every other entitlement field already is.
+          await m.addColumn(entitlements, entitlements.clockInMethod);
+        }
       },
     );
   }
 
   // ── sync_meta helpers ────────────────────────────────────────────────────
 
+  /// Which generation of the sync cursor this build understands.
+  ///
+  /// Bumping it makes every existing device do one full sync instead of a delta, and it exists
+  /// because a delta cursor can outlive its own correctness. It did: the server's delta filter
+  /// compared `UpdatedAt > since` against rows whose `UpdatedAt` is null until someone edits
+  /// them, so anything created after a device's last sync was invisible to that device forever.
+  /// Fixing the server does not help a phone whose cursor is already past those rows — it will
+  /// never ask for them again. Only a full sync recovers, and the technician cannot be asked to
+  /// reinstall the app.
+  ///
+  /// Implemented as part of the row id rather than a new column so it needs no schema migration:
+  /// a device on an older generation simply finds no row and syncs from scratch.
+  ///
+  /// v2 — 2026-08-16, the COALESCE(UpdatedAt, CreatedAt) delta fix.
+  /// v3 — 2026-08-17, schema 12 added `tickets.numero`. The column arrives empty and a delta sync
+  ///      would never refill it, because the tickets it needs are precisely the ones that have not
+  ///      changed. Same reasoning as v2: a cursor can outlive its own correctness.
+  /// v4 — 2026-08-26, schema 20 added `tickets.priority`/`tickets.dueDate`. Same reasoning as v3.
+  /// v5 — 2026-08-27, schema 22 added `materiale_barcodes` (new table, not a column, but the
+  ///      same delta blind spot: existing MaterialeBarcode rows on the backend would never
+  ///      backfill for a device whose cursor is already past their (unrelated) last change).
+  /// v6 — 2026-08-31, schema 23 added `tickets.cantiereId`. Same reasoning as v4
+  ///      (tickets.priority/dueDate): already on the wire, a delta sync would never refill it for
+  ///      tickets that haven't otherwise changed.
+  /// v7 — 2026-08-31, schema 24 added `ticket_materiali` (new table, same delta blind spot as v5's
+  ///      `materiale_barcodes`).
+  static const String syncCursorGeneration = 'v7';
+
+  static const String _cursorId = 'default:$syncCursorGeneration';
+
   Future<DateTime?> getLastSync() async {
-    final row = await (select(syncMeta)
-          ..where((t) => t.id.equals('default')))
-        .getSingleOrNull();
+    final row = await (select(syncMeta)..where((t) => t.id.equals(_cursorId))).getSingleOrNull();
     return row?.lastSync;
   }
 
   Future<void> setLastSync(DateTime dt) async {
-    await into(syncMeta).insertOnConflictUpdate(
-      SyncMetaCompanion.insert(id: const Value('default'), lastSync: Value(dt)),
-    );
+    await transaction(() async {
+      // Drop cursors from older generations on the way past. They are never read again, and
+      // leaving one row per shipped generation to accumulate is the kind of thing nobody notices
+      // until there are twelve of them.
+      await (delete(syncMeta)..where((t) => t.id.equals(_cursorId).not())).go();
+      await into(syncMeta).insertOnConflictUpdate(
+        SyncMetaCompanion.insert(id: const Value(_cursorId), lastSync: Value(dt)),
+      );
+    });
+  }
+
+  /// Deletes every row from every table — the entire synced/offline dataset for whichever
+  /// account was last signed in on this device. Must run on sign-out: this is a shared/rotating-
+  /// device field-service app (van tablets, rotating technicians), and without this the next
+  /// person to sign in — possibly a different tenant entirely — would see the previous account's
+  /// full cached tickets/customers/cantieri/notifications until an eventual sync happened to
+  /// overwrite each row (upsert-based sync never clears rows that no longer exist for the new
+  /// tenant, so some could persist indefinitely).
+  ///
+  /// Deletes rows rather than deleting the underlying sqlite file: this connection stays open and
+  /// usable immediately afterward (e.g. for a subsequent sign-in on the same app session), with no
+  /// risk of racing a file delete against an open native handle.
+  Future<void> wipeAllData() async {
+    await transaction(() async {
+      for (final table in allTables) {
+        await delete(table).go();
+      }
+    });
   }
 }
 

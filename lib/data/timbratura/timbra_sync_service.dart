@@ -10,6 +10,14 @@
 //   is always safe even if a previous sync already succeeded.
 // - Errors are silently swallowed: timbra stays fully functional offline;
 //   isPendingSync remains true so the next sync attempt will retry.
+//
+// Resurrection guard:
+// - Sessions whose opener (ingresso/ripresa) WorkLogReconciler has flagged with
+//   `reconciledOrphanMarker` are excluded before assembling intervals. Those openers represent a
+//   shift the server has already told this device (via GET /worklog/today) is closed elsewhere
+//   — a stale local push of that same interval, still "active" (endTime null) from this device's
+//   point of view, would re-open or extend a worklog the server considers finished. See
+//   work_log_reconciler.dart for the write side of this marker.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,8 +26,7 @@ import '../api/dio_client.dart';
 import 'timbra_session_assembler.dart';
 import 'work_session_repository.dart';
 import 'worklog_api_client.dart';
-import '../../features/timbra/timbra_providers.dart'
-    show workSessionRepositoryProvider;
+import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -33,11 +40,9 @@ final timbraSyncServiceProvider = Provider<TimbraSyncService>((ref) {
 // ── Service ───────────────────────────────────────────────────────────────────
 
 class TimbraSyncService {
-  TimbraSyncService({
-    required IWorkSessionRepository repo,
-    required WorklogApiClient apiClient,
-  })  : _repo = repo,
-        _apiClient = apiClient;
+  TimbraSyncService({required IWorkSessionRepository repo, required WorklogApiClient apiClient})
+    : _repo = repo,
+      _apiClient = apiClient;
 
   final IWorkSessionRepository _repo;
   final WorklogApiClient _apiClient;
@@ -51,7 +56,11 @@ class TimbraSyncService {
   /// - On any error: swallows silently so offline use is unaffected.
   Future<void> syncNow() async {
     try {
-      final sessions = await _repo.getTodaySessions();
+      final allSessions = await _repo.getTodaySessions();
+      if (allSessions.isEmpty) return;
+
+      // Resurrection guard — see class doc comment above.
+      final sessions = allSessions.where((s) => s.notes != reconciledOrphanMarker).toList();
       if (sessions.isEmpty) return;
 
       final intervals = assembleIntervals(sessions);
@@ -63,9 +72,13 @@ class TimbraSyncService {
               clientId: i.clientId,
               startTime: i.startTime,
               endTime: i.endTime,
-              // Simple timbra: no GPS
-              latitude: null,
-              longitude: null,
+              // Captured at punch time when available (PunchNotifier) — see WorkInterval's own
+              // doc comment for why only the opener's position is carried. Still null whenever no
+              // position was captured (GPS off, permission never granted, or a pre-existing
+              // event from before this capture existed); simple timbra keeps working either way.
+              latitude: i.latitude,
+              longitude: i.longitude,
+              gpsAccuracyMeters: i.gpsAccuracyMeters,
             ),
           )
           .toList();

@@ -1,6 +1,8 @@
 // dart format width=100
 import 'dart:convert';
 
+import 'package:drift/drift.dart';
+
 import '../local/app_database.dart';
 
 /// What the tenant is entitled to, as last confirmed by the server.
@@ -10,6 +12,8 @@ class Entitlement {
     required this.capabilities,
     required this.seatType,
     required this.fetchedAt,
+    this.subscriptionStatus,
+    this.clockInMethod = 'Both',
   });
 
   /// Granted module keys — `rapportini`, `magazzino`, and so on.
@@ -24,7 +28,43 @@ class Entitlement {
   /// When the server last confirmed this. For display only — never used to expire the row.
   final DateTime fetchedAt;
 
+  /// `Trialing` / `Active` / `PastDue` / `GracePeriod` / `Suspended` / `Canceled`. Null when never
+  /// fetched (pre-migration row, or the server omitted it) — treat as unknown, never as active.
+  final String? subscriptionStatus;
+
+  /// "Both" / "QrOnly" / "ButtonOnly" — the effective clock-in method the server already resolved
+  /// (tenant default + user override + Kiosk-entitlement downgrade). Defaults to "Both" for rows
+  /// written before this field existed, matching `Entitlements.clockInMethod`'s own doc comment.
+  final String clockInMethod;
+
   bool get isFieldSeat => seatType == 'field';
+
+  /// Suspended/canceled: reads still work (EntitlementMiddleware only gates writes), but every
+  /// write 403s. The app must say so rather than let each write fail unexplained.
+  bool get isSuspended => subscriptionStatus == 'Suspended' || subscriptionStatus == 'Canceled';
+}
+
+/// The always-on modules. Enforced true in code on the server too (`ModuleKeys.AlwaysOn`), so a
+/// client that gated them off would hide screens the backend would happily serve.
+const alwaysOnModules = {'clienti', 'team', 'sistema'};
+
+/// What a field seat can always do, used before the first sync ever completes.
+///
+/// A fresh install that cannot reach the network must not be a brick. These are the three things
+/// a field seat exists for; offering them unverified is right, because a technician standing in
+/// front of a customer needs to record the work either way and the server will reject anything
+/// the tenant genuinely lacks.
+const fieldSeatBaselineModules = {'rapportini', 'presenze', 'interventi'};
+
+/// Whether a module should be offered, given what has been confirmed so far.
+///
+/// The rule itself, with no database attached, so a widget deciding whether to draw a tile and
+/// [EntitlementRepository.hasFeature] cannot drift apart. [cached] is null when the server has
+/// never answered on this device.
+bool moduleIsOffered(String moduleKey, Entitlement? cached) {
+  if (alwaysOnModules.contains(moduleKey)) return true;
+  if (cached == null) return fieldSeatBaselineModules.contains(moduleKey);
+  return cached.features.contains(moduleKey);
 }
 
 /// Reads and writes the cached entitlement.
@@ -45,22 +85,16 @@ class EntitlementRepository {
 
   static const _rowId = 'current';
 
-  /// The always-on modules. Enforced true in code on the server too (`ModuleKeys.AlwaysOn`), so a
-  /// client that gated them off would hide screens the backend would happily serve.
-  static const alwaysOn = {'clienti', 'team', 'sistema'};
+  /// See [alwaysOnModules].
+  static const alwaysOn = alwaysOnModules;
 
-  /// What a field seat can always do, used before the first sync ever completes.
-  ///
-  /// A fresh install that cannot reach the network must not be a brick. These are the three things
-  /// a field seat exists for; offering them unverified is right, because a technician standing in
-  /// front of a customer needs to record the work either way and the server will reject anything
-  /// the tenant genuinely lacks.
-  static const fieldSeatBaseline = {'rapportini', 'presenze', 'interventi'};
+  /// See [fieldSeatBaselineModules].
+  static const fieldSeatBaseline = fieldSeatBaselineModules;
 
   Future<Entitlement?> read() async {
-    final row = await (_db.select(_db.entitlements)
-          ..where((e) => e.id.equals(_rowId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.entitlements,
+    )..where((e) => e.id.equals(_rowId))).getSingleOrNull();
 
     if (row == null) return null;
 
@@ -69,6 +103,8 @@ class EntitlementRepository {
       capabilities: _decode(row.capabilitiesJson),
       seatType: row.seatType,
       fetchedAt: row.fetchedAt,
+      subscriptionStatus: row.subscriptionStatus,
+      clockInMethod: row.clockInMethod ?? 'Both',
     );
   }
 
@@ -78,30 +114,27 @@ class EntitlementRepository {
     required List<String> capabilities,
     required String seatType,
     required DateTime fetchedAt,
+    String? subscriptionStatus,
+    String? clockInMethod,
   }) async {
-    await _db.into(_db.entitlements).insertOnConflictUpdate(
+    await _db
+        .into(_db.entitlements)
+        .insertOnConflictUpdate(
           EntitlementsCompanion.insert(
             id: _rowId,
             featuresJson: jsonEncode(features),
             capabilitiesJson: jsonEncode(capabilities),
             seatType: seatType,
             fetchedAt: fetchedAt,
+            subscriptionStatus: Value(subscriptionStatus),
+            clockInMethod: Value(clockInMethod),
           ),
         );
   }
 
-  /// Whether a module should be offered.
-  ///
-  /// Returns true when nothing has been cached yet and the module is in the field-seat baseline —
-  /// see [fieldSeatBaseline]. Always true for [alwaysOn], matching the server.
-  Future<bool> hasFeature(String moduleKey) async {
-    if (alwaysOn.contains(moduleKey)) return true;
-
-    final cached = await read();
-    if (cached == null) return fieldSeatBaseline.contains(moduleKey);
-
-    return cached.features.contains(moduleKey);
-  }
+  /// Whether a module should be offered. The rule lives in [moduleIsOffered]; this only supplies
+  /// it with the cache.
+  Future<bool> hasFeature(String moduleKey) async => moduleIsOffered(moduleKey, await read());
 
   /// Whether a specific `module.resource.action` capability is held.
   ///

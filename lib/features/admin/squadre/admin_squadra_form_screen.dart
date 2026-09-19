@@ -2,6 +2,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_rack.dart';
+import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,6 +11,7 @@ import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 /// Admin squadra form — create or edit.
 class AdminSquadraFormScreen extends ConsumerStatefulWidget {
@@ -17,12 +20,10 @@ class AdminSquadraFormScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? squadra;
 
   @override
-  ConsumerState<AdminSquadraFormScreen> createState() =>
-      _AdminSquadraFormScreenState();
+  ConsumerState<AdminSquadraFormScreen> createState() => _AdminSquadraFormScreenState();
 }
 
-class _AdminSquadraFormScreenState
-    extends ConsumerState<AdminSquadraFormScreen> {
+class _AdminSquadraFormScreenState extends ConsumerState<AdminSquadraFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeCtrl = TextEditingController();
   final _descrizioneCtrl = TextEditingController();
@@ -30,8 +31,20 @@ class _AdminSquadraFormScreenState
   final _coloreCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   bool _isSaving = false;
+  // Backend forces IsActive=true on create (SquadreController.Create) — there is nothing to
+  // toggle until the squadra exists, so this only matters (and is only shown) while editing.
+  bool _isActive = true;
 
   bool get _isEditing => widget.squadra != null;
+
+  // Same fallback logic as _SquadraRow._parseColor in admin_squadra_list_screen.dart, so the
+  // live swatch preview here matches what the list row will actually render.
+  Color _parseColor(BuildContext context, String? hex) {
+    if (hex == null || hex.isEmpty) return context.colors.inkMuted;
+    final clean = hex.replaceFirst('#', '');
+    if (clean.length != 6) return context.colors.inkMuted;
+    return Color(int.parse('FF$clean', radix: 16));
+  }
 
   @override
   void initState() {
@@ -46,6 +59,7 @@ class _AdminSquadraFormScreenState
     _specializzazioneCtrl.text = s['specializzazione'] as String? ?? '';
     _coloreCtrl.text = s['coloreCalendario'] as String? ?? '';
     _noteCtrl.text = s['note'] as String? ?? '';
+    _isActive = s['isActive'] as bool? ?? true;
   }
 
   @override
@@ -70,54 +84,39 @@ class _AdminSquadraFormScreenState
         await api.updateSquadra(
           widget.squadra!['id'] as String,
           nome: _nomeCtrl.text.trim(),
-          descrizione: _descrizioneCtrl.text.trim().isEmpty
-              ? null
-              : _descrizioneCtrl.text.trim(),
+          descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
           specializzazione: _specializzazioneCtrl.text.trim().isEmpty
               ? null
               : _specializzazioneCtrl.text.trim(),
-          coloreCalendario: _coloreCtrl.text.trim().isEmpty
-              ? null
-              : _coloreCtrl.text.trim(),
-          note: _noteCtrl.text.trim().isEmpty
-              ? null
-              : _noteCtrl.text.trim(),
+          coloreCalendario: _coloreCtrl.text.trim().isEmpty ? null : _coloreCtrl.text.trim(),
+          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+          isActive: _isActive,
         );
       } else {
         await api.createSquadra(
           nome: _nomeCtrl.text.trim(),
-          descrizione: _descrizioneCtrl.text.trim().isEmpty
-              ? null
-              : _descrizioneCtrl.text.trim(),
+          descrizione: _descrizioneCtrl.text.trim().isEmpty ? null : _descrizioneCtrl.text.trim(),
           specializzazione: _specializzazioneCtrl.text.trim().isEmpty
               ? null
               : _specializzazioneCtrl.text.trim(),
-          coloreCalendario: _coloreCtrl.text.trim().isEmpty
-              ? null
-              : _coloreCtrl.text.trim(),
-          note: _noteCtrl.text.trim().isEmpty
-              ? null
-              : _noteCtrl.text.trim(),
+          coloreCalendario: _coloreCtrl.text.trim().isEmpty ? null : _coloreCtrl.text.trim(),
+          note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
         );
       }
 
       unawaited(ref.read(syncProvider.notifier).performSync());
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isEditing ? 'Squadra aggiornata' : 'Squadra creata',
-            ),
-          ),
+        showAppToast(
+          context,
+          message: _isEditing ? 'Squadra aggiornata' : 'Squadra creata',
+          tone: ToastTone.success,
         );
         context.pop(true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Errore: $e')),
-        );
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -128,78 +127,92 @@ class _AdminSquadraFormScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Modifica squadra' : 'Nuova squadra'),
-        backgroundColor: context.colors.bg2,
-        foregroundColor: context.colors.ink,
-        elevation: 0,
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Salva'),
-          ),
-        ],
+      appBar: ScreenHeaderBar(
+        title: _isEditing ? 'Modifica squadra' : 'Nuova squadra',
+        showBack: true,
       ),
       body: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(19),
-          children: [
-            TextFormField(
-              controller: _nomeCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nome *',
-                border: OutlineInputBorder(),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                AppSpacing.pagePadding,
+                context.navClearance,
               ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
-            ),
-            const SizedBox(height: 16),
+              children: [
+                AppTextField(
+                  label: 'Nome *',
+                  controller: _nomeCtrl,
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Campo obbligatorio' : null,
+                ),
+                const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _descrizioneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Descrizione',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Descrizione', controller: _descrizioneCtrl, maxLines: 3),
+                const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _specializzazioneCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Specializzazione',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
+                AppTextField(label: 'Specializzazione', controller: _specializzazioneCtrl),
+                const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _coloreCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Colore calendario (hex)',
-                border: OutlineInputBorder(),
-                hintText: '#FF5722',
-              ),
-            ),
-            const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: AppTextField(
+                        label: 'Colore calendario (hex)',
+                        hint: '#FF5722',
+                        controller: _coloreCtrl,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedBuilder(
+                      animation: _coloreCtrl,
+                      builder: (context, _) => Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: _parseColor(context, _coloreCtrl.text),
+                          borderRadius: AppRack.insetShape,
+                          border: Border.all(color: context.colors.divider),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _noteCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
+                AppTextField(label: 'Note', controller: _noteCtrl, maxLines: 3),
+                const SizedBox(height: 16),
+
+                // Only shown while editing — a new squadra is always created active
+                // (SquadreController.Create hardcodes IsActive=true), so there is nothing to toggle
+                // yet. This is the only way to deactivate/reactivate a squadra from mobile.
+                if (_isEditing)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _isActive ? 'Squadra attiva' : 'Squadra disattivata',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: context.colors.ink),
+                        ),
+                      ),
+                      AppToggle(value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
+                    ],
+                  ),
+                const SizedBox(height: 32),
+
+                AppButton(
+                  label: _isEditing ? 'Salva modifiche' : 'Crea squadra',
+                  onPressed: _isSaving ? null : _save,
+                  isLoading: _isSaving,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

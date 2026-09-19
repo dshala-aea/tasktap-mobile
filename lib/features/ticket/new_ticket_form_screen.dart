@@ -2,10 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../core/widgets/app_button.dart';
-import '../../core/widgets/app_stepper.dart';
+import '../../core/widgets/widgets.dart';
+import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'steps/step_assegnazione.dart';
@@ -15,6 +13,7 @@ import 'new_ticket_form_state.dart';
 import 'steps/step_riepilogo_ticket.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
+import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Form steps enum
@@ -37,8 +36,7 @@ class NewTicketFormScreen extends ConsumerStatefulWidget {
   const NewTicketFormScreen({super.key});
 
   @override
-  ConsumerState<NewTicketFormScreen> createState() =>
-      _NewTicketFormScreenState();
+  ConsumerState<NewTicketFormScreen> createState() => _NewTicketFormScreenState();
 }
 
 class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
@@ -46,8 +44,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   NewTicketFormState _formState = const NewTicketFormState();
   bool _isSubmitting = false;
 
-  late final ProviderSubscription<AsyncValue<Map<int, String>>>
-      _statusListener;
+  late final ProviderSubscription<AsyncValue<List<TicketStatuse>>> _statusListener;
 
   int get _stepIndex => _FormStep.values.indexOf(_step);
   bool get _isFirst => _step == _FormStep.clienteSede;
@@ -66,7 +63,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   void initState() {
     super.initState();
     _statusListener = ref.listenManual(
-      ticketStatusMapProvider,
+      ticketStatusesProvider,
       (previous, next) => next.whenData(_applyDefaultStatus),
       fireImmediately: true,
     );
@@ -78,15 +75,21 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
     super.dispose();
   }
 
-  void _applyDefaultStatus(Map<int, String> statusMap) {
+  void _applyDefaultStatus(List<TicketStatuse> statuses) {
     if (_formState.statusId != null) return;
-    // We don't have isDefault in the map, but the first entry from the
-    // query is typically the default. Alternatively, we can read it from a
-    // dedicated provider. For now, pick the first status as default.
-    final defaultEntry = statusMap.entries.firstOrNull;
-    if (defaultEntry == null) return;
+    if (statuses.isEmpty) return;
+    // Pick the status actually flagged as default server-side — not the
+    // first row returned, which is an arbitrary SQLite ordering with no
+    // guarantee of matching the tenant's intended default (could even be a
+    // status flagged isClosed, silently creating a ticket that's already
+    // "closed"). Fall back to the first non-closed status if none is
+    // flagged default, and only then to the first status of any kind.
+    final defaultStatus =
+        statuses.where((s) => s.isDefault).firstOrNull ??
+        statuses.where((s) => !s.isClosed).firstOrNull ??
+        statuses.first;
     setState(() {
-      _formState = _formState.copyWith(statusId: defaultEntry.key);
+      _formState = _formState.copyWith(statusId: defaultStatus.id);
     });
   }
 
@@ -136,43 +139,35 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       assignedUserId: _formState.assignedUserId,
       statusId: _formState.statusId!,
       typeId: _formState.typeId!,
+      priorita: _formState.priority,
       isOnline: isOnline,
     );
 
     if (!mounted) return;
 
     if (outcome.isQueuedOffline) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      showAppToast(
+        context,
+        message:
             'Sei offline: il ticket è stato salvato e verrà inviato '
             'automaticamente alla riconnessione.',
-          ),
-          backgroundColor: context.colors.amber,
-        ),
+        tone: ToastTone.warning,
       );
       Navigator.of(context).pop(true); // return true = created (locally)
     } else if (outcome.isSubmitted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ticket creato con successo'),
-          backgroundColor: context.colors.green,
-        ),
-      );
+      showAppToast(context, message: 'Ticket creato con successo', tone: ToastTone.success);
       Navigator.of(context).pop(true);
     } else {
       // Failed while online: the request may have already reached the
       // server, so we do NOT retry automatically. Data is safe locally.
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      showAppToast(
+        context,
+        message:
             'Il ticket è stato salvato in locale, ma l\'invio non è '
             'riuscito (${outcome.error}). Per evitare duplicati, controlla '
             'la lista ticket prima di riprovare dalla sezione "In sospeso".',
-          ),
-          backgroundColor: context.colors.red,
-        ),
+        tone: ToastTone.error,
       );
     }
   }
@@ -181,32 +176,40 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: AppBar(
-        backgroundColor: AppColors.CHARCOAL,
-        foregroundColor: context.colors.inkInverse,
-        elevation: 0,
-        titleSpacing: 0,
-        title: Text(
-          'Nuovo ticket',
-          style: AppTextStyles.titleMedium.copyWith(color: context.colors.inkInverse),
-        ),
-      ),
       body: Column(
         children: [
-          // ── Stepper ──────────────────────────────────────────────────────
-          Container(
-            color: AppColors.CHARCOAL,
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-            child: AppStepper(
-              steps: _kSteps,
-              currentIndex: _stepIndex,
+          // This was a Material AppBar, which made this the one screen in the ticket flow whose
+          // chrome changed the moment a technician started entering data — the list beside it
+          // uses ScreenHeader. Now the same flipping ScreenHeader every other screen uses, header
+          // and stepper sharing the page's own background rather than a charcoal plate.
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                ScreenHeader(title: 'Nuovo ticket', showBack: true),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    0,
+                    AppSpacing.pagePadding,
+                    AppSpacing.base,
+                  ),
+                  child: AppStepper(
+                    steps: _kSteps,
+                    currentIndex: _stepIndex,
+                    onStepSelected: (i) => setState(() => _step = _FormStep.values[i]),
+                  ),
+                ),
+              ],
             ),
           ),
 
           // ── Step content ─────────────────────────────────────────────────
           Expanded(
             child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 200),
               switchInCurve: Curves.easeInOut,
               switchOutCurve: Curves.easeInOut,
               child: _buildStep(key: ValueKey(_step)),
@@ -228,12 +231,11 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
 
   bool get _canProceed {
     return switch (_step) {
-      _FormStep.clienteSede =>
-        _formState.customerId != null && _formState.locationId != null,
+      _FormStep.clienteSede => _formState.customerId != null && _formState.locationId != null,
       _FormStep.dettagli =>
         _formState.title != null &&
-        _formState.title!.trim().isNotEmpty &&
-        _formState.typeId != null,
+            _formState.title!.trim().isNotEmpty &&
+            _formState.typeId != null,
       _FormStep.assegnazione => true, // optional
       _FormStep.riepilogo => false, // submit button instead
     };
@@ -242,26 +244,26 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   Widget _buildStep({required Key key}) {
     return switch (_step) {
       _FormStep.clienteSede => StepClienteSede(
-          key: key,
-          state: _formState,
-          onChanged: _onFormChanged,
-        ),
+        key: key,
+        state: _formState,
+        onChanged: _onFormChanged,
+      ),
       _FormStep.dettagli => StepDettagliTicket(
-          key: key,
-          state: _formState,
-          onChanged: _onFormChanged,
-        ),
+        key: key,
+        state: _formState,
+        onChanged: _onFormChanged,
+      ),
       _FormStep.assegnazione => StepAssegnazione(
-          key: key,
-          state: _formState,
-          onChanged: _onFormChanged,
-        ),
+        key: key,
+        state: _formState,
+        onChanged: _onFormChanged,
+      ),
       _FormStep.riepilogo => StepRiepilogoTicket(
-          key: key,
-          state: _formState,
-          onSubmit: _onSubmit,
-          isSubmitting: _isSubmitting,
-        ),
+        key: key,
+        state: _formState,
+        onSubmit: _onSubmit,
+        isSubmitting: _isSubmitting,
+      ),
     };
   }
 }
@@ -291,7 +293,10 @@ class _BottomNavBar extends StatelessWidget {
       top: false,
       child: Container(
         color: context.colors.surface,
-        padding: const EdgeInsets.symmetric(horizontal: 19, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pagePadding,
+          vertical: AppSpacing.md,
+        ),
         child: Row(
           children: [
             if (!isFirst) ...[

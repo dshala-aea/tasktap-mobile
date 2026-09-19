@@ -68,6 +68,16 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>TaskTap usa Face ID per proteggere l'accesso ai dati di clienti e interventi su questo dispositivo.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TaskTap usa il microfono per permetterti di dettare la descrizione dell'intervento invece di scriverla. L'audio resta sul dispositivo e non viene inviato a nessun server.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>TaskTap converte la tua voce in testo sul dispositivo per compilare i campi del rapportino. Il riconoscimento avviene in locale, senza inviare audio a server esterni.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>TaskTap usa la fotocamera per allegare foto dell'intervento al rapportino, come prova del lavoro svolto.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>TaskTap accede alle foto per allegare immagini gia' scattate al rapportino dell'intervento.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

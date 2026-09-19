@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,17 +24,16 @@ void main() {
   late EntitlementService service;
 
   Response<Map<String, dynamic>> ok(Map<String, dynamic> body) => Response(
-        requestOptions: RequestOptions(path: '/api/Auth/me'),
-        statusCode: 200,
-        data: body,
-      );
+    requestOptions: RequestOptions(path: '/api/Auth/me'),
+    statusCode: 200,
+    data: body,
+  );
 
   Map<String, dynamic> meBody({
     List<String> features = const ['clienti', 'team', 'sistema', 'rapportini', 'magazzino'],
     List<String> capabilities = const ['rapportini.report.write'],
     String seatType = 'field',
-  }) =>
-      {'features': features, 'capabilities': capabilities, 'seatType': seatType};
+  }) => {'features': features, 'capabilities': capabilities, 'seatType': seatType};
 
   void stub(Response<Map<String, dynamic>> response) {
     when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) async => response);
@@ -80,20 +81,18 @@ void main() {
     });
 
     test('a network error leaves the cache untouched', () async {
-      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
-        DioException(requestOptions: RequestOptions(path: '/api/Auth/me')),
-      );
+      when(
+        () => dio.get<Map<String, dynamic>>(any()),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/Auth/me')));
 
       expect(await service.refresh(), isFalse);
       expect(await repo.hasFeature('magazzino'), isTrue);
     });
 
     test('a non-200 leaves the cache untouched', () async {
-      stub(Response(
-        requestOptions: RequestOptions(path: '/api/Auth/me'),
-        statusCode: 503,
-        data: null,
-      ));
+      stub(
+        Response(requestOptions: RequestOptions(path: '/api/Auth/me'), statusCode: 503, data: null),
+      );
 
       expect(await service.refresh(), isFalse);
       expect(await repo.hasFeature('magazzino'), isTrue);
@@ -151,6 +150,55 @@ void main() {
       await service.refresh();
 
       expect(await repo.hasFeature('clienti'), isTrue);
+    });
+  });
+
+  group('caching the effective clock-in method', () {
+    test('write/read round-trips clockInMethod', () async {
+      await repo.write(
+        features: ['presenze_kiosk'],
+        capabilities: [],
+        seatType: 'field',
+        fetchedAt: DateTime.now().toUtc(),
+        clockInMethod: 'QrOnly',
+      );
+      final read = await repo.read();
+      expect(read!.clockInMethod, 'QrOnly');
+    });
+
+    test('read defaults clockInMethod to Both for a legacy row with no value', () async {
+      // Simulates a row written before this column existed: insert directly via the generated
+      // companion, omitting clockInMethod so the nullable column stays null.
+      await db
+          .into(db.entitlements)
+          .insertOnConflictUpdate(
+            EntitlementsCompanion.insert(
+              id: 'current',
+              featuresJson: jsonEncode(['clienti']),
+              capabilitiesJson: jsonEncode(<String>[]),
+              seatType: 'field',
+              fetchedAt: DateTime.now().toUtc(),
+            ),
+          );
+
+      final read = await repo.read();
+      expect(read!.clockInMethod, 'Both');
+    });
+
+    test('refresh persists clockInMethod from the response body', () async {
+      stub(
+        ok({
+          'features': ['clienti', 'team', 'sistema', 'rapportini'],
+          'capabilities': <String>[],
+          'seatType': 'field',
+          'clockInMethod': 'ButtonOnly',
+        }),
+      );
+
+      expect(await service.refresh(), isTrue);
+
+      final cached = await repo.read();
+      expect(cached!.clockInMethod, 'ButtonOnly');
     });
   });
 

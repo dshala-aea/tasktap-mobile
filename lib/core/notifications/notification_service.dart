@@ -8,9 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/config/env.dart';
 import '../router/app_router.dart';
 
-/// Background message handler — must be a top-level function.
+/// Background message handler — must be a top-level function, registered by main.dart via
+/// `FirebaseMessaging.onBackgroundMessage` before `runApp`.
 @pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Background messages are handled by the OS notification tray.
   // No in-app processing needed here.
   debugPrint('FCM background message: ${message.messageId}');
@@ -49,29 +50,25 @@ class NotificationService {
   /// re-register without needing the caller to thread the token through.
   String? _lastAccessToken;
 
-  /// Initialize FCM: request permission, get token, set up listeners.
+  /// Wire up FCM without asking for anything.
+  ///
+  /// This used to call `requestPermission` as its first act, and it is called from
+  /// `runTaskTapApp()` — so the OS notification dialog was the first thing a technician saw, before
+  /// the app had drawn a single screen and with nothing on it saying what would be sent or why.
+  /// That is a transparency failure and, in practice, the surest way to be denied: an unexplained
+  /// prompt is the one people refuse, and on iOS it cannot be shown a second time.
+  ///
+  /// The ask now lives behind the "Notifiche push" setting, where [ensurePermission] is called
+  /// after a sheet has stated the purpose. Everything here is listeners and token plumbing, none of
+  /// which prompts; the token is fetched only if permission is *already* held from a previous run.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
 
-    // Request permission (iOS primarily; Android always grants).
-    final settings = await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    debugPrint('FCM permission: ${settings.authorizationStatus}');
-
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      debugPrint('FCM permission denied — push notifications disabled');
-      return;
+    if (await hasPermission()) {
+      _currentToken = await _messaging.getToken();
+      debugPrint('FCM token: $_currentToken');
     }
-
-    // Get the initial token.
-    _currentToken = await _messaging.getToken();
-    debugPrint('FCM token: $_currentToken');
 
     // Listen for token refreshes.
     _messaging.onTokenRefresh.listen((newToken) {
@@ -103,6 +100,52 @@ class NotificationService {
         sound: true,
       );
     }
+  }
+
+  /// Whether the OS already allows notifications, without asking.
+  ///
+  /// `authorized` and `provisional` both deliver; `notDetermined` means the dialog has never been
+  /// shown, and `denied` means it has and the answer was no.
+  Future<bool> hasPermission() async {
+    final settings = await _messaging.getNotificationSettings();
+    final status = settings.authorizationStatus;
+    return status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+  }
+
+  /// Raw OS authorization status, for a caller that needs to tell "never asked" apart from "said
+  /// no" — [hasPermission] deliberately collapses both to `false` for its one existing caller
+  /// ("can I skip the purpose sheet"), which is correct there and not enough for onboarding's own
+  /// three-state UI.
+  Future<AuthorizationStatus> authorizationStatus() async {
+    final settings = await _messaging.getNotificationSettings();
+    return settings.authorizationStatus;
+  }
+
+  /// Asks the OS, once the caller has already explained why.
+  ///
+  /// Returns whether notifications can now be delivered. **Do not call this without showing
+  /// `askPermissionPurpose` first** — that is the whole point of it being separate from
+  /// [initialize].
+  Future<bool> ensurePermission() async {
+    final settings = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    final status = settings.authorizationStatus;
+    debugPrint('FCM permission: $status');
+
+    final granted =
+        status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+    if (!granted) return false;
+
+    // The token could not be fetched at startup if permission was not held then.
+    _currentToken ??= await _messaging.getToken();
+    return true;
   }
 
   /// Register the current FCM token with the TaskTap backend.
@@ -220,25 +263,24 @@ class NotificationService {
   }
 
   Dio _createDio(String accessToken) {
-    return Dio(BaseOptions(
-      baseUrl: Env.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-      },
-    ));
+    return Dio(
+      BaseOptions(
+        baseUrl: Env.apiBaseUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+      ),
+    );
   }
 }
 
 /// Deep-link intent parsed from a notification tap.
 class DeepLinkIntent {
-  const DeepLinkIntent({
-    required this.entityType,
-    required this.entityId,
-  });
+  const DeepLinkIntent({required this.entityType, required this.entityId});
 
   final String entityType;
   final String entityId;

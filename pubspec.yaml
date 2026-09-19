@@ -40,6 +40,7 @@ dependencies:
 
   # Connectivity
   connectivity_plus: ^6.1.4
+  permission_handler: ^13.0.2
 
   # Fonts
   google_fonts: ^6.2.1
@@ -47,7 +48,23 @@ dependencies:
   # Field capture
   signature: ^5.5.0
   image_picker: ^1.1.2
+  # PDF attachments on rapportino photos/allegati (item 7 of the admin-form audit) — image_picker
+  # only ever offers camera/gallery, which can't return a PDF at all.
+  file_picker: ^11.0.3
+  local_auth: ^2.3.0
   geolocator: ^13.0.4
+
+  # Opens the device's own maps app for turn-by-turn directions — no in-app map SDK, no API key.
+  url_launcher: ^6.3.1
+
+  # Embedded OpenStreetMap preview on cantiere detail (see CantiereMapCard) — a real map widget,
+  # not just the pin-and-external-link AppMapCard fallback. No API key: OSM's public tile server
+  # + Nominatim geocoding, both usage-policy-compliant (see geocoding_service.dart).
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+
+  # Barcode/QR scanning (materiali lookup) — camera + on-device ML Kit, no cloud call per scan.
+  mobile_scanner: ^6.0.2
 
   # Icons
   lucide_icons: ^0.257.0
@@ -60,12 +77,33 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.0
   uuid: ^4.5.1
+  open_filex: ^4.7.0
+  share_plus: ^11.0.0
+
+  # Realtime — SignalR client for NotificationHub's tenant event broadcasts.
+  # NOTE: the plan's sketch assumed `signalr_netcore`, but that package is stale (last publish
+  # ~12 months ago, 130/160 pub points, 56 open GitHub issues incl. reconnect-breaking bugs that
+  # directly conflict with this task's "best-effort, must reconnect" requirement). `signalr_hub`
+  # is its actively-maintained, verified-publisher successor (160/160 pub points, 0 open issues,
+  # explicitly fixes reconnection stability) — used instead. See task-3-report.md for the full
+  # research trail.
+  signalr_hub: ^2.1.1
 
   # Crash reporting (Sentry)
   # DSN is supplied via --dart-define=SENTRY_DSN=... at build time.
   # When the dart-define is absent (tests, local runs without a DSN) Sentry
   # is NOT initialised and the app still works normally.
   sentry_flutter: ^9.27.0
+  speech_to_text: ^7.4.0
+  crypto: ^3.0.7
+
+  # Reactive utilities (Rx.combineLatest for stream composition)
+  rxdart: ^0.28.0
+
+  # Kiosk mode's attendance QR (see lib/features/kiosk) — renders the backend's rotating HMAC
+  # token as an on-screen QR code for technicians to scan with their own phone. Pure-Dart
+  # CustomPainter, no native platform code, no network calls of its own.
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
@@ -84,6 +122,16 @@ dev_dependencies:
 
   # Testing
   mocktail: ^1.0.4
+  # Fakes ImagePickerPlatform.instance in widget tests (ticket_detail_screen_test.dart) — a
+  # transitive dep of image_picker already, declared directly because the test imports it.
+  image_picker_platform_interface: ^2.11.1
+  # Fakes PathProviderPlatform.instance in widget tests (step_riepilogo_signature_test.dart) —
+  # a transitive dep of path_provider already, declared directly for the same reason as above.
+  path_provider_platform_interface: ^2.1.3
+  plugin_platform_interface: ^2.1.8
+  # Golden-image testing (test/golden/) — CI compares against committed goldens, local runs
+  # render but don't fail on mismatch (font rendering varies by OS).
+  alchemist: ^0.12.1
 
   # App icon + splash generation
   # Run: flutter pub run flutter_launcher_icons
@@ -124,3 +172,64 @@ flutter:
 
   assets:
     - assets/icons/
+
+  # Sora and Manrope, bundled rather than fetched.
+  #
+  # They were reaching the app only through the `google_fonts` runtime package, which downloads a
+  # family on first use and falls back to the platform font until it lands. In an app whose stated
+  # design center is offline that is the wrong default: a technician's first run in a plant room
+  # got the system sans, and the two pinned typefaces are a brand commitment.
+  #
+  # Eighteen call sites were worse off still — they wrote `fontFamily: 'Sora'` / `'Manrope'`
+  # directly, naming families that were never declared here, so they had been rendering as the
+  # platform font on every device since the day they were written. Declaring the families is what
+  # makes those work at all.
+  #
+  # Only the weights the app actually uses are shipped: Sora 400/600/700, Manrope 400/500/600/700.
+  fonts:
+    - family: Sora
+      fonts:
+        - asset: assets/fonts/Sora-400.ttf
+          weight: 400
+        - asset: assets/fonts/Sora-600.ttf
+          weight: 600
+        - asset: assets/fonts/Sora-700.ttf
+          weight: 700
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-400.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-500.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-600.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-700.ttf
+          weight: 700
+    # Inter, for the Vetro redesign (2026-08-26). One variable-font file, not per-weight statics
+    # like Sora/Manrope above — upstream (rsms/inter v4.1) stopped shipping static TTFs; only a
+    # variable font and woff2 remain, and woff2 isn't a format `flutter:` fonts can declare at all.
+    # Flutter/Skia resolve `FontWeight` against the file's own `wght` axis, so every weight Vetro
+    # uses (400/500/600/700/800) comes from this single 860KB file — smaller than shipping five
+    # separate static files would have been anyway.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/InterVariable.ttf
+    # Archivo, Archivo Narrow and IBM Plex Mono, for the Il Documento restyle (2026-09-03). Same
+    # bundled-asset approach as Sora/Manrope/Inter above, for the same reason: `google_fonts` sits
+    # in `dependencies` unused (nothing in lib/ imports it) precisely because its runtime-download
+    # default is wrong for this offline-first app. Archivo and Archivo Narrow ship upstream only as
+    # variable fonts (like Inter above) — one file each, weight resolved against the file's own
+    # `wght` axis. IBM Plex Mono ships static per-weight files (like Sora/Manrope); only the
+    # weights DESIGN.md calls for (400/500) are shipped.
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/ArchivoVariable.ttf
+    - family: Archivo Narrow
+      fonts:
+        - asset: assets/fonts/ArchivoNarrowVariable.ttf
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-400.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-500.ttf
+          weight: 500

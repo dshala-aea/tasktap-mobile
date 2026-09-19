@@ -21,10 +21,10 @@ void main() {
       expect(decoration.color, equals(AppColors.BM));
     });
 
-    testWidgets('renders in on state (Y track color)', (tester) async {
-      await tester.pumpWidget(
-        _wrap(AppToggle(value: true, onChanged: (_) {})),
-      );
+    testWidgets('renders in on state (AppColors.Y track color)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_wrap(AppToggle(value: true, onChanged: (_) {})));
       await tester.pump();
 
       final track = tester.widget<AnimatedContainer>(
@@ -52,7 +52,9 @@ void main() {
       expect(received, isFalse);
     });
 
-    testWidgets('disabled (onChanged null) does not throw on tap', (tester) async {
+    testWidgets('disabled (onChanged null) does not throw on tap', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         _wrap(const AppToggle(value: false, onChanged: null)),
       );
@@ -66,10 +68,12 @@ void main() {
       );
       await tester.pump();
       final sizedBox = tester.widget<SizedBox>(
-        find.descendant(
-          of: find.byType(AppToggle),
-          matching: find.byType(SizedBox),
-        ).first,
+        find
+            .descendant(
+              of: find.byType(AppToggle),
+              matching: find.byType(SizedBox),
+            )
+            .first,
       );
       expect(sizedBox.width, greaterThanOrEqualTo(44));
       expect(sizedBox.height, greaterThanOrEqualTo(44));
