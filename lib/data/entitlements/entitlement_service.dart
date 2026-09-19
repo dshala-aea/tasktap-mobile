@@ -47,6 +47,7 @@ class EntitlementService {
     final features = _stringList(body['features']);
     final capabilities = _stringList(body['capabilities']);
     final seatType = body['seatType'];
+    final clockInMethod = body['clockInMethod'] as String?;
     final subscription = body['subscription'];
     final subscriptionStatus = subscription is Map ? subscription['status'] as String? : null;
 
@@ -62,6 +63,7 @@ class EntitlementService {
       seatType: seatType,
       fetchedAt: DateTime.now().toUtc(),
       subscriptionStatus: subscriptionStatus,
+      clockInMethod: clockInMethod,
     );
 
     // The response's `user.id` is the backend's internal Users.Id (a Guid) — distinct from the

@@ -13,6 +13,7 @@ class Entitlement {
     required this.seatType,
     required this.fetchedAt,
     this.subscriptionStatus,
+    this.clockInMethod = 'Both',
   });
 
   /// Granted module keys — `rapportini`, `magazzino`, and so on.
@@ -30,6 +31,11 @@ class Entitlement {
   /// `Trialing` / `Active` / `PastDue` / `GracePeriod` / `Suspended` / `Canceled`. Null when never
   /// fetched (pre-migration row, or the server omitted it) — treat as unknown, never as active.
   final String? subscriptionStatus;
+
+  /// "Both" / "QrOnly" / "ButtonOnly" — the effective clock-in method the server already resolved
+  /// (tenant default + user override + Kiosk-entitlement downgrade). Defaults to "Both" for rows
+  /// written before this field existed, matching `Entitlements.clockInMethod`'s own doc comment.
+  final String clockInMethod;
 
   bool get isFieldSeat => seatType == 'field';
 
@@ -98,6 +104,7 @@ class EntitlementRepository {
       seatType: row.seatType,
       fetchedAt: row.fetchedAt,
       subscriptionStatus: row.subscriptionStatus,
+      clockInMethod: row.clockInMethod ?? 'Both',
     );
   }
 
@@ -108,6 +115,7 @@ class EntitlementRepository {
     required String seatType,
     required DateTime fetchedAt,
     String? subscriptionStatus,
+    String? clockInMethod,
   }) async {
     await _db
         .into(_db.entitlements)
@@ -119,6 +127,7 @@ class EntitlementRepository {
             seatType: seatType,
             fetchedAt: fetchedAt,
             subscriptionStatus: Value(subscriptionStatus),
+            clockInMethod: Value(clockInMethod),
           ),
         );
   }
