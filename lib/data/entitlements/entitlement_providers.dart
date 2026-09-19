@@ -39,6 +39,14 @@ final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
   return ref.watch(entitlementRepositoryProvider).read();
 });
 
+/// The effective clock-in method as a plain string ('Both'/'QrOnly'/'ButtonOnly'), defaulting to
+/// 'Both' before the first successful /auth/me — matching the same "no answer means allow"
+/// asymmetry the rest of this file's entitlement reads already use.
+final effectiveClockInMethodProvider = Provider<String>((ref) {
+  final cached = ref.watch(cachedEntitlementProvider).valueOrNull;
+  return cached?.clockInMethod ?? 'Both';
+});
+
 /// Call once on app start, alongside initAuthReconnectWatcher.
 ///
 /// Fetches immediately as well as on every reconnect. Reconnect alone was not enough and the

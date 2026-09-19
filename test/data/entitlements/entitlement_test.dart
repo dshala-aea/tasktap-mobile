@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -148,6 +150,55 @@ void main() {
       await service.refresh();
 
       expect(await repo.hasFeature('clienti'), isTrue);
+    });
+  });
+
+  group('caching the effective clock-in method', () {
+    test('write/read round-trips clockInMethod', () async {
+      await repo.write(
+        features: ['presenze_kiosk'],
+        capabilities: [],
+        seatType: 'field',
+        fetchedAt: DateTime.now().toUtc(),
+        clockInMethod: 'QrOnly',
+      );
+      final read = await repo.read();
+      expect(read!.clockInMethod, 'QrOnly');
+    });
+
+    test('read defaults clockInMethod to Both for a legacy row with no value', () async {
+      // Simulates a row written before this column existed: insert directly via the generated
+      // companion, omitting clockInMethod so the nullable column stays null.
+      await db
+          .into(db.entitlements)
+          .insertOnConflictUpdate(
+            EntitlementsCompanion.insert(
+              id: 'current',
+              featuresJson: jsonEncode(['clienti']),
+              capabilitiesJson: jsonEncode(<String>[]),
+              seatType: 'field',
+              fetchedAt: DateTime.now().toUtc(),
+            ),
+          );
+
+      final read = await repo.read();
+      expect(read!.clockInMethod, 'Both');
+    });
+
+    test('refresh persists clockInMethod from the response body', () async {
+      stub(
+        ok({
+          'features': ['clienti', 'team', 'sistema', 'rapportini'],
+          'capabilities': <String>[],
+          'seatType': 'field',
+          'clockInMethod': 'ButtonOnly',
+        }),
+      );
+
+      expect(await service.refresh(), isTrue);
+
+      final cached = await repo.read();
+      expect(cached!.clockInMethod, 'ButtonOnly');
     });
   });
 

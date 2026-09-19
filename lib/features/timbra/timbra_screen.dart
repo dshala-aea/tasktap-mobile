@@ -9,10 +9,12 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
+import '../../core/widgets/app_button.dart';
 import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_toast.dart';
 import '../../core/widgets/row_icon_tile.dart';
 import '../../core/widgets/screen_header.dart';
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
@@ -109,6 +111,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
     final sessionsAsync = ref.watch(todaySessionsProvider);
     final punchState = ref.watch(punchNotifierProvider);
     final total = ref.watch(totalWorkedTodayProvider);
+    final clockInMethod = ref.watch(effectiveClockInMethodProvider);
 
     _updatePulse(shiftState.isOnShift);
 
@@ -133,13 +136,18 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
             ScreenHeader(
               title: 'Timbra',
               subtitle: _formatDateLabel(),
-              actions: [
-                HeaderIconBtn(
-                  icon: Icons.qr_code_scanner,
-                  label: 'Timbra con QR',
-                  onTap: () => context.push(AppRoutes.timbraQr),
-                ),
-              ],
+              // ButtonOnly: no server endpoint would accept a kiosk-QR punch anyway (backend
+              // Task 4's EnsureClockInMethodAllowedAsync), so the entry point is hidden rather
+              // than shown-but-doomed.
+              actions: clockInMethod == 'ButtonOnly'
+                  ? const []
+                  : [
+                      HeaderIconBtn(
+                        icon: Icons.qr_code_scanner,
+                        label: 'Timbra con QR',
+                        onTap: () => context.push(AppRoutes.timbraQr),
+                      ),
+                    ],
             ),
             Expanded(
               child: Padding(
@@ -181,24 +189,28 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
                               )
                             : const SizedBox.shrink(),
                       ),
-                      _PunchButton(
-                        shiftState: shiftState,
-                        isLoading: punchState is AsyncLoading,
-                        guard: punchGuard,
-                        onTap: () {
-                          ref.read(punchNotifierProvider.notifier).punch(shiftState);
-                        },
-                      ),
-                      if (shiftState.isOnShift) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        _PauseButton(
+                      if (clockInMethod == 'QrOnly') ...[
+                        const _QrRequiredNotice(),
+                      ] else ...[
+                        _PunchButton(
                           shiftState: shiftState,
                           isLoading: punchState is AsyncLoading,
-                          guard: ref.watch(pauseGuardProvider),
+                          guard: punchGuard,
                           onTap: () {
-                            ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                            ref.read(punchNotifierProvider.notifier).punch(shiftState);
                           },
                         ),
+                        if (shiftState.isOnShift) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          _PauseButton(
+                            shiftState: shiftState,
+                            isLoading: punchState is AsyncLoading,
+                            guard: ref.watch(pauseGuardProvider),
+                            onTap: () {
+                              ref.read(punchNotifierProvider.notifier).togglePause(shiftState);
+                            },
+                          ),
+                        ],
                       ],
                       const SizedBox(height: AppSpacing.xl),
                     ];
@@ -469,6 +481,36 @@ class _GuardBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// _QrRequiredNotice
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// Shown instead of the punch/pause controls when the effective clock-in method is QrOnly — the
+/// server would reject a button punch anyway (WorkLogService.EnsureClockInMethodAllowedAsync), so
+/// this avoids a round trip to a state the client already knows about.
+class _QrRequiredNotice extends StatelessWidget {
+  const _QrRequiredNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          'La tua azienda richiede la timbratura con QR.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.inkMuted),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AppButton(
+          label: 'Scansiona QR',
+          icon: const Icon(Icons.qr_code_scanner, size: 18),
+          onPressed: () => context.push(AppRoutes.timbraQr),
+        ),
+      ],
     );
   }
 }
