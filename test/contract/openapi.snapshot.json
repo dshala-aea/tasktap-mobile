@@ -17773,6 +17773,14 @@
         },
         "description": "Ready-to-render payload for the customer overview screen (\u0060GET /api/app/clienti/{id}/overview\u0060).\nApplication-tier contract (\u0060docs/patterns/application-api.md\u0060): Italian property names,\nno \u0060[JsonPropertyName]\u0060 (the existing camelCase policy already produces \u0060ragioneSociale\u0060,\n\u0060codiceFiscale\u0060, etc. from these PascalCase names), owned by the web app, no external\ncompatibility promise. Replaces the previous Italian-shaped hand-mocked customer detail with\na composed header plus computed counts; the three detail tabs stay canonical endpoints."
       },
+      "ClockInMethod": {
+        "enum": [
+          "Both",
+          "QrOnly",
+          "ButtonOnly",
+          null
+        ]
+      },
       "Commessa": {
         "type": "object",
         "properties": {
@@ -28164,6 +28172,13 @@
               "boolean"
             ],
             "description": "Tenant-wide default for the Analytics weekly digest email. Individual admins can still\nopt themselves out via PUT /api/users/me/preferences even when this is true."
+          },
+          "clockInMethod": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Tenant-wide clock-in method default: \u0022Both\u0022 (default)/\u0022QrOnly\u0022/\u0022ButtonOnly\u0022, case-insensitive.\nNull/absent leaves the current value unchanged. An unrecognized value is a 400."
           }
         },
         "description": "Request model for updating a tenant."
@@ -28428,6 +28443,13 @@
             ],
             "description": "Weekly working hours.",
             "format": "double"
+          },
+          "clockInMethodOverride": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Per-user override of the tenant\u0027s ClockInMethod default: \u0022Both\u0022/\u0022QrOnly\u0022/\u0022ButtonOnly\u0022, or the\nliteral \u0022Inherit\u0022 to explicitly clear the override back to null (inherit the tenant default).\nCase-insensitive. Null/absent leaves the current value unchanged \u2014 this is the one place in\nthis DTO where an explicit sentinel (\u0022Inherit\u0022) is needed alongside \u0022absent\u0022, because the\nfield itself is nullable and null-as-JSON is indistinguishable from absent under this\ncontroller\u0027s existing \u0060if (request.X != null)\u0060 convention."
           },
           "calendarColor": {
             "type": [
@@ -28817,6 +28839,17 @@
           "analyticsDigestOptOut": {
             "type": "boolean",
             "description": "When true, this user does not receive the Analytics weekly digest email even when\ntheir tenant has bool Tenant.AnalyticsDigestEnabled on. Self-service via\nPUT /api/users/me/preferences. Has no effect on the in-app/push alerts\nAnalyticsNotificationHandler sends \u2014 those are per-event, not this digest."
+          },
+          "clockInMethodOverride": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Per-user override of the tenant\u0027s ClockInMethod Tenant.ClockInMethod default. Null (default)\nmeans \u0022inherit the tenant default\u0022 \u2014 set only when this one person needs to be narrowed (or\nwidened relative to a narrowed tenant is NOT possible; a user can only be equal to or more\nrestrictive than nothing, this simply names which single value applies to them instead of the\ntenant\u0027s). See ClockInMethodPolicy.Resolve for the exact precedence.",
+                "$ref": "#/components/schemas/ClockInMethod"
+              }
+            ]
           },
           "weeklyHours": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
