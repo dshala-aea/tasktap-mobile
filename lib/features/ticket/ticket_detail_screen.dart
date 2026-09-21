@@ -1398,11 +1398,25 @@ class _AssignSheetState extends State<_AssignSheet> {
         setState(() {
           _technicians = techs;
           _isLoading = false;
+          // The currently-assigned technician may no longer be in this list (deactivated, or
+          // otherwise out of scope — see fetchTechnicians' own [activeOnly] doc comment) even
+          // though the ticket still points at them. DropdownButtonFormField asserts there is
+          // exactly zero or one item matching its value, so a stale id left in place here would
+          // crash the sheet the moment it renders; falling back to unassigned keeps it valid.
+          if (_selectedUserId != null &&
+              !_technicians.any((t) => (t['id'] as String?) == _selectedUserId)) {
+            _selectedUserId = null;
+          }
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          // No technician list at all on a failed fetch — the same "value not in items" guard
+          // as the success path above applies, just with an empty list.
+          _selectedUserId = null;
+        });
         showAppToast(
           context,
           message: 'Impossibile caricare i tecnici. Riprova.',

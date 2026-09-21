@@ -1435,4 +1435,85 @@ void main() {
       await resetAndDispose(tester);
     });
   });
+
+  // Regression: the "Assegna" sheet seeded its dropdown's value from ticket.assignedUserId
+  // regardless of whether that id was actually among the fetched technicians. When it wasn't (a
+  // deactivated user, or any other reason fetchTechnicians' isActive filter excludes them —
+  // still the ticket's assignee), DropdownButtonFormField's "exactly zero or one item with this
+  // value" assertion threw and took the whole sheet down with it.
+  group('TicketDetailScreen — Assegna sheet', () {
+    testWidgets(
+      'does not crash when the assigned user is missing from the fetched technician list',
+      (tester) async {
+        await seedBase(db); // assigns 'user-1'
+        final dio = MockDio();
+        when(
+          () => dio.get<Map<String, dynamic>>(
+            '/api/users',
+            queryParameters: any(named: 'queryParameters'),
+          ),
+        ).thenAnswer(
+          (_) async => _okResponse({
+            'items': [
+              {'id': 'user-2', 'displayName': 'Luca Bianchi'},
+            ],
+          }, '/api/users'),
+        );
+
+        await pump(tester, dio: dio, isOnline: true);
+        await tester.tap(find.bySemanticsLabel('Assegna'));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), null);
+        expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+        // Fell back to unassigned rather than keeping the stale, now-absent id — the closed
+        // dropdown's own visible label is the selected item's child.
+        expect(find.text('Non assegnato'), findsOneWidget);
+        await resetAndDispose(tester);
+      },
+    );
+
+    testWidgets('does not crash when the technician fetch fails outright', (tester) async {
+      await seedBase(db); // assigns 'user-1'
+      final dio = MockDio(); // no stub for /api/users — throws MissingStubError
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.tap(find.bySemanticsLabel('Assegna'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), null);
+      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('keeps the assigned user selected when they are in the fetched list', (
+      tester,
+    ) async {
+      await seedBase(db); // assigns 'user-1'
+      final dio = MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>(
+          '/api/users',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {'id': 'user-1', 'displayName': 'Mario Rossi'},
+          ],
+        }, '/api/users'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.tap(find.bySemanticsLabel('Assegna'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), null);
+      final dropdown = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>),
+      );
+      expect(dropdown.initialValue, 'user-1');
+      await resetAndDispose(tester);
+    });
+  });
 }

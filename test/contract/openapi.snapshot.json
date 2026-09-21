@@ -735,6 +735,137 @@
         }
       }
     },
+    "/api/ai/conversations": {
+      "post": {
+        "tags": [
+          "AiConversations"
+        ],
+        "summary": "Starts a new conversation, optionally bound to a Ticket or a Cantiere (never\n    both). The row-scope permission check below runs BEFORE the session is created \u2014 the same\n    permission the orchestrator\u0027s own \u0060get_current_ticket\u0060/\u0060get_current_cantiere\u0060\n    tools would themselves require this session to use, checked up front so a caller who could\n    never use this session for anything never gets one.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAiConversationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAiConversationRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAiConversationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{id}/turns": {
+      "post": {
+        "tags": [
+          "AiConversations"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConversationTurnRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConversationTurnRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConversationTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{id}/confirm": {
+      "post": {
+        "tags": [
+          "AiConversations"
+        ],
+        "summary": "Folds the conversation\u0027s current draft into a real Report (Bozza) \u2014 the\nterminal, once-only action of a copilot session. Supports the same \u0060Idempotency-Key\u0060\nconvention \u0060ReportsController.Submit\u0060 already uses, via the shared\nIdempotencyStore, with one addition specific to this endpoint (Task 19\ncheckpoint 1): the draft\u0027s own optimistic-concurrency \u0060Version\u0060 is folded into the\nclaimed key (\u0060\u0022{idempotencyKey}:{state.Version}\u0022\u0060) so a replay only ever matches the\nexact draft the client confirmed against. A client that generated an Idempotency-Key,\nthen took another turn (bumping \u0060Version\u0060) before retrying the same confirm, must not\nsilently confirm the NEW draft under the OLD key\u0027s identity \u2014 that is detected as a 409\nbelow, before any replay or create.\n\nPhase 1 confirms the draft\u0027s narrative text only \u2014 resolved workers, materials, and hours\n(from search_workers/get_worker_hours/get_today_work_logs/search_materials) inform fact\nresolution but are not yet written as Report line items; a technician who needs them today\nadds them manually after this creates the Bozza (I-8: documented Phase-1 scope decision, not\na deviation \u2014 \u0060CreateReportRequest\u0060 never carried \u0060draft.Workers\u0060/\u0060draft.Materials\u0060/\nper-activity \u0060Hours\u0060 and Task 19\u0027s own brief never asked it to).\n\nOnce-only (I-7): on a genuine (non-replayed) success, the session is deleted\n(Task IAiConversationStore.DeleteAsync(Guid sessionId, CancellationToken ct)) so it can never be confirmed, turned, or\nabandoned again \u2014 without an \u0060Idempotency-Key\u0060, nothing previously stopped a repeated\n\u0060POST .../confirm\u0060 from creating a second, unrelated Report from the same\nconversation.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{id}": {
+      "delete": {
+        "tags": [
+          "AiConversations"
+        ],
+        "summary": "Abandons a session immediately (Task IAiConversationStore.DeleteAsync(Guid sessionId, CancellationToken ct))\n    rather than leaving it to the 60-minute TTL \u2014 the UI needs \u0022discard this draft\u0022 to actually\n    free the sessionId right away (e.g. so a stale confirm can never land after the operator\n    has explicitly walked away), not just stop being reachable an hour later.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/audit-log": {
       "get": {
         "tags": [
@@ -3876,6 +4007,156 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Customers/{id}/contacts": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Lists a customer\u0027s report-recipient contacts \u2014 who a report PDF is emailed to by default\n(\u0060ReportsController.SendEmail\u0060) when the caller doesn\u0027t override the recipient list.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Adds a report-recipient contact to a customer.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertCustomerContactRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertCustomerContactRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertCustomerContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/Customers/{id}/contacts/{contactId}": {
+      "put": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Updates a customer\u0027s report-recipient contact.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertCustomerContactRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertCustomerContactRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertCustomerContactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Removes a customer\u0027s report-recipient contact.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -7653,17 +7934,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedResultOfProdottoAssistenza"
+                  "$ref": "#/components/schemas/PaginatedResultOfProdottoAssistenzaDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedResultOfProdottoAssistenza"
+                  "$ref": "#/components/schemas/PaginatedResultOfProdottoAssistenzaDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedResultOfProdottoAssistenza"
+                  "$ref": "#/components/schemas/PaginatedResultOfProdottoAssistenzaDto"
                 }
               }
             }
@@ -7723,17 +8004,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProdottoAssistenza"
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProdottoAssistenza"
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProdottoAssistenza"
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                 }
               }
             }
@@ -7867,7 +8148,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                    "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                   }
                 }
               },
@@ -7875,7 +8156,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                    "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                   }
                 }
               },
@@ -7883,7 +8164,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                    "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                   }
                 }
               }
@@ -7917,7 +8198,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                    "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                   }
                 }
               },
@@ -7925,7 +8206,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                    "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                   }
                 }
               },
@@ -7933,7 +8214,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/ProdottoAssistenza"
+                    "$ref": "#/components/schemas/ProdottoAssistenzaDto"
                   }
                 }
               }
@@ -16477,6 +16758,12 @@
           "succeeded": {
             "type": "boolean"
           },
+          "pricingVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -16491,6 +16778,15 @@
           }
         },
         "description": "Full-detail per-call record of an AI draft-generation call \u2014 the durable, queryable audit and\nbilling record behind the fast Redis monthly counter (\u0060IAiQuotaStore\u0060). Every call is\nlogged here regardless of whether it was within the included allowance or overage, so the\nnightly overage-reporting sweep (Task 7) can sum a tenant\u0027s calls for the current period."
+      },
+      "AiConversationTurnRequest": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "description": "Body for \u0060POST /api/ai/conversations/{id}/turns\u0060 \u2014 one operator utterance."
       },
       "AiGenerateReportRequest": {
         "type": "object",
@@ -22511,13 +22807,13 @@
         },
         "description": "Paginated result wrapper."
       },
-      "PaginatedResultOfProdottoAssistenza": {
+      "PaginatedResultOfProdottoAssistenzaDto": {
         "type": "object",
         "properties": {
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProdottoAssistenza"
+              "$ref": "#/components/schemas/ProdottoAssistenzaDto"
             },
             "description": "Items for current page."
           },
@@ -22917,9 +23213,28 @@
           }
         }
       },
-      "ProdottoAssistenza": {
+      "ProdottoAssistenzaDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
           "name": {
             "type": "string"
           },
@@ -22938,6 +23253,12 @@
           "customerId": {
             "type": "string",
             "format": "uuid"
+          },
+          "customerName": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "locationId": {
             "type": "string",
@@ -22963,8 +23284,7 @@
             "type": [
               "null",
               "string"
-            ],
-            "description": "Brand. Wire name is \u0022marchio\u0022 (Layer-1 wins over the Italian layer\u0027s \u0022marca\u0022)."
+            ]
           },
           "modello": {
             "type": [
@@ -22983,7 +23303,6 @@
               "null",
               "string"
             ],
-            "description": "Installation date. Appears in NEITHER frontend layer (plan Appendix A.5 \u26A0) \u2014 sourced from\nthe competitor audit, kept because assets need an install date, but expect no UI binding.",
             "format": "date-time"
           },
           "ultimaManutenzione": {
@@ -23004,29 +23323,25 @@
             "type": [
               "null",
               "string"
-            ],
-            "description": "Legacy gestionale id (legacy \u0060idGestionale\u0060), for cross-referencing assets imported\nfrom the legacy ERP. Nullable and deliberately NOT unique \u2014 the legacy system used\n\u00600\u0060 as a \u0022no link\u0022 sentinel, so many assets legitimately carry no external id.\nFollows string? Commessa.ExternalId exactly. Any import boundary must map a legacy\n\u00600\u0060/\u0060\u00220\u0022\u0060/\u0060\u0022\u0022\u0060 to \u0060null\u0060 via\nLegacyExternalIdMapper before assigning this\nproperty."
+            ]
           },
           "codice": {
             "type": [
               "null",
               "string"
-            ],
-            "description": "Internal code / SKU for this asset. Wire name \u0022codice\u0022. Not unique \u2014 unlike\n            Materiale\u0027s Code, an asset code is informational, not a catalog key."
+            ]
           },
           "categoria": {
             "type": [
               "null",
               "string"
-            ],
-            "description": "Logical grouping / equipment family (free text). Wire name \u0022categoria\u0022."
+            ]
           },
           "um": {
             "type": [
               "null",
               "string"
-            ],
-            "description": "Unit of measure (e.g. pz, kg, mt). Wire name \u0022um\u0022."
+            ]
           },
           "prezzoAcquisto": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
@@ -23035,7 +23350,6 @@
               "number",
               "string"
             ],
-            "description": "Purchase/cost price in EUR. Wire name \u0022prezzoAcquisto\u0022.",
             "format": "double"
           },
           "prezzoVendita": {
@@ -23045,7 +23359,6 @@
               "number",
               "string"
             ],
-            "description": "Customer-facing sale price in EUR. Wire name \u0022prezzoVendita\u0022.",
             "format": "double"
           },
           "extensionValues": {
@@ -23053,31 +23366,9 @@
               "null",
               "string"
             ]
-          },
-          "tenantId": {
-            "type": "string",
-            "description": "Tenant identifier for schema-per-tenant isolation.",
-            "format": "uuid"
-          },
-          "id": {
-            "type": "string",
-            "description": "Unique identifier for the entity.",
-            "format": "uuid"
-          },
-          "createdAt": {
-            "type": "string",
-            "description": "Date and time when the entity was created.",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Date and time when the entity was last updated.",
-            "format": "date-time"
           }
-        }
+        },
+        "description": "Response shape for GetAll/GetById/GetChildren/GetLibretti \u2014 the entity\u0027s fields plus a\nresolved string? ProdottoAssistenzaDto.CustomerName (batch-joined server-side, see\nTask\u0026lt;Dictionary\u0026lt;Guid, string\u0026gt;\u0026gt; ProdottoAssistenzaController.ResolveCustomerNamesAsync(IEnumerable\u0026lt;Guid\u0026gt; customerIds, CancellationToken ct)) so the UI can show which\ncustomer a prodotto/libretto belongs to without an extra per-row lookup."
       },
       "ProdottoAssistenzaLookupsDto": {
         "type": "object",
@@ -24291,6 +24582,12 @@
               "string"
             ]
           },
+          "descrizione": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "customerName": {
             "type": [
               "null",
@@ -24732,7 +25029,17 @@
               "null",
               "string"
             ],
-            "description": "Recipient email address."
+            "description": "Single recipient email address. Kept for back-compat with existing callers \u2014 new callers\nshould use List\u0026lt;string\u0026gt;? SendReportEmailRequest.Recipients. If both are omitted, the report\u0027s customer\u0027s own\ncontact list (CustomerContact) is used instead."
+          },
+          "recipients": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Recipient email addresses. Takes priority over string? SendReportEmailRequest.Email when non-empty."
           },
           "message": {
             "type": [
@@ -24972,6 +25279,26 @@
           }
         },
         "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \u0022Ore lavorate\u0022 total, as exposed over the wire."
+      },
+      "StartAiConversationRequest": {
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "Body for \u0060POST /api/ai/conversations\u0060 \u2014 starts a new copilot session bound to at\n            most one of a Ticket or a Cantiere (spec Component 9). Neither is required: a context-free\n            conversation is allowed to start, though \u0060confirm\u0060 currently rejects it (Task 19\u0027s\n            deliberate Phase-1 scope decision \u2014 see \u003Csee cref=\u0022!:TaskTapAPI.Api.Controllers.AiConversationsController.Confirm\u0022 /\u003E)."
       },
       "StartCantiereWorkLogRequest": {
         "type": "object",
@@ -28138,6 +28465,20 @@
             ],
             "description": "Codice Destinatario SDI. Empty string clears it."
           },
+          "regimeFiscale": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Regime Fiscale \u2014 one of the FatturaPA RF01-RF20 codes. Empty string clears it."
+          },
+          "provincia": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Two-letter Italian province code (e.g. \u0022MI\u0022). Empty string clears it."
+          },
           "industryCode": {
             "type": [
               "null",
@@ -28510,6 +28851,39 @@
           }
         }
       },
+      "UpsertCustomerContactRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phone": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Request body for creating or updating a customer\u0027s report-recipient contact\n(CustomerContact). Mirrors\n\u0060CantieriController.UpsertCantiereContactRequest\u0060\u0027s shape exactly."
+      },
       "UpsertExtensionFieldDefinitionRequest": {
         "type": "object",
         "properties": {
@@ -28784,9 +29158,15 @@
           },
           "enableSsl": {
             "type": "boolean"
+          },
+          "copyToAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
-        "description": "Request body for creating/updating the tenant\u0027s SMTP config. string? UpsertTenantSmtpConfigRequest.Password is\n    optional: omitted/null keeps the existing encrypted password unchanged on an update."
+        "description": "Request body for creating/updating the tenant\u0027s SMTP config. string? UpsertTenantSmtpConfigRequest.Password is\n    optional: omitted/null keeps the existing encrypted password unchanged on an update.\n    string? UpsertTenantSmtpConfigRequest.CopyToAddress is optional: null/blank means no standing BCC copy is sent."
       },
       "User": {
         "type": "object",
@@ -29317,6 +29697,9 @@
     },
     {
       "name": "Ai"
+    },
+    {
+      "name": "AiConversations"
     },
     {
       "name": "AuditLog"
