@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
@@ -276,10 +277,7 @@ void main() {
 
       // The punch control is not inside anything that scrolls, so it cannot leave the screen.
       expect(
-        find.ancestor(
-          of: find.text('INIZIA TURNO'),
-          matching: find.byType(SingleChildScrollView),
-        ),
+        find.ancestor(of: find.text('INIZIA TURNO'), matching: find.byType(SingleChildScrollView)),
         findsNothing,
       );
       await _teardownTimer(tester);
@@ -395,9 +393,8 @@ void main() {
           db,
           extraOverrides: [
             giornataProvider.overrideWith(
-              (ref) async => giornataWith(
-                const GiornataActionDto(action: 'ClockIn', enabled: true),
-              ),
+              (ref) async =>
+                  giornataWith(const GiornataActionDto(action: 'ClockIn', enabled: true)),
             ),
           ],
         ),
@@ -406,6 +403,73 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(find.byIcon(LucideIcons.alertTriangle), findsNothing);
+      await _teardownTimer(tester);
+    });
+  });
+
+  // ── Clock-in method gating (Task 13) ──────────────────────────────────────
+  //
+  // effectiveClockInMethodProvider (Task 12) reflects the tenant/user's configured clock-in
+  // method. This is a UI-only gate for UX purposes — the backend already enforces the real
+  // authorization on both the button and kiosk-QR clock-in endpoints.
+
+  group('clock-in method gating', () {
+    testWidgets('shows a QR-required message instead of the punch button when method is qrOnly', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildApp(db, extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('QrOnly')]),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsNothing);
+      expect(find.text('FINE TURNO'), findsNothing);
+      expect(find.text('La tua azienda richiede la timbratura con QR.'), findsOneWidget);
+      expect(find.text('Scansiona QR'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('hides the header QR icon when method is buttonOnly', (tester) async {
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('ButtonOnly')],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.bySemanticsLabel('Timbra con QR'), findsNothing);
+      expect(find.byIcon(Icons.qr_code_scanner), findsNothing);
+      // The punch button remains available.
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows both the punch button and the QR header icon when method is both', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildApp(db, extraOverrides: [effectiveClockInMethodProvider.overrideWithValue('Both')]),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+      expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
+
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('shows both by default (no override) — existing behavior unchanged', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildApp(db));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('INIZIA TURNO'), findsOneWidget);
+      expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
+
       await _teardownTimer(tester);
     });
   });

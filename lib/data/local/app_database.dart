@@ -263,6 +263,11 @@ class Entitlements extends Table {
   /// treated as unknown, not as active, everywhere it is read.
   TextColumn get subscriptionStatus => text().nullable()();
 
+  /// "Both" (default) / "QrOnly" / "ButtonOnly" — the EFFECTIVE value the server already resolved
+  /// (tenant default + user override + Kiosk-entitlement downgrade), never recomputed on-device.
+  /// Nullable only for rows written before this column existed — read as "Both" everywhere.
+  TextColumn get clockInMethod => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -794,7 +799,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration {
@@ -981,6 +986,11 @@ class AppDatabase extends _$AppDatabase {
           // needed, same reasoning as schema 21/25/26's own client-authored columns.
           await m.addColumn(cantieri, cantieri.latitude);
           await m.addColumn(cantieri, cantieri.longitude);
+        }
+        if (from < 29) {
+          // Effective clock-in method (tenant default + per-user override), mirrored from /auth/me
+          // the same way every other entitlement field already is.
+          await m.addColumn(entitlements, entitlements.clockInMethod);
         }
       },
     );
