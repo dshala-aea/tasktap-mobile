@@ -23,6 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart' show UserWorkLogDto;
 import 'package:tasktap_mobile/features/rapportino/steps/step_ore.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_providers.dart';
@@ -50,6 +51,30 @@ TicketWorkLogDto _entry({
   isManualEntry: false,
   duration: duration,
 );
+
+String _hms(DateTime dt) =>
+    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:'
+    '${dt.second.toString().padLeft(2, '0')}';
+
+/// A plain [UserWorkLogDto] (StepOre's last-resort tier) at a given [start] moment, stripped to
+/// whole-second precision — the backend's "HH:mm:ss" wire format has no room for milli/micros, so
+/// round-tripping through it must not lose anything a test then compares against.
+UserWorkLogDto _plainEntry({
+  required String userId,
+  required DateTime start,
+  DateTime? end,
+  Duration? duration,
+}) {
+  final workDate = DateTime(start.year, start.month, start.day);
+  return UserWorkLogDto(
+    id: 'plain-${userId}_${start.millisecondsSinceEpoch}',
+    userId: userId,
+    workDate: workDate,
+    startTime: _hms(start),
+    endTime: end == null ? null : _hms(end),
+    duration: duration,
+  );
+}
 
 ProviderContainer _buildContainer({
   required AppDatabase db,
@@ -297,6 +322,114 @@ void main() {
 
       expect(find.textContaining('Da worklog:'), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  // Regression: when a ticket has no worklog of its own tied to it (and no cantiere tier either),
+  // StepOre used to fall back to the last *closed* plain WorkLog in the last 30 days — attributing
+  // some unrelated past day's hours to today's rapportino. The only honest fallback left is this
+  // technician's own still-open punch: its start really did happen, and "now" is an honest end
+  // while that clock is still running.
+  group('StepOre — plain-timbratura fallback (active punch, no ticket/cantiere worklog)', () {
+    ProviderContainer buildNoTicketContainer({
+      required List<StaffRow> staffRows,
+      required List<UserWorkLogDto> recentEntries,
+    }) {
+      return ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          reportEditorProvider(_reportId).overrideWith(
+            (ref) => ReportEditorNotifier(
+              initialState: ReportEditorState(
+                reportId: _reportId,
+                tenantId: 'tenant-1',
+                insertedUserId: 'user-1',
+                staffRows: staffRows,
+              ),
+              repo: DraftReportRepository(db),
+            ),
+          ),
+          recentWorkLogProvider.overrideWith((ref, userId) async => recentEntries),
+        ],
+      );
+    }
+
+    testWidgets(
+      'an open punch suggests its start time and now as the end; applying writes exactly that',
+      (tester) async {
+        final now = DateTime.now();
+        final start = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          now.hour,
+          now.minute,
+          now.second,
+        ).subtract(const Duration(hours: 2));
+        final container = buildNoTicketContainer(
+          staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
+          recentEntries: [_plainEntry(userId: 'user-1', start: start)],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pumpAndSettle();
+
+        final startLabel =
+            '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+        expect(find.textContaining('Da worklog:'), findsOneWidget);
+        expect(find.textContaining('$startLabel–'), findsOneWidget);
+
+        await tester.tap(find.textContaining('Da worklog:'));
+        await tester.pumpAndSettle();
+
+        final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
+        expect(row.startTime, start);
+        expect(row.endTime, isNotNull);
+        // "now" as of the tap, not the fixed 30-day-old closed-session time the old fallback used.
+        expect(row.endTime!.difference(DateTime.now()).inSeconds.abs(), lessThan(10));
+        expect(
+          row.hoursWorked,
+          closeTo(row.endTime!.difference(row.startTime!).inMinutes / 60.0, 0.001),
+        );
+      },
+    );
+
+    testWidgets(
+      'a closed session in the last 30 days is never suggested — no more "last closed worklog"',
+      (tester) async {
+        final workDate = DateTime.now().subtract(const Duration(days: 5));
+        final container = buildNoTicketContainer(
+          staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
+          recentEntries: [
+            _plainEntry(
+              userId: 'user-1',
+              start: workDate,
+              end: workDate.add(const Duration(hours: 3)),
+              duration: const Duration(hours: 3),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(_buildStep(container));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Da worklog:'), findsNothing);
+      },
+    );
+
+    testWidgets('no chip when the open punch belongs to a different user', (tester) async {
+      final container = buildNoTicketContainer(
+        staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
+        recentEntries: [_plainEntry(userId: 'user-2', start: DateTime.now())],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Da worklog:'), findsNothing);
     });
   });
 }

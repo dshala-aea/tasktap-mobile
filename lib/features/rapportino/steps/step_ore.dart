@@ -370,25 +370,30 @@ WorklogHoursSuggestion? _cantiereWorklogSuggestionFor(
 }
 
 /// Plain-timbratura tier — the last resort, offered only when neither the ticket nor the
-/// cantiere tier suggested anything for this row. Unlike the two tiers above, this never sums:
-/// a plain WorkLog carries no ticket/cantiere in common to justify combining several unrelated
-/// days into one figure, so only the single most recent completed entry is ever suggested.
+/// cantiere tier suggested anything for this row.
+///
+/// This used to pick the single most-recently-started *completed* WorkLog from the last 30
+/// days — but a closed session from days ago says nothing about today's job, and suggesting it
+/// silently attributed old hours to whatever ticket happened to be open. The only thing worth
+/// suggesting here is this technician's own still-open punch: its start time is real (they
+/// clocked in and haven't clocked out), and "now" is an honest end for a rapportino being
+/// compiled while that clock is still running. No sum, unlike the two tiers above: an open
+/// timbratura is at most one entry, never several to combine.
 WorklogHoursSuggestion? _recentWorkLogSuggestionFor(List<UserWorkLogDto> entries, StaffRow row) {
-  final completed = entries
-      .where((e) => e.userId == row.userId && e.endTime != null && e.duration != null)
-      .toList();
-  if (completed.isEmpty) return null;
+  final active = entries.where((e) => e.userId == row.userId && e.endTime == null).toList();
+  if (active.isEmpty) return null;
 
-  completed.sort(
+  active.sort(
     (a, b) => _combineWorkDateAndHms(
       b.workDate,
       b.startTime,
     ).compareTo(_combineWorkDateAndHms(a.workDate, a.startTime)),
   );
-  final e = completed.first;
+  final e = active.first;
   final start = _combineWorkDateAndHms(e.workDate, e.startTime);
-  final end = start.add(e.duration!);
-  return WorklogHoursSuggestion(hours: e.duration!.inMinutes / 60.0, startTime: start, endTime: end);
+  final end = DateTime.now();
+  final hours = end.difference(start).inMinutes / 60.0;
+  return WorklogHoursSuggestion(hours: hours, startTime: start, endTime: end);
 }
 
 /// The plain-timbratura fallback provider (StepOre's third tier) — same online-only posture as
