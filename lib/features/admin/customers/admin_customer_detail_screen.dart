@@ -10,6 +10,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/clienti/cliente_overview_api_client.dart';
+import '../../../data/clienti/customer_contact_api_client.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../clienti/clienti_providers.dart';
 import '../admin_api_client.dart';
@@ -176,6 +177,8 @@ class _CustomerDetailBody extends ConsumerWidget {
             ),
             // ── Sedi (Gap 3) ─────────────────────────────────────────────────
             SliverToBoxAdapter(child: _SediSection(customerId: customerId)),
+            // ── Referenti (labeled CustomerContact list) ────────────────────
+            SliverToBoxAdapter(child: _ContactsSection(customerId: customerId)),
             // ── Contratti (Gap 7, read-only + create) ───────────────────────
             SliverToBoxAdapter(child: _ContrattiSection(customerId: customerId)),
             // ── Prodotti assistenza (Gap 8, read-only + create) ─────────────
@@ -634,6 +637,301 @@ class _TicketHistoryCard extends ConsumerWidget {
                   onTap: () => context.push('/ticket/${tickets[i].id}'),
                 ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Referenti (CustomerContact — a customer can now have several labeled contacts) — distinct from
+// the single flat `contactPerson` string on the customer record itself
+// (admin_customer_form_screen.dart's own `_contactPersonCtrl`, deliberately left untouched: this
+// is a new, separate concept added alongside it, not a replacement). No Drift mirror, live-fetched
+// via `customerContactsProvider` / `CustomerContactApiClient`. Add/edit/delete all happen inline
+// through a bottom sheet, mirroring the cantiere's own contacts section
+// (`_ContactsSection`/`_ContactFormSheet` in admin_cantiere_detail_screen.dart) — the closest
+// existing pattern in this app for a labeled sub-entity list with the same
+// name/role/phone/email/notes shape.
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _ContactsSection extends ConsumerWidget {
+  const _ContactsSection({required this.customerId});
+
+  final String customerId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final contactsAsync = ref.watch(customerContactsProvider(customerId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionTitle(
+          title: 'Referenti',
+          action: IconButton(
+            icon: const Icon(LucideIcons.plus),
+            tooltip: 'Aggiungi referente',
+            onPressed: () => _openContactSheet(context, ref, customerId: customerId, contact: null),
+          ),
+        ),
+        contactsAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (e, _) =>
+              AppSectionError(onRetry: () => ref.invalidate(customerContactsProvider(customerId))),
+          data: (contacts) {
+            if (contacts.isEmpty) {
+              return const EmptyState(
+                icon: LucideIcons.users,
+                title: 'Nessun referente',
+                body: 'Aggiungi un referente per questo cliente con il pulsante +.',
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              child: Column(
+                children: contacts.asMap().entries.map((entry) {
+                  final c = entry.value;
+                  final subtitleParts = [
+                    if (c.role != null && c.role!.isNotEmpty) c.role!,
+                    if (c.phone != null && c.phone!.isNotEmpty) c.phone!,
+                  ];
+                  return ListRow(
+                    leading: const RowIconTile(icon: LucideIcons.user),
+                    title: c.name.isNotEmpty ? c.name : 'Referente',
+                    subtitle: subtitleParts.isNotEmpty ? subtitleParts.join(' · ') : null,
+                    meta: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(LucideIcons.pencil, size: 18),
+                          tooltip: 'Modifica referente',
+                          onPressed: () =>
+                              _openContactSheet(context, ref, customerId: customerId, contact: c),
+                        ),
+                        IconButton(
+                          icon: const Icon(LucideIcons.trash2, size: 18),
+                          tooltip: 'Elimina referente',
+                          onPressed: () => _deleteContact(
+                            context,
+                            ref,
+                            customerId: customerId,
+                            contactId: c.id,
+                            name: c.name,
+                          ),
+                        ),
+                      ],
+                    ),
+                    showDivider: entry.key < contacts.length - 1,
+                  );
+                }).toList(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _deleteContact(
+    BuildContext context,
+    WidgetRef ref, {
+    required String customerId,
+    required String contactId,
+    required String name,
+  }) async {
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Eliminare il referente?',
+      message: 'Vuoi eliminare "$name" dai referenti di questo cliente?',
+    );
+    if (!confirmed || !context.mounted) return;
+
+    try {
+      await ref.read(customerContactApiClientProvider).delete(customerId, contactId);
+      ref.invalidate(customerContactsProvider(customerId));
+      if (context.mounted) {
+        showAppToast(context, message: 'Referente eliminato', tone: ToastTone.success);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showAppToast(context, message: 'Impossibile eliminare. Riprova.', tone: ToastTone.error);
+      }
+    }
+  }
+
+  void _openContactSheet(
+    BuildContext context,
+    WidgetRef ref, {
+    required String customerId,
+    required CustomerContact? contact,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _ContactFormSheet(
+        customerId: customerId,
+        contact: contact,
+        api: ref.read(customerContactApiClientProvider),
+        onSaved: () => ref.invalidate(customerContactsProvider(customerId)),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet to add or edit a customer contact — mirrors `UpsertCustomerContactRequest` (name
+/// required, role/phone/email/notes optional), same shape and treatment as the cantiere's own
+/// `_ContactFormSheet` in admin_cantiere_detail_screen.dart.
+class _ContactFormSheet extends StatefulWidget {
+  const _ContactFormSheet({
+    required this.customerId,
+    required this.contact,
+    required this.api,
+    required this.onSaved,
+  });
+
+  final String customerId;
+
+  /// Null when adding; the existing contact when editing.
+  final CustomerContact? contact;
+  final CustomerContactApiClient api;
+  final VoidCallback onSaved;
+
+  @override
+  State<_ContactFormSheet> createState() => _ContactFormSheetState();
+}
+
+class _ContactFormSheetState extends State<_ContactFormSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nameCtrl = TextEditingController(text: widget.contact?.name);
+  late final _roleCtrl = TextEditingController(text: widget.contact?.role);
+  late final _phoneCtrl = TextEditingController(text: widget.contact?.phone);
+  late final _emailCtrl = TextEditingController(text: widget.contact?.email);
+  late final _notesCtrl = TextEditingController(text: widget.contact?.notes);
+  bool _isSaving = false;
+
+  bool get _isEditing => widget.contact != null;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _roleCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate() || _isSaving) return;
+    setState(() => _isSaving = true);
+    try {
+      final name = _nameCtrl.text.trim();
+      if (_isEditing) {
+        await widget.api.update(
+          widget.customerId,
+          widget.contact!.id,
+          name: name,
+          role: _roleCtrl.text.trim().isEmpty ? null : _roleCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        );
+      } else {
+        await widget.api.create(
+          widget.customerId,
+          name: name,
+          role: _roleCtrl.text.trim().isEmpty ? null : _roleCtrl.text.trim(),
+          phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          email: _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+          notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        );
+      }
+      widget.onSaved();
+      if (mounted) {
+        showAppToast(
+          context,
+          message: _isEditing ? 'Referente aggiornato' : 'Referente aggiunto',
+          tone: ToastTone.success,
+        );
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        showAppToast(context, message: 'Impossibile salvare. Riprova.', tone: ToastTone.error);
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        AppSpacing.pagePadding,
+        // + viewPadding.bottom: the keyboard-inset term alone leaves the button flush against
+        // the home indicator/gesture bar once the keyboard is closed — see the cantiere sheet's
+        // own identical comment.
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            AppSpacing.pagePadding,
+      ),
+      child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: AppSpacing.md),
+                child: SheetHandle(),
+              ),
+              Text(
+                _isEditing ? 'Modifica referente' : 'Aggiungi referente',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+              AppTextField(
+                label: 'Nome *',
+                controller: _nameCtrl,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo obbligatorio' : null,
+              ),
+              const SizedBox(height: 16),
+              AppTextField(label: 'Ruolo', controller: _roleCtrl),
+              const SizedBox(height: 16),
+              AppTextField(
+                label: 'Telefono',
+                controller: _phoneCtrl,
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 16),
+              AppTextField(
+                label: 'Email',
+                controller: _emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              AppTextField(label: 'Note', controller: _notesCtrl, maxLines: 3),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: AppButton(
+                  label: _isSaving ? 'Salvataggio…' : 'Salva',
+                  onPressed: _isSaving ? null : _save,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

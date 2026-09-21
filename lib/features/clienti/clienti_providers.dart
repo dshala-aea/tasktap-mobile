@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/clienti/cliente_overview_api_client.dart';
+import '../../data/clienti/customer_contact_api_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
@@ -77,4 +78,13 @@ final clienteOverviewProvider = FutureProvider.autoDispose
       return ref
           .watch(clienteOverviewApiClientProvider)
           .getOverview(customerId);
+    });
+
+/// A customer's labeled contacts (`CustomerContact`) — no Drift mirror, live-fetched like
+/// [ticketsForCustomerProvider]'s cantiere-detail counterparts (contacts/assignments there also
+/// have no local mirror). Errors (including offline) surface through the AsyncValue and are
+/// handled by the section's own `AppSectionError` + retry, same treatment as those.
+final customerContactsProvider = FutureProvider.autoDispose
+    .family<List<CustomerContact>, String>((ref, customerId) async {
+      return ref.watch(customerContactApiClientProvider).list(customerId);
     });
