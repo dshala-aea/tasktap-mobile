@@ -9031,6 +9031,33 @@
         }
       }
     },
+    "/api/Reports/tecnici": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Resolves technician display names for a batch of report ids in one query \u2014 backs the\nrapportini list\u0027s \u0022Tecnico\u0022 column, which \u0060GET /Reports\u0060 cannot answer on its own\n(technician assignment lives in child \u0060ReportStaff\u0060 rows, not on \u0060Report\u0060\nitself). Intended to be called once per rendered page (the ids of the rows just fetched),\nmirroring how the client already resolves \u0060clienteId\u0060 against \u0060/customers\u0060.",
+        "parameters": [
+          {
+            "name": "reportIds",
+            "in": "query",
+            "description": "Report ids to resolve technicians for (repeatable query param).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Map of report id \u2192 technician full names (report ids with no staff are omitted)."
+          }
+        }
+      }
+    },
     "/api/Reports/{id}": {
       "get": {
         "tags": [
@@ -10236,72 +10263,6 @@
           },
           {
             "name": "userId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/reports/{reportId}/staff/{staffId}/approve": {
-      "post": {
-        "tags": [
-          "ReportStaff"
-        ],
-        "summary": "Approves one staff line\u0027s timesheet (\u0060ApprovalStatus\u0060 \u2192 Approved). Restricted to\n\u0060manage_settings\u0060 (Admin/SuperUser only per \u0060RoleToPermissionMapper\u0060) \u2014\ntimesheet approval is a supervisory action, matching \u0060WorkLogController.Approve\u0060.",
-        "parameters": [
-          {
-            "name": "reportId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "staffId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/api/reports/{reportId}/staff/{staffId}/reject": {
-      "post": {
-        "tags": [
-          "ReportStaff"
-        ],
-        "summary": "Rejects one staff line\u0027s timesheet (\u0060ApprovalStatus\u0060 \u2192 Rejected). Same \u0060manage_settings\u0060 gate as Task\u0026lt;IActionResult\u0026gt; ReportStaffController.Approve(Guid reportId, Guid staffId).",
-        "parameters": [
-          {
-            "name": "reportId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "staffId",
             "in": "path",
             "required": true,
             "schema": {
@@ -16438,7 +16399,7 @@
       },
       "AbsenceTypeEnum": {
         "type": "integer",
-        "description": "The category of an AbsenceRequest."
+        "description": "The category of an AbsenceRequest. Client requirement (2026-09):\nthe create form must offer exactly 9 types \u2014 Ferie, ROL, Ex festivit\u00E0, Permesso retribuito,\nPermesso non retribuito, Legge 104, Malattia, Congedo parentale, Altri congedi/permessi.\nNew members are appended after the original 3 (never renumbered \u2014 this is a plain-int wire\nenum with no \u0060JsonStringEnumConverter\u0060, and existing rows/API callers depend on the\nnumeric values staying stable)."
       },
       "AcroFormConfigDto": {
         "required": [
@@ -24380,10 +24341,6 @@
             "description": "Total break minutes within the working window (subtracted from gross duration).",
             "format": "int32"
           },
-          "approvalStatus": {
-            "description": "Timesheet-approval status for this technician\u0027s line (Draft by default). Set via\n\u0060IReportService.SetStaffApprovalAsync\u0060 \u2014 an office/admin-only action independent of\nthe parent report\u0027s own state machine.",
-            "$ref": "#/components/schemas/ReportStaffApprovalStatusEnum"
-          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -24409,10 +24366,6 @@
           }
         },
         "description": "Records time and distance contributed by a single technician to a report.\nOne row per (Report, User) pair \u2014 enforced by a unique index.\n\nLive workflow: tecnico hits \u0022start\u0022 \u2192 StartTime stamped; \u0022stop\u0022 \u2192 EndTime\nstamped; pauses logged in PauseMinutes. HoursWorked is either derived by\nITimeClassificationService (preferred) or stored manually for legacy rows."
-      },
-      "ReportStaffApprovalStatusEnum": {
-        "type": "integer",
-        "description": "Timesheet-approval status for a single ReportStaff row (one\ntechnician\u0027s hours/km on one report). Independent of the parent\n\u0060Report.Stato\u0060/ReportStatoEnum state machine \u2014 an office/admin user can\napprove or reject an individual staff line (e.g. while reviewing hours for payroll) without\nthat action driving the report\u0027s own Bozza/Inviato/Controllato/Fatturato lifecycle."
       },
       "ReportStatoEnum": {
         "type": "integer"

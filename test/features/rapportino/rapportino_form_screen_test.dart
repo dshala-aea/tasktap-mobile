@@ -110,6 +110,42 @@ void main() {
 
   const reportId = 'draft-test-1';
 
+  group('RapportinoFormScreen — checklist grid layout', () {
+    testWidgets('checklist grid lays out 2-per-row on a phone-width screen', (tester) async {
+      tester.view.physicalSize = const Size(960, 1920); // 480dp logical width (phone-class, < wideBreakpoint)
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      await _seedDraft(db, reportId);
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
+      await tester.pumpAndSettle();
+
+      final gridView = tester.widget<GridView>(find.byType(GridView));
+      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(delegate.crossAxisCount, 2);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('checklist grid widens to 4-per-row on a tablet/wide screen', (tester) async {
+      tester.view.physicalSize = const Size(1600, 2400); // 800dp logical width
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      await _seedDraft(db, reportId);
+      await tester.pumpWidget(_buildForm(db: db, reportId: reportId));
+      await tester.pumpAndSettle();
+
+      final gridView = tester.widget<GridView>(find.byType(GridView));
+      final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(delegate.crossAxisCount, 4);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('RapportinoFormScreen — checklist tiles', () {
     testWidgets('renders all three tiles + the review-and-send completion card', (tester) async {
       await _seedDraft(db, reportId);

@@ -219,15 +219,17 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                     // tile tap required), unlike the old buried-in-Dettagli button it replaces.
                     AiDraftAction(reportId: reportId),
                     GridView.count(
-                      // 4 columns at every width, matching the 4 tiles now in this grid (Controlli
-                      // split out from Materiali into its own tile — see StepControlli's doc
-                      // comment). Was 3-on-phone/4-on-wide when the grid held 3 tiles; left
-                      // unchanged after the split, a 4th tile wrapped to an orphaned second row on
-                      // every phone — the primary device class — directly contradicting DESIGN.md's
-                      // own "never more than one row of primary choices" rule.
-                      // AppCompartmentTile's label already wraps to 2 lines with ellipsis, so the
-                      // narrower phone tile this produces degrades safely.
-                      crossAxisCount: 4,
+                      // 2 columns on a phone, 4 on a tablet/wide window — same width-driven
+                      // breakpoint (AppBottomNav.wideBreakpoint) altro_hub_screen.dart's Gestione
+                      // grid already uses, reused here rather than inventing a second one. This
+                      // used to be a flat 4-at-every-width (see git history for that reasoning:
+                      // a 3-on-phone/4-on-wide split once wrapped a 4th tile to an orphaned lone
+                      // row). With exactly 4 tiles, 2 columns produces two full, even rows — not
+                      // an orphan — so DESIGN.md's "never more than one row of primary choices"
+                      // rule no longer applies here; this is a deliberate 2x2 block, not a regression
+                      // back to the old wrap bug.
+                      crossAxisCount:
+                          MediaQuery.sizeOf(context).width >= AppBottomNav.wideBreakpoint ? 4 : 2,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       mainAxisSpacing: AppSpacing.md,
