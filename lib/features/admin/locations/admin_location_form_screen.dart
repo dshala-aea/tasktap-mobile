@@ -6,7 +6,9 @@ import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/location/geocoding_service.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
@@ -37,6 +39,7 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
   final _longitudeCtrl = TextEditingController();
   String? _selectedCustomerId;
   bool _isSaving = false;
+  bool _isGeocoding = false;
 
   bool get _isEditing => widget.locationId != null;
 
@@ -140,6 +143,51 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
     }
   }
 
+  /// Types the Indirizzo/Città/CAP fields into a free-text address and looks it up via
+  /// [GeocodingService], populating the lat/lng fields on a match. The manual fields stay
+  /// editable afterwards — this only fills them in, it never locks them.
+  ///
+  /// [GeocodingService.geocode] never throws (see its own doc comment): a failed lookup and "no
+  /// match" both come back as `null`, so both are handled the same way here — a warning toast,
+  /// not a crash or a silent no-op.
+  Future<void> _lookupCoordinates() async {
+    final address = [
+      _addressCtrl.text.trim(),
+      _cityCtrl.text.trim(),
+      _postalCodeCtrl.text.trim(),
+    ].where((s) => s.isNotEmpty).join(', ');
+
+    if (address.isEmpty) {
+      showAppToast(
+        context,
+        message: 'Inserisci almeno un indirizzo per cercare le coordinate.',
+        tone: ToastTone.warning,
+      );
+      return;
+    }
+
+    setState(() => _isGeocoding = true);
+    try {
+      final point = await ref.read(geocodingServiceProvider).geocode(address);
+      if (!mounted) return;
+      if (point == null) {
+        showAppToast(
+          context,
+          message: 'Nessuna corrispondenza trovata per questo indirizzo.',
+          tone: ToastTone.warning,
+        );
+        return;
+      }
+      setState(() {
+        _latitudeCtrl.text = point.lat.toString();
+        _longitudeCtrl.text = point.lng.toString();
+      });
+      showAppToast(context, message: 'Coordinate trovate', tone: ToastTone.success);
+    } finally {
+      if (mounted) setState(() => _isGeocoding = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
@@ -191,9 +239,27 @@ class _AdminLocationFormScreenState extends ConsumerState<AdminLocationFormScree
             AppTextField(label: 'Telefono', controller: _phoneCtrl),
             const SizedBox(height: 16),
 
-            // Plain numeric fields — no map-picker widget exists anywhere in this app yet (web's
-            // Sedi tab uses an inline map, but that is a net-new component this pass isn't
-            // building). Both optional: a sede with no coordinates is common and not an error.
+            // "Cerca coordinate" — geocodes Indirizzo/Città/CAP (above) via Nominatim
+            // (GeocodingService, already used read-only for CantiereMapCard's preview) and fills
+            // the lat/lng fields below on a match. Not a map-picker widget — no interactive
+            // pin-drop map exists anywhere in this app yet (web's Sedi tab uses an inline map, but
+            // that is a net-new component this pass isn't building) — just a text-search-to-
+            // coordinates shortcut. The lat/lng fields stay manually editable either way.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: AppButton.secondary(
+                label: _isGeocoding ? 'Ricerca…' : 'Cerca coordinate da indirizzo',
+                icon: const Icon(LucideIcons.search),
+                size: AppButtonSize.sm,
+                isLoading: _isGeocoding,
+                onPressed: _isGeocoding ? null : _lookupCoordinates,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Plain numeric fields, still manually editable — a sede with no coordinates is
+            // common and not an error. "Cerca coordinate" above fills these in but never hides or
+            // locks them.
             Row(
               children: [
                 Expanded(
