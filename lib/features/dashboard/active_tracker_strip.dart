@@ -98,6 +98,7 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
       switch (t.kind) {
         case ActiveTrackerKind.attendance:
           await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+          _throwIfPunchFailed();
         case ActiveTrackerKind.cantiere:
           await ref.read(cantiereWorklogApiClientProvider).endCantiere();
         case ActiveTrackerKind.ticket:
@@ -108,9 +109,25 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
     });
   }
 
-  Future<void> _togglePause() => _run(
-    () => ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider)),
-  );
+  Future<void> _togglePause() => _run(() async {
+    await ref.read(punchNotifierProvider.notifier).togglePause(ref.read(timbraStateProvider));
+    _throwIfPunchFailed();
+  });
+
+  /// `PunchNotifier.punch()`/`togglePause()` never throw — a repo failure is caught internally
+  /// and parked in the notifier's own `state` as `AsyncError`, which is exactly the contract
+  /// TimbraScreen's `ref.listen` relies on. `_run`'s try/catch above expects a thrown exception,
+  /// the same contract `endCantiere()`/`stopTimer()` (the other two branches) actually honor —
+  /// without this check, a genuine failure closing the worklog or toggling a break from here
+  /// completed "successfully" as far as `_run` could tell: no toast, nothing thrown, nothing any
+  /// log would ever show. Reading the state right back out and re-raising it here is what puts
+  /// the attendance branch on the same footing as the other two.
+  void _throwIfPunchFailed() {
+    final result = ref.read(punchNotifierProvider);
+    if (result is AsyncError) {
+      Error.throwWithStackTrace(result.error, result.stackTrace);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

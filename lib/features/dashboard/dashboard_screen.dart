@@ -219,27 +219,6 @@ class _ClockInPrompt extends ConsumerWidget {
     final punchState = ref.watch(punchNotifierProvider);
     final busy = punchState.isLoading;
 
-    // A punch fired from here used to hand back control with nothing but the hero swapping
-    // shape — the one confirmation TimbraScreen's own inline error text gives a failed punch, a
-    // successful one from Home gave none at all. Same success-toast convention
-    // new_ticket_form_screen.dart already uses (context.colors.green), so this reads as the same
-    // "it worked" language the rest of the app already speaks, not a new one invented here.
-    ref.listen<AsyncValue<void>>(punchNotifierProvider, (previous, next) {
-      if (previous is AsyncLoading && next is AsyncData && !next.hasError) {
-        showAppToast(context, message: 'Turno iniziato', tone: ToastTone.success);
-      } else if (next is AsyncError) {
-        // The success branch above got a toast; a failed punch fired from here gave zero
-        // feedback — the hero just silently stopped loading. Same toast text/mechanism
-        // TimbraScreen's own punch failure already uses (timbra_screen.dart), so a failure
-        // reads the same whether it started from Home or from the Timbra tab.
-        showAppToast(
-          context,
-          message: 'Errore durante la timbratura. Riprova.',
-          tone: ToastTone.error,
-        );
-      }
-    });
-
     // A CTA, not a passive readout — flat AppColors.Y fill + white ink, same primary-action
     // language AppButton's own primary variant already uses (this replaces the old VetroGlass
     // panel, which only read as an action via its own onTap; AppCard's onTap does that job here
@@ -248,9 +227,7 @@ class _ClockInPrompt extends ConsumerWidget {
     return AppCard(
       padding: EdgeInsets.zero,
       backgroundColor: AppColors.Y,
-      onTap: busy
-          ? null
-          : () => ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider)),
+      onTap: busy ? null : () => _punchIn(context, ref),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.base),
         child: Row(
@@ -279,5 +256,37 @@ class _ClockInPrompt extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Punches in and reports the result of THIS call specifically — not, as a `ref.listen` on the
+  /// shared [punchNotifierProvider] used to, the next `AsyncLoading`→`AsyncData` transition on
+  /// that provider from *anywhere*.
+  ///
+  /// `AppRoutes.timbra` is pushed on the root navigator (`parentNavigatorKey: rootNavigatorKey`
+  /// in app_router.dart), so this widget never actually unmounts underneath it — if the
+  /// dashboard was idle when the user navigated to the standalone Timbra page, `_ClockInPrompt`
+  /// stays mounted, still listening to the one, app-wide `punchNotifierProvider` instance. A
+  /// clock-out or break toggle performed on that (now on-screen) Timbra page fired the exact same
+  /// "loading, then data, no error" transition this widget's old `ref.listen` was watching for,
+  /// and [showAppToast]'s root overlay paints above every route — so "Turno iniziato" appeared
+  /// over whichever action the user had actually just taken, regardless of what it was. Awaiting
+  /// the call directly and reading its own outcome right back out ties the toast to the tap that
+  /// caused it, not to ambient state this instance never touched.
+  Future<void> _punchIn(BuildContext context, WidgetRef ref) async {
+    await ref.read(punchNotifierProvider.notifier).punch(ref.read(timbraStateProvider));
+    if (!context.mounted) return;
+    final result = ref.read(punchNotifierProvider);
+    if (result is AsyncError) {
+      // Same toast text/mechanism TimbraScreen's own punch failure already uses
+      // (timbra_screen.dart), so a failure reads the same whether it started from Home or from
+      // the Timbra page.
+      showAppToast(
+        context,
+        message: 'Errore durante la timbratura. Riprova.',
+        tone: ToastTone.error,
+      );
+    } else {
+      showAppToast(context, message: 'Turno iniziato', tone: ToastTone.success);
+    }
   }
 }

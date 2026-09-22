@@ -20,6 +20,7 @@ import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/dashboard/active_tracker_strip.dart';
 import 'package:tasktap_mobile/features/dashboard/dashboard_screen.dart';
+import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
 class MockAuthRepository extends Mock implements IAuthRepository {}
@@ -411,5 +412,66 @@ void main() {
         await tester.pump(Duration.zero);
       }
     });
+
+    // ── Phantom toast from the idle prompt left mounted underneath (bug) ────
+    //
+    // AppRoutes.timbra is pushed on the ROOT navigator (parentNavigatorKey: rootNavigatorKey in
+    // app_router.dart), so DashboardScreen never actually unmounts underneath it — if the
+    // dashboard was idle (showing _ClockInPrompt) when the user navigated to the standalone
+    // Timbra page, _ClockInPrompt stays alive, still listening to the same app-wide
+    // punchNotifierProvider. Its `ref.listen` fired "Turno iniziato" on ANY
+    // AsyncLoading→AsyncData transition, regardless of which action actually produced it — a
+    // clock-out or break toggle performed on the (now-visible, on top) Timbra page shares that
+    // same provider instance and triggered the exact same, wrong, toast — via showAppToast's
+    // root overlay, which paints above every route including the one on top.
+    testWidgets(
+      'a punch action performed elsewhere does not show "Turno iniziato" from the idle prompt '
+      'left mounted underneath',
+      (tester) async {
+        final container = ProviderContainer(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(repo),
+            appDatabaseProvider.overrideWithValue(db),
+            dioProvider.overrideWithValue(MockDio()),
+            locationServiceProvider.overrideWithValue(const DisabledLocationService()),
+          ],
+        );
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: DashboardScreen()),
+          ),
+        );
+        await tester.pump();
+        authStream.add(fakeUser);
+        await tester.pumpAndSettle(const Duration(seconds: 2));
+
+        // Idle: the clock-in prompt is mounted and (buggily) listening to the shared provider.
+        expect(find.text('Timbra ingresso'), findsOneWidget);
+
+        // Simulate a clock-OUT performed on another screen (e.g. the pushed standalone Timbra
+        // page) — it shares this exact punchNotifierProvider instance, app-wide.
+        await container.read(punchNotifierProvider.notifier).punch(
+          const TimbraState(isOnShift: true),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('Turno iniziato'), findsNothing);
+
+        // Bounded pumps, not pumpAndSettle — same reasoning as the clock-in test above
+        // (activeTrackersProvider's own poll keeps re-scheduling frames). The container is
+        // explicit (UncontrolledProviderScope doesn't tie its lifecycle to the widget tree), so
+        // it's disposed directly to cancel that poll's Timer — before the final pumps, so the
+        // zero-duration Timer drift's own stream teardown schedules on dispose gets a chance to
+        // fire before the framework's pending-timer check runs.
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        for (var i = 0; i < 5; i++) {
+          await tester.pump(Duration.zero);
+        }
+      },
+    );
   });
 }
