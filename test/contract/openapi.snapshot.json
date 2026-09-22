@@ -15912,12 +15912,90 @@
         }
       }
     },
+    "/api/WorkLog/rounding-config": {
+      "get": {
+        "tags": [
+          "WorkLog"
+        ],
+        "summary": "The tenant\u0027s worked-hours rounding rule \u2014 how every WorkLog\u0027s raw duration rounds\nbefore feeding the JSON summary, monthly grid, and Excel export (all three via\nIWorkLogAggregator). Stored inside \u0060Tenant.WorkingHoursConfig\u0060\n(jsonb) alongside the holiday calendar/night-window settings already there \u2014 one\n\u0022tenant\u0027s time-accounting rules\u0022 blob, not a new table. Minutes: 0 means off (raw,\nunrounded hours \u2014 the only behavior before this setting existed).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundingConfigDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundingConfigDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundingConfigDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "WorkLog"
+        ],
+        "summary": "Same \u0060configure\u0060 gate as payroll lock/export settings \u2014 this changes what\n    every technician\u0027s hours look like, tenant-wide, on the very next aggregation.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoundingConfigRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoundingConfigRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoundingConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundingConfigDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundingConfigDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundingConfigDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/WorkLog/export/{year}/{month}": {
       "get": {
         "tags": [
           "WorkLog"
         ],
-        "summary": "Export work log entries to Excel (EPPlus) with straordinari/festivo/notturno columns.",
+        "summary": "Export work log entries to Excel (EPPlus): one sheet, technician \u00D7 tipo \u00D7 day\n(Ordinario/Straordinario/Festivo/Notturno), plus an Incomplete Records sheet for any\nforgotten clock-outs in the period.",
         "parameters": [
           {
             "name": "year",
@@ -16013,19 +16091,6 @@
                 "format": "uuid"
               }
             }
-          },
-          {
-            "name": "rounding",
-            "in": "query",
-            "schema": {
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ],
-              "format": "int32",
-              "default": 0
-            }
           }
         ],
         "responses": {
@@ -16088,19 +16153,6 @@
                 "type": "string",
                 "format": "uuid"
               }
-            }
-          },
-          {
-            "name": "rounding",
-            "in": "query",
-            "schema": {
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ],
-              "format": "int32",
-              "default": 0
             }
           }
         ],
@@ -24809,6 +24861,27 @@
         },
         "description": "One role\u2192capability grant, by canonical \u0060module.resource.action\u0060 key."
       },
+      "RoundingConfigDto": {
+        "required": [
+          "mode",
+          "minutes"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "minutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "Mode is one of \u0022Nearest\u0022/\u0022Floor\u0022/\u0022Ceil\u0022 \u2014 RoundingMode\u0027s names, as a string so the\n    JSON contract doesn\u0027t depend on the enum\u0027s underlying int values."
+      },
       "ScheduleCalendarDto": {
         "required": [
           "id",
@@ -28540,6 +28613,26 @@
           }
         },
         "description": "Request model for updating a report. Only non-null properties are applied.\nRelocated from \u0060ReportsController\u0060 (W3 Task 2 thinning)."
+      },
+      "UpdateRoundingConfigRequest": {
+        "required": [
+          "mode",
+          "minutes"
+        ],
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "minutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
       },
       "UpdateScheduleRequest": {
         "type": "object",
