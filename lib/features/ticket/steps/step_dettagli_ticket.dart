@@ -19,18 +19,11 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
     super.key,
     required this.state,
     required this.onChanged,
-    this.showPriority = true,
     this.ticketId,
   });
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
-
-  /// Hidden in ticket-edit mode (see EditTicketScreen): the local ticket mirror carries no
-  /// `priorita` column at all (it is never synced down — see Tickets table in app_database.dart),
-  /// so there is no current value to pre-fill here. Showing the picker anyway would default to
-  /// "Media" regardless of the ticket's real priority and silently reset it on save.
-  final bool showPriority;
 
   /// The ticket being edited, or null while creating a new one. Gates [ExtensionFieldsSection]:
   /// tenant-defined custom fields save through `PUT /extension-fields/ticket/{id}/values`, which
@@ -127,23 +120,22 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
           ),
         ),
 
-        if (widget.showPriority) ...[
-          const SizedBox(height: 24),
+        const SizedBox(height: 24),
 
-          // ── Priority ───────────────────────────────────────────────────────
-          AppFieldShell(
-            label: 'Priorità',
-            child: DropdownButtonFormField<String>(
-              initialValue: widget.state.priority,
-              isExpanded: true,
-              items: kTicketPriorities
-                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                  .toList(),
-              onChanged: (p) =>
-                  p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
-            ),
+        // ── Priority ───────────────────────────────────────────────────────
+        AppFieldShell(
+          label: 'Priorità',
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('priorita-${widget.state.priority}'),
+            initialValue: widget.state.priority,
+            isExpanded: true,
+            items: kTicketPriorities
+                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                .toList(),
+            onChanged: (p) =>
+                p != null ? widget.onChanged(widget.state.copyWith(priority: p)) : null,
           ),
-        ],
+        ),
 
         if (widget.ticketId != null)
           ExtensionFieldsSection(entityType: 'ticket', entityId: widget.ticketId!),

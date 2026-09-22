@@ -94,6 +94,7 @@ void main() {
             locationId: 'loc-1',
             statusId: 1,
             typeId: 1,
+            priority: const Value('Alta'),
           ),
         );
   });
@@ -155,9 +156,11 @@ void main() {
       expect(find.text('Acqua che perde dal tubo.'), findsOneWidget);
       expect(find.text('Assistenza'), findsOneWidget);
 
-      // Priority is deliberately absent — see StepDettagliTicket.showPriority's doc comment
-      // (the local ticket mirror carries no priorita column to pre-fill from).
-      expect(find.text('Priorità'), findsNothing);
+      // Priority pre-fills from the ticket's real value (schema 20 already syncs it down) rather
+      // than defaulting to "Media" and silently resetting it on the next save. AppFieldLabel
+      // upper-cases its text, so the rendered label is "PRIORITÀ", not "Priorità".
+      expect(find.text('PRIORITÀ'), findsOneWidget);
+      expect(find.text('Alta'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -201,14 +204,14 @@ void main() {
       expect(sentData['customerId'], 'cust-1');
       expect(sentData['locationId'], 'loc-1');
       expect(sentData['typeId'], 1);
-      // Never sent: no PUT field for it (see UpdateTicketRequest / AdminApiClient.updateTicket's
-      // own doc comment), and it would silently reset the ticket's real priority to whatever the
-      // picker defaulted to if it were.
-      expect(sentData.containsKey('priorita'), isFalse);
+      // The ticket's real, unchanged priority — round-tripped, not reset to a picker default.
+      expect(sentData['priorita'], 'Alta');
+      // Status has its own dedicated PUT (_TicketStatusRowState._changeStatus) — never sent here.
       expect(sentData.containsKey('statusId'), isFalse);
 
       final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
       expect(row.title, 'Perdita idrica bagno — riparata parzialmente');
+      expect(row.priority, 'Alta');
 
       expect(find.text('Ticket aggiornato'), findsOneWidget);
       // Popped back to the caller — the screen didn't get stuck on save.

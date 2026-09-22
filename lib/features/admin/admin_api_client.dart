@@ -634,6 +634,7 @@ class AdminApiClient {
     String? customerId,
     String? locationId,
     int? typeId,
+    String? priority,
   }) async {
     await _dio.put(
       '/api/tickets/$id',
@@ -643,6 +644,8 @@ class AdminApiClient {
         'customerId': ?customerId,
         'locationId': ?locationId,
         'typeId': ?typeId,
+        // Wire name per UpdateTicketRequest.Priority's [JsonPropertyName("priorita")].
+        'priorita': ?priority,
       },
     );
   }

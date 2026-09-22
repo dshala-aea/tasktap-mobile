@@ -32,8 +32,7 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // on it) and Riepilogo (create-and-submit-to-the-outbox) are both
 // creation-specific — this screen is not queued offline (see `_onSave`'s own
 // note) and status/assignment already have their own controls on ticket
-// detail. Priority is left out of StepDettagliTicket entirely in this mode —
-// see `StepDettagliTicket.showPriority`'s doc comment.
+// detail.
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum _EditStep { clienteSede, dettagli }
@@ -89,6 +88,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
         description: ticket.description,
         typeId: ticket.typeId,
         statusId: ticket.statusId,
+        priority: ticket.priority ?? kDefaultTicketPriority,
       );
     });
   }
@@ -137,6 +137,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
             customerId: s.customerId,
             locationId: s.locationId,
             typeId: s.typeId,
+            priority: s.priority,
           );
 
       // Safe to mirror locally: these are the exact values the server just accepted, not values
@@ -150,6 +151,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
           customerId: Value(s.customerId!),
           locationId: Value(s.locationId!),
           typeId: Value(s.typeId!),
+          priority: Value(s.priority),
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
@@ -216,7 +218,6 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                         key: const ValueKey(_EditStep.dettagli),
                         state: s,
                         onChanged: _onFormChanged,
-                        showPriority: false,
                         ticketId: widget.ticketId,
                       ),
                     },
