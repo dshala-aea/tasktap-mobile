@@ -44,6 +44,10 @@ ProviderContainer _buildContainer({
   String? ticketFreeText,
   String? cantiereId,
   String? cantiereFreeText,
+  String? customerId,
+  String? customerFreeText,
+  String? locationId,
+  String? locationFreeText,
   double? gpsLatitude,
   double? gpsLongitude,
 }) {
@@ -68,6 +72,10 @@ ProviderContainer _buildContainer({
             ticketFreeText: ticketFreeText,
             cantiereId: cantiereId,
             cantiereFreeText: cantiereFreeText,
+            customerId: customerId,
+            customerFreeText: customerFreeText,
+            locationId: locationId,
+            locationFreeText: locationFreeText,
             gpsLatitude: gpsLatitude,
             gpsLongitude: gpsLongitude,
           ),
@@ -144,6 +152,72 @@ void main() {
       expect(find.text('Cantiere Via Roma'), findsOneWidget);
       expect(find.byIcon(LucideIcons.check), findsOneWidget);
       expect(find.byIcon(LucideIcons.x), findsNothing);
+    });
+  });
+
+  group('StepDettagli — cliente/sede are derived once a ticket is linked', () {
+    testWidgets('shows the resolved name as a locked chip, not an editable lookup field', (
+      tester,
+    ) async {
+      // linkedTicket must resolve to non-null (it gates lockedCliente/lockedSede in
+      // step_dettagli.dart) — driven off allTicketsProvider, which reads this real, otherwise-
+      // empty in-memory db. customerId/locationId themselves don't need matching rows: lacking a
+      // Customer/Location row, lockedCliente/lockedSede fall back to state.customerFreeText/
+      // locationFreeText, which is exactly what's asserted below.
+      await db
+          .into(db.tickets)
+          .insert(
+            TicketsCompanion.insert(
+              id: 'ticket-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              title: 'TICK-042',
+              customerId: 'customer-1',
+              locationId: 'location-1',
+              statusId: 1,
+              typeId: 1,
+            ),
+          );
+
+      final container = _buildContainer(
+        db: db,
+        ticketId: 'ticket-1',
+        ticketFreeText: 'TICK-042',
+        customerId: 'customer-1',
+        customerFreeText: 'Acme SRL',
+        locationId: 'location-1',
+        locationFreeText: 'Sede Legale',
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cliente · '), findsOneWidget);
+      expect(find.text('Acme SRL'), findsOneWidget);
+      expect(find.text('Sede · '), findsOneWidget);
+      expect(find.text('Sede Legale'), findsOneWidget);
+
+      // Not an editable lookup field: its label (AppFieldLabel upper-cases "Cliente *"/"Sede"
+      // into "CLIENTE *"/"SEDE") must not render at all.
+      expect(find.text('CLIENTE *'), findsNothing);
+      expect(find.text('SEDE'), findsNothing);
+    });
+
+    testWidgets('stays an editable lookup field when no ticket is linked', (tester) async {
+      final container = _buildContainer(
+        db: db,
+        customerId: 'customer-1',
+        customerFreeText: 'Acme SRL',
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CLIENTE *'), findsOneWidget);
+      expect(find.text('SEDE'), findsOneWidget);
+      expect(find.text('Cliente · '), findsNothing);
     });
   });
 

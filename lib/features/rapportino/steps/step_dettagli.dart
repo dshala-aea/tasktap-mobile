@@ -87,6 +87,18 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     final linkedTicket = _findName(tickets.map((t) => (t.id, t.title)), state.ticketId);
     final linkedCantiere = _findName(cantieri.map((c) => (c.id, c.name)), state.cantiereId);
 
+    // Cliente/sede are derived once a ticket is linked (Ticket.CustomerId/LocationId are set
+    // server-side the moment the ticket exists) — locked, not re-pickable, same reasoning as
+    // the ticket/cantiere chip above. Cantiere-linked reports are left editable: unlike Ticket,
+    // Cantiere.CustomerId is nullable, so there isn't always a value to derive from.
+    final lockedCliente = linkedTicket != null
+        ? (_findName(customers.map((c) => (c.id, c.companyName)), state.customerId) ??
+            state.customerFreeText)
+        : null;
+    final lockedSede = linkedTicket != null
+        ? (_findName(locations.map((l) => (l.id, l.name)), state.locationId) ?? state.locationFreeText)
+        : null;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
@@ -117,28 +129,38 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           ),
           const SizedBox(height: 12),
 
-          AppLookupField(
-            label: 'Cliente *',
-            hint: 'Cerca o scrivi il nome',
-            items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
-            selectedId: state.customerId,
-            initialText: state.customerFreeText,
-            emptyCacheHint: 'Nessun cliente sincronizzato — scrivi il nome, verrà collegato dopo.',
-            onSelected: notifier.setCustomerFromCache,
-            onFreeText: notifier.setCustomerFreeText,
-          ),
-          const SizedBox(height: 12),
+          if (lockedCliente != null) ...[
+            _LinkedChip(label: 'Cliente', value: lockedCliente),
+            const SizedBox(height: 12),
+          ] else ...[
+            AppLookupField(
+              label: 'Cliente *',
+              hint: 'Cerca o scrivi il nome',
+              items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
+              selectedId: state.customerId,
+              initialText: state.customerFreeText,
+              emptyCacheHint: 'Nessun cliente sincronizzato — scrivi il nome, verrà collegato dopo.',
+              onSelected: notifier.setCustomerFromCache,
+              onFreeText: notifier.setCustomerFreeText,
+            ),
+            const SizedBox(height: 12),
+          ],
 
-          AppLookupField(
-            label: 'Sede',
-            hint: 'Cerca o scrivi l\'ubicazione',
-            items: [for (final l in locations) LookupItem(id: l.id, name: l.name)],
-            selectedId: state.locationId,
-            initialText: state.locationFreeText,
-            onSelected: notifier.setLocationFromCache,
-            onFreeText: notifier.setLocationFreeText,
-          ),
-          const SizedBox(height: 12),
+          if (lockedSede != null) ...[
+            _LinkedChip(label: 'Sede', value: lockedSede),
+            const SizedBox(height: 12),
+          ] else ...[
+            AppLookupField(
+              label: 'Sede',
+              hint: 'Cerca o scrivi l\'ubicazione',
+              items: [for (final l in locations) LookupItem(id: l.id, name: l.name)],
+              selectedId: state.locationId,
+              initialText: state.locationFreeText,
+              onSelected: notifier.setLocationFromCache,
+              onFreeText: notifier.setLocationFreeText,
+            ),
+            const SizedBox(height: 12),
+          ],
 
           AppTextField(
             controller: _workAddressCtrl,
