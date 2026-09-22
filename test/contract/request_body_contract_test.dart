@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
+import 'package:tasktap_mobile/data/clienti/customer_contact_api_client.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
@@ -542,6 +543,29 @@ void main() {
     contractTest('location update matches the server', () {
       final client = AdminApiClient(dio);
       return capture(() => client.updateLocation(_id(19), name: 'Sede centrale'));
+    });
+
+    // CustomerContactApiClient is a separate, dedicated client (not AdminApiClient) — same
+    // "labeled contacts" concept as cantiere contacts below, but on a customer instead.
+    contractTest('adding a customer contact matches the server', () {
+      final client = CustomerContactApiClient(dio);
+      return capture(
+        () => client.create(
+          _id(54),
+          name: 'Mario Rossi',
+          role: 'Titolare',
+          phone: '333123456',
+          email: 'mario.rossi@example.com',
+          notes: 'presente solo al mattino',
+        ),
+      );
+    });
+
+    contractTest('updating a customer contact matches the server', () {
+      final client = CustomerContactApiClient(dio);
+      return capture(
+        () => client.update(_id(54), _id(55), name: 'Mario Rossi', role: 'Titolare'),
+      );
     });
 
     contractTest('cantiere creation matches the server', () {
