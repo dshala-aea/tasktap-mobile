@@ -57,6 +57,16 @@ final rapportinoAllegatiProvider = StreamProvider.autoDispose
       return repo.watchAllegati(reportId);
     });
 
+/// Stream Controlli (checklist answers, ADR-0012 §B.4) rows for a given report — used by
+/// RapportinoViewScreen's own Controlli section. The view screen resolves each row's label/type
+/// against the ticket's cached checklist (`cachedTicketControlsProvider`) itself; this provider
+/// only surfaces what was actually recorded on the report.
+final rapportinoControlliProvider = StreamProvider.autoDispose
+    .family<List<ReportControlliData>, String>((ref, reportId) {
+      final repo = ref.watch(draftReportRepositoryProvider);
+      return repo.watchControlli(reportId);
+    });
+
 /// Sums the hours actually worked across staff rows, in minutes.
 ///
 /// `hoursWorked` wins whenever it's set, matching `StaffRow.effectiveHours` (the same value these
@@ -77,6 +87,17 @@ double totalOreMinutes(List<ReportStaffTableData> rows) {
   });
 }
 
+/// Formats a minute total as "3h 30min" / "3h" / "—" — shared by [rapportinoOreProvider] (the
+/// report's aggregate) and RapportinoViewScreen's per-technician breakdown, which needs the exact
+/// same formatting for a single [ReportStaffTableData] row's own minutes.
+String formatOreLabel(double totalMinutes) {
+  if (totalMinutes <= 0) return '—';
+  final h = totalMinutes ~/ 60;
+  final m = (totalMinutes % 60).round();
+  if (m == 0) return '${h}h';
+  return '${h}h ${m}min';
+}
+
 /// Derived: total ore from staff rows for a given report.
 /// Returns a formatted string like "3h 30min" or "—".
 final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, reportId) {
@@ -84,14 +105,7 @@ final rapportinoOreProvider = Provider.autoDispose.family<String, String>((ref, 
   return staffAsync.when(
     loading: () => '—',
     error: (e, s) => '—',
-    data: (rows) {
-      final totalMinutes = totalOreMinutes(rows);
-      if (totalMinutes <= 0) return '—';
-      final h = totalMinutes ~/ 60;
-      final m = (totalMinutes % 60).round();
-      if (m == 0) return '${h}h';
-      return '${h}h ${m}min';
-    },
+    data: (rows) => formatOreLabel(totalOreMinutes(rows)),
   );
 });
 

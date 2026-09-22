@@ -13,18 +13,44 @@
 
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/location/geocoding_service.dart';
+import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportino_view_screen.dart';
+
+class _MockDio extends Mock implements Dio {}
+
+/// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
+/// this, so a report location with an address exercises `GeoMapCard`'s fallback path
+/// (`AppMapCard`, unchanged) deterministically instead of racing a real Nominatim request. Mirrors
+/// `test/features/cantiere/cantiere_detail_screen_test.dart`'s own `_NullGeocodingService`.
+class _NullGeocodingService extends GeocodingService {
+  _NullGeocodingService() : super(dio: null);
+
+  @override
+  Future<GeocodedPoint?> geocode(String address) async => null;
+}
+
+Response<T> _okResponse<T>(T data, String path) => Response<T>(
+  data: data,
+  statusCode: 200,
+  requestOptions: RequestOptions(path: path),
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +60,15 @@ Future<void> _seedSubmittedDraft(
   AppDatabase db, {
   String id = 'report-1',
   String stato = 'Bozza',
+  String? ticketId,
+  String? technicianNotes,
+  String? customerSignoffText,
+  bool isAiAssisted = false,
+  bool richiedeSecondoIntervento = false,
+  bool materialiNotRequired = false,
+  DateTime? inviatoAt,
+  DateTime? controllatoAt,
+  DateTime? fatturatoAt,
 }) async {
   await db
       .into(db.draftReports)
@@ -46,11 +81,70 @@ Future<void> _seedSubmittedDraft(
           insertedUserId: 'tecnico-1',
           locationId: 'sede-abc',
           customerId: const Value('Cliente Srl'),
+          ticketId: Value(ticketId),
           isLocalOnly: const Value(true),
           stato: Value(stato),
           submissionState: const Value('submitted'),
           customerSignatureAllegatoId: const Value('sig-c-1'),
           technicianSignatureAllegatoId: const Value('sig-t-1'),
+          technicianNotes: Value(technicianNotes),
+          customerSignoffText: Value(customerSignoffText),
+          isAiAssisted: Value(isAiAssisted),
+          richiedeSecondoIntervento: Value(richiedeSecondoIntervento),
+          materialiNotRequired: Value(materialiNotRequired),
+          inviatoAt: Value(inviatoAt),
+          controllatoAt: Value(controllatoAt),
+          fatturatoAt: Value(fatturatoAt),
+        ),
+      );
+}
+
+Future<void> _seedStaff(
+  AppDatabase db,
+  String reportId, {
+  String id = 'staff-1',
+  String userId = 'tecnico-1',
+  double? hoursWorked = 3.5,
+  double kmTraveled = 0.0,
+  String? vehicle,
+  String? notes,
+}) async {
+  await db
+      .into(db.reportStaffTable)
+      .insert(
+        ReportStaffTableCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          reportId: reportId,
+          userId: userId,
+          hoursWorked: Value(hoursWorked),
+          kmTraveled: Value(kmTraveled),
+          vehicle: Value(vehicle),
+          notes: Value(notes),
+        ),
+      );
+}
+
+Future<void> _seedControllo(
+  AppDatabase db,
+  String reportId, {
+  String id = 'ctrl-row-1',
+  required String controlId,
+  String? stringValue,
+  bool? boolValue,
+}) async {
+  await db
+      .into(db.reportControlli)
+      .insert(
+        ReportControlliCompanion.insert(
+          id: id,
+          tenantId: 'tenant-1',
+          createdAt: DateTime.utc(2026, 6, 1),
+          reportId: reportId,
+          controlId: controlId,
+          stringValue: Value(stringValue),
+          boolValue: Value(boolValue),
         ),
       );
 }
@@ -121,9 +215,19 @@ Future<void> _insertAllegato(
       );
 }
 
-Widget _buildView({required AppDatabase db, String reportId = 'report-1'}) {
+Widget _buildView({
+  required AppDatabase db,
+  String reportId = 'report-1',
+  Dio? dio,
+  bool isOnline = true,
+}) {
   return ProviderScope(
-    overrides: [appDatabaseProvider.overrideWithValue(db)],
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      if (dio != null) dioProvider.overrideWithValue(dio),
+      isOnlineProvider.overrideWithValue(isOnline),
+      geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
+    ],
     child: MaterialApp(home: RapportinoViewScreen(reportId: reportId)),
   );
 }
@@ -134,6 +238,7 @@ void main() {
   setUpAll(() async {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     await initializeDateFormatting('it', null);
+    registerFallbackValue(RequestOptions(path: '/'));
   });
 
   late AppDatabase db;
@@ -456,6 +561,78 @@ void main() {
     });
   });
 
+  group('RapportinoViewScreen — Sede map', () {
+    testWidgets(
+      'shows GeoMapCard (never a raw KeyVal-only Sede) when the location has an address',
+      (tester) async {
+        await db
+            .into(db.customers)
+            .insert(
+              CustomersCompanion.insert(
+                id: 'customer-map-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1),
+                companyName: 'Bianchi Impianti Srl',
+              ),
+            );
+        await db
+            .into(db.locations)
+            .insert(
+              LocationsCompanion.insert(
+                id: 'location-map-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1),
+                customerId: 'customer-map-1',
+                name: 'Sede Via Torino 5',
+                address: const Value('Via Torino 5'),
+                city: const Value('Torino'),
+              ),
+            );
+        await db
+            .into(db.draftReports)
+            .insert(
+              DraftReportsCompanion.insert(
+                id: 'report-map-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1),
+                title: 'Manutenzione con sede geolocalizzata',
+                insertedUserId: 'tecnico-1',
+                locationId: 'location-map-1',
+                customerId: const Value('customer-map-1'),
+                isLocalOnly: const Value(true),
+                stato: const Value('Bozza'),
+                submissionState: const Value('submitted'),
+              ),
+            );
+
+        await tester.pumpWidget(_buildView(db: db, reportId: 'report-map-1'));
+        await tester.pumpAndSettle();
+
+        // The fake geocoder never resolves a point, so this exercises GeoMapCard's own fallback
+        // to AppMapCard, deterministically — see `_NullGeocodingService`'s own doc comment.
+        expect(find.byType(GeoMapCard), findsOneWidget);
+        expect(find.byType(AppMapCard), findsOneWidget);
+        expect(find.text('Via Torino 5, Torino'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('shows no map when the report has no real Location row (free-text-only sede)', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db); // locationId 'sede-abc' — no matching Locations row
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GeoMapCard), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('RapportinoViewScreen — rejection banner (mobile audit item #1)', () {
     testWidgets('shows the rejection banner and Rilavora affordance for a Respinto report', (
       tester,
@@ -497,6 +674,314 @@ void main() {
 
       expect(find.textContaining("L'ufficio ha respinto"), findsNothing);
       expect(find.text('Rilavora'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — note tecnico', () {
+    testWidgets('renders technicianNotes in its own section, separate from Descrizione', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, technicianNotes: 'Verificare guarnizione al prossimo giro');
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Note tecnico'), findsOneWidget);
+      expect(find.text('Verificare guarnizione al prossimo giro'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no Note tecnico section when technicianNotes is empty', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Note tecnico'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — redazione AI / da tornare', () {
+    testWidgets('shows the AI-drafted row when isAiAssisted is true', (tester) async {
+      await _seedSubmittedDraft(db, isAiAssisted: true);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bozza generata con AI, poi rivista'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no AI row when isAiAssisted is false', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bozza generata con AI, poi rivista'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows a "Da tornare" badge when richiedeSecondoIntervento is true', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, richiedeSecondoIntervento: true);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da tornare'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no "Da tornare" badge when richiedeSecondoIntervento is false', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Da tornare'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — cronologia', () {
+    testWidgets('shows Inviato/Controllato/Fatturato dates when present', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await _seedSubmittedDraft(
+        db,
+        inviatoAt: DateTime.utc(2026, 6, 2, 9),
+        controllatoAt: DateTime.utc(2026, 6, 3, 10),
+        fatturatoAt: DateTime.utc(2026, 6, 4, 11),
+      );
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cronologia'), findsOneWidget);
+      expect(find.text('INVIATO IL'), findsOneWidget);
+      expect(find.text('CONTROLLATO IL'), findsOneWidget);
+      expect(find.text('FATTURATO IL'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no Cronologia card when the report never left Bozza', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cronologia'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — materiali non richiesti', () {
+    testWidgets('shows the "not required" message when materialiNotRequired and no rows', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(db, materialiNotRequired: true);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Materiali'), findsOneWidget);
+      expect(find.text('Nessun materiale utilizzato — confermato dal tecnico.'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no Materiali section at all when not required and unseeded', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Materiali'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — squadra e ore', () {
+    testWidgets('renders one row per technician with hours, km and vehicle', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await _seedSubmittedDraft(db);
+      await _seedStaff(
+        db,
+        'report-1',
+        id: 'staff-1',
+        userId: 'tecnico-1',
+        hoursWorked: 2.5,
+        kmTraveled: 12.0,
+        vehicle: 'Furgone',
+      );
+      await _seedStaff(
+        db,
+        'report-1',
+        id: 'staff-2',
+        userId: 'tecnico-2',
+        hoursWorked: 1.0,
+      );
+
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Squadra e ore'), findsOneWidget);
+      expect(find.textContaining('2h 30min'), findsOneWidget);
+      expect(find.textContaining('12.0 km'), findsOneWidget);
+      expect(find.textContaining('Furgone'), findsOneWidget);
+      expect(find.textContaining('1h'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no Squadra e ore section when there are no staff rows', (tester) async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'report-nostaff',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Senza squadra',
+              insertedUserId: 'tecnico-1',
+              locationId: 'sede-abc',
+              isLocalOnly: const Value(true),
+              stato: const Value('Bozza'),
+              submissionState: const Value('submitted'),
+            ),
+          );
+      await tester.pumpWidget(_buildView(db: db, reportId: 'report-nostaff'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Squadra e ore'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — accettazione cliente', () {
+    testWidgets('shows customerSignoffText above the Firma cliente signature block', (
+      tester,
+    ) async {
+      await _seedSubmittedDraft(
+        db,
+        customerSignoffText: 'Confermo accettazione lavoro eseguito e materiali utilizzati',
+      );
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Confermo accettazione lavoro eseguito e materiali utilizzati'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportinoViewScreen — controlli', () {
+    testWidgets('renders a recorded answer with its resolved checklist label', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      const ticketId = 'ticket-1';
+      await _seedSubmittedDraft(db, ticketId: ticketId);
+      await _seedControllo(db, 'report-1', controlId: 'tc-1', boolValue: true);
+
+      final dio = _MockDio();
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/$ticketId/controls')).thenAnswer(
+        (_) async => _okResponse({
+          'groups': [
+            {
+              'id': 'grp-1',
+              'name': 'Sezione A',
+              'description': null,
+              'sortOrder': 0,
+              'subgroups': <dynamic>[],
+              'controls': [
+                {
+                  'id': 'tc-1',
+                  'templateControlId': 'tpl-1',
+                  'label': 'Pressione OK',
+                  'description': null,
+                  'type': 'Checkbox',
+                  'isRequired': true,
+                  'options': null,
+                  'valoreLimite': null,
+                  'sortOrder': 0,
+                  'status': 'Completed',
+                  'stringValue': null,
+                  'boolValue': true,
+                  'dateValue': null,
+                },
+              ],
+            },
+          ],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/$ticketId/controls'),
+      );
+
+      await tester.pumpWidget(_buildView(db: db, dio: dio));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Controlli'), findsOneWidget);
+      expect(find.text('Pressione OK'), findsOneWidget);
+      expect(find.text('Sì'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('falls back to the raw control id when the checklist is not cached', (
+      tester,
+    ) async {
+      const ticketId = 'ticket-2';
+      await _seedSubmittedDraft(db, ticketId: ticketId);
+      await _seedControllo(db, 'report-1', controlId: 'tc-9', stringValue: 'Tutto ok');
+
+      final dio = _MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>('/api/tickets/$ticketId/controls'),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/')));
+
+      await tester.pumpWidget(_buildView(db: db, dio: dio));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Controlli'), findsOneWidget);
+      expect(find.text('Controllo tc-9'), findsOneWidget);
+      expect(find.text('Tutto ok'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('no Controlli section when no answers were recorded', (tester) async {
+      await _seedSubmittedDraft(db);
+      await tester.pumpWidget(_buildView(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Controlli'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -15,9 +15,13 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
+import '../../data/reports/ticket_controls_cache_repository.dart' show cachedTicketControlsProvider;
+import '../ticket/ticket_detail_api_client.dart'
+    show ControlType, FlatTicketControl, flattenTicketControls;
 import 'create_draft.dart';
 import 'rapportino_list_providers.dart';
 import '../../presentation/providers/schedule_providers.dart';
@@ -101,9 +105,24 @@ class _RapportinoViewBody extends ConsumerWidget {
     final materialiAsync = ref.watch(rapportinoMaterialiProvider(draft.id));
     final oreLabel = ref.watch(rapportinoOreProvider(draft.id));
     final allegatiAsync = ref.watch(rapportinoAllegatiProvider(draft.id));
+    final controlliAsync = ref.watch(rapportinoControlliProvider(draft.id));
     // For openAttachment below (photo grid + signature) — see its own doc comment for why an
     // authenticated client is the right one, not a bare Dio.
     final dio = ref.watch(dioProvider);
+
+    // Resolves each recorded Controlli answer's label/group/type against the ticket's checklist
+    // (same source StepControlli compiled it from). Deliberately tolerant: a report not linked to
+    // a ticket, or a checklist that hasn't been cached on this device yet, still shows the
+    // recorded answers below — just without a resolved label — rather than hiding the section or
+    // blocking it on a network round trip the read-only view has no reason to require.
+    final ticketId = draft.ticketId;
+    final ticketControlsAsync = (ticketId != null && ticketId.isNotEmpty)
+        ? ref.watch(cachedTicketControlsProvider(ticketId))
+        : null;
+    final controlLabels = <String, FlatTicketControl>{
+      for (final f in flattenTicketControls(ticketControlsAsync?.valueOrNull ?? const []))
+        f.control.id: f,
+    };
 
     final statusLabel = rapportinoStatusLabel(draft);
     final dateLabel = DateFormat(
@@ -113,6 +132,7 @@ class _RapportinoViewBody extends ConsumerWidget {
 
     final staff = staffAsync.valueOrNull ?? [];
     final materiali = materialiAsync.valueOrNull ?? [];
+    final controlli = controlliAsync.valueOrNull ?? [];
 
     // rapportinoAllegatiProvider mixes photo and signature rows (both are just "allegati" for
     // the report) — split them here so the photo grid never shows a signature as if it were a
@@ -138,6 +158,18 @@ class _RapportinoViewBody extends ConsumerWidget {
               .join(', ')
         : (ref.watch(colleagueNameProvider(draft.insertedUserId)).valueOrNull ??
               draft.insertedUserId);
+
+    // Sede map — only when this draft carries a real Location id: a report saved against a
+    // free-text-only site (`locationFreeText` in metadataJson, no `Locations` row) has nothing to
+    // geocode or cache a point against, same as `_locationLabel`'s own fallback chain above.
+    final locationId = draft.locationId;
+    final locationAsync = locationId.isEmpty ? null : ref.watch(locationByIdProvider(locationId));
+    final location = locationAsync?.valueOrNull;
+    final locationAddress = [
+      location?.address,
+      location?.city,
+      location?.postalCode,
+    ].where((s) => s != null && s.isNotEmpty).join(', ');
 
     return SafeArea(
       child: Column(
@@ -178,6 +210,20 @@ class _RapportinoViewBody extends ConsumerWidget {
                                     color: context.colors.inkMuted,
                                   ),
                                 ),
+                                // "Serve un secondo intervento" (step_riepilogo.dart's own toggle)
+                                // — surfaced here so the office/technician sees it without opening
+                                // Rilavora. Local-only for a report synced down from another
+                                // device (see richiedeSecondoIntervento's own doc comment on
+                                // DraftReports) — off is not proof nothing was flagged, only that
+                                // this device doesn't know.
+                                if (draft.richiedeSecondoIntervento) ...[
+                                  const SizedBox(width: 8),
+                                  AppBadge(
+                                    label: 'Da tornare',
+                                    bgColor: context.colors.amber.withAlpha(31),
+                                    fgColor: context.colors.amber,
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -185,12 +231,104 @@ class _RapportinoViewBody extends ConsumerWidget {
                           KeyVal(label: 'Sede', value: _locationLabel(context, ref, draft)),
                           KeyVal(label: 'Tecnico', value: tecnicoLabel),
                           KeyVal(label: 'Cliente', value: _customerLabel(context, ref, draft)),
+                          // Stated on the technician's own record of what they signed, mirroring
+                          // the exact same row (same label, same text) step_riepilogo.dart's
+                          // summary card shows before the two signatures are collected.
+                          if (draft.isAiAssisted)
+                            const KeyVal(
+                              label: 'Redazione',
+                              value: 'Bozza generata con AI, poi rivista',
+                            ),
                           KeyVal(label: 'Ore', value: oreLabel, showDivider: false),
                         ],
                       ),
                     ),
                   ),
                 ),
+
+                // ── Sede map ──────────────────────────────────────────────────────
+                //
+                // Same embedded-map treatment ticket detail and cantiere detail already give a
+                // location — this report's "Sede" KeyVal row above used to be the only trace of
+                // where the job happened; there was no map at all.
+                if (locationAddress.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: GeoMapCard(
+                        pointAsync: ref.watch(locationGeocodedLocationProvider(locationId)),
+                        address: locationAddress,
+                      ),
+                    ),
+                  ),
+
+                // ── Cronologia: lifecycle dates past creation ────────────────────
+                //
+                // Bozza → createdAt/updatedAt alone (already in the header) says everything.
+                // Past that, the office's own review trail (Inviato/Controllato/Fatturato) is
+                // real content this report carries and the view never showed — only the
+                // customer-facing Firma dates got surfaced before this.
+                if (draft.inviatoAt != null ||
+                    draft.controllatoAt != null ||
+                    draft.fatturatoAt != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: AppCard(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.md,
+                                bottom: AppSpacing.xs,
+                              ),
+                              child: SectionTitle(title: 'Cronologia'),
+                            ),
+                            if (draft.inviatoAt != null)
+                              KeyVal(
+                                label: 'Inviato il',
+                                value: DateFormat(
+                                  'dd/MM/yyyy HH:mm',
+                                  'it',
+                                ).format(draft.inviatoAt!.toLocal()),
+                                showDivider:
+                                    draft.controllatoAt != null || draft.fatturatoAt != null,
+                              ),
+                            if (draft.controllatoAt != null)
+                              KeyVal(
+                                label: 'Controllato il',
+                                value: DateFormat(
+                                  'dd/MM/yyyy HH:mm',
+                                  'it',
+                                ).format(draft.controllatoAt!.toLocal()),
+                                showDivider: draft.fatturatoAt != null,
+                              ),
+                            if (draft.fatturatoAt != null)
+                              KeyVal(
+                                label: 'Fatturato il',
+                                value: DateFormat(
+                                  'dd/MM/yyyy HH:mm',
+                                  'it',
+                                ).format(draft.fatturatoAt!.toLocal()),
+                                showDivider: false,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // ── Rejection banner + rework affordance ────────────────────────
                 //
@@ -245,8 +383,136 @@ class _RapportinoViewBody extends ConsumerWidget {
                     ),
                   ),
 
+                // ── Note tecnico ──────────────────────────────────────────────
+                //
+                // A separate field from Descrizione (DraftReports.details) — internal, not
+                // printed on the customer PDF (see Report.technicianNotes' own backend doc
+                // comment) — so it needs its own section rather than being folded into or
+                // mistaken for the description above it.
+                if (draft.technicianNotes != null && draft.technicianNotes!.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SectionTitle(title: 'Note tecnico'),
+                            const SizedBox(height: 4),
+                            Text(
+                              draft.technicianNotes!,
+                              style: TextStyle(
+                                fontFamily: 'Archivo',
+                                fontSize: 13,
+                                color: context.colors.ink,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // ── Squadra e ore ────────────────────────────────────────────────
+                //
+                // The header's "Ore" row is the report's aggregate total — this is the
+                // itemized worklog behind it, one row per technician who contributed, with
+                // whatever travel/vehicle/notes data that technician's row carries.
+                if (staff.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: AppCard(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.md,
+                                bottom: AppSpacing.xs,
+                              ),
+                              child: SectionTitle(title: 'Squadra e ore'),
+                            ),
+                            ...staff.map((s) {
+                              final name =
+                                  ref.watch(colleagueNameProvider(s.userId)).valueOrNull ??
+                                  s.userId;
+                              final hours = formatOreLabel(totalOreMinutes([s]));
+                              final metaParts = [
+                                hours,
+                                if (s.kmTraveled > 0) '${s.kmTraveled.toStringAsFixed(1)} km',
+                                ?s.vehicle,
+                                ?s.notes,
+                              ];
+                              return ListRow(
+                                leading: const RowIconTile(icon: LucideIcons.user),
+                                title: name,
+                                subtitle: metaParts.join(' · '),
+                                showDivider: s != staff.last,
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // ── Controlli (checklist) ────────────────────────────────────────
+                //
+                // What was recorded against the ticket's checklist on this visit (ADR-0012
+                // §B.4) — labels/types resolved against the cached ticket checklist when
+                // available (see controlLabels above); a raw controlId is shown instead of
+                // hiding the row when the checklist hasn't been cached on this device.
+                if (controlli.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.pagePadding,
+                        0,
+                        AppSpacing.pagePadding,
+                        AppSpacing.base,
+                      ),
+                      child: AppCard(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                top: AppSpacing.md,
+                                bottom: AppSpacing.xs,
+                              ),
+                              child: SectionTitle(title: 'Controlli'),
+                            ),
+                            ...controlli.map(
+                              (c) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _ControlloAnswerRow(
+                                  controllo: c,
+                                  flat: controlLabels[c.controlId],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                 // ── Materiali list ────────────────────────────────────────────
-                if (materiali.isNotEmpty)
+                if (materiali.isNotEmpty || draft.materialiNotRequired)
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
@@ -267,6 +533,18 @@ class _RapportinoViewBody extends ConsumerWidget {
                               ),
                               child: SectionTitle(title: 'Materiali'),
                             ),
+                            if (materiali.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                                child: Text(
+                                  'Nessun materiale utilizzato — confermato dal tecnico.',
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 13,
+                                    color: context.colors.inkMuted,
+                                  ),
+                                ),
+                              ),
                             ...materiali.map((m) {
                               final name =
                                   m.freeTextName ??
@@ -342,7 +620,26 @@ class _RapportinoViewBody extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SectionTitle(title: 'Firma cliente'),
-                            const SizedBox(height: 8),
+                            // The acceptance text the customer signed against
+                            // (Report.customerSignoffText) — captured alongside the signature
+                            // itself, and otherwise nowhere on this screen.
+                            if (draft.customerSignoffText != null &&
+                                draft.customerSignoffText!.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  draft.customerSignoffText!,
+                                  style: TextStyle(
+                                    fontFamily: 'Archivo',
+                                    fontSize: 13,
+                                    fontStyle: FontStyle.italic,
+                                    color: context.colors.inkMuted,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ] else
+                              const SizedBox(height: 8),
                             _SignatureBlock(
                               dio: dio,
                               allegato: customerSignatureAllegato,
@@ -869,5 +1166,94 @@ class _AllegatiPhotoGrid extends StatelessWidget {
       color: context.colors.bg3,
       child: Icon(LucideIcons.imageOff, color: context.colors.inkMuted),
     );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Controlli answers — one recorded checklist finding
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// One recorded [ReportControlliData] row, read-only — the answer this report's own technician
+/// gave to one item of the ticket's checklist (ADR-0012 §B.4). Mirrors ticket_detail_screen.dart's
+/// `_TicketControlStatusCard` shape (icon + group path + label + value), but reads a report's own
+/// recorded answer instead of the ticket's live/current one, and tolerates [flat] being null (the
+/// checklist hasn't been cached on this device) by falling back to the raw control id rather than
+/// hiding the row — the answer itself is still real, recorded data worth showing.
+class _ControlloAnswerRow extends StatelessWidget {
+  const _ControlloAnswerRow({required this.controllo, required this.flat});
+
+  final ReportControlliData controllo;
+  final FlatTicketControl? flat;
+
+  @override
+  Widget build(BuildContext context) {
+    final control = flat?.control;
+    final label = control?.label ?? 'Controllo ${controllo.controlId}';
+    final groupPath = flat?.groupPath;
+    final valueLabel = _valueLabel(control?.type);
+
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.clipboardCheck, size: 18, color: context.colors.inkMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (groupPath != null && groupPath.isNotEmpty)
+                  Text(groupPath, style: TextStyle(color: context.colors.inkMuted, fontSize: 11)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: context.colors.ink,
+                  ),
+                ),
+                if (valueLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      valueLabel,
+                      style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Picks the recorded column matching [type] when it's known; falls back to "whichever column
+  /// is actually populated" when the checklist item's type hasn't resolved (offline / never
+  /// cached) — a report's answer is stored in exactly one of these four columns regardless of
+  /// whether this device can currently say which type it is.
+  String? _valueLabel(ControlType? type) {
+    switch (type) {
+      case ControlType.checkbox:
+      case ControlType.trueFalse:
+        if (controllo.boolValue == null) return null;
+        return controllo.boolValue! ? 'Sì' : 'No';
+      case ControlType.dateTime:
+        if (controllo.dateValue == null) return null;
+        return DateFormat('dd/MM/yyyy', 'it').format(controllo.dateValue!.toLocal());
+      case ControlType.number:
+        return controllo.numberValue?.toString();
+      case ControlType.text:
+      case ControlType.options:
+      case ControlType.unknown:
+      case null:
+        return controllo.stringValue ??
+            (controllo.boolValue != null ? (controllo.boolValue! ? 'Sì' : 'No') : null) ??
+            (controllo.dateValue != null
+                ? DateFormat('dd/MM/yyyy', 'it').format(controllo.dateValue!.toLocal())
+                : null) ??
+            controllo.numberValue?.toString();
+    }
   }
 }
