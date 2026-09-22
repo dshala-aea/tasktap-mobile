@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
+import '../../../core/widgets/geo_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/sync_service.dart';
+import '../../../presentation/providers/schedule_providers.dart' show locationGeocodedLocationProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -63,14 +65,22 @@ class AdminLocationDetailScreen extends ConsumerWidget {
   }
 }
 
-class _LocationDetailBody extends StatelessWidget {
+class _LocationDetailBody extends ConsumerWidget {
   const _LocationDetailBody({required this.location, required this.locationId});
 
   final Location location;
   final String locationId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Same joined-address shape ticket detail and CantiereMapCard's callers already build —
+    // GeoMapCard's fallback text and "Apri in Mappe" query both read from this string.
+    final address = [
+      location.address,
+      location.city,
+      location.postalCode,
+    ].where((s) => s != null && s.isNotEmpty).join(', ');
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -87,18 +97,50 @@ class _LocationDetailBody extends StatelessWidget {
                   KeyVal(label: 'Città', value: location.city ?? '—'),
                   KeyVal(label: 'Indirizzo', value: location.address ?? '—'),
                   KeyVal(label: 'CAP', value: location.postalCode ?? '—'),
-                  KeyVal(label: 'Telefono', value: location.phone ?? '—'),
-                  if (location.latitude != null && location.longitude != null)
-                    KeyVal(
-                      label: 'Coordinate',
-                      value: '${location.latitude}, ${location.longitude}',
-                    ),
                   KeyVal(
-                    label: 'Note',
-                    value: location.notes?.isNotEmpty == true ? location.notes! : '—',
+                    label: 'Telefono',
+                    value: location.phone ?? '—',
                     showDivider: false,
                   ),
                 ],
+              ),
+            ),
+          ),
+        ),
+
+        // Map — replaces the old raw "Coordinate" KeyVal row (a bare `lat, lng` pair) with the
+        // same embedded-map treatment ticket detail and cantiere detail already give a location:
+        // a pin plotted on a real map, never numbers on their own.
+        if (address.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                0,
+                AppSpacing.pagePadding,
+                AppSpacing.base,
+              ),
+              child: GeoMapCard(
+                pointAsync: ref.watch(locationGeocodedLocationProvider(locationId)),
+                address: address,
+              ),
+            ),
+          ),
+
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              0,
+              AppSpacing.pagePadding,
+              AppSpacing.base,
+            ),
+            child: AppCard(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base),
+              child: KeyVal(
+                label: 'Note',
+                value: location.notes?.isNotEmpty == true ? location.notes! : '—',
+                showDivider: false,
               ),
             ),
           ),

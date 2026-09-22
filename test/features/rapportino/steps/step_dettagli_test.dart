@@ -17,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
@@ -43,6 +44,8 @@ ProviderContainer _buildContainer({
   String? ticketFreeText,
   String? cantiereId,
   String? cantiereFreeText,
+  double? gpsLatitude,
+  double? gpsLongitude,
 }) {
   return ProviderContainer(
     overrides: [
@@ -65,6 +68,8 @@ ProviderContainer _buildContainer({
             ticketFreeText: ticketFreeText,
             cantiereId: cantiereId,
             cantiereFreeText: cantiereFreeText,
+            gpsLatitude: gpsLatitude,
+            gpsLongitude: gpsLongitude,
           ),
           repo: DraftReportRepository(db),
         ),
@@ -139,6 +144,44 @@ void main() {
       expect(find.text('Cantiere Via Roma'), findsOneWidget);
       expect(find.byIcon(LucideIcons.check), findsOneWidget);
       expect(find.byIcon(LucideIcons.x), findsNothing);
+    });
+  });
+
+  group('StepDettagli — GPS capture never shows raw coordinates', () {
+    testWidgets('shows a neutral label, never the raw lat/lng, when no fix is captured', (
+      tester,
+    ) async {
+      final container = _buildContainer(db: db);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Posizione GPS non acquisita'), findsOneWidget);
+      expect(find.byType(GeoMapCard), findsNothing);
+    });
+
+    testWidgets('shows GeoMapCard, never the raw lat/lng pair, once a fix is captured', (
+      tester,
+    ) async {
+      final container = _buildContainer(db: db, gpsLatitude: 45.464200, gpsLongitude: 9.190000);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      // Bounded pumps, not pumpAndSettle: a captured point renders the real embedded map
+      // immediately (AsyncValue.data, no async wait), and its TileLayer's network image requests
+      // never "settle" the way pumpAndSettle waits for — see the analogous note in
+      // admin_location_detail_screen_test.dart. The assertions below only need the widget tree
+      // built, not tiles painted.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(find.text('Posizione GPS acquisita'), findsOneWidget);
+      expect(find.byType(GeoMapCard), findsOneWidget);
+      // The old rendering would have shown this exact string — assert it's gone entirely.
+      expect(find.text('GPS: 45.46420, 9.19000'), findsNothing);
+      expect(find.textContaining('45.4642'), findsNothing);
     });
   });
 }

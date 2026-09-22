@@ -11,7 +11,7 @@ import 'package:intl/intl.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/widgets/app_compartment_tile.dart';
-import '../../core/widgets/app_map_card.dart';
+import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
@@ -338,7 +338,10 @@ class _TicketDetailBody extends ConsumerWidget {
                         AppSpacing.pagePadding,
                         AppSpacing.base,
                       ),
-                      child: AppMapCard(address: locationAddress),
+                      child: GeoMapCard(
+                        pointAsync: ref.watch(locationGeocodedLocationProvider(ticket.locationId)),
+                        address: locationAddress,
+                      ),
                     ),
                   ),
 
@@ -483,7 +486,7 @@ class _TicketDetailBody extends ConsumerWidget {
       customerId: ticket.customerId,
       // The ticket's own tenant, rather than whatever row the mirror lookup finds first.
       tenantId: ticket.tenantId,
-      // Same address AppMapCard already shows on this screen — a technician who needed it
+      // Same address GeoMapCard already shows on this screen — a technician who needed it
       // typed by hand every single time is exactly the friction "prefill everything possible"
       // is about.
       workAddress: locationAddress.isEmpty ? null : locationAddress,

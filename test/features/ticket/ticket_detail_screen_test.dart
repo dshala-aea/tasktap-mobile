@@ -12,7 +12,10 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/core/location/geocoding_service.dart';
 import 'package:tasktap_mobile/core/router/app_router.dart';
+import 'package:tasktap_mobile/core/widgets/app_map_card.dart';
+import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -48,6 +51,17 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
+/// Never geocodes for real — every test in this file overrides `geocodingServiceProvider` with
+/// this, so a ticket location with an address exercises `GeoMapCard`'s fallback path
+/// (`AppMapCard`, unchanged) deterministically instead of racing a real Nominatim request. Mirrors
+/// `test/features/cantiere/cantiere_detail_screen_test.dart`'s own `_NullGeocodingService`.
+class _NullGeocodingService extends GeocodingService {
+  _NullGeocodingService() : super(dio: null);
+
+  @override
+  Future<GeocodedPoint?> geocode(String address) async => null;
+}
+
 // Helper: build a Dio Response for a given status code + data.
 Response<T> _okResponse<T>(T data, String path) => Response<T>(
   data: data,
@@ -71,6 +85,7 @@ Widget _buildDetail({
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(dio ?? MockDio()),
       isOnlineProvider.overrideWithValue(isOnline),
+      geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
     child: MaterialApp(home: TicketDetailScreen(ticketId: ticketId)),
   );
@@ -114,6 +129,7 @@ Widget _buildDetailWithRouter({
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
       isOnlineProvider.overrideWithValue(isOnline),
+      geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -266,6 +282,71 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets(
+      'shows GeoMapCard (never AppMapCard directly) when the location has an address',
+      (tester) async {
+        await db
+            .into(db.ticketStatuses)
+            .insert(
+              TicketStatusesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Aperto'),
+            );
+        await db
+            .into(db.ticketTypes)
+            .insert(
+              TicketTypesCompanion.insert(id: const Value(1), tenantId: 'tenant-1', name: 'Assistenza'),
+            );
+        await db
+            .into(db.customers)
+            .insert(
+              CustomersCompanion.insert(
+                id: 'cust-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                companyName: 'ACME Srl',
+              ),
+            );
+        await db
+            .into(db.locations)
+            .insert(
+              LocationsCompanion.insert(
+                id: 'loc-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                customerId: 'cust-1',
+                name: 'Sede Milano',
+                address: const Value('Via Roma 1'),
+                city: const Value('Milano'),
+              ),
+            );
+        await db
+            .into(db.tickets)
+            .insert(
+              TicketsCompanion.insert(
+                id: 'ticket-1',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 6, 1, 9),
+                title: 'Perdita idrica bagno',
+                customerId: 'cust-1',
+                locationId: 'loc-1',
+                statusId: 1,
+                typeId: 1,
+              ),
+            );
+
+        await pump(tester);
+
+        // The fake geocoder never resolves a point, so this exercises GeoMapCard's own fallback
+        // to AppMapCard — same widget the screen always rendered before this refactor, just no
+        // longer instantiated directly by the screen itself.
+        expect(find.byType(GeoMapCard), findsOneWidget);
+        expect(find.byType(AppMapCard), findsOneWidget);
+        expect(find.text('Via Roma 1, Milano'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
 
     testWidgets('renders resolved StatusPill', (tester) async {
       await seedBase(db);

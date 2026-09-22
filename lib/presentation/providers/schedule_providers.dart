@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/location/geocoding_service.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 
@@ -78,6 +79,45 @@ final ticketByIdProvider = StreamProvider.autoDispose.family<Ticket?, String>((
     db.tickets,
   )..where((t) => t.id.equals(id))).watchSingleOrNull();
 });
+
+/// The geocoded {lat, lng} for a Location's (a "sede"'s) address — the same cache-then-geocode-
+/// then-persist contract as `cantiereGeocodedLocationProvider`
+/// (features/cantiere/cantiere_providers.dart), against the `Locations` table instead of
+/// `Cantieri`. Backs `GeoMapCard` (core/widgets/geo_map_card.dart) wherever a Location is shown:
+/// ticket detail, sede detail, report detail.
+///
+/// Reads `Locations.latitude`/`longitude` first, and only calls [GeocodingService] (a real
+/// Nominatim HTTP request) when both are still null, immediately persisting a successful result
+/// back to those same columns — so a given location is never geocoded more than once on this
+/// device. Returns null when the location isn't synced locally, has no usable address, or
+/// geocoding failed; `GeoMapCard` reads null as "fall back to AppMapCard", not as an error.
+final locationGeocodedLocationProvider = FutureProvider.autoDispose
+    .family<GeocodedPoint?, String>((ref, locationId) async {
+      final db = ref.watch(appDatabaseProvider);
+      final location = await (db.select(
+        db.locations,
+      )..where((l) => l.id.equals(locationId))).getSingleOrNull();
+      if (location == null) return null;
+
+      if (location.latitude != null && location.longitude != null) {
+        return (lat: location.latitude!, lng: location.longitude!);
+      }
+
+      final address = [
+        location.address,
+        location.city,
+        location.postalCode,
+      ].where((s) => s != null && s.isNotEmpty).join(', ');
+      if (address.isEmpty) return null;
+
+      final point = await ref.read(geocodingServiceProvider).geocode(address);
+      if (point == null) return null;
+
+      await (db.update(db.locations)..where((l) => l.id.equals(locationId))).write(
+        LocationsCompanion(latitude: Value(point.lat), longitude: Value(point.lng)),
+      );
+      return point;
+    });
 
 // ── Draft reports ──────────────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/dictation/dictate_button.dart';
 import '../../../core/location/location_service.dart';
+import '../../../core/widgets/geo_map_card.dart';
 import '../../../core/widgets/widgets.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -236,37 +237,51 @@ class _GpsCapture extends ConsumerWidget {
     final state = ref.watch(reportEditorProvider(reportId));
     final hasGps = state.gpsLatitude != null && state.gpsLongitude != null;
 
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
-      child: Row(
-        children: [
-          Icon(
-            hasGps ? LucideIcons.mapPin : LucideIcons.mapPinOff,
-            color: hasGps ? context.colors.green : context.colors.inkMuted,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              hasGps
-                  ? 'GPS: ${state.gpsLatitude!.toStringAsFixed(5)}, '
-                        '${state.gpsLongitude!.toStringAsFixed(5)}'
-                  : 'Posizione GPS non acquisita',
-              style: TextStyle(
-                fontSize: 13,
-                color: hasGps ? context.colors.ink : context.colors.inkMuted,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: AppSpacing.md),
+          child: Row(
+            children: [
+              Icon(
+                hasGps ? LucideIcons.mapPin : LucideIcons.mapPinOff,
+                color: hasGps ? context.colors.green : context.colors.inkMuted,
+                size: 20,
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  // Never the raw lat/lng pair — see GeoMapCard below, which is the correct place
+                  // to show exactly where this coordinate is.
+                  hasGps ? 'Posizione GPS acquisita' : 'Posizione GPS non acquisita',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: hasGps ? context.colors.ink : context.colors.inkMuted,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () => _captureGps(context, ref),
+                icon: const Icon(LucideIcons.locateFixed, size: 16),
+                label: Text(hasGps ? 'Aggiorna' : 'Acquisisci'),
+                style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          TextButton.icon(
-            onPressed: () => _captureGps(context, ref),
-            icon: const Icon(LucideIcons.locateFixed, size: 16),
-            label: Text(hasGps ? 'Aggiorna' : 'Acquisisci'),
-            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+        ),
+        // Plots the just-captured fix on a real map instead of leaving it as a fact the
+        // technician has to take on faith — the point is already in hand (no address to geocode,
+        // no network round trip), so this renders immediately via `AsyncValue.data`.
+        if (hasGps) ...[
+          const SizedBox(height: 8),
+          GeoMapCard(
+            pointAsync: AsyncValue.data((lat: state.gpsLatitude!, lng: state.gpsLongitude!)),
+            address: '${state.gpsLatitude!.toStringAsFixed(6)}, ${state.gpsLongitude!.toStringAsFixed(6)}',
           ),
         ],
-      ),
+      ],
     );
   }
 
