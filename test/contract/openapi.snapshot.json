@@ -12472,6 +12472,62 @@
         }
       }
     },
+    "/api/admin/SuperUser/ai-model-settings": {
+      "get": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "The platform-wide AI model configured per ModelRole \u2014 the live, SuperUser-\neditable counterpart to \u0060appsettings.json\u0060\u0027s \u0060Ai:Models:Roles\u0060. Applies to every\ntenant at once (see AiModelSetting\u0027s doc comment for why this is a genuine\nplatform singleton, not a per-tenant setting).",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/SuperUser/ai-model-settings/{role}": {
+      "put": {
+        "tags": [
+          "SuperUser"
+        ],
+        "summary": "Updates the provider/model for one role. Takes effect on the very next AI call \u2014 no\nrestart, no cache to clear (see \u0060AiModelSettingsReader\u0060). If no row exists yet for\nthis role (should not normally happen post-seed-migration), creates one rather than\nfailing, so a SuperUser can always recover from a missing row through this endpoint.",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ModelRole"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiModelSettingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiModelSettingRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiModelSettingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Sync/mobile": {
       "get": {
         "tags": [
@@ -22272,6 +22328,10 @@
         },
         "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
+      "ModelRole": {
+        "type": "integer",
+        "description": "The three model roles a call site can ask for \u2014 named for what the call is *for*, not for a\nrelative capability label that goes stale the moment a cheaper model gets good enough to do\nthe job. See the design spec\u0027s Component 1 for the full role semantics."
+      },
       "MonthlyGridCell": {
         "required": [
           "giorno",
@@ -27314,6 +27374,18 @@
             ]
           }
         }
+      },
+      "UpdateAiModelSettingRequest": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "description": "Free-text model identifier, deliberately not validated against a known-model whitelist \u2014 the\nOpenRouter catalogue changes too fast for this codebase to hardcode one. See\nstring AiModelSetting.Model\u0027s doc comment."
       },
       "UpdateAiSettingsRequest": {
         "type": "object",
