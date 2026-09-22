@@ -93,7 +93,13 @@ class _RowContent {
   const _RowContent({required this.title, required this.subtitle, required this.timeLabel});
   final String title;
   final String subtitle;
-  final String timeLabel;
+
+  /// Null for an all-day schedule — there is no real start time to show (see
+  /// `_resolveRow`'s own doc comment), so the badge/meta row omits the time entirely rather
+  /// than formatting the placeholder minute values into a literal "00:00". Same gate
+  /// `giorno_view.dart`'s `_EventBlock`, `lista_view.dart`'s `_ScheduleListRow` and
+  /// `calendario_screen.dart`'s `_ScheduleInfoSheet` already use for the same reason.
+  final String? timeLabel;
 }
 
 final _weekdayFmt = DateFormat('EEE d', 'it');
@@ -127,10 +133,17 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
     customerName,
     location?.city,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
+  // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
+  // 0/0), not a real time of day — formatting them unconditionally produced a literal "00:00"
+  // that read as "starts at midnight" rather than "no time, all day". Gate on `allDay` the
+  // same way Calendario's own views already do.
+  final timeLabel = schedule.allDay
+      ? null
+      : _dateQualifiedTimeLabel(schedule.activityDate, schedule.timeStartMinutes);
   return _RowContent(
     title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
     subtitle: subtitle,
-    timeLabel: _dateQualifiedTimeLabel(schedule.activityDate, schedule.timeStartMinutes),
+    timeLabel: timeLabel,
   );
 }
 
@@ -202,16 +215,17 @@ class _FocusCard extends ConsumerWidget {
                     color: badgeColor,
                   ),
                 ),
-                Text(
-                  '  ·  ${row.timeLabel}',
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: c.inkMuted,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                if (row.timeLabel != null)
+                  Text(
+                    '  ·  ${row.timeLabel}',
+                    style: TextStyle(
+                      fontFamily: 'Archivo',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: c.inkMuted,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
-                ),
                 const Spacer(),
                 // Flat AppColors.Y for every tier, live included — was a per-tier gradient
                 // override (green for live); AppButton's 5 named variants don't carry a
@@ -292,16 +306,18 @@ class _CompactRow extends ConsumerWidget {
         leading: RowIconTile(icon: tier.badge.$1, size: 36, iconSize: 16),
         title: row.title,
         subtitle: row.subtitle,
-        meta: Text(
-          row.timeLabel,
-          style: TextStyle(
-            fontFamily: 'Archivo',
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: context.colors.inkMuted,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
+        meta: row.timeLabel == null
+            ? null
+            : Text(
+                row.timeLabel!,
+                style: TextStyle(
+                  fontFamily: 'Archivo',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.inkMuted,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
         onTap: schedule.ticketId != null ? () => _open(context, schedule) : null,
       ),
     );
