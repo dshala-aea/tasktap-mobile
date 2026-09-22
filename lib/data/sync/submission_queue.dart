@@ -247,6 +247,7 @@ class SubmissionQueue {
       customerSignoffText: draft.customerSignoffText,
       materialiNotRequired: draft.materialiNotRequired,
       aiAssisted: draft.isAiAssisted,
+      richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       photoAllegatoIds: photoIds,
       staff: staff
           .map(

@@ -422,6 +422,16 @@ class DraftReports extends Table {
   BoolColumn get technicianSignaturePrefillSuppressed =>
       boolean().withDefault(const Constant(false))();
 
+  /// "Da tornare" / "Serve un secondo intervento" — set from the Riepilogo step alongside the
+  /// submit action. Mirrors `SubmitReportRequest.RichiedeSecondoIntervento` on the backend: when
+  /// true and this draft is linked to a ticket, submitting atomically moves that ticket to the
+  /// tenant's `RequiresFollowUp`-flagged status (see `ReportSubmitService.SubmitAsync`).
+  ///
+  /// Persisted like every other Riepilogo boolean (see `materialiNotRequired`), not held only in
+  /// memory: a technician who ticks this and then closes the app mid-compilation must not lose
+  /// the flag before ever reaching the submit button.
+  BoolColumn get richiedeSecondoIntervento => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -799,7 +809,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration {
@@ -991,6 +1001,13 @@ class AppDatabase extends _$AppDatabase {
           // Effective clock-in method (tenant default + per-user override), mirrored from /auth/me
           // the same way every other entitlement field already is.
           await m.addColumn(entitlements, entitlements.clockInMethod);
+        }
+        if (from < 30) {
+          // "Da tornare" — see DraftReports.richiedeSecondoIntervento's own doc comment.
+          // Client-authored only (set locally on the Riepilogo step, read locally to build the
+          // submit payload), never delta-synced: no syncCursorGeneration bump needed, same
+          // reasoning as schema 21/25/26/28's own client-authored columns.
+          await m.addColumn(draftReports, draftReports.richiedeSecondoIntervento);
         }
       },
     );

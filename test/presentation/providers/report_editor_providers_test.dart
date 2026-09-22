@@ -463,6 +463,49 @@ void main() {
     });
   });
 
+  // ── "Serve un secondo intervento" (Da tornare) ─────────────────────────────
+
+  group('richiedeSecondoIntervento — Riepilogo follow-up flag', () {
+    test('defaults to false for a brand-new draft', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(db);
+
+      expect(notifier.state.richiedeSecondoIntervento, isFalse);
+    });
+
+    test('setRichiedeSecondoIntervento updates state and autosaves', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      await notifier.setRichiedeSecondoIntervento(true);
+
+      expect(notifier.state.richiedeSecondoIntervento, isTrue);
+      final draft = await repo.getDraft('draft-1');
+      expect(draft?.richiedeSecondoIntervento, isTrue);
+    });
+
+    test('survives being read back from a reloaded draft', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(db);
+      await notifier.setRichiedeSecondoIntervento(true);
+
+      // A fresh notifier over the same underlying Drift row — mirrors closing and reopening the
+      // rapportino editor (e.g. the app was closed mid-compilation and reopened later).
+      final repo = DraftReportRepository(db);
+      final reopened = ReportEditorNotifier(
+        initialState: const ReportEditorState(
+          reportId: 'draft-1',
+          tenantId: 'tenant-1',
+          insertedUserId: 'user-1',
+        ),
+        repo: repo,
+      );
+      await reopened.ready;
+
+      expect(reopened.state.richiedeSecondoIntervento, isTrue);
+    });
+  });
+
   // ── Signatures ────────────────────────────────────────────────────────────
 
   group('captureGpsSilently — automatic GPS acquisition', () {

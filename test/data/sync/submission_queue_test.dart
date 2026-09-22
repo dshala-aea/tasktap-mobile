@@ -39,6 +39,8 @@ Future<void> _insertDraft(
   bool isPendingAllegato = false,
   String? customerSigId,
   String? technicianSigId,
+  String? ticketId,
+  bool richiedeSecondoIntervento = false,
   // unique suffix for child rows when inserting multiple drafts in same test
   String? suffix,
 }) async {
@@ -53,11 +55,13 @@ Future<void> _insertDraft(
           title: 'Test rapportino',
           insertedUserId: 'user-1',
           locationId: 'loc-1',
+          ticketId: Value(ticketId),
           isLocalOnly: const Value(true),
           submissionState: Value(submissionState),
           idempotencyKey: Value(idempotencyKey),
           customerSignatureAllegatoId: Value(customerSigId),
           technicianSignatureAllegatoId: Value(technicianSigId),
+          richiedeSecondoIntervento: Value(richiedeSecondoIntervento),
         ),
       );
 
@@ -291,6 +295,40 @@ void main() {
       expect(capturedRequest!.staff.first.userId, 'user-1');
       expect(capturedRequest!.materiali.length, 1);
       expect(capturedRequest!.materiali.first.freeTextName, 'Vite');
+      // Defaults to false — flagging a follow-up is an explicit technician decision.
+      expect(capturedRequest!.richiedeSecondoIntervento, isFalse);
+    });
+
+    test('submit carries richiedeSecondoIntervento=true from draft onto the request', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-1',
+        ticketId: 'ticket-1',
+        richiedeSecondoIntervento: true,
+      );
+
+      SubmitReportRequest? capturedRequest;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        capturedRequest = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(
+          id: 'report-1',
+          title: 'Test',
+          stato: '1',
+          inviatoAt: null,
+        );
+      });
+
+      await queue.processAll();
+
+      expect(capturedRequest, isNotNull);
+      expect(capturedRequest!.ticketId, 'ticket-1');
+      expect(capturedRequest!.richiedeSecondoIntervento, isTrue);
     });
   });
 
@@ -895,6 +933,22 @@ void main() {
       expect((json['materiali'] as List).length, 1);
       expect((json['controlli'] as List).length, 1);
       expect((json['photoAllegatoIds'] as List).isEmpty, isTrue);
+    });
+
+    test('richiedeSecondoIntervento defaults to false and serializes under the wire name', () {
+      const req = SubmitReportRequest(id: 'guid-1', locationId: 'loc-1', title: 'T');
+      expect(req.richiedeSecondoIntervento, isFalse);
+      expect(req.toJson()['richiedeSecondoIntervento'], false);
+    });
+
+    test('richiedeSecondoIntervento=true serializes as true', () {
+      const req = SubmitReportRequest(
+        id: 'guid-1',
+        locationId: 'loc-1',
+        title: 'T',
+        richiedeSecondoIntervento: true,
+      );
+      expect(req.toJson()['richiedeSecondoIntervento'], true);
     });
 
     test('toJson omits null optional fields', () {

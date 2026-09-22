@@ -279,6 +279,44 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
           ),
           const SizedBox(height: 20),
 
+          // ── "Serve un secondo intervento" toggle ────────────────────────────
+          //
+          // Only meaningful when this rapportino is linked to a ticket — a report with no ticket
+          // has nothing for the backend to transition (see `ReportEditorState
+          // .richiedeSecondoIntervento`'s own doc comment). Off by default: flagging a follow-up
+          // is an explicit technician decision, never assumed.
+          if (state.ticketId?.isNotEmpty ?? false) ...[
+            AppCard(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.base,
+                AppSpacing.xs,
+                AppSpacing.base,
+                AppSpacing.xs,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Serve un secondo intervento',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: context.colors.ink,
+                      ),
+                    ),
+                  ),
+                  AppToggle(
+                    value: state.richiedeSecondoIntervento,
+                    onChanged: (v) => ref
+                        .read(reportEditorProvider(widget.reportId).notifier)
+                        .setRichiedeSecondoIntervento(v),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+
           // ── Firma cliente ──────────────────────────────────────────────────
           StepLabel(title: 'Firma cliente *'),
           const SizedBox(height: 8),

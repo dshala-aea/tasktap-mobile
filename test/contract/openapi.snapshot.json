@@ -6465,6 +6465,7 @@
           "MaintenanceTemplates"
         ],
         "summary": "Edits a control by its lineage id, in whatever draft is currently open for the template \u2014\nopening one first (from the latest published version) if none is open yet. A convenience\nover the plain Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControl(Guid controlId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken)) route, which requires the caller to have already\ncalled Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.CreateDraft(Guid templateId, CancellationToken ct = default(CancellationToken)) and to know the copy\u0027s new control id; this route accepts\nthe same identity \u2014 \u0060ControlLineageId\u0060 \u2014 the caller already has from the last time it\nread this control, published or not.",
+        "description": "**Service-principal callers publish atomically.** A \u0060ServicePrincipal\u0060 (API-key caller,\nADR-0011 \u00A7B.4) is an external system, not a human working the office UI \u2014 it cannot perform\nthe normal \u0022open a draft, review it, then separately publish\u0022 workflow, and has no reason to\nleave a draft open for anyone to review afterwards. So for that caller only, this route opens\na brand-new draft (never reusing one already open \u2014 see\n\u0060MaintenanceTemplateAuthoringService.RequireNoOpenDraft\u0060\u0027s remarks for why reuse would\nrisk auto-publishing a human\u0027s unrelated in-progress edit) and publishes it before returning,\nso the response already reflects the published state. A human/interactive caller (session or\nOIDC auth) is routed exactly as before \u2014 reusing an open draft if there is one, never\nauto-publishing \u2014 this branch changes nothing for that path. bool MaintenanceTemplatesController.IsSuperUser is\nnever true for a \u0060ServicePrincipal\u0060 token (it carries no \u0060is_superuser\u0060 claim), so\nthe System-origin branch below is unreachable for it and needs no counterpart.",
         "parameters": [
           {
             "name": "templateId",
@@ -6505,6 +6506,37 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "MaintenanceTemplates"
+        ],
+        "summary": "Removes a control by its lineage id, atomically publishing the draft it was removed from \u2014\nthe delete counterpart to Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControlByLineage(Guid templateId, Guid controlLineageId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken))\u0027s service-principal branch.\nService-principal callers only: a human deletes via the plain Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.DeleteControl(Guid controlId, CancellationToken ct = default(CancellationToken))\nroute on a draft it already opened and reviews before manually publishing, exactly as today;\nthis route exists because that two-step shape is not available to it. See\nTask\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControlByLineage(Guid templateId, Guid controlLineageId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken))\u0027s own remarks and\n\u0060MaintenanceTemplateAuthoringService.DeleteControlByLineageAsServicePrincipalAsync\u0060 for\nthe fresh-draft-only rule this follows.",
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "controlLineageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -13360,6 +13392,57 @@
         }
       }
     },
+    "/api/Tickets/{id}/materiali-dotazione": {
+      "get": {
+        "tags": [
+          "Tickets"
+        ],
+        "summary": "The ticket\u0027s assigned technician\u0027s personal material kit (\u0022dotazione\u0022) \u2014 the catalogue\nmaterials permanently assigned to them (TecnicoDotazione), surfaced\nautomatically in the materials/collaudi section alongside Task\u0026lt;IActionResult\u0026gt; TicketsController.GetMateriali(Guid id, CancellationToken ct)\u0027s\nfabbisogno rows.",
+        "description": "Deliberately a separate endpoint rather than folded into Task\u0026lt;IActionResult\u0026gt; TicketsController.GetMateriali(Guid id, CancellationToken ct)\u0027s\nresponse: that endpoint\u0027s flat array is also consumed by\n\u0060RapportinoEditor\u0060\u0027s \u0022seed the rapportino\u0027s consumed materials from the ticket\u0027s\nfabbisogno\u0022 flow (client-side), which must never pick up a technician\u0027s own kit as if it\nwere a planned/consumed material for the job. Keeping the two arrays behind two endpoints\n(rather than one payload with two keys) keeps that existing contract byte-for-byte\nunchanged. The office Materiali tab (\u0060MaterialsTab.tsx\u0060) calls both and renders them\nas two clearly labelled, additive sections.\n\nEmpty when the ticket has no Guid? Ticket.AssignedUserId \u2014 there is no technician\nwhose kit would apply yet.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DotazioneMaterialeDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DotazioneMaterialeDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DotazioneMaterialeDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Tickets/{id}/attachments/{allegatoId}/content": {
       "get": {
         "tags": [
@@ -14621,6 +14704,205 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Users/{id}/dotazione": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "A technician\u0027s personal kit, resolved against the material catalogue. Used both by the\nadmin UI (\u0060UtenteDetailPage\u0060\u0027s Dotazione section) and indirectly by\nTask\u0026lt;IActionResult\u0026gt; TicketsController.GetMaterialiDotazione(Guid id, CancellationToken ct), which queries the same table keyed\noff the ticket\u0027s assigned user rather than calling this endpoint.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DotazioneMaterialeDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DotazioneMaterialeDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DotazioneMaterialeDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Adds a catalogue material to a technician\u0027s kit. Idempotent by (UserId, MaterialeId) \u2014\nrepeating a call for a material already in the kit is a no-op success, matching\n\u0060CantieriController.AddAssegnazione\u0060\u0027s upsert-by-existence shape (there is nothing to\nupdate here beyond existence, since a kit row carries no other mutable field).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDotazioneRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDotazioneRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDotazioneRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Users/{id}/dotazione/{materialeId}": {
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Removes a material from a technician\u0027s kit.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "materialeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -16498,6 +16780,16 @@
             "type": "boolean"
           }
         }
+      },
+      "AddDotazioneRequest": {
+        "type": "object",
+        "properties": {
+          "materialeId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "Request body for Task\u0026lt;IActionResult\u0026gt; UsersController.AddDotazione(Guid id, AddDotazioneRequest request, CancellationToken ct)."
       },
       "AddManualTicketWorkLogRequest": {
         "type": "object",
@@ -20109,6 +20401,47 @@
       },
       "DocumentType": {
         "type": "integer"
+      },
+      "DotazioneMaterialeDto": {
+        "required": [
+          "id",
+          "materialeId",
+          "codice",
+          "nome",
+          "unitaMisura"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The TecnicoDotazione row id (not the material id).",
+            "format": "uuid"
+          },
+          "materialeId": {
+            "type": "string",
+            "description": "The catalogue material.",
+            "format": "uuid"
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Catalogue code."
+          },
+          "nome": {
+            "type": "string",
+            "description": "Catalogue name."
+          },
+          "unitaMisura": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Catalogue unit of measure."
+          }
+        },
+        "description": "One material in a technician\u0027s personal kit, resolved against the material catalogue. Shared\nshape between Task\u0026lt;IActionResult\u0026gt; UsersController.GetDotazione(Guid id, CancellationToken ct) (the admin picker) and\nTask\u0026lt;IActionResult\u0026gt; TicketsController.GetMaterialiDotazione(Guid id, CancellationToken ct) (the ticket materials/collaudi section)."
       },
       "EndCantiereWorkLogRequest": {
         "type": "object",
@@ -25671,6 +26004,10 @@
             "type": "boolean",
             "description": "When true, the operator confirmed no materials were used."
           },
+          "richiedeSecondoIntervento": {
+            "type": "boolean",
+            "description": "CSC requirement: the technician finished this visit but flags that a second one is\nneeded (\u0022Da tornare\u0022 / \u0022Serve un secondo intervento\u0022), set from the rapportino\u0027s\nRiepilogo step alongside the submit action rather than through a separate status-change\ncall. Applied atomically with the rest of this submit (see\nTask\u0026lt;ReportSubmitResult\u0026gt; ReportSubmitService.SubmitAsync(Guid tenantId, Guid userId, string? idempotencyKey, SubmitReportRequest request)\u0027s handling): a technician on a spotty\nconnection who ticks this box must not end up with the rapportino sent but the ticket\nstill sitting in its old status because a second network round trip never landed.\nNo-op when Guid? SubmitReportRequest.TicketId is null (a report with no ticket has nothing to\ntransition) or when the tenant has no status flagged\nbool TicketStatus.RequiresFollowUp."
+          },
           "photoAllegatoIds": {
             "type": "array",
             "items": {
@@ -26766,6 +27103,10 @@
               "string"
             ],
             "description": "Optional tenant-defined badge color for this status, as a hex string (e.g. \u0022#3B82F6\u0022).\nNull means no override \u2014 the frontend falls back to its default status color mapping."
+          },
+          "requiresFollowUp": {
+            "type": "boolean",
+            "description": "Marks this status as the tenant\u0027s \u0022needs a follow-up visit\u0022 state (CSC requirement:\n\u0022Da Tornare\u0022) \u2014 a technician finishing an intervento in the field but flagging a second\nvisit is required lands the ticket here instead of a normal closed status."
           }
         },
         "description": "Represents a ticket status (StatoIntervento)."
@@ -26787,6 +27128,9 @@
               "null",
               "string"
             ]
+          },
+          "requiresFollowUp": {
+            "type": "boolean"
           }
         }
       },
@@ -26891,7 +27235,8 @@
           "titolo",
           "cliente",
           "priorita",
-          "stato"
+          "stato",
+          "richiedeSecondoIntervento"
         ],
         "type": "object",
         "properties": {
@@ -26922,9 +27267,12 @@
           },
           "stato": {
             "type": "string"
+          },
+          "richiedeSecondoIntervento": {
+            "type": "boolean"
           }
         },
-        "description": "One open ticket that has not been scheduled yet."
+        "description": "One open ticket needing office attention: not yet scheduled, or flagged \u0022Da tornare\u0022\n(bool UnscheduledInterventoDto.RichiedeSecondoIntervento) \u2014 a technician finished the visit in the field but\na second one is needed."
       },
       "UpdateAgentRequest": {
         "type": "object",

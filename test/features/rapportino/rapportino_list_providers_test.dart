@@ -48,6 +48,7 @@ DraftReport _draft({
   materialiNotRequired: false,
   customerSignoffText: null,
   customerSignoffAt: null,
+  richiedeSecondoIntervento: false,
   isLocalOnly: isLocalOnly,
   submissionState: submissionState,
   idempotencyKey: null,

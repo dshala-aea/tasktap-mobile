@@ -237,6 +237,7 @@ class ReportEditorState {
     this.controlloRows = const [],
     this.materialiNotRequired = false,
     this.isAiAssisted = false,
+    this.richiedeSecondoIntervento = false,
     this.customerSignatureLocalPath,
     this.customerSignatureAllegatoId,
     this.technicianSignatureLocalPath,
@@ -286,6 +287,11 @@ class ReportEditorState {
   /// character. The honest claim is "a model was involved in producing this", not "this is
   /// verbatim model output".
   final bool isAiAssisted;
+
+  /// "Da tornare" / "Serve un secondo intervento" — see `DraftReports
+  /// .richiedeSecondoIntervento`'s own doc comment. Only meaningful when [ticketId] is set: a
+  /// rapportino with no linked ticket has nothing for the backend to transition.
+  final bool richiedeSecondoIntervento;
 
   // Step 5 — Firme
   final String? customerSignatureLocalPath;
@@ -356,6 +362,7 @@ class ReportEditorState {
     materialiNotRequired: materialiNotRequired,
     customerSignoffText: null,
     customerSignoffAt: null,
+    richiedeSecondoIntervento: richiedeSecondoIntervento,
     isLocalOnly: true,
     submissionState: 'draft',
     idempotencyKey: null,
@@ -384,6 +391,7 @@ class ReportEditorState {
     List<ControlloRow>? controlloRows,
     bool? materialiNotRequired,
     bool? isAiAssisted,
+    bool? richiedeSecondoIntervento,
     String? customerSignatureLocalPath,
     String? customerSignatureAllegatoId,
     String? technicianSignatureLocalPath,
@@ -430,6 +438,7 @@ class ReportEditorState {
       controlloRows: controlloRows ?? this.controlloRows,
       materialiNotRequired: materialiNotRequired ?? this.materialiNotRequired,
       isAiAssisted: isAiAssisted ?? this.isAiAssisted,
+      richiedeSecondoIntervento: richiedeSecondoIntervento ?? this.richiedeSecondoIntervento,
       customerSignatureLocalPath: clearCustomerSignature
           ? null
           : (customerSignatureLocalPath ?? this.customerSignatureLocalPath),
@@ -616,6 +625,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       ],
       materialiNotRequired: draft.materialiNotRequired,
       isAiAssisted: draft.isAiAssisted,
+      richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       customerSignatureAllegatoId: draft.customerSignatureAllegatoId,
       customerSignatureLocalPath: customerSignatureLocalPath,
       technicianSignatureAllegatoId: draft.technicianSignatureAllegatoId,
@@ -815,6 +825,14 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   Future<void> setMaterialiNotRequired(bool value) async {
     state = state.copyWith(materialiNotRequired: value);
+    await _autosave();
+  }
+
+  /// Toggles "Serve un secondo intervento" from the Riepilogo step. See
+  /// `ReportEditorState.richiedeSecondoIntervento`'s own doc comment — only meaningful for a
+  /// ticket-linked rapportino, but harmless (and simply ignored server-side) otherwise.
+  Future<void> setRichiedeSecondoIntervento(bool value) async {
+    state = state.copyWith(richiedeSecondoIntervento: value);
     await _autosave();
   }
 
@@ -1055,6 +1073,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       locationId: Value(state.locationId ?? ''),
       materialiNotRequired: Value(state.materialiNotRequired),
       isAiAssisted: Value(state.isAiAssisted),
+      richiedeSecondoIntervento: Value(state.richiedeSecondoIntervento),
       customerSignatureAllegatoId: Value(state.customerSignatureAllegatoId),
       technicianSignatureAllegatoId: Value(state.technicianSignatureAllegatoId),
       technicianSignaturePrefillSuppressed: Value(state.technicianSignaturePrefillSuppressed),

@@ -25,6 +25,7 @@ class SubmitReportRequest {
     this.customerSignoffText,
     this.materialiNotRequired = false,
     this.aiAssisted = false,
+    this.richiedeSecondoIntervento = false,
     this.photoAllegatoIds = const [],
     this.staff = const [],
     this.materiali = const [],
@@ -73,6 +74,13 @@ class SubmitReportRequest {
   /// Whether text produced by an AI draft is still in this rapportino.
   final bool aiAssisted;
 
+  /// CSC requirement: the technician finished this visit but flags that a second one is needed
+  /// ("Da tornare" / "Serve un secondo intervento"), set from the Riepilogo step alongside submit
+  /// rather than through a separate status-change call. Applied atomically with the rest of this
+  /// submit — see backend `ReportSubmitService.SubmitAsync`. No-op server-side when there is no
+  /// linked ticket or the tenant has no status flagged `RequiresFollowUp`.
+  final bool richiedeSecondoIntervento;
+
   /// Allegato ids of additional photos attached to the report.
   final List<String> photoAllegatoIds;
 
@@ -102,6 +110,7 @@ class SubmitReportRequest {
     if (customerSignoffText != null) 'customerSignoffText': customerSignoffText,
     'materialiNotRequired': materialiNotRequired,
     'aiAssisted': aiAssisted,
+    'richiedeSecondoIntervento': richiedeSecondoIntervento,
     'photoAllegatoIds': photoAllegatoIds,
     'staff': staff.map((s) => s.toJson()).toList(),
     'materiali': materiali.map((m) => m.toJson()).toList(),
