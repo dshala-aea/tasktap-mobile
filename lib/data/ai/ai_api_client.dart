@@ -245,6 +245,24 @@ class AiDraftControlAnswer {
   }
 }
 
+/// One activity the model resolved for the draft — mirrors backend `DraftActivity`
+/// (Orchestration/ReportDraftDto.cs). `AiConversationsController.Confirm` builds the created
+/// Report's Title/Details directly from these, so this is the exact text that becomes the
+/// rapportino's title/description; the technician needs to see it before confirming.
+class AiDraftActivity {
+  const AiDraftActivity({required this.description, this.hours, required this.state});
+
+  final String description;
+  final double? hours;
+  final AiResolutionState state;
+
+  factory AiDraftActivity.fromJson(Map<String, dynamic> json) => AiDraftActivity(
+    description: json['description'] as String? ?? '',
+    hours: asDouble(json['hours']),
+    state: _parseResolutionState(json['state'] as String?),
+  );
+}
+
 /// The copilot's structured draft — mirrors backend `ReportDraftDto` (Orchestration/ReportDraftDto.cs).
 class AiCopilotDraftDto {
   const AiCopilotDraftDto({
@@ -254,6 +272,7 @@ class AiCopilotDraftDto {
     required this.workers,
     required this.materials,
     required this.controlli,
+    required this.activities,
     required this.openItems,
   });
 
@@ -263,12 +282,14 @@ class AiCopilotDraftDto {
   final List<AiDraftWorkerRef> workers;
   final List<AiDraftMaterialUsage> materials;
   final List<AiDraftControlAnswer> controlli;
+  final List<AiDraftActivity> activities;
   final List<AiCandidateFact> openItems;
 
   static const empty = AiCopilotDraftDto(
     workers: [],
     materials: [],
     controlli: [],
+    activities: [],
     openItems: [],
   );
 
@@ -288,6 +309,9 @@ class AiCopilotDraftDto {
         .toList(),
     controlli: ((json['controlli'] as List<dynamic>?) ?? [])
         .map((c) => AiDraftControlAnswer.fromJson(c as Map<String, dynamic>))
+        .toList(),
+    activities: ((json['activities'] as List<dynamic>?) ?? [])
+        .map((a) => AiDraftActivity.fromJson(a as Map<String, dynamic>))
         .toList(),
     openItems: ((json['openItems'] as List<dynamic>?) ?? [])
         .map((f) => AiCandidateFact.fromJson(f as Map<String, dynamic>))
