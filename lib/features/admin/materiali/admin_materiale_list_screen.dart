@@ -56,13 +56,16 @@ class _AdminMaterialeListScreenState extends State<AdminMaterialeListScreen> {
           onShowInactiveChanged: (v) => setState(() => _showInactive = v),
         ),
       ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
-        // this same change.
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuovo materiale',
-          onPressed: () => context.push('/altro/magazzino/nuovo'),
+      floatingActionButton: CapabilityGate(
+        capability: 'magazzino.article.write',
+        child: Padding(
+          // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment
+          // on this same change.
+          padding: EdgeInsets.only(bottom: context.navClearance),
+          child: AppFab(
+            tooltip: 'Nuovo materiale',
+            onPressed: () => context.push('/altro/magazzino/nuovo'),
+          ),
         ),
       ),
     );

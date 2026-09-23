@@ -43,13 +43,16 @@ class AdminSquadraListScreen extends ConsumerWidget {
           data: (squadre) => _SquadraListBody(squadre: squadre),
         ),
       ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
-        // this same change.
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuova squadra',
-          onPressed: () => context.push('/altro/squadre/nuovo'),
+      floatingActionButton: CapabilityGate(
+        capability: 'team.squadra.write',
+        child: Padding(
+          // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment
+          // on this same change.
+          padding: EdgeInsets.only(bottom: context.navClearance),
+          child: AppFab(
+            tooltip: 'Nuova squadra',
+            onPressed: () => context.push('/altro/squadre/nuovo'),
+          ),
         ),
       ),
     );

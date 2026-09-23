@@ -35,8 +35,10 @@ import 'package:tasktap_mobile/data/local/app_database.dart' show AppDatabase;
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
+import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_screen.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
+import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/kiosk_providers.dart';
@@ -200,4 +202,61 @@ void main() {
       await tester.pumpAndSettle();
     },
   );
+
+  // Proves the permission-gate sweep's new table rows use the same generic mechanism as
+  // pianificazione above, not something pianificazione-specific — one capability-gated admin
+  // subtree (magazzino.warehouse.read) and one module-gated operational route (cantieri).
+
+  testWidgets(
+    'denied magazzino.warehouse.read capability redirects /altro/magazzino/magazzini to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'magazzino'},
+        capabilities: const {},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 23),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/magazzino/magazzini');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(AdminMagazzinoListScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('unentitled cantieri module redirects /cantieri to /forbidden', (tester) async {
+    final cached = Entitlement(
+      features: const {},
+      capabilities: const {},
+      seatType: 'office',
+      fetchedAt: DateTime.utc(2026, 9, 23),
+    );
+
+    await tester.pumpWidget(
+      _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+    );
+    authStream.add(fakeUser);
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    final context = tester.element(find.byType(Scaffold).first);
+    GoRouter.of(context).go('/cantieri');
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+
+    expect(find.byType(ForbiddenScreen), findsOneWidget);
+    expect(find.byType(CantieriListScreen), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
 }

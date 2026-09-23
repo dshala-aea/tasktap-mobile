@@ -80,13 +80,16 @@ class AdminMagazzinoListScreen extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment on
-        // this same change.
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuovo magazzino',
-          onPressed: () => context.push('/altro/magazzino/magazzini/nuovo'),
+      floatingActionButton: CapabilityGate(
+        capability: 'magazzino.warehouse.write',
+        child: Padding(
+          // navClearance alone, not minus navGap — see admin_cantiere_list_screen.dart's comment
+          // on this same change.
+          padding: EdgeInsets.only(bottom: context.navClearance),
+          child: AppFab(
+            tooltip: 'Nuovo magazzino',
+            onPressed: () => context.push('/altro/magazzino/magazzini/nuovo'),
+          ),
         ),
       ),
     );

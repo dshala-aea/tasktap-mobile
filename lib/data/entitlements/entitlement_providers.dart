@@ -34,6 +34,13 @@ final hasFeatureProvider = FutureProvider.family<bool, String>((ref, moduleKey) 
   return ref.watch(entitlementRepositoryProvider).hasFeature(moduleKey);
 });
 
+/// Whether a specific `module.resource.action` capability is held. Unlike [hasFeatureProvider],
+/// fail-closed when nothing is cached — see [EntitlementRepository.hasCapability]'s own doc
+/// comment for why a capability has no safe baseline to guess at. Read by [CapabilityGate].
+final hasCapabilityProvider = FutureProvider.family<bool, String>((ref, key) {
+  return ref.watch(entitlementRepositoryProvider).hasCapability(key);
+});
+
 /// The cached answer, for screens that want to show when it was last confirmed.
 final cachedEntitlementProvider = FutureProvider<Entitlement?>((ref) {
   return ref.watch(entitlementRepositoryProvider).read();

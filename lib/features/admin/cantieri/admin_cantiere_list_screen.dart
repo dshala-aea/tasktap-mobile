@@ -49,15 +49,18 @@ class _AdminCantiereListScreenState extends State<AdminCantiereListScreen> {
           onQueryChanged: (q) => setState(() => _query = q),
         ),
       ),
-      floatingActionButton: Padding(
-        // navClearance alone, not minus navGap: subtracting the gap left the FAB flush against the
-        // pill's top edge with zero breathing room — real-device testing showed it overlapping the
-        // nav on some screens (the active tab's rendered height isn't pinned to navBarHeight's own
-        // hand-derived 74 to begin with).
-        padding: EdgeInsets.only(bottom: context.navClearance),
-        child: AppFab(
-          tooltip: 'Nuovo cantiere',
-          onPressed: () => context.push('/altro/cantieri/nuovo'),
+      floatingActionButton: CapabilityGate(
+        capability: 'cantieri.cantiere.write',
+        child: Padding(
+          // navClearance alone, not minus navGap: subtracting the gap left the FAB flush against
+          // the pill's top edge with zero breathing room — real-device testing showed it
+          // overlapping the nav on some screens (the active tab's rendered height isn't pinned to
+          // navBarHeight's own hand-derived 74 to begin with).
+          padding: EdgeInsets.only(bottom: context.navClearance),
+          child: AppFab(
+            tooltip: 'Nuovo cantiere',
+            onPressed: () => context.push('/altro/cantieri/nuovo'),
+          ),
         ),
       ),
     );
