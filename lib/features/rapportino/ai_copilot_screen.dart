@@ -27,9 +27,10 @@ import '../../data/ai/ai_api_client.dart';
 // editor for review.
 //
 // No voice-recording-and-upload flow here (unlike the web copilot's record/transcribe control):
-// this app has no server-transcription dependency wired at all, by design (see AiApiClient's own
-// "Transcription is deliberately absent" note) — dictation goes through DictateButton, on-device,
-// straight into the text field, same as every other dictated field in this app.
+// this app never calls server-side transcription, by design (see AiApiClient's own "Server-upload
+// transcription is deliberately absent — dictation is not" note) — dictation goes through
+// DictateButton, on-device, straight into the text field, same as every other dictated field in
+// this app.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _ChatMessage {

@@ -14,14 +14,16 @@ import '../api/json_parse.dart';
 /// then fails has still cost one. Both facts have to reach the screen, or a technician cannot make
 /// an informed decision about pressing the button.
 ///
-/// ## Transcription is deliberately absent
+/// ## Server-upload transcription is deliberately absent — dictation is not
 ///
-/// `POST /api/ai/transcribe` exists and takes a multipart audio file, but this app has no
-/// audio-recording dependency and no microphone permission declared on either platform. Adding
-/// both is a platform change — a new package, an Android manifest entry and an iOS usage
-/// description — not a wiring task, and not one to make weeks before a pilot without deciding it
-/// first. A client method with no possible caller would have been dead code pretending to be
-/// coverage, so it is left out and recorded in `docs/redesign-handoff.md` instead.
+/// `POST /api/ai/transcribe` exists and takes a multipart audio file, but this app never calls
+/// it: voice input goes through on-device dictation instead (`DictateButton`,
+/// `lib/core/dictation/`), straight into the text field, per ADR-0017. That path is real and
+/// wired — package, native channel, manifest/Info.plist permissions all present on both
+/// platforms — so a client method for the server-upload endpoint would have no caller. It is
+/// left out and recorded in `docs/redesign-handoff.md` instead, not because voice input is
+/// unimplemented, but because this specific (upload-and-transcribe-server-side) path is
+/// intentionally not the one this app uses.
 
 /// What the company has left this month.
 class AiQuotaDto {
@@ -369,9 +371,10 @@ class AiApiClient {
   //
   // Multi-turn counterpart to [generateDraft] above — the model calls TaskTap tools to verify
   // people/hours/materials/checklist items against real data across several turns instead of one
-  // shot. Text-only here: ADR-0017's on-device speech-to-text is not yet wired on this platform
-  // (no mic package, no permission declared — see this file's own "Transcription is deliberately
-  // absent" note), so there is no voice input to offer on this screen either, same reasoning.
+  // shot. This endpoint itself is text-only (no audio field on the wire), but the screen built on
+  // top of it is not voice-less: dictation via `DictateButton` (on-device, per ADR-0017) fills the
+  // text field before it's sent here — see this file's own "Server-upload transcription is
+  // deliberately absent" note, and `ai_copilot_screen.dart`'s own comment on the same point.
 
   /// POST /api/ai/conversations — starts a session bound to at most one of ticketId/cantiereId.
   Future<AiConversationSessionDto> startConversation({
