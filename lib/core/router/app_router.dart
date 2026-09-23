@@ -56,6 +56,7 @@ import '../../features/admin/reports/admin_report_detail_screen.dart';
 import '../../features/ferie/ferie_permessi_form_screen.dart';
 import '../../features/ferie/ferie_permessi_list_screen.dart';
 import '../../features/clienti/clienti_list_screen.dart';
+import '../../features/rapportino/ai_copilot_screen.dart';
 import '../../features/rapportino/rapportino_form_screen.dart';
 import '../../features/rapportino/rapportini_list_screen.dart';
 import '../../features/rapportino/rapportino_view_screen.dart';
@@ -192,6 +193,19 @@ abstract final class AppRoutes {
   /// Build the editor path for a given draft report id (under Altro › Rapportini).
   static String rapportiniEditor(String reportId) =>
       '/altro/rapportini/editor/$reportId';
+
+  /// Build the AI Copilot path — bound to at most one of ticketId/cantiereId (mutually exclusive,
+  /// same as the backend's `POST /api/ai/conversations`).
+  static String rapportiniCopilot({String? ticketId, String? cantiereId}) {
+    final params = <String, String>{
+      'ticketId': ?ticketId,
+      'cantiereId': ?cantiereId,
+    };
+    final query = params.isEmpty
+        ? ''
+        : '?${params.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
+    return '/altro/rapportini/copilot$query';
+  }
 
   /// Build the read-only view path for a submitted rapportino.
   static String rapportiniView(String reportId) =>
@@ -498,6 +512,14 @@ GoRouter buildRouter(WidgetRef ref) {
                         parentNavigatorKey: rootNavigatorKey,
                         builder: (context, state) => RapportinoFormScreen(
                           reportId: state.pathParameters['reportId']!,
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'copilot',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) => AiCopilotScreen(
+                          ticketId: state.uri.queryParameters['ticketId'],
+                          cantiereId: state.uri.queryParameters['cantiereId'],
                         ),
                       ),
                       GoRoute(

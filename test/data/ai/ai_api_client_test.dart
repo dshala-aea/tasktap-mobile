@@ -185,4 +185,149 @@ void main() {
       expect(dto.technicianNotes, 'Consigliata revisione pompa.');
     });
   });
+
+  // ── AI Copilot conversation ──────────────────────────────────────────────────
+
+  group('AiCopilotDraftDto', () {
+    test('parses every draft section and flags a blocking open item', () {
+      final draft = AiCopilotDraftDto.fromJson({
+        'diagnosi': 'Valvola bloccata',
+        'soluzione': 'Sostituita valvola',
+        'customerSignoffText': 'Cliente ha accettato',
+        'workers': [
+          {'userId': 'u1', 'fullName': 'Marco Rossi', 'hours': 6.5, 'state': 'ResolvedBySystem'},
+        ],
+        'materials': [
+          {'materialId': 'm1', 'name': 'Vite M8', 'quantity': 4, 'state': 'ResolvedBySystem'},
+        ],
+        'controlli': [
+          {'ticketControlId': 'c1', 'boolValue': true, 'state': 'Unresolved'},
+        ],
+        'openItems': [
+          {'field': 'materials[0].materialId', 'state': 'Ambiguous'},
+        ],
+      });
+
+      expect(draft.diagnosi, 'Valvola bloccata');
+      expect(draft.workers.single.fullName, 'Marco Rossi');
+      expect(draft.workers.single.hours, 6.5);
+      expect(draft.materials.single.quantity, 4);
+      expect(draft.controlli.single.describe(), 'Sì');
+      expect(draft.hasBlockingOpenItems, isTrue);
+    });
+
+    test('empty draft has no blocking open items', () {
+      expect(AiCopilotDraftDto.empty.hasBlockingOpenItems, isFalse);
+    });
+
+    test('an Unresolved-only open item does not block', () {
+      final draft = AiCopilotDraftDto.fromJson({
+        'workers': [],
+        'materials': [],
+        'controlli': [],
+        'openItems': [
+          {'field': 'diagnosi', 'state': 'Unresolved'},
+        ],
+      });
+
+      expect(draft.hasBlockingOpenItems, isFalse);
+    });
+  });
+
+  group('conversation lifecycle', () {
+    test('startConversation sends ticketId and parses the session', () async {
+      RequestOptions? captured;
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter((options) async {
+        captured = options;
+        return ResponseBody.fromString(
+          '{"sessionId":"sess-1","ticketId":"tkt-1","cantiereId":null}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+      final client = AiApiClient(dio);
+
+      final session = await client.startConversation(ticketId: 'tkt-1');
+
+      expect(session.sessionId, 'sess-1');
+      expect(session.ticketId, 'tkt-1');
+      final body = captured!.data as Map<String, dynamic>;
+      expect(body['ticketId'], 'tkt-1');
+      expect(body.containsKey('cantiereId'), isFalse);
+    });
+
+    test('sendTurn posts the text and parses the draft', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter(
+        (options) async => ResponseBody.fromString(
+          '{"assistantReplyText":"Fatto.","draft":{"workers":[],"materials":[],"controlli":[],"openItems":[]}}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        ),
+      );
+      final client = AiApiClient(dio);
+
+      final result = await client.sendTurn('sess-1', 'Ho sostituito la valvola');
+
+      expect(result.assistantReplyText, 'Fatto.');
+      expect(result.draft.workers, isEmpty);
+    });
+
+    test('confirmConversation sends the Idempotency-Key header', () async {
+      RequestOptions? captured;
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter((options) async {
+        captured = options;
+        return ResponseBody.fromString(
+          '{"reportId":"rpt-1","replayed":false}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+      final client = AiApiClient(dio);
+
+      final result = await client.confirmConversation('sess-1', idempotencyKey: 'key-1');
+
+      expect(result.reportId, 'rpt-1');
+      expect(result.replayed, isFalse);
+      expect(captured!.headers['Idempotency-Key'], 'key-1');
+    });
+
+    test('a 409 on confirm becomes a stale-version conflict', () async {
+      final client = _clientThrowing(_err(status: 409));
+
+      await expectLater(
+        () => client.confirmConversation('sess-1', idempotencyKey: 'key-1'),
+        throwsA(isA<AiConversationException>().having((e) => e.isStaleVersionConflict, 'isStaleVersionConflict', isTrue)),
+      );
+    });
+
+    test('a 404 on turn means the session is gone, not a generic error', () async {
+      final client = _clientThrowing(_err(status: 404));
+
+      await expectLater(
+        () => client.sendTurn('sess-1', 'ciao'),
+        throwsA(
+          isA<AiConversationException>().having(
+            (e) => e.message,
+            'message',
+            contains('scaduta'),
+          ),
+        ),
+      );
+    });
+
+    test('abandonConversation swallows a failure — best-effort', () async {
+      final client = _clientThrowing(_err(status: 404));
+
+      await expectLater(client.abandonConversation('sess-1'), completes);
+    });
+  });
 }

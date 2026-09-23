@@ -111,6 +111,216 @@ class AiFailure implements Exception {
   String toString() => message;
 }
 
+/// A conversation-endpoint failure that keeps its HTTP status — the screen needs to react
+/// differently to a 409 (stale idempotency-key version: mint a fresh key and let the technician
+/// retry) than to any other failure, which a plain [AiFailure] can't express.
+class AiConversationException implements Exception {
+  const AiConversationException(this.statusCode, this.message);
+
+  final int? statusCode;
+  final String message;
+
+  bool get isStaleVersionConflict => statusCode == 409;
+
+  @override
+  String toString() => message;
+}
+
+/// A resolved field's confidence — mirrors backend `ResolutionState` (CandidateFact.cs),
+/// on the wire as a string (`[JsonConverter(typeof(JsonStringEnumConverter))]`).
+enum AiResolutionState { unresolved, resolvedBySystem, operatorConfirmed, ambiguous, conflict }
+
+AiResolutionState _parseResolutionState(String? s) => switch (s) {
+  'ResolvedBySystem' => AiResolutionState.resolvedBySystem,
+  'OperatorConfirmed' => AiResolutionState.operatorConfirmed,
+  'Ambiguous' => AiResolutionState.ambiguous,
+  'Conflict' => AiResolutionState.conflict,
+  _ => AiResolutionState.unresolved,
+};
+
+class AiConversationSessionDto {
+  const AiConversationSessionDto({required this.sessionId, this.ticketId, this.cantiereId});
+
+  final String sessionId;
+  final String? ticketId;
+  final String? cantiereId;
+
+  factory AiConversationSessionDto.fromJson(Map<String, dynamic> json) =>
+      AiConversationSessionDto(
+        sessionId: json['sessionId'] as String? ?? '',
+        ticketId: json['ticketId'] as String?,
+        cantiereId: json['cantiereId'] as String?,
+      );
+}
+
+/// One draft field the model proposed — just enough to render "N punti da chiarire" and gate
+/// Confirm on Ambiguous/Conflict. Full provenance (which tool resolved it, candidates) is not
+/// shown on mobile — the web copilot's own doc comment covers why the shape carries more than
+/// this; this app only needs the count and the blocking states.
+class AiCandidateFact {
+  const AiCandidateFact({required this.field, required this.state});
+
+  final String field;
+  final AiResolutionState state;
+
+  factory AiCandidateFact.fromJson(Map<String, dynamic> json) => AiCandidateFact(
+    field: json['field'] as String? ?? '',
+    state: _parseResolutionState(json['state'] as String?),
+  );
+}
+
+class AiDraftWorkerRef {
+  const AiDraftWorkerRef({
+    required this.userId,
+    required this.fullName,
+    this.hours,
+    required this.state,
+  });
+
+  final String userId;
+  final String fullName;
+  final double? hours;
+  final AiResolutionState state;
+
+  factory AiDraftWorkerRef.fromJson(Map<String, dynamic> json) => AiDraftWorkerRef(
+    userId: json['userId'] as String? ?? '',
+    fullName: json['fullName'] as String? ?? '',
+    hours: asDouble(json['hours']),
+    state: _parseResolutionState(json['state'] as String?),
+  );
+}
+
+class AiDraftMaterialUsage {
+  const AiDraftMaterialUsage({
+    required this.materialId,
+    required this.name,
+    required this.quantity,
+    required this.state,
+  });
+
+  final String materialId;
+  final String name;
+  final double quantity;
+  final AiResolutionState state;
+
+  factory AiDraftMaterialUsage.fromJson(Map<String, dynamic> json) => AiDraftMaterialUsage(
+    materialId: json['materialId'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    quantity: asDoubleOr0(json['quantity']),
+    state: _parseResolutionState(json['state'] as String?),
+  );
+}
+
+class AiDraftControlAnswer {
+  const AiDraftControlAnswer({
+    required this.ticketControlId,
+    this.stringValue,
+    this.boolValue,
+    this.numberValue,
+    required this.state,
+  });
+
+  final String ticketControlId;
+  final String? stringValue;
+  final bool? boolValue;
+  final double? numberValue;
+  final AiResolutionState state;
+
+  factory AiDraftControlAnswer.fromJson(Map<String, dynamic> json) => AiDraftControlAnswer(
+    ticketControlId: json['ticketControlId'] as String? ?? '',
+    stringValue: json['stringValue'] as String?,
+    boolValue: json['boolValue'] as bool?,
+    numberValue: asDouble(json['numberValue']),
+    state: _parseResolutionState(json['state'] as String?),
+  );
+
+  /// A short human-readable answer, for a one-line list row.
+  String describe() {
+    if (stringValue != null) return stringValue!;
+    if (boolValue != null) return boolValue! ? 'Sì' : 'No';
+    if (numberValue != null) return numberValue!.toString();
+    return '—';
+  }
+}
+
+/// The copilot's structured draft — mirrors backend `ReportDraftDto` (Orchestration/ReportDraftDto.cs).
+class AiCopilotDraftDto {
+  const AiCopilotDraftDto({
+    this.diagnosi,
+    this.soluzione,
+    this.customerSignoffText,
+    required this.workers,
+    required this.materials,
+    required this.controlli,
+    required this.openItems,
+  });
+
+  final String? diagnosi;
+  final String? soluzione;
+  final String? customerSignoffText;
+  final List<AiDraftWorkerRef> workers;
+  final List<AiDraftMaterialUsage> materials;
+  final List<AiDraftControlAnswer> controlli;
+  final List<AiCandidateFact> openItems;
+
+  static const empty = AiCopilotDraftDto(
+    workers: [],
+    materials: [],
+    controlli: [],
+    openItems: [],
+  );
+
+  bool get hasBlockingOpenItems => openItems.any(
+    (f) => f.state == AiResolutionState.ambiguous || f.state == AiResolutionState.conflict,
+  );
+
+  factory AiCopilotDraftDto.fromJson(Map<String, dynamic> json) => AiCopilotDraftDto(
+    diagnosi: json['diagnosi'] as String?,
+    soluzione: json['soluzione'] as String?,
+    customerSignoffText: json['customerSignoffText'] as String?,
+    workers: ((json['workers'] as List<dynamic>?) ?? [])
+        .map((w) => AiDraftWorkerRef.fromJson(w as Map<String, dynamic>))
+        .toList(),
+    materials: ((json['materials'] as List<dynamic>?) ?? [])
+        .map((m) => AiDraftMaterialUsage.fromJson(m as Map<String, dynamic>))
+        .toList(),
+    controlli: ((json['controlli'] as List<dynamic>?) ?? [])
+        .map((c) => AiDraftControlAnswer.fromJson(c as Map<String, dynamic>))
+        .toList(),
+    openItems: ((json['openItems'] as List<dynamic>?) ?? [])
+        .map((f) => AiCandidateFact.fromJson(f as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class AiConversationTurnResult {
+  const AiConversationTurnResult({required this.assistantReplyText, required this.draft});
+
+  final String assistantReplyText;
+  final AiCopilotDraftDto draft;
+
+  factory AiConversationTurnResult.fromJson(Map<String, dynamic> json) =>
+      AiConversationTurnResult(
+        assistantReplyText: json['assistantReplyText'] as String? ?? '',
+        draft: AiCopilotDraftDto.fromJson(
+          (json['draft'] as Map<String, dynamic>?) ?? const {},
+        ),
+      );
+}
+
+class AiConversationConfirmResult {
+  const AiConversationConfirmResult({required this.reportId, required this.replayed});
+
+  final String reportId;
+  final bool replayed;
+
+  factory AiConversationConfirmResult.fromJson(Map<String, dynamic> json) =>
+      AiConversationConfirmResult(
+        reportId: json['reportId'] as String? ?? '',
+        replayed: json['replayed'] as bool? ?? false,
+      );
+}
+
 class AiApiClient {
   AiApiClient(this._dio);
 
@@ -155,6 +365,78 @@ class AiApiClient {
     }
   }
 
+  // ── AI Copilot conversation (POST /api/ai/conversations/...) ──────────────────
+  //
+  // Multi-turn counterpart to [generateDraft] above — the model calls TaskTap tools to verify
+  // people/hours/materials/checklist items against real data across several turns instead of one
+  // shot. Text-only here: ADR-0017's on-device speech-to-text is not yet wired on this platform
+  // (no mic package, no permission declared — see this file's own "Transcription is deliberately
+  // absent" note), so there is no voice input to offer on this screen either, same reasoning.
+
+  /// POST /api/ai/conversations — starts a session bound to at most one of ticketId/cantiereId.
+  Future<AiConversationSessionDto> startConversation({
+    String? ticketId,
+    String? cantiereId,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/ai/conversations',
+        data: {'ticketId': ?ticketId, 'cantiereId': ?cantiereId},
+      );
+      final data = response.data;
+      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      return AiConversationSessionDto.fromJson(data);
+    } on DioException catch (e) {
+      throw _translateConversation(e);
+    }
+  }
+
+  /// POST /api/ai/conversations/{id}/turns — one operator utterance.
+  Future<AiConversationTurnResult> sendTurn(String sessionId, String text) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/ai/conversations/$sessionId/turns',
+        data: {'text': text},
+      );
+      final data = response.data;
+      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      return AiConversationTurnResult.fromJson(data);
+    } on DioException catch (e) {
+      throw _translateConversation(e);
+    }
+  }
+
+  /// POST /api/ai/conversations/{id}/confirm — creates the Bozza from the resolved draft.
+  /// [idempotencyKey] should be a fresh id per confirm *attempt* (retried unchanged on a plain
+  /// retry, regenerated by the caller after a 409 — mirrors the backend's own reuse contract,
+  /// documented on `AiConversationsController.Confirm`).
+  Future<AiConversationConfirmResult> confirmConversation(
+    String sessionId, {
+    required String idempotencyKey,
+  }) async {
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '/api/ai/conversations/$sessionId/confirm',
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
+      );
+      final data = response.data;
+      if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
+      return AiConversationConfirmResult.fromJson(data);
+    } on DioException catch (e) {
+      throw _translateConversation(e);
+    }
+  }
+
+  /// DELETE /api/ai/conversations/{id} — abandon. Best-effort: a session that's already gone
+  /// (already confirmed, expired) is not a failure from the caller's point of view.
+  Future<void> abandonConversation(String sessionId) async {
+    try {
+      await _dio.delete<void>('/api/ai/conversations/$sessionId');
+    } catch (_) {
+      // best-effort — see doc comment above
+    }
+  }
+
   static Exception _translate(DioException e) {
     final status = e.response?.statusCode;
     final body = e.response?.data;
@@ -189,6 +471,61 @@ class AiApiClient {
     return const AiFailure(
       'Il servizio AI non ha risposto. Riprova più tardi.',
     );
+  }
+
+  /// As [_translate], but for the conversation endpoints — keeps the HTTP status (see
+  /// [AiConversationException]'s own doc comment for why) instead of collapsing it into one
+  /// generic [AiFailure].
+  static Exception _translateConversation(DioException e) {
+    final status = e.response?.statusCode;
+    final body = e.response?.data;
+    final map = body is Map<String, dynamic> ? body : null;
+
+    if (status == 429) {
+      return AiQuotaExhaustedException(
+        monthlyLimit: asInt(map?['monthlyLimit']),
+        used: asInt(map?['used']),
+        resetsAt: DateTime.tryParse(map?['resetsAt'] as String? ?? '')?.toUtc(),
+      );
+    }
+
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
+      return AiConversationException(
+        status,
+        'Nessuna connessione. Il copilot AI richiede la rete.',
+      );
+    }
+
+    if (status == 404) {
+      return AiConversationException(
+        status,
+        'La conversazione non esiste più — è scaduta o è già stata confermata.',
+      );
+    }
+
+    if (status == 403) {
+      return AiConversationException(status, 'Non hai i permessi per questa conversazione.');
+    }
+
+    if (status == 409) {
+      return AiConversationException(
+        status,
+        'La bozza è cambiata da quando hai provato a confermare — riprova.',
+      );
+    }
+
+    if (status == 400) {
+      final reason = body is String ? body : (map?['error'] as String?);
+      return AiConversationException(
+        status,
+        reason ?? 'Richiesta non valida.',
+      );
+    }
+
+    return AiConversationException(status, 'Il servizio AI non ha risposto. Riprova più tardi.');
   }
 }
 

@@ -460,9 +460,23 @@ class _TicketDetailBody extends ConsumerWidget {
                 AppSpacing.pagePadding,
                 AppSpacing.base,
               ),
-              child: AppButton(
-                label: 'Crea rapportino',
-                onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: AppButton.secondary(
+                      label: 'AI Copilot',
+                      onPressed: () =>
+                          context.push(AppRoutes.rapportiniCopilot(ticketId: ticket.id)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppButton(
+                      label: 'Crea rapportino',
+                      onPressed: () => _createRapportino(context, ref, ticket, locationAddress),
+                    ),
+                  ),
+                ],
               ),
             )
           else

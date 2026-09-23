@@ -494,6 +494,18 @@ void main() {
         ),
       );
     });
+
+    contractTest('starting a copilot conversation matches the server', () {
+      final client = AiApiClient(dio);
+      return capture(() => client.startConversation(ticketId: _id(56)));
+    });
+
+    contractTest('a copilot conversation turn matches the server', () {
+      final client = AiApiClient(dio);
+      return capture(
+        () => client.sendTurn(_id(57), 'ho sostituito la valvola di zona'),
+      );
+    });
   });
 
   // ── Office writes ───────────────────────────────────────────────────────────
@@ -958,6 +970,13 @@ void main() {
           'DTO, the server schema declares a free-form object, and a body-key check against it '
           'would compare nothing while reading as coverage. ExtensionValueService.SetValuesAsync '
           'already silently drops any key that is not a currently-active definition server-side.',
+      'POST /api/ai/conversations/{}/confirm':
+          'AiApiClient.confirmConversation sends no JSON body at all — the request carries only '
+          'an Idempotency-Key header (AiConversationsController.Confirm reads nothing else off '
+          'the request) — there is no schema to compare a body against.',
+      'DELETE /api/ai/conversations/{}':
+          'AiApiClient.abandonConversation is a bodyless DELETE — nothing to check against a '
+          'request-body schema.',
     };
 
     /// Proof that the checks above did something.
