@@ -29324,6 +29324,17 @@
               "boolean"
             ],
             "description": "Is active."
+          },
+          "seatType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Office vs Field seat. Null/absent leaves the existing value unchanged \u2014 most PUT calls\nnever touch this. Enforced against the tenant\u0027s seat cap for the NEW type before it is\napplied (see \u0060CheckSeatCapAsync\u0060), the same guard \u0060Create\u0060/\u0060Invite\u0060/\nreactivation already use.",
+                "$ref": "#/components/schemas/SeatTypeEnum"
+              }
+            ]
           }
         },
         "description": "Request model for updating a user."
