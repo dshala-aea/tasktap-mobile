@@ -268,6 +268,12 @@ class Entitlements extends Table {
   /// Nullable only for rows written before this column existed — read as "Both" everywhere.
   TextColumn get clockInMethod => text().nullable()();
 
+  /// The one deliberate exception to this table's "no answer means allow" asymmetry (see
+  /// EntitlementRepository's own doc comment): set only when the server has positively confirmed,
+  /// via a structured error code on /auth/me (not just any failure), that this specific user has
+  /// been deactivated. Every other failure — offline, timeout, 5xx — leaves this column untouched.
+  BoolColumn get isAccountDeactivated => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -809,7 +815,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration {
@@ -1008,6 +1014,12 @@ class AppDatabase extends _$AppDatabase {
           // submit payload), never delta-synced: no syncCursorGeneration bump needed, same
           // reasoning as schema 21/25/26/28's own client-authored columns.
           await m.addColumn(draftReports, draftReports.richiedeSecondoIntervento);
+        }
+        if (from < 31) {
+          // Confirmed-deactivation signal — see Entitlements.isAccountDeactivated's own doc
+          // comment. Defaults to false, the honest answer for every row written before this
+          // column existed.
+          await m.addColumn(entitlements, entitlements.isAccountDeactivated);
         }
       },
     );
