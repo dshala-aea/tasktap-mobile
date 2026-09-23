@@ -27,9 +27,10 @@ import '../../data/ai/ai_api_client.dart';
 // editor for review.
 //
 // No voice-recording-and-upload flow here (unlike the web copilot's record/transcribe control):
-// this app has no server-transcription dependency wired at all, by design (see AiApiClient's own
-// "Transcription is deliberately absent" note) — dictation goes through DictateButton, on-device,
-// straight into the text field, same as every other dictated field in this app.
+// this app never calls server-side transcription, by design (see AiApiClient's own "Server-upload
+// transcription is deliberately absent — dictation is not" note) — dictation goes through
+// DictateButton, on-device, straight into the text field, same as every other dictated field in
+// this app.
 // ══════════════════════════════════════════════════════════════════════════════
 
 class _ChatMessage {
@@ -212,7 +213,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                 ),
               if (!_starting && _startError == null) ...[
                 Expanded(child: _buildChat(context)),
-                if (_draft.workers.isNotEmpty ||
+                if (_draft.activities.isNotEmpty ||
+                    _draft.workers.isNotEmpty ||
                     _draft.materials.isNotEmpty ||
                     _draft.controlli.isNotEmpty ||
                     _draft.diagnosi != null ||
@@ -327,6 +329,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             if (_draft.soluzione != null) _draftLine('Soluzione', _draft.soluzione!),
             if (_draft.customerSignoffText != null)
               _draftLine('Accettazione cliente', _draft.customerSignoffText!),
+            // What becomes the rapportino's Title/Description on Confirm (Confirm builds both
+            // directly from these) — shown before workers/materials so the technician can verify
+            // it, not just the line items.
+            for (final a in _draft.activities)
+              _draftRow(
+                '${a.description.isEmpty ? '—' : a.description}${a.hours != null ? ' · ${a.hours}h' : ''}',
+                a.state,
+              ),
             for (final w in _draft.workers)
               _draftRow(
                 '${w.fullName.isEmpty ? '—' : w.fullName}${w.hours != null ? ' · ${w.hours}h' : ''}',

@@ -107,6 +107,13 @@ void main() {
           ],
           materials: [],
           controlli: [],
+          activities: [
+            AiDraftActivity(
+              description: 'Sostituzione valvola',
+              hours: 2,
+              state: AiResolutionState.resolvedBySystem,
+            ),
+          ],
           openItems: [],
         ),
       ),
@@ -124,6 +131,10 @@ void main() {
     expect(find.text('Ho aggiornato la bozza.'), findsOneWidget);
     expect(find.textContaining('Valvola bloccata'), findsOneWidget);
     expect(find.textContaining('Marco Rossi'), findsOneWidget);
+    // Bug (2026-09-23): activities[] — what Confirm builds the created Report's Title/Description
+    // from — used to be silently dropped, so the technician had no way to verify it before
+    // confirming.
+    expect(find.textContaining('Sostituzione valvola'), findsOneWidget);
   });
 
   testWidgets('Confirm is disabled while an open item is Ambiguous', (tester) async {
@@ -134,6 +145,7 @@ void main() {
           workers: [],
           materials: [],
           controlli: [],
+          activities: [],
           openItems: [
             AiCandidateFact(field: 'materials[0].materialId', state: AiResolutionState.ambiguous),
           ],
@@ -158,7 +170,7 @@ void main() {
     final client = _FakeAiApiClient(
       turnResult: const AiConversationTurnResult(
         assistantReplyText: 'Fatto.',
-        draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], openItems: []),
+        draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], activities: [], openItems: []),
       ),
       confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
     );
@@ -180,7 +192,7 @@ void main() {
     final client = _FakeAiApiClient(
       turnResult: const AiConversationTurnResult(
         assistantReplyText: 'Fatto.',
-        draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], openItems: []),
+        draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], activities: [], openItems: []),
       ),
       confirmError: const AiConversationException(409, 'La bozza è cambiata, riprova.'),
     );

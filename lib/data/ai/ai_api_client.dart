@@ -14,14 +14,16 @@ import '../api/json_parse.dart';
 /// then fails has still cost one. Both facts have to reach the screen, or a technician cannot make
 /// an informed decision about pressing the button.
 ///
-/// ## Transcription is deliberately absent
+/// ## Server-upload transcription is deliberately absent — dictation is not
 ///
-/// `POST /api/ai/transcribe` exists and takes a multipart audio file, but this app has no
-/// audio-recording dependency and no microphone permission declared on either platform. Adding
-/// both is a platform change — a new package, an Android manifest entry and an iOS usage
-/// description — not a wiring task, and not one to make weeks before a pilot without deciding it
-/// first. A client method with no possible caller would have been dead code pretending to be
-/// coverage, so it is left out and recorded in `docs/redesign-handoff.md` instead.
+/// `POST /api/ai/transcribe` exists and takes a multipart audio file, but this app never calls
+/// it: voice input goes through on-device dictation instead (`DictateButton`,
+/// `lib/core/dictation/`), straight into the text field, per ADR-0017. That path is real and
+/// wired — package, native channel, manifest/Info.plist permissions all present on both
+/// platforms — so a client method for the server-upload endpoint would have no caller. It is
+/// left out and recorded in `docs/redesign-handoff.md` instead, not because voice input is
+/// unimplemented, but because this specific (upload-and-transcribe-server-side) path is
+/// intentionally not the one this app uses.
 
 /// What the company has left this month.
 class AiQuotaDto {
@@ -243,6 +245,24 @@ class AiDraftControlAnswer {
   }
 }
 
+/// One activity the model resolved for the draft — mirrors backend `DraftActivity`
+/// (Orchestration/ReportDraftDto.cs). `AiConversationsController.Confirm` builds the created
+/// Report's Title/Details directly from these, so this is the exact text that becomes the
+/// rapportino's title/description; the technician needs to see it before confirming.
+class AiDraftActivity {
+  const AiDraftActivity({required this.description, this.hours, required this.state});
+
+  final String description;
+  final double? hours;
+  final AiResolutionState state;
+
+  factory AiDraftActivity.fromJson(Map<String, dynamic> json) => AiDraftActivity(
+    description: json['description'] as String? ?? '',
+    hours: asDouble(json['hours']),
+    state: _parseResolutionState(json['state'] as String?),
+  );
+}
+
 /// The copilot's structured draft — mirrors backend `ReportDraftDto` (Orchestration/ReportDraftDto.cs).
 class AiCopilotDraftDto {
   const AiCopilotDraftDto({
@@ -252,6 +272,7 @@ class AiCopilotDraftDto {
     required this.workers,
     required this.materials,
     required this.controlli,
+    required this.activities,
     required this.openItems,
   });
 
@@ -261,12 +282,14 @@ class AiCopilotDraftDto {
   final List<AiDraftWorkerRef> workers;
   final List<AiDraftMaterialUsage> materials;
   final List<AiDraftControlAnswer> controlli;
+  final List<AiDraftActivity> activities;
   final List<AiCandidateFact> openItems;
 
   static const empty = AiCopilotDraftDto(
     workers: [],
     materials: [],
     controlli: [],
+    activities: [],
     openItems: [],
   );
 
@@ -286,6 +309,9 @@ class AiCopilotDraftDto {
         .toList(),
     controlli: ((json['controlli'] as List<dynamic>?) ?? [])
         .map((c) => AiDraftControlAnswer.fromJson(c as Map<String, dynamic>))
+        .toList(),
+    activities: ((json['activities'] as List<dynamic>?) ?? [])
+        .map((a) => AiDraftActivity.fromJson(a as Map<String, dynamic>))
         .toList(),
     openItems: ((json['openItems'] as List<dynamic>?) ?? [])
         .map((f) => AiCandidateFact.fromJson(f as Map<String, dynamic>))
@@ -369,9 +395,10 @@ class AiApiClient {
   //
   // Multi-turn counterpart to [generateDraft] above — the model calls TaskTap tools to verify
   // people/hours/materials/checklist items against real data across several turns instead of one
-  // shot. Text-only here: ADR-0017's on-device speech-to-text is not yet wired on this platform
-  // (no mic package, no permission declared — see this file's own "Transcription is deliberately
-  // absent" note), so there is no voice input to offer on this screen either, same reasoning.
+  // shot. This endpoint itself is text-only (no audio field on the wire), but the screen built on
+  // top of it is not voice-less: dictation via `DictateButton` (on-device, per ADR-0017) fills the
+  // text field before it's sent here — see this file's own "Server-upload transcription is
+  // deliberately absent" note, and `ai_copilot_screen.dart`'s own comment on the same point.
 
   /// POST /api/ai/conversations — starts a session bound to at most one of ticketId/cantiereId.
   Future<AiConversationSessionDto> startConversation({

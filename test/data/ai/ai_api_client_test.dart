@@ -203,6 +203,9 @@ void main() {
         'controlli': [
           {'ticketControlId': 'c1', 'boolValue': true, 'state': 'Unresolved'},
         ],
+        'activities': [
+          {'description': 'Sostituzione valvola bloccata', 'hours': 2.5, 'state': 'ResolvedBySystem'},
+        ],
         'openItems': [
           {'field': 'materials[0].materialId', 'state': 'Ambiguous'},
         ],
@@ -213,6 +216,12 @@ void main() {
       expect(draft.workers.single.hours, 6.5);
       expect(draft.materials.single.quantity, 4);
       expect(draft.controlli.single.describe(), 'Sì');
+      // Bug (2026-09-23): this field is what AiConversationsController.Confirm builds the
+      // created Report's Title/Details from — until this parsed, a technician had no way to see
+      // or verify that text before confirming.
+      expect(draft.activities.single.description, 'Sostituzione valvola bloccata');
+      expect(draft.activities.single.hours, 2.5);
+      expect(draft.activities.single.state, AiResolutionState.resolvedBySystem);
       expect(draft.hasBlockingOpenItems, isTrue);
     });
 
