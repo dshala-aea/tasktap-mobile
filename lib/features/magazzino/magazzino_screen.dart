@@ -9,6 +9,7 @@ import '../../core/theme/app_rack.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/utils/offline_guard.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../../data/magazzino/magazzino_api_client.dart';
 import '../../data/materiali/materiale_barcode_lookup.dart';
@@ -486,8 +487,16 @@ class _GiacenzaRow extends ConsumerWidget {
         ],
       ),
       // Gap 3/4 of the feature audit: this row used to be read-only — the app could show a
-      // shortage but never let a technician act on it from here.
-      onTap: () => _showActions(context, ref),
+      // shortage but never let a technician act on it from here. Every action this sheet offers
+      // (Carico/Scarico/Trasferisci/soglia minima) is a write, so the row itself is the right
+      // place to gate — not null-checking inside _showActions, which would open an all-hidden
+      // sheet instead of simply not opening one.
+      onTap: (ref.watch(cachedEntitlementProvider).value?.capabilities.contains(
+                'magazzino.warehouse.write',
+              ) ??
+              false)
+          ? () => _showActions(context, ref)
+          : null,
     );
   }
 

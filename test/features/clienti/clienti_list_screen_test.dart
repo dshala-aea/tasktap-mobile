@@ -11,7 +11,9 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
@@ -22,12 +24,18 @@ class MockAuthRepository extends Mock implements IAuthRepository {}
 
 class MockDio extends Mock implements Dio {}
 
-Widget _buildList({required AppDatabase db, required MockAuthRepository repo}) {
+Widget _buildList({
+  required AppDatabase db,
+  required MockAuthRepository repo,
+  Entitlement? cachedEntitlement,
+}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(MockDio()),
+      if (cachedEntitlement != null)
+        cachedEntitlementProvider.overrideWith((ref) => Future.value(cachedEntitlement)),
     ],
     child: const MaterialApp(home: ClientiListScreen()),
   );
@@ -65,8 +73,8 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(WidgetTester tester) async {
-    await tester.pumpWidget(_buildList(db: db, repo: repo));
+  Future<void> pump(WidgetTester tester, {Entitlement? cachedEntitlement}) async {
+    await tester.pumpWidget(_buildList(db: db, repo: repo, cachedEntitlement: cachedEntitlement));
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -180,6 +188,40 @@ void main() {
       await pump(tester);
 
       expect(find.textContaining('2 totali'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('shows the Nuovo cliente FAB when clienti.customer.write is held', (tester) async {
+      await pump(
+        tester,
+        cachedEntitlement: Entitlement(
+          features: {},
+          capabilities: {'clienti.customer.write'},
+          seatType: 'office',
+          fetchedAt: DateTime.utc(2026, 9, 23),
+        ),
+      );
+
+      expect(find.byType(AppFab), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('hides the Nuovo cliente FAB when clienti.customer.write is denied', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        cachedEntitlement: Entitlement(
+          features: {},
+          capabilities: {'clienti.customer.read'},
+          seatType: 'office',
+          fetchedAt: DateTime.utc(2026, 9, 23),
+        ),
+      );
+
+      expect(find.byType(AppFab), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

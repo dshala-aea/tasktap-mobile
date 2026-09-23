@@ -11,7 +11,9 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
@@ -26,13 +28,33 @@ class MockDio extends Mock implements Dio {}
 Response<T> _okResponse<T>(T data, String path) =>
     Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
 
-Widget _buildMagazzino({required AppDatabase db, required MockAuthRepository repo, Dio? dio}) {
+Widget _buildMagazzino({
+  required AppDatabase db,
+  required MockAuthRepository repo,
+  Dio? dio,
+  // Every pre-existing test in this file exercises the write actions (Carico/Scarico/
+  // Trasferisci/soglia minima) reached from a giacenza row's onTap, added before
+  // magazzino.warehouse.write gating existed — defaulting to "granted" keeps them green without
+  // rewriting each one; the explicit "denied" cases below override this.
+  Entitlement? cachedEntitlement,
+}) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
       dioProvider.overrideWithValue(dio ?? MockDio()),
       isOnlineProvider.overrideWithValue(true),
+      cachedEntitlementProvider.overrideWith(
+        (ref) => Future.value(
+          cachedEntitlement ??
+              Entitlement(
+                features: const {},
+                capabilities: const {'magazzino.warehouse.write'},
+                seatType: 'office',
+                fetchedAt: DateTime.utc(2026, 9, 23),
+              ),
+        ),
+      ),
     ],
     child: const MaterialApp(home: MagazzinoScreen()),
   );
@@ -70,8 +92,10 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(WidgetTester tester, {Dio? dio}) async {
-    await tester.pumpWidget(_buildMagazzino(db: db, repo: repo, dio: dio));
+  Future<void> pump(WidgetTester tester, {Dio? dio, Entitlement? cachedEntitlement}) async {
+    await tester.pumpWidget(
+      _buildMagazzino(db: db, repo: repo, dio: dio, cachedEntitlement: cachedEntitlement),
+    );
     await tester.pump();
     authStream.add(fakeUser);
     await tester.pumpAndSettle(const Duration(seconds: 2));
@@ -263,8 +287,8 @@ void main() {
       );
     });
 
-    Future<void> openGiacenzeTab(WidgetTester tester) async {
-      await pump(tester, dio: dio);
+    Future<void> openGiacenzeTab(WidgetTester tester, {Entitlement? cachedEntitlement}) async {
+      await pump(tester, dio: dio, cachedEntitlement: cachedEntitlement);
       await tester.tap(find.text('Giacenze'));
       await tester.pumpAndSettle();
     }
@@ -279,6 +303,27 @@ void main() {
       expect(find.text('Scarico'), findsOneWidget);
       expect(find.text('Trasferisci'), findsOneWidget);
       expect(find.text('Imposta soglia minima'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('tapping a row does nothing when magazzino.warehouse.write is denied', (
+      tester,
+    ) async {
+      await openGiacenzeTab(
+        tester,
+        cachedEntitlement: Entitlement(
+          features: const {},
+          capabilities: const {'magazzino.warehouse.read'},
+          seatType: 'office',
+          fetchedAt: DateTime.utc(2026, 9, 23),
+        ),
+      );
+
+      await tester.tap(find.text('Valvola idraulica'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Carico'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });

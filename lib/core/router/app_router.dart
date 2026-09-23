@@ -224,24 +224,56 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// dynamic segment (e.g. `:id`) with the real value in `state.matchedLocation` for an actual
 /// visit, so an exact-string map keyed on `'/altro/pianificazioni/:id'` would never match a real
 /// navigation there — a plain map is the wrong data structure for a route subtree that has
-/// dynamic children. `'/altro/pianificazioni'` as a prefix covers all four admin schedule routes
-/// (list, `nuova`, `:id`, `:id/modifica`) in one entry, since no sibling route under
-/// [AppRoutes.altro] shares that prefix (verified against the route tree below: `rapportini`,
-/// `profilo`, `impostazioni`, `notifiche`, `i-miei-dati`, `ferie`, `clienti`, `commesse/:id`,
-/// `cantieri`, `sedi`, `magazzino`, `prodotti`, `contratti`, `squadre`, `rapportini-admin`,
-/// `non-disponibile` — none begin with `pianificazioni`).
+/// dynamic children. A prefix like `'/altro/pianificazioni'` covers every route beneath it (list,
+/// `nuova`, `:id`, `:id/modifica`) in one entry, no matter how deep, since a dynamic segment in
+/// the middle still starts with the parent prefix.
+///
+/// **Order matters**: the loop below breaks on the FIRST matching prefix, so a more specific
+/// prefix must be listed before a broader one it is nested under (`/altro/rapportini-admin`
+/// before `/altro/rapportini`; `/altro/magazzino/magazzini` before `/altro/magazzino`) — otherwise
+/// the broader entry would shadow it and apply the wrong requirement.
 ///
 /// [AppRoutes.forbidden] itself must NEVER be prefix-matched by an entry here — that would
-/// self-redirect-loop back onto itself. It isn't: the only prefix below is
-/// `/altro/pianificazioni`, which `/forbidden` does not start with.
+/// self-redirect-loop back onto itself. None of the prefixes below start with `/forbidden`.
 ///
-/// The mobile Admin surface (`/altro/...` admin CRUD screens) is dispatcher-only — a narrower,
-/// genuinely different audience than "anyone who can use the module at all" — so this checks the
-/// finer-grained `pianificazione.schedule.write` *capability*, not just the `pianificazione`
-/// module. That's deliberately stricter than the web guard for the end-user Presenze/
-/// Pianificazione routes, which only checks module entitlement.
+/// The mobile Admin surface (`/altro/...` admin CRUD screens — `clienti`, `sedi`, `cantieri`,
+/// `squadre`, `contratti`, `commesse`, `magazzino`/`magazzini`, `pianificazioni`,
+/// `rapportini-admin`) is dispatcher-only — a narrower, genuinely different audience than "anyone
+/// who can use the module at all" — so each is gated on the resource's `.read` capability at
+/// minimum (its own write actions are gated further, at the button level, by `CapabilityGate`).
+/// `prodotti` is deliberately NOT gated here: the backend defines no `prodotti.*` capability yet
+/// (see `PermissionCatalogue.All`'s own comment — "a capability nothing requires governs
+/// nothing"), so there is nothing correct to check.
+///
+/// The end-user/operational routes (`/ticket`, `/cantieri`, `/altro/rapportini`, `/altro/ferie`)
+/// are a different, broader audience — anyone whose tenant has the module, not dispatcher-only —
+/// so those check module entitlement only, matching the web guard's equivalent split.
+///
+/// **Known residual gap**: prefix matching cannot distinguish a read path from a write path when
+/// the write path is nested past a dynamic segment (e.g. `/altro/clienti/:id/modifica` — the `:id`
+/// varies, so no fixed prefix covers only `modifica`). Where a section mixes open read with
+/// gated write (`clienti`, `sedi`), the route-level entry below only enforces read; the
+/// corresponding `CapabilityGate` on the edit button is what actually keeps an unauthorized user
+/// from reaching the write form through the UI. A direct deep-link to a guessed `:id/modifica`
+/// URL bypasses this — same class of gap as before this sweep, just narrowed to sections that
+/// deliberately keep read open, and only reachable by guessing an exact record id (mobile has no
+/// address bar). Closing it fully needs `RouteRequirement` to support matching a specific leaf
+/// segment regardless of what dynamic segments precede it — out of scope here.
 final _routeRequirements = <(String pathPrefix, RouteRequirement requirement)>[
   ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write')),
+  ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read')),
+  ('/altro/rapportini', const RouteRequirement.module('rapportini')),
+  ('/altro/magazzino/magazzini', const RouteRequirement.capability('magazzino.warehouse.read')),
+  ('/altro/magazzino', const RouteRequirement.capability('magazzino.article.read')),
+  ('/altro/squadre', const RouteRequirement.capability('team.squadra.read')),
+  ('/altro/cantieri', const RouteRequirement.capability('cantieri.cantiere.read')),
+  ('/altro/contratti', const RouteRequirement.capability('contratti.contract.read')),
+  ('/altro/commesse', const RouteRequirement.capability('commesse.commessa.read')),
+  ('/altro/sedi', const RouteRequirement.capability('clienti.location.read')),
+  ('/altro/clienti', const RouteRequirement.capability('clienti.customer.read')),
+  ('/altro/ferie', const RouteRequirement.module('presenze')),
+  ('/ticket', const RouteRequirement.module('interventi')),
+  ('/cantieri', const RouteRequirement.module('cantieri')),
 ];
 
 /// Builds and returns the [GoRouter] for the TaskTap app.

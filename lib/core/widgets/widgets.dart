@@ -12,6 +12,7 @@ export 'app_toggle.dart';
 export 'avatar.dart';
 export 'badge.dart';
 export 'bottom_nav.dart';
+export 'capability_gate.dart';
 export 'compartment_sheet.dart';
 export 'confirm_delete_dialog.dart';
 export 'empty_state.dart';
