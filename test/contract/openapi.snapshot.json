@@ -12599,6 +12599,38 @@
         }
       }
     },
+    "/api/tenant/deletion-request": {
+      "post": {
+        "tags": [
+          "TenantDeletion"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantDeletionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantDeletionRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantDeletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/Tenants": {
       "get": {
         "tags": [
@@ -26734,6 +26766,17 @@
         },
         "description": "A template image, as returned by its upload endpoint."
       },
+      "TenantDeletionRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "TenantProvisionPayload": {
         "required": [
           "companyName"
@@ -30295,6 +30338,9 @@
     },
     {
       "name": "Sync"
+    },
+    {
+      "name": "TenantDeletion"
     },
     {
       "name": "Tenants"
