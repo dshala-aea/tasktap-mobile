@@ -115,6 +115,69 @@ void main() {
     });
   });
 
+  group('a confirmed account-deactivation signal is the one deliberate exception', () {
+    setUp(() async {
+      stub(ok(meBody(features: ['clienti', 'rapportini', 'magazzino'])));
+      await service.refresh();
+    });
+
+    test('a 400 carrying code AccountDeactivated marks the cache deactivated', () async {
+      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/Auth/me'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/Auth/me'),
+            statusCode: 400,
+            data: {'error': 'Account deactivated', 'code': 'AccountDeactivated'},
+          ),
+        ),
+      );
+
+      expect(await service.refresh(), isTrue);
+      final cached = await repo.read();
+      expect(cached!.isAccountDeactivated, isTrue);
+    });
+
+    test('a plain 400 with no code is a transient failure, not a deactivation signal', () async {
+      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/Auth/me'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/Auth/me'),
+            statusCode: 400,
+            data: {'error': 'Your account is not associated with a tenant.'},
+          ),
+        ),
+      );
+
+      expect(await service.refresh(), isFalse);
+      final cached = await repo.read();
+      expect(cached!.isAccountDeactivated, isFalse);
+      expect(await repo.hasFeature('magazzino'), isTrue);
+    });
+
+    test('a 400 with an unrelated code is not treated as deactivation', () async {
+      when(() => dio.get<Map<String, dynamic>>(any())).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/Auth/me'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/Auth/me'),
+            statusCode: 400,
+            data: {'error': 'Something else', 'code': 'SomethingElse'},
+          ),
+        ),
+      );
+
+      expect(await service.refresh(), isFalse);
+      expect((await repo.read())!.isAccountDeactivated, isFalse);
+    });
+
+    test('a normal successful refresh reports isAccountDeactivated false', () async {
+      final cached = await repo.read();
+      expect(cached!.isAccountDeactivated, isFalse);
+    });
+  });
+
   group('before the first successful refresh', () {
     /// A fresh install that cannot reach the network must not be a brick. These three are what a
     /// field seat exists for, and the server rejects anything the tenant genuinely lacks.

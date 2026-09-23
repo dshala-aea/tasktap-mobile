@@ -14,6 +14,7 @@ class Entitlement {
     required this.fetchedAt,
     this.subscriptionStatus,
     this.clockInMethod = 'Both',
+    this.isAccountDeactivated = false,
   });
 
   /// Granted module keys — `rapportini`, `magazzino`, and so on.
@@ -36,6 +37,12 @@ class Entitlement {
   /// (tenant default + user override + Kiosk-entitlement downgrade). Defaults to "Both" for rows
   /// written before this field existed, matching `Entitlements.clockInMethod`'s own doc comment.
   final String clockInMethod;
+
+  /// Set only when the server has positively confirmed (a structured error code, not just any
+  /// failure) that this specific user was deactivated. Unlike [isSuspended], reads fail too —
+  /// TenantMiddleware cannot resolve a tenant at all for a deactivated user — so this blocks the
+  /// whole app rather than just warning about writes.
+  final bool isAccountDeactivated;
 
   bool get isFieldSeat => seatType == 'field';
 
@@ -105,6 +112,7 @@ class EntitlementRepository {
       fetchedAt: row.fetchedAt,
       subscriptionStatus: row.subscriptionStatus,
       clockInMethod: row.clockInMethod ?? 'Both',
+      isAccountDeactivated: row.isAccountDeactivated,
     );
   }
 
@@ -128,6 +136,35 @@ class EntitlementRepository {
             fetchedAt: fetchedAt,
             subscriptionStatus: Value(subscriptionStatus),
             clockInMethod: Value(clockInMethod),
+            // A successful /auth/me is itself proof the user is NOT deactivated — clears any
+            // stale flag from a prior confirmed-deactivation signal (e.g. an admin reactivated
+            // them). Explicit rather than left to the column's own default: an upsert only applies
+            // a Companion field's DEFAULT on first insert, never on the update branch, so omitting
+            // this would leave a previously-set true stuck forever.
+            isAccountDeactivated: const Value(false),
+          ),
+        );
+  }
+
+  /// The one deliberate write outside the normal [write] path: called only when the server has
+  /// positively confirmed — a structured error code, not just any failed request — that this
+  /// specific user was deactivated. Touches nothing else on the row; the rest of the cached
+  /// entitlement stays exactly what it was, so a later reactivation's successful [write] has
+  /// something real to restore rather than a blanked-out cache.
+  Future<void> markAccountDeactivated() async {
+    final existing = await read();
+    await _db
+        .into(_db.entitlements)
+        .insertOnConflictUpdate(
+          EntitlementsCompanion.insert(
+            id: _rowId,
+            featuresJson: jsonEncode(existing?.features.toList() ?? const <String>[]),
+            capabilitiesJson: jsonEncode(existing?.capabilities.toList() ?? const <String>[]),
+            seatType: existing?.seatType ?? 'office',
+            fetchedAt: existing?.fetchedAt ?? DateTime.now().toUtc(),
+            subscriptionStatus: Value(existing?.subscriptionStatus),
+            clockInMethod: Value(existing?.clockInMethod),
+            isAccountDeactivated: const Value(true),
           ),
         );
   }

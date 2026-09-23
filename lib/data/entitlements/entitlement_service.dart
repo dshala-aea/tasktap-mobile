@@ -37,7 +37,17 @@ class EntitlementService {
 
     try {
       response = await _dio.get<Map<String, dynamic>>('/api/Auth/me');
-    } on DioException {
+    } on DioException catch (e) {
+      // The one deliberate exception to "every failure is a no-op": a 400 carrying the specific
+      // structured code TenantMiddleware sends only when it positively resolved this sub to an
+      // existing-but-inactive Users row — never for an unrelated 400 (missing tenant association
+      // entirely), and never for a network error, timeout, or any other status. Anything less
+      // specific than this exact code stays a transient failure, same as before.
+      final body = e.response?.data;
+      if (e.response?.statusCode == 400 && body is Map && body['code'] == 'AccountDeactivated') {
+        await _repository.markAccountDeactivated();
+        return true;
+      }
       return false;
     }
 

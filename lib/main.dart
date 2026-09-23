@@ -18,7 +18,9 @@ import 'core/notifications/notification_service.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/account_deactivated_screen.dart';
 import 'core/widgets/suspended_banner.dart';
+import 'data/entitlements/entitlement_providers.dart';
 import 'presentation/providers/auth_providers.dart';
 import 'features/altro/impostazioni_provider.dart';
 
@@ -221,22 +223,36 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       // router owns — including pushed forms like "Nuovo ticket" — not just the 5 tab branches.
       // A technician who is mid-wizard on a suspended tenant must see the same warning a
       // dashboard visit would have shown, not discover the block only when the final submit 403s.
-      builder: (context, child) => BiometricLock(
-        enabled: biometricLock,
-        // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
-        // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
-        // with nothing behind that empty state, the status-bar strip would fall back to
-        // whatever the platform default is rather than matching the page underneath.
-        child: ColoredBox(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: Column(
-            children: [
-              const SuspendedBanner(),
-              Expanded(child: child ?? const SizedBox.shrink()),
-            ],
+      //
+      // A confirmed-deactivated account replaces `child` outright rather than banner-warning
+      // above it, same reasoning as SuspendedBanner's own placement but taken further: unlike
+      // suspension (reads still work, only writes 403), TenantMiddleware cannot resolve a tenant
+      // for a deactivated user at all — every request fails the same way, so there is nothing
+      // real behind the block worth showing.
+      builder: (context, child) {
+        final isDeactivated = ref.watch(
+          cachedEntitlementProvider.select((e) => e.valueOrNull?.isAccountDeactivated ?? false),
+        );
+
+        return BiometricLock(
+          enabled: biometricLock,
+          // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
+          // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
+          // with nothing behind that empty state, the status-bar strip would fall back to
+          // whatever the platform default is rather than matching the page underneath.
+          child: ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: isDeactivated
+                ? const AccountDeactivatedScreen()
+                : Column(
+                    children: [
+                      const SuspendedBanner(),
+                      Expanded(child: child ?? const SizedBox.shrink()),
+                    ],
+                  ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
