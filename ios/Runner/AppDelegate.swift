@@ -13,8 +13,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    registerDictationChannel(engineBridge.binaryMessenger)
-    registerKioskLockChannel(engineBridge.binaryMessenger)
+    let messenger = engineBridge.applicationRegistrar.messenger()
+    registerDictationChannel(messenger)
+    registerKioskLockChannel(messenger)
   }
 
   /// Whether this handset can recognise Italian speech without sending audio to Apple.
