@@ -17,6 +17,12 @@ build/
 .env.local
 *.pfx
 
+# Signing — never commit a release keystore or its passwords. Codemagic holds these
+# (Code signing identities > Android keystores; the yaml's android_signing reference).
+*.jks
+*.keystore
+key.properties
+
 # OS
 .DS_Store
 Thumbs.db

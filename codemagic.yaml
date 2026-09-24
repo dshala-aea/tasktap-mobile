@@ -55,6 +55,17 @@ workflows:
         script: flutter analyze
       - name: Unit tests
         script: flutter test
+      - name: Bridge Codemagic's CM_-prefixed signing vars
+        script: |
+          # android/app/build.gradle.kts reads the plain names (KEYSTORE_PATH etc.) so a local
+          # release build can also pick up a developer's own keystore without any CM_ prefix.
+          # Codemagic's managed android_signing integration only exports the CM_-prefixed ones —
+          # without this bridge the release buildType's `if (KEYSTORE_PATH != null)` check is
+          # always false here and the CI build silently falls back to debug signing.
+          echo "KEYSTORE_PATH=$CM_KEYSTORE_PATH" >> $CM_ENV
+          echo "KEYSTORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> $CM_ENV
+          echo "KEY_ALIAS=$CM_KEY_ALIAS" >> $CM_ENV
+          echo "KEY_PASSWORD=$CM_KEY_PASSWORD" >> $CM_ENV
       - name: Build Android App Bundle (release)
         script: |
           flutter build appbundle \
