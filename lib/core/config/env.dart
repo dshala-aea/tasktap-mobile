@@ -21,7 +21,7 @@
 /// empty so a build without the dart-define flags fails fast at runtime.
 /// SENTRY_DSN is optional: when absent, crash reporting is a no-op.
 abstract final class Env {
-  /// Zitadel OIDC issuer — e.g. https://tasktap-auth.advantedgeautomation.com
+  /// Zitadel OIDC issuer — e.g. https://auth.tasktap.it
   static const String oidcIssuer = String.fromEnvironment(
     'OIDC_ISSUER',
     defaultValue: '',
