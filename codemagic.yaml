@@ -99,12 +99,7 @@ workflows:
     publishing:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        package_name: com.advantedge.tasktap.tasktap_mobile
         track: internal
-        status: completed
-        # Upload both AAB and APK — AAB for Play Store, APK for direct install
-        upload:
-          - build/**/outputs/**/release/*.aab
       email:
         recipients:
           - dev@advantedge.com
