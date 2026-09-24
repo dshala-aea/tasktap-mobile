@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+import '../../data/api/json_parse.dart';
 
 /// `TicketsController.UploadAttachment`'s own cap. Checked client-side too — before a photo/file
 /// is even queued or sent — so an oversized file is rejected with a clear, actionable sentence
@@ -15,12 +16,13 @@ const int kMaxTicketAttachmentBytes = 10 * 1024 * 1024;
 // ══════════════════════════════════════════════════════════════════════════════
 // TicketDetailApiClient
 //
-// Thin Dio wrapper for the ticket-detail tabs that have no local Drift mirror
-// (rapportini, checklist, attachments, fabbisogno — none of these are ever
-// written by SyncService). Every call here is fetch-on-demand: nothing is
-// cached, so the offline case has to be surfaced as its own outcome
-// (TicketDetailOfflineException) rather than folded into a plain empty list
-// — see ticket_providers.dart for where that check happens.
+// Thin Dio wrapper for the ticket-detail tabs. Most of these (rapportini, checklist,
+// attachments) have no local Drift mirror — every call is fetch-on-demand, so the offline case
+// has to be surfaced as its own outcome (TicketDetailOfflineException) rather than folded into a
+// plain empty list, see ticket_providers.dart for where that check happens. Fabbisogno is the one
+// exception: it IS local-Drift-backed (see ticketMaterialiProvider's own doc comment), so
+// fetchMateriali here isn't the tab's read path — it exists purely for setMateriali's own
+// post-write refresh (see that method's doc comment).
 // ══════════════════════════════════════════════════════════════════════════════
 
 class TicketDetailApiClient {
@@ -70,6 +72,29 @@ class TicketDetailApiClient {
         .cast<Map<String, dynamic>>()
         .map(TicketMaterialeDto.fromJson)
         .toList();
+  }
+
+  /// Replaces a ticket's planned materials (fabbisogno) wholesale — mirrors
+  /// `TicketsController.SetMateriali`, which deletes every existing row and inserts the submitted
+  /// list fresh. No per-row server id to reconcile against (same reasoning that endpoint's own
+  /// doc comment gives), which is why this takes the full replacement list, not a diff.
+  Future<void> setMateriali(String ticketId, List<TicketMaterialeWriteRow> rows) async {
+    await _dio.put<dynamic>(
+      '/api/Tickets/$ticketId/materiali',
+      data: rows.map((r) => r.toJson()).toList(),
+    );
+  }
+
+  /// Tenant-wide catalogue article search (not stock/warehouse-scoped, unlike
+  /// MagazzinoApiClient's van-inventory methods) — the picker half of the Fabbisogno editor's
+  /// "catalogue article OR free text" row choice. Tolerates either an `{items: [...]}` envelope
+  /// or a bare array (see [pagedItems]) since the exact shape wasn't pinned down before this.
+  Future<List<MaterialeSearchResult>> searchMateriali(String query) async {
+    final response = await _dio.get<dynamic>(
+      '/Materiali',
+      queryParameters: {'q': query, 'page': 1, 'pageSize': 20},
+    );
+    return pagedItems(response.data).map(MaterialeSearchResult.fromJson).toList();
   }
 
   /// Uploads one photo/file directly to a ticket (Allegati tab).
@@ -243,6 +268,57 @@ class TicketAttachmentUploadResponse {
     return TicketAttachmentUploadResponse(
       allegatoId: json['allegatoId'] as String,
       contentUrl: json['contentUrl'] as String? ?? '',
+    );
+  }
+}
+
+/// One row the Fabbisogno editor submits to [TicketDetailApiClient.setMateriali] — mirrors
+/// `CreateTicketMaterialeRequest`'s shape exactly (`materialeId`/`freeTextName` mutually
+/// exclusive, `quantity` required, `unitOfMeasure`/`notes` optional).
+class TicketMaterialeWriteRow {
+  const TicketMaterialeWriteRow({
+    this.materialeId,
+    this.freeTextName,
+    required this.quantity,
+    this.unitOfMeasure,
+    this.notes,
+  });
+
+  final String? materialeId;
+  final String? freeTextName;
+  final double quantity;
+  final String? unitOfMeasure;
+  final String? notes;
+
+  Map<String, dynamic> toJson() => {
+    'materialeId': materialeId,
+    'freeTextName': freeTextName,
+    'quantity': quantity,
+    'unitOfMeasure': unitOfMeasure,
+    'notes': notes,
+  };
+}
+
+/// One catalogue article from [TicketDetailApiClient.searchMateriali].
+class MaterialeSearchResult {
+  const MaterialeSearchResult({
+    required this.id,
+    required this.name,
+    this.code,
+    this.unitOfMeasure,
+  });
+
+  final String id;
+  final String name;
+  final String? code;
+  final String? unitOfMeasure;
+
+  factory MaterialeSearchResult.fromJson(Map<String, dynamic> json) {
+    return MaterialeSearchResult(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? '',
+      code: json['code'] as String?,
+      unitOfMeasure: json['unitOfMeasure'] as String?,
     );
   }
 }

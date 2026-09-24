@@ -16,6 +16,7 @@ import 'package:tasktap_mobile/data/magazzino/magazzino_api_client.dart';
 import 'package:tasktap_mobile/data/reports/report_submit_api_client.dart';
 import 'package:tasktap_mobile/features/admin/admin_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_api_client.dart';
+import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_workflow_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -392,6 +393,15 @@ void main() {
           typeId: 1,
           clientId: _id(8),
         ),
+      );
+    });
+
+    contractTest('replacing the ticket materiali (fabbisogno) matches the server', () {
+      final client = TicketDetailApiClient(dio);
+      return capture(
+        () => client.setMateriali(_id(62), const [
+          TicketMaterialeWriteRow(materialeId: null, freeTextName: 'Guarnizione', quantity: 1),
+        ]),
       );
     });
 

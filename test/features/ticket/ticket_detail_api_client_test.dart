@@ -8,8 +8,15 @@
 // isolation, including the shapes that are easy to get subtly wrong (int
 // enum, string enum, nested groups, unparseable Options).
 
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
+
+class MockDio extends Mock implements Dio {}
+
+Response<T> _okResponse<T>(T data, String path) =>
+    Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
 
 void main() {
   group('TicketControlDto.fromJson', () {
@@ -265,6 +272,124 @@ void main() {
       expect(dto.codice, isNull);
       expect(dto.nome, 'Guarnizione generica');
       expect(dto.disponibile, isFalse);
+    });
+  });
+
+  group('TicketDetailApiClient.setMateriali', () {
+    late MockDio mockDio;
+    late TicketDetailApiClient client;
+
+    setUpAll(() {
+      registerFallbackValue(RequestOptions(path: '/'));
+    });
+
+    setUp(() {
+      mockDio = MockDio();
+      client = TicketDetailApiClient(mockDio);
+    });
+
+    test('PUTs the full row list, matching CreateTicketMaterialeRequest\'s shape', () async {
+      when(
+        () => mockDio.put<dynamic>(
+          '/api/Tickets/tick-1/materiali',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer((_) async => _okResponse<dynamic>(null, '/api/Tickets/tick-1/materiali'));
+
+      await client.setMateriali('tick-1', const [
+        TicketMaterialeWriteRow(materialeId: 'mat-1', quantity: 2, unitOfMeasure: 'pz'),
+        TicketMaterialeWriteRow(freeTextName: 'Guarnizione generica', quantity: 1, notes: 'usata'),
+      ]);
+
+      final captured = verify(
+        () => mockDio.put<dynamic>(
+          '/api/Tickets/tick-1/materiali',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured;
+      final body = captured.first as List<dynamic>;
+      expect(body, [
+        {
+          'materialeId': 'mat-1',
+          'freeTextName': null,
+          'quantity': 2.0,
+          'unitOfMeasure': 'pz',
+          'notes': null,
+        },
+        {
+          'materialeId': null,
+          'freeTextName': 'Guarnizione generica',
+          'quantity': 1.0,
+          'unitOfMeasure': null,
+          'notes': 'usata',
+        },
+      ]);
+    });
+  });
+
+  group('TicketDetailApiClient.searchMateriali', () {
+    late MockDio mockDio;
+    late TicketDetailApiClient client;
+
+    setUpAll(() {
+      registerFallbackValue(RequestOptions(path: '/'));
+    });
+
+    setUp(() {
+      mockDio = MockDio();
+      client = TicketDetailApiClient(mockDio);
+    });
+
+    test('parses an envelope response ({items: [...]})', () async {
+      when(
+        () => mockDio.get<dynamic>('/Materiali', queryParameters: any(named: 'queryParameters')),
+      ).thenAnswer(
+        (_) async => _okResponse<dynamic>({
+          'items': [
+            {'id': 'mat-1', 'name': 'Valvola', 'code': 'V-001', 'unitOfMeasure': 'pz'},
+          ],
+        }, '/Materiali'),
+      );
+
+      final results = await client.searchMateriali('valv');
+
+      expect(results, hasLength(1));
+      expect(results.first.id, 'mat-1');
+      expect(results.first.name, 'Valvola');
+      expect(results.first.code, 'V-001');
+      expect(results.first.unitOfMeasure, 'pz');
+    });
+
+    test('parses a bare-array response too (pagedItems tolerates both shapes)', () async {
+      when(
+        () => mockDio.get<dynamic>('/Materiali', queryParameters: any(named: 'queryParameters')),
+      ).thenAnswer(
+        (_) async => _okResponse<dynamic>([
+          {'id': 'mat-2', 'name': 'Guarnizione', 'code': null, 'unitOfMeasure': null},
+        ], '/Materiali'),
+      );
+
+      final results = await client.searchMateriali('guarn');
+
+      expect(results, hasLength(1));
+      expect(results.first.id, 'mat-2');
+      expect(results.first.code, isNull);
+    });
+
+    test('sends the query, page and pageSize as query params', () async {
+      when(
+        () => mockDio.get<dynamic>('/Materiali', queryParameters: any(named: 'queryParameters')),
+      ).thenAnswer((_) async => _okResponse<dynamic>({'items': []}, '/Materiali'));
+
+      await client.searchMateriali('valv');
+
+      final captured = verify(
+        () => mockDio.get<dynamic>('/Materiali', queryParameters: captureAny(named: 'queryParameters')),
+      ).captured;
+      final params = captured.first as Map<String, dynamic>;
+      expect(params['q'], 'valv');
+      expect(params['page'], 1);
+      expect(params['pageSize'], 20);
     });
   });
 }

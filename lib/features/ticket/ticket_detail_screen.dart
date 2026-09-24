@@ -27,8 +27,10 @@ import '../rapportino/create_draft.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_label.dart';
+import 'ticket_materiali_editor.dart';
 import 'ticket_providers.dart';
 import 'ticket_workflow_api_client.dart';
+import 'package:uuid/uuid.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -1246,14 +1248,73 @@ class _PendingAttachmentRow extends ConsumerWidget {
 
 // ── Fabbisogno tab ───────────────────────────────────────────────────────────
 
-class _FabbisognoTab extends ConsumerWidget {
+class _FabbisognoTab extends ConsumerStatefulWidget {
   const _FabbisognoTab({required this.ticketId});
 
   final String ticketId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final materialiAsync = ref.watch(ticketMaterialiProvider(ticketId));
+  ConsumerState<_FabbisognoTab> createState() => _FabbisognoTabState();
+}
+
+class _FabbisognoTabState extends ConsumerState<_FabbisognoTab> {
+  bool _editing = false;
+
+  /// Replaces the ticket's planned materials server-side, then mirrors the same values into the
+  /// local Drift table `ticketMateriali` reads from (see `ticketMaterialiProvider`'s own doc
+  /// comment: unlike the other detail tabs, Fabbisogno IS local-Drift-backed). `setMateriali` has
+  /// no per-row server id to hand back (its own doc comment explains why), so the local rows get
+  /// fresh client-generated ids — fine, since nothing tracks a Fabbisogno row's identity across a
+  /// save; the next real sync reconciles them to the server's own ids transparently.
+  Future<void> _onSave(List<TicketMaterialeWriteRow> rows) async {
+    final api = ref.read(ticketDetailApiClientProvider);
+    await api.setMateriali(widget.ticketId, rows);
+
+    final ticket = await ref.read(ticketByIdProvider(widget.ticketId).future);
+    if (ticket == null) {
+      if (mounted) setState(() => _editing = false);
+      return;
+    }
+
+    final db = ref.read(appDatabaseProvider);
+    const uuid = Uuid();
+    final now = DateTime.now().toUtc();
+    await db.transaction(() async {
+      await (db.delete(
+        db.ticketMateriali,
+      )..where((m) => m.ticketId.equals(widget.ticketId))).go();
+      for (final row in rows) {
+        await db
+            .into(db.ticketMateriali)
+            .insert(
+              TicketMaterialiCompanion.insert(
+                id: uuid.v4(),
+                tenantId: ticket.tenantId,
+                createdAt: now,
+                updatedAt: Value(now),
+                ticketId: widget.ticketId,
+                materialeId: Value(row.materialeId),
+                freeTextName: Value(row.freeTextName),
+                quantity: row.quantity,
+                unitOfMeasure: Value(row.unitOfMeasure),
+                notes: Value(row.notes),
+                // Not knowable locally without a server round trip — the next sync corrects this
+                // if a catalogue article has actually gone unavailable; same "cosmetic, self-
+                // corrects on next sync" tolerance as the row's own client-generated id.
+                isAvailable: const Value(true),
+              ),
+            );
+      }
+    });
+
+    if (!mounted) return;
+    setState(() => _editing = false);
+    showAppToast(context, message: 'Fabbisogno aggiornato', tone: ToastTone.success);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final materialiAsync = ref.watch(ticketMaterialiProvider(widget.ticketId));
 
     return materialiAsync.when(
       loading: () => const _TabLoading(),
@@ -1268,13 +1329,22 @@ class _FabbisognoTab extends ConsumerWidget {
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),
       data: (materiali) {
-        if (materiali.isEmpty) {
-          return const _EmptyTab(
-            icon: LucideIcons.package,
-            label: 'Nessun fabbisogno',
-            body: 'Non ci sono materiali pianificati per questo ticket.',
+        if (_editing) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+              AppSpacing.pagePadding,
+              AppSpacing.xl,
+            ),
+            child: TicketMaterialiEditor(
+              initialRows: materiali,
+              onSave: _onSave,
+              onCancel: () => setState(() => _editing = false),
+            ),
           );
         }
+
         return Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,
@@ -1283,30 +1353,52 @@ class _FabbisognoTab extends ConsumerWidget {
             0,
           ),
           child: Column(
-            children: materiali.map((m) {
-              final qtyLabel = m.unitaMisura != null
-                  ? '${_formatQty(m.quantita)} ${m.unitaMisura}'
-                  : _formatQty(m.quantita);
-              return ListRow(
-                leading: Icon(
-                  LucideIcons.package,
-                  size: 20,
-                  color: m.disponibile ? context.colors.inkMuted : context.colors.red,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.centerRight,
+                child: AppButton.secondary(
+                  label: 'Modifica',
+                  icon: const Icon(LucideIcons.pencil, size: 16),
+                  size: AppButtonSize.sm,
+                  onPressed: () => setState(() => _editing = true),
                 ),
-                title: m.nome,
-                subtitle: m.codice != null ? '${m.codice} · $qtyLabel' : qtyLabel,
-                meta: !m.disponibile
-                    ? const AppChip(label: 'Non disponibile', active: false)
-                    : null,
-                showDivider: m != materiali.last,
-              );
-            }).toList(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              if (materiali.isEmpty)
+                const _EmptyTab(
+                  icon: LucideIcons.package,
+                  label: 'Nessun fabbisogno',
+                  body: 'Non ci sono materiali pianificati per questo ticket.',
+                )
+              else
+                for (final m in materiali) ...[
+                  ListRow(
+                    leading: Icon(
+                      LucideIcons.package,
+                      size: 20,
+                      color: m.disponibile ? context.colors.inkMuted : context.colors.red,
+                    ),
+                    title: m.nome,
+                    subtitle: m.codice != null
+                        ? '${m.codice} · ${_materialeQtyLabel(m)}'
+                        : _materialeQtyLabel(m),
+                    meta: !m.disponibile
+                        ? const AppChip(label: 'Non disponibile', active: false)
+                        : null,
+                    showDivider: m != materiali.last,
+                  ),
+                ],
+            ],
           ),
         );
       },
     );
   }
 }
+
+String _materialeQtyLabel(TicketMaterialeDto m) =>
+    m.unitaMisura != null ? '${_formatQty(m.quantita)} ${m.unitaMisura}' : _formatQty(m.quantita);
 
 class _EmptyTab extends StatelessWidget {
   const _EmptyTab({required this.icon, required this.label, required this.body});
