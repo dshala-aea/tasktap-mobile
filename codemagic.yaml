@@ -78,8 +78,9 @@ workflows:
           flutter build appbundle \
             --release \
             --build-number="$BUILD_NUMBER" \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
+            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
             --dart-define=SENTRY_DSN="$SENTRY_DSN"
       - name: Build APK (release, for testing)
@@ -87,8 +88,9 @@ workflows:
           flutter build apk \
             --release \
             --build-number="$BUILD_NUMBER" \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
+            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
             --dart-define=SENTRY_DSN="$SENTRY_DSN"
     artifacts:
@@ -117,12 +119,17 @@ workflows:
   ios_release:
     name: iOS Release
     max_build_duration: 40
+    integrations:
+      # Same App Store Connect API key/integration already set up for GraderTCG
+      # (Codemagic UI → Teams → Integrations → Apple App Store Connect). One
+      # team-level key covers every app under the same Apple Developer account,
+      # so no new key is needed here — it auto-fetches the distribution cert
+      # and provisioning profile for this app's bundle id.
+      app_store_connect: gradertcg_ios_app
     environment:
       flutter: stable
       groups:
         - tasktap_dartDefines
-        - tasktap_app_store_connect  # APP_STORE_CONNECT_API_KEY_ID, APP_STORE_CONNECT_ISSUER_ID,
-                                     # APP_STORE_CONNECT_API_KEY (private key)
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.advantedge.tasktap.tasktapMobile
@@ -163,8 +170,9 @@ workflows:
             --release \
             --build-number="$BUILD_NUMBER" \
             --export-options-plist=/Users/builder/export_options.plist \
-            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
+            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
             --dart-define=SENTRY_DSN="$SENTRY_DSN"
     artifacts:
@@ -172,9 +180,7 @@ workflows:
       - build/ios/archive/**/*.xcarchive
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_API_KEY
-        key_id: $APP_STORE_CONNECT_API_KEY_ID
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_app_store: false
         submit_to_testflight: true
       email:
@@ -191,9 +197,9 @@ workflows:
   ios_app_store:
     name: iOS App Store
     max_build_duration: 20
+    integrations:
+      app_store_connect: gradertcg_ios_app
     environment:
-      groups:
-        - tasktap_app_store_connect
       flutter: stable
     triggering:
       events:
@@ -205,8 +211,6 @@ workflows:
           # CodeMagic App Store Connect integration handles this via submit_to_app_store
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_API_KEY
-        key_id: $APP_STORE_CONNECT_API_KEY_ID
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_app_store: true
         submit_to_testflight: false
