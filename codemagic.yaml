@@ -66,10 +66,18 @@ workflows:
           echo "KEYSTORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> $CM_ENV
           echo "KEY_ALIAS=$CM_KEY_ALIAS" >> $CM_ENV
           echo "KEY_PASSWORD=$CM_KEY_PASSWORD" >> $CM_ENV
+      - name: Compute build number
+        script: |
+          # Shared across android_release and ios_release: same commit -> same build number on
+          # both Play Store and App Store Connect, so the two stores' independent (store-enforced
+          # monotonic) counters stay correlatable to a source commit. Version *name* (1.0.0 etc.)
+          # is bumped manually in pubspec.yaml per release; this only derives the build number.
+          echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
       - name: Build Android App Bundle (release)
         script: |
           flutter build appbundle \
             --release \
+            --build-number="$BUILD_NUMBER" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
@@ -78,6 +86,7 @@ workflows:
         script: |
           flutter build apk \
             --release \
+            --build-number="$BUILD_NUMBER" \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
             --dart-define=API_BASE_URL="$API_BASE_URL" \
@@ -136,10 +145,23 @@ workflows:
         script: flutter analyze
       - name: Unit tests
         script: flutter test
+      - name: Set up code signing settings on Xcode project
+        script: |
+          # Reads the cert/profile Codemagic already fetched via the managed `ios_signing`
+          # block and writes export_options.plist to $HOME/export_options.plist — the file
+          # the build step below points --export-options-plist at. Without this the file
+          # never exists and the ipa export step fails.
+          xcode-project use-profiles
+      - name: Compute build number
+        script: |
+          # Same derivation as android_release — see that step's comment. Keeps this build's
+          # CFBundleVersion correlated to the same commit's Play Store versionCode.
+          echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
       - name: Build iOS (release)
         script: |
           flutter build ipa \
             --release \
+            --build-number="$BUILD_NUMBER" \
             --export-options-plist=/Users/builder/export_options.plist \
             --dart-define=SUPABASE_URL="$SUPABASE_URL" \
             --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
