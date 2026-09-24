@@ -196,9 +196,6 @@ workflows:
       app_store_connect: gradertcg_ios_app
     environment:
       flutter: stable
-    triggering:
-      events:
-        - manual
     scripts:
       - name: Download latest TestFlight build info
         script: |
