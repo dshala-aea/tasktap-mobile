@@ -35,6 +35,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart' show AppDatabase;
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
+import 'package:tasktap_mobile/features/admin/customers/admin_customer_form_screen.dart';
 import 'package:tasktap_mobile/features/admin/magazzini/admin_magazzino_list_screen.dart';
 import 'package:tasktap_mobile/features/admin/schedules/admin_schedule_list_screen.dart';
 import 'package:tasktap_mobile/features/altro/forbidden_screen.dart';
@@ -259,4 +260,66 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
   });
+
+  // Closes the residual gap the sweep documented but didn't fix: clienti/sedi mix open read with
+  // gated write, so the list-level `.read` requirement alone would let a held-read/denied-write
+  // user reach `nuovo`/`:id/modifica` by deep-linking past the button-level CapabilityGate that
+  // hides those triggers in the UI. `nuovo` is the simpler case to assert directly (no `:id` to
+  // fabricate) — same write-segment mechanism also covers `:id/modifica`.
+
+  testWidgets(
+    'held clienti.customer.read but denied .write redirects /altro/clienti/nuovo to /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'clienti'},
+        capabilities: const {'clienti.customer.read'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 24),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/clienti/nuovo');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsOneWidget);
+      expect(find.byType(AdminCustomerFormScreen), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'held clienti.customer.write reaches /altro/clienti/nuovo, not /forbidden',
+    (tester) async {
+      final cached = Entitlement(
+        features: const {'clienti'},
+        capabilities: const {'clienti.customer.read', 'clienti.customer.write'},
+        seatType: 'office',
+        fetchedAt: DateTime.utc(2026, 9, 24),
+      );
+
+      await tester.pumpWidget(
+        _buildApp(repo: repo, db: db, mockDio: mockDio, cachedEntitlement: cached),
+      );
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      final context = tester.element(find.byType(Scaffold).first);
+      GoRouter.of(context).go('/altro/clienti/nuovo');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(find.byType(ForbiddenScreen), findsNothing);
+      expect(find.byType(AdminCustomerFormScreen), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    },
+  );
 }

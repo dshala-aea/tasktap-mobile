@@ -249,32 +249,45 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// are a different, broader audience — anyone whose tenant has the module, not dispatcher-only —
 /// so those check module entitlement only, matching the web guard's equivalent split.
 ///
-/// **Known residual gap**: prefix matching cannot distinguish a read path from a write path when
-/// the write path is nested past a dynamic segment (e.g. `/altro/clienti/:id/modifica` — the `:id`
-/// varies, so no fixed prefix covers only `modifica`). Where a section mixes open read with
-/// gated write (`clienti`, `sedi`), the route-level entry below only enforces read; the
-/// corresponding `CapabilityGate` on the edit button is what actually keeps an unauthorized user
-/// from reaching the write form through the UI. A direct deep-link to a guessed `:id/modifica`
-/// URL bypasses this — same class of gap as before this sweep, just narrowed to sections that
-/// deliberately keep read open, and only reachable by guessing an exact record id (mobile has no
-/// address bar). Closing it fully needs `RouteRequirement` to support matching a specific leaf
-/// segment regardless of what dynamic segments precede it — out of scope here.
-final _routeRequirements = <(String pathPrefix, RouteRequirement requirement)>[
-  ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write')),
-  ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read')),
-  ('/altro/rapportini', const RouteRequirement.module('rapportini')),
-  ('/altro/magazzino/magazzini', const RouteRequirement.capability('magazzino.warehouse.read')),
-  ('/altro/magazzino', const RouteRequirement.capability('magazzino.article.read')),
-  ('/altro/squadre', const RouteRequirement.capability('team.squadra.read')),
-  ('/altro/cantieri', const RouteRequirement.capability('cantieri.cantiere.read')),
-  ('/altro/contratti', const RouteRequirement.capability('contratti.contract.read')),
-  ('/altro/commesse', const RouteRequirement.capability('commesse.commessa.read')),
-  ('/altro/sedi', const RouteRequirement.capability('clienti.location.read')),
-  ('/altro/clienti', const RouteRequirement.capability('clienti.customer.read')),
-  ('/altro/ferie', const RouteRequirement.module('presenze')),
-  ('/ticket', const RouteRequirement.module('interventi')),
-  ('/cantieri', const RouteRequirement.module('cantieri')),
+/// A dynamic segment defeats plain prefix matching for a *write* leaf nested past it (e.g.
+/// `/altro/clienti/:id/modifica` — the `:id` varies, so no fixed prefix covers only `modifica`).
+/// Each entry's optional third element, `writeRequirement`, closes that: when the visited path's
+/// LAST segment is `nuovo` or `modifica` (see `_writeLeafSegments`), that stricter requirement is
+/// checked instead of the base one — still prefix-matched first, so it only applies within a
+/// section this table already governs. Left `null` for sections where read and write are gated
+/// identically at the section level already (nothing sharper to express); given only where a
+/// section mixes open read with gated write (`clienti`, `sedi`) — the base `.read` requirement
+/// alone would let a held-read/denied-write user past the button-level `CapabilityGate` that hides
+/// `nuovo`/`modifica` triggers in the UI, by deep-linking straight to the path.
+final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, RouteRequirement? writeRequirement)>[
+  ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write'), null),
+  ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read'), null),
+  ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
+  ('/altro/magazzino/magazzini', const RouteRequirement.capability('magazzino.warehouse.read'), null),
+  ('/altro/magazzino', const RouteRequirement.capability('magazzino.article.read'), null),
+  ('/altro/squadre', const RouteRequirement.capability('team.squadra.read'), null),
+  ('/altro/cantieri', const RouteRequirement.capability('cantieri.cantiere.read'), null),
+  ('/altro/contratti', const RouteRequirement.capability('contratti.contract.read'), null),
+  ('/altro/commesse', const RouteRequirement.capability('commesse.commessa.read'), null),
+  (
+    '/altro/sedi',
+    const RouteRequirement.capability('clienti.location.read'),
+    const RouteRequirement.capability('clienti.location.write'),
+  ),
+  (
+    '/altro/clienti',
+    const RouteRequirement.capability('clienti.customer.read'),
+    const RouteRequirement.capability('clienti.customer.write'),
+  ),
+  ('/altro/ferie', const RouteRequirement.module('presenze'), null),
+  ('/ticket', const RouteRequirement.module('interventi'), null),
+  ('/cantieri', const RouteRequirement.module('cantieri'), null),
 ];
+
+/// Leaf path segments that mean "this specific visit is a write attempt" — checked against
+/// `state.matchedLocation`'s LAST segment only, so a record id that happens to be the literal
+/// string `nuovo` (impossible — ids are GUIDs) or `modifica` can never false-positive.
+const _writeLeafSegments = {'nuovo', 'modifica'};
 
 /// Builds and returns the [GoRouter] for the TaskTap app.
 ///
@@ -352,9 +365,14 @@ GoRouter buildRouter(WidgetRef ref) {
           // redirecting. Never applies to AppRoutes.forbidden itself (see _routeRequirements'
           // own doc comment on why that would self-redirect-loop).
           if (state.matchedLocation != AppRoutes.forbidden) {
-            for (final (prefix, requirement) in _routeRequirements) {
+            for (final (prefix, requirement, writeRequirement) in _routeRequirements) {
               if (state.matchedLocation.startsWith(prefix)) {
-                final satisfied = requirement.isSatisfied(ref);
+                final segments = state.matchedLocation.split('/');
+                final isWriteLeaf = segments.isNotEmpty && _writeLeafSegments.contains(segments.last);
+                final effective = isWriteLeaf && writeRequirement != null
+                    ? writeRequirement
+                    : requirement;
+                final satisfied = effective.isSatisfied(ref);
                 // satisfied == null: entitlement cache still loading — stay put, don't redirect
                 // yet (same "don't know yet" treatment as kioskState.loading/authAsync.loading
                 // above).
