@@ -1229,4 +1229,31 @@ void main() {
       expect(result?['name'], 'Manutenzione annuale');
     });
   });
+
+  // Field-parity gap: EditTicketScreen had no way to set dueDate/technicianNotes/agentId/tags —
+  // web's ticket edit form has all 4, UpdateTicketRequest already accepts them.
+  group('updateTicket field-parity fields', () {
+    test('sends dueDate/technicianNotes/agentId/tags when provided', () async {
+      when(
+        () => mockDio.put<dynamic>('/api/tickets/tick-1', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse(null, '/api/tickets/tick-1'));
+
+      await client.updateTicket(
+        'tick-1',
+        dueDate: DateTime.utc(2026, 10, 1),
+        technicianNotes: 'Verificare guarnizione',
+        agentId: 'usr-agent-1',
+        tags: const ['urgente', 'garanzia'],
+      );
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/tickets/tick-1', data: captureAny(named: 'data')),
+      ).captured;
+      final body = captured.first as Map<String, dynamic>;
+      expect(body['dueDate'], '2026-10-01T00:00:00.000Z');
+      expect(body['technicianNotes'], 'Verificare guarnizione');
+      expect(body['agentId'], 'usr-agent-1');
+      expect(body['tags'], ['urgente', 'garanzia']);
+    });
+  });
 }

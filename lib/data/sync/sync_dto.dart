@@ -239,6 +239,9 @@ class TicketDto {
   final String? priority;
   final DateTime? dueDate;
 
+  /// Free-form labels — see `Tickets.tagsJson`'s own doc comment in `app_database.dart`.
+  final List<String> tags;
+
   const TicketDto({
     required this.id,
     required this.tenantId,
@@ -262,6 +265,7 @@ class TicketDto {
     this.cantiereId,
     this.priority,
     this.dueDate,
+    this.tags = const [],
   });
 
   factory TicketDto.fromJson(Map<String, dynamic> j) => TicketDto(
@@ -287,6 +291,7 @@ class TicketDto {
     cantiereId: j['cantiereId'] as String?,
     priority: j['priority'] as String?,
     dueDate: _dt(j['dueDate']),
+    tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
   );
 }
 

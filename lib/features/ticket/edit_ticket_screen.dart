@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:convert';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,8 +91,20 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
         typeId: ticket.typeId,
         statusId: ticket.statusId,
         priority: ticket.priority ?? kDefaultTicketPriority,
+        dueDate: ticket.dueDate,
+        technicianNotes: ticket.technicianNotes,
+        agentId: ticket.agentId,
+        tags: _decodeTags(ticket.tagsJson),
       );
     });
+  }
+
+  /// `Tickets.tagsJson`'s own JSON-text storage — see its doc comment for why. `null`/`""` (rows
+  /// written before schema 32, or a genuinely tag-less ticket) means no tags, not a parse error.
+  static List<String> _decodeTags(String? json) {
+    if (json == null || json.isEmpty) return const [];
+    final decoded = jsonDecode(json);
+    return decoded is List ? decoded.cast<String>() : const [];
   }
 
   void _onFormChanged(NewTicketFormState newState) {
@@ -138,6 +152,10 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
             locationId: s.locationId,
             typeId: s.typeId,
             priority: s.priority,
+            dueDate: s.dueDate,
+            technicianNotes: s.technicianNotes,
+            agentId: s.agentId,
+            tags: s.tags,
           );
 
       // Safe to mirror locally: these are the exact values the server just accepted, not values
@@ -152,6 +170,10 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
           locationId: Value(s.locationId!),
           typeId: Value(s.typeId!),
           priority: Value(s.priority),
+          dueDate: Value(s.dueDate),
+          technicianNotes: Value(s.technicianNotes),
+          agentId: Value(s.agentId),
+          tagsJson: Value(jsonEncode(s.tags)),
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );

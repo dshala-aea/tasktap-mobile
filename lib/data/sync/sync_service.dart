@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -273,6 +275,7 @@ class SyncService {
               cantiereId: Value(t.cantiereId),
               priority: Value(t.priority),
               dueDate: Value(t.dueDate),
+              tagsJson: Value(jsonEncode(t.tags)),
             ),
           );
     }
