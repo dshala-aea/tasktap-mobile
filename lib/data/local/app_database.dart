@@ -114,6 +114,12 @@ class Tickets extends Table {
 
   DateTimeColumn get dueDate => dateTime().nullable()();
 
+  /// Free-form labels, no catalogue behind them (see `TicketDto.tags`'s own doc comment). No
+  /// list-column type exists in Drift, so stored as JSON text — same convention as
+  /// `Entitlements.featuresJson`/`capabilitiesJson`, not a naive comma-join (a tag containing a
+  /// literal comma would silently split wrong).
+  TextColumn get tagsJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -738,6 +744,15 @@ class PendingTickets extends Table {
   /// Set once the server confirms creation — the real Ticket.id.
   TextColumn get serverTicketId => text().nullable()();
 
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  TextColumn get technicianNotes => text().nullable()();
+  TextColumn get agentId => text().nullable()();
+
+  /// Free-form labels — same JSON-text storage as `Tickets.tagsJson` (its own doc comment has
+  /// the full reasoning). Client-authored, never delta-synced from the server, same as every
+  /// other column on this table — no syncCursorGeneration bump needed.
+  TextColumn get tagsJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -815,7 +830,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration {
@@ -1021,6 +1036,22 @@ class AppDatabase extends _$AppDatabase {
           // column existed.
           await m.addColumn(entitlements, entitlements.isAccountDeactivated);
         }
+        if (from < 32) {
+          // Tags field-parity gap — see Tickets.tagsJson's own doc comment. Already on the wire
+          // (Ticket.Tags), same delta blind spot as schema 20/23's tickets columns: a delta sync
+          // only re-sends rows that changed, so syncCursorGeneration bumped below.
+          await m.addColumn(tickets, tickets.tagsJson);
+        }
+        if (from < 33) {
+          // Field-parity gap on the CREATE path — PendingTickets.dueDate/technicianNotes/agentId/
+          // tagsJson, so a ticket queued offline (or created online through the same queue) can
+          // carry the same fields the edit path already gained in schema 32. Client-authored, same
+          // as every other PendingTickets column — no syncCursorGeneration bump needed.
+          await m.addColumn(pendingTickets, pendingTickets.dueDate);
+          await m.addColumn(pendingTickets, pendingTickets.technicianNotes);
+          await m.addColumn(pendingTickets, pendingTickets.agentId);
+          await m.addColumn(pendingTickets, pendingTickets.tagsJson);
+        }
       },
     );
   }
@@ -1053,7 +1084,9 @@ class AppDatabase extends _$AppDatabase {
   ///      tickets that haven't otherwise changed.
   /// v7 — 2026-08-31, schema 24 added `ticket_materiali` (new table, same delta blind spot as v5's
   ///      `materiale_barcodes`).
-  static const String syncCursorGeneration = 'v7';
+  /// v8 — 2026-09-24, schema 32 added `tickets.tagsJson`. Same reasoning as v4/v6: already on the
+  ///      wire, a delta sync would never refill it for tickets that haven't otherwise changed.
+  static const String syncCursorGeneration = 'v8';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

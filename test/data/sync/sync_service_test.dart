@@ -281,6 +281,20 @@ void main() {
       expect(rows.first.id, 'ticket-1');
     });
 
+    // Field-parity gap: Ticket.Tags is on the wire, mobile never stored it. Stored as JSON text
+    // (Tickets.tagsJson's own doc comment) — this proves the round-trip, not just the parse.
+    test('stores a ticket\'s tags as JSON text', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(tickets: [_ticketJson()..['tags'] = ['urgente', 'garanzia']]),
+      );
+
+      await svc.sync();
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.tagsJson, '["urgente","garanzia"]');
+    });
+
     test('inserts a new schedule with parsed time minutes', () async {
       _stubDioGet(mockDio, _syncPayload(schedules: [_scheduleJson()]));
 

@@ -622,11 +622,12 @@ class AdminApiClient {
   /// General field edit from ticket detail (`EditTicketScreen`) — distinct from [assignTicket],
   /// which narrowly sends `assignedUserId` for the "Assegna" action.
   ///
-  /// Matches `UpdateTicketRequest` (`TicketsController.cs`): every field is optional there too,
-  /// but this only ever sends the five the edit screen actually exposes — title, description,
-  /// customer, location, type. `statusId` has no PUT field at all (status changes go through
-  /// `PUT /api/Tickets/{id}/status` — see `TicketWorkflowApiClient.updateStatus`) and priority is
-  /// deliberately left alone (see `StepDettagliTicket.showPriority`'s doc comment for why).
+  /// Matches `UpdateTicketRequest` (`TicketsController.cs`): every field is optional there too.
+  /// `statusId` has no PUT field at all (status changes go through `PUT /api/Tickets/{id}/status`
+  /// — see `TicketWorkflowApiClient.updateStatus`) and priority is deliberately left alone (see
+  /// `StepDettagliTicket.showPriority`'s doc comment for why). dueDate/technicianNotes/agentId/tags
+  /// added once `StepDettagliTicket` gained UI for them — field-parity gap with web's own ticket
+  /// edit form.
   Future<void> updateTicket(
     String id, {
     String? title,
@@ -635,6 +636,10 @@ class AdminApiClient {
     String? locationId,
     int? typeId,
     String? priority,
+    DateTime? dueDate,
+    String? technicianNotes,
+    String? agentId,
+    List<String>? tags,
   }) async {
     await _dio.put(
       '/api/tickets/$id',
@@ -646,6 +651,10 @@ class AdminApiClient {
         'typeId': ?typeId,
         // Wire name per UpdateTicketRequest.Priority's [JsonPropertyName("priorita")].
         'priorita': ?priority,
+        'dueDate': ?dueDate?.toIso8601String(),
+        'technicianNotes': ?technicianNotes,
+        'agentId': ?agentId,
+        'tags': ?tags,
       },
     );
   }

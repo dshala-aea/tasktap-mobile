@@ -35,4 +35,62 @@ void main() {
       expect(kTicketPriorities, ['Bassa', 'Media', 'Alta', 'Urgente']);
     });
   });
+
+  // Field-parity gap: web's TicketCreatePanel has dueDate/technicianNotes/agentId/tags,
+  // mobile had no way to set any of them (create or edit).
+  group('NewTicketFormState field-parity fields', () {
+    test('dueDate/technicianNotes/agentId/tags default to null/empty', () {
+      const state = NewTicketFormState();
+      expect(state.dueDate, isNull);
+      expect(state.technicianNotes, isNull);
+      expect(state.agentId, isNull);
+      expect(state.tags, isEmpty);
+    });
+
+    test('copyWith updates dueDate/technicianNotes/agentId/tags', () {
+      const state = NewTicketFormState();
+      final due = DateTime.utc(2026, 10, 1);
+      final updated = state.copyWith(
+        dueDate: due,
+        technicianNotes: 'Verificare guarnizione',
+        agentId: 'usr-agent-1',
+        tags: const ['urgente', 'garanzia'],
+      );
+      expect(updated.dueDate, due);
+      expect(updated.technicianNotes, 'Verificare guarnizione');
+      expect(updated.agentId, 'usr-agent-1');
+      expect(updated.tags, ['urgente', 'garanzia']);
+    });
+
+    test('copyWith preserves dueDate/technicianNotes/agentId/tags when not specified', () {
+      final due = DateTime.utc(2026, 10, 1);
+      final state = NewTicketFormState(
+        dueDate: due,
+        technicianNotes: 'note',
+        agentId: 'usr-1',
+        tags: const ['a'],
+      );
+      final updated = state.copyWith(title: 'Guasto');
+      expect(updated.dueDate, due);
+      expect(updated.technicianNotes, 'note');
+      expect(updated.agentId, 'usr-1');
+      expect(updated.tags, ['a']);
+    });
+
+    test('clearX flags null out dueDate/technicianNotes/agentId', () {
+      final state = NewTicketFormState(
+        dueDate: DateTime.utc(2026, 10, 1),
+        technicianNotes: 'note',
+        agentId: 'usr-1',
+      );
+      final cleared = state.copyWith(
+        clearDueDate: true,
+        clearTechnicianNotes: true,
+        clearAgentId: true,
+      );
+      expect(cleared.dueDate, isNull);
+      expect(cleared.technicianNotes, isNull);
+      expect(cleared.agentId, isNull);
+    });
+  });
 }

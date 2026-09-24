@@ -37,6 +37,43 @@ void main() {
 
       expect(dto.cantiereId, isNull);
     });
+
+    // Field-parity gap: Ticket.Tags is on the wire (same sync response every other field here
+    // comes from), mobile never parsed it.
+    test('TicketDto.fromJson parses tags', () {
+      final json = {
+        'id': 't1',
+        'tenantId': 'tenant1',
+        'createdAt': '2026-08-31T00:00:00Z',
+        'title': 'Test',
+        'customerId': 'c1',
+        'locationId': 'l1',
+        'statusId': 1,
+        'typeId': 1,
+        'tags': ['urgente', 'garanzia'],
+      };
+
+      final dto = TicketDto.fromJson(json);
+
+      expect(dto.tags, ['urgente', 'garanzia']);
+    });
+
+    test('TicketDto.fromJson defaults tags to an empty list when missing', () {
+      final json = {
+        'id': 't1',
+        'tenantId': 'tenant1',
+        'createdAt': '2026-08-31T00:00:00Z',
+        'title': 'Test',
+        'customerId': 'c1',
+        'locationId': 'l1',
+        'statusId': 1,
+        'typeId': 1,
+      };
+
+      final dto = TicketDto.fromJson(json);
+
+      expect(dto.tags, isEmpty);
+    });
   });
 
   group('SyncTicketMaterialeDto.fromJson', () {

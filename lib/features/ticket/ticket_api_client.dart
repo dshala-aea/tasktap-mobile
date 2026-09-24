@@ -28,6 +28,10 @@ class TicketApiClient {
     // Bassa | Media | Alta | Urgente; matches the backend's own "Media" default.
     String priorita = 'Media',
     String? clientId,
+    DateTime? dueDate,
+    String? technicianNotes,
+    String? agentId,
+    List<String>? tags,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/tickets',
@@ -42,6 +46,10 @@ class TicketApiClient {
         'typeId': typeId,
         'priorita': priorita,
         'clientId': ?clientId,
+        'dueDate': ?dueDate?.toIso8601String(),
+        'technicianNotes': ?technicianNotes,
+        'agentId': ?agentId,
+        'tags': ?tags,
       },
     );
 

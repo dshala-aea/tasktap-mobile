@@ -23,6 +23,10 @@ class NewTicketFormState {
     this.statusId,
     this.assignedUserId,
     this.priority = kDefaultTicketPriority,
+    this.dueDate,
+    this.technicianNotes,
+    this.agentId,
+    this.tags = const [],
   });
 
   final String? customerId;
@@ -38,6 +42,21 @@ class NewTicketFormState {
   /// touches the picker still sends an explicit, correct value.
   final String priority;
 
+  /// Scadenza — when the work is due. Optional, matches web's TicketCreatePanel.
+  final DateTime? dueDate;
+
+  /// Note tecnico — free text for the assigned technician. Distinct from `internalNotes` (office-
+  /// only, deliberately not exposed on mobile) and from `description` (what the job is).
+  final String? technicianNotes;
+
+  /// Riferimento — a contact-reference field, not a sales agent and not the assignee
+  /// ([assignedUserId]/Tecnico). Reuses the same Users list as Tecnico, same as web's own
+  /// TicketCreatePanel.
+  final String? agentId;
+
+  /// Free-form labels, no catalogue behind them — same reasoning as web's comma-separated input.
+  final List<String> tags;
+
   NewTicketFormState copyWith({
     String? customerId,
     String? locationId,
@@ -47,6 +66,10 @@ class NewTicketFormState {
     int? statusId,
     String? assignedUserId,
     String? priority,
+    DateTime? dueDate,
+    String? technicianNotes,
+    String? agentId,
+    List<String>? tags,
     bool clearCustomerId = false,
     bool clearLocationId = false,
     bool clearTitle = false,
@@ -54,6 +77,9 @@ class NewTicketFormState {
     bool clearTypeId = false,
     bool clearStatusId = false,
     bool clearAssignedUserId = false,
+    bool clearDueDate = false,
+    bool clearTechnicianNotes = false,
+    bool clearAgentId = false,
   }) {
     return NewTicketFormState(
       customerId: clearCustomerId ? null : (customerId ?? this.customerId),
@@ -64,6 +90,10 @@ class NewTicketFormState {
       statusId: clearStatusId ? null : (statusId ?? this.statusId),
       assignedUserId: clearAssignedUserId ? null : (assignedUserId ?? this.assignedUserId),
       priority: priority ?? this.priority,
+      dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
+      technicianNotes: clearTechnicianNotes ? null : (technicianNotes ?? this.technicianNotes),
+      agentId: clearAgentId ? null : (agentId ?? this.agentId),
+      tags: tags ?? this.tags,
     );
   }
 

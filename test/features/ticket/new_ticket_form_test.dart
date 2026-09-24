@@ -455,7 +455,13 @@ void main() {
       );
     }
 
-    Future<void> fillWizardAndReachRiepilogo(WidgetTester tester) async {
+    // [onDettagli] runs after tipo is chosen but before "Avanti" — the hook a test uses to also
+    // fill the field-parity fields (dueDate/technicianNotes/agentId/tags) added to this same
+    // step, without duplicating the whole wizard walk.
+    Future<void> fillWizardAndReachRiepilogo(
+      WidgetTester tester, {
+      Future<void> Function(WidgetTester)? onDettagli,
+    }) async {
       await tester.tap(find.text('Apri form'));
       await tester.pumpAndSettle();
 
@@ -478,6 +484,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Manutenzione').last);
       await tester.pumpAndSettle();
+      if (onDettagli != null) await onDettagli(tester);
       await tester.tap(find.text('Avanti'));
       await tester.pumpAndSettle();
 
@@ -541,6 +548,44 @@ void main() {
 
       // Popped back to the caller — the screen didn't get stuck.
       expect(find.text('Apri form'), findsOneWidget);
+
+      await flushSnackBarTimer(tester);
+    });
+
+    // Field-parity gap: dueDate/technicianNotes/agentId/tags — added to StepDettagliTicket
+    // (shared with EditTicketScreen) but the CREATE path threads them through a different route:
+    // NewTicketFormScreen → TicketCreationQueue.create → PendingTicketRepository.insert →
+    // pendingTickets row. Proves the whole chain, not just the widget or the API client in
+    // isolation (both already covered by their own unit tests).
+    testWidgets('technicianNotes and tags reach the pendingTickets row on offline submit', (
+      tester,
+    ) async {
+      await tester.pumpWidget(buildLauncher(isOnline: false));
+      await tester.pumpAndSettle();
+      await fillWizardAndReachRiepilogo(
+        tester,
+        onDettagli: (tester) async {
+          await tester.drag(find.byType(ListView), const Offset(0, -500));
+          await tester.pumpAndSettle();
+          final notesField = find.descendant(
+            of: find.byKey(const ValueKey('technician-notes-field')),
+            matching: find.byType(TextFormField),
+          );
+          final tagsField = find.descendant(
+            of: find.byKey(const ValueKey('tags-field')),
+            matching: find.byType(TextFormField),
+          );
+          await tester.enterText(notesField, 'Verificare guarnizione');
+          await tester.enterText(tagsField, 'urgente, garanzia');
+          await tester.pump();
+        },
+      );
+
+      await tapCreaTicket(tester);
+
+      final rows = await db.select(db.pendingTickets).get();
+      expect(rows.single.technicianNotes, 'Verificare guarnizione');
+      expect(rows.single.tagsJson, '["urgente","garanzia"]');
 
       await flushSnackBarTimer(tester);
     });

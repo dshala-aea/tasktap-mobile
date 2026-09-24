@@ -89,5 +89,57 @@ void main() {
       expect(body['priorita'], 'Urgente');
       expect(body['priorita'], isA<String>());
     });
+
+    // Field-parity gap: web's TicketCreatePanel sends dueDate/technicianNotes/agentId/tags on
+    // create, mobile sent none of them.
+    test('sends dueDate/technicianNotes/agentId/tags when provided', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'tick-1'}, '/api/tickets'));
+
+      await client.createTicket(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        dueDate: DateTime.utc(2026, 10, 1),
+        technicianNotes: 'Verificare guarnizione',
+        agentId: 'usr-agent-1',
+        tags: const ['urgente', 'garanzia'],
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: captureAny(named: 'data')),
+      ).captured;
+      final body = captured.first as Map<String, dynamic>;
+      expect(body['dueDate'], '2026-10-01T00:00:00.000Z');
+      expect(body['technicianNotes'], 'Verificare guarnizione');
+      expect(body['agentId'], 'usr-agent-1');
+      expect(body['tags'], ['urgente', 'garanzia']);
+    });
+
+    test('omits dueDate/technicianNotes/agentId/tags when not provided', () async {
+      when(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: any(named: 'data')),
+      ).thenAnswer((_) async => _okResponse({'id': 'tick-1'}, '/api/tickets'));
+
+      await client.createTicket(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+      );
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>('/api/tickets', data: captureAny(named: 'data')),
+      ).captured;
+      final body = captured.first as Map<String, dynamic>;
+      expect(body.containsKey('dueDate'), isFalse);
+      expect(body.containsKey('technicianNotes'), isFalse);
+      expect(body.containsKey('agentId'), isFalse);
+      expect(body.containsKey('tags'), isFalse);
+    });
   });
 }

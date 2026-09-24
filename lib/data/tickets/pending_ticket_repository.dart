@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../local/app_database.dart';
@@ -27,6 +29,10 @@ class PendingTicketRepository {
     required int statusId,
     required int typeId,
     String priorita = 'Media',
+    DateTime? dueDate,
+    String? technicianNotes,
+    String? agentId,
+    List<String> tags = const [],
     required PendingTicketState state,
   }) async {
     await _db
@@ -43,6 +49,10 @@ class PendingTicketRepository {
             statusId: statusId,
             typeId: typeId,
             priorita: Value(priorita),
+            dueDate: Value(dueDate),
+            technicianNotes: Value(technicianNotes),
+            agentId: Value(agentId),
+            tagsJson: Value(jsonEncode(tags)),
             state: Value(state.toPersistedString()),
           ),
         );

@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:convert';
+
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart';
@@ -67,6 +69,10 @@ class TicketCreationQueue {
     required int statusId,
     required int typeId,
     String priorita = 'Media',
+    DateTime? dueDate,
+    String? technicianNotes,
+    String? agentId,
+    List<String> tags = const [],
     required bool isOnline,
   }) async {
     final id = const Uuid().v4();
@@ -80,6 +86,10 @@ class TicketCreationQueue {
       statusId: statusId,
       typeId: typeId,
       priorita: priorita,
+      dueDate: dueDate,
+      technicianNotes: technicianNotes,
+      agentId: agentId,
+      tags: tags,
       state: isOnline ? PendingTicketState.submitting : PendingTicketState.pendingSync,
     );
 
@@ -137,6 +147,10 @@ class TicketCreationQueue {
         statusId: t.statusId,
         typeId: t.typeId,
         priorita: t.priorita,
+        dueDate: t.dueDate,
+        technicianNotes: t.technicianNotes,
+        agentId: t.agentId,
+        tags: _decodeTags(t.tagsJson),
         // The local row id, unchanged across every attempt — that is the whole
         // point. A new one per attempt would deduplicate nothing.
         clientId: t.id,
@@ -153,6 +167,13 @@ class TicketCreationQueue {
       await _repo.updateState(id: id, state: PendingTicketState.failed, error: reason);
       return TicketCreationOutcome.failed(id, reason);
     }
+  }
+
+  /// `PendingTickets.tagsJson`'s own JSON-text storage — see its doc comment for why.
+  static List<String> _decodeTags(String? json) {
+    if (json == null || json.isEmpty) return const [];
+    final decoded = jsonDecode(json);
+    return decoded is List ? decoded.cast<String>() : const [];
   }
 }
 
