@@ -6,7 +6,7 @@ workflows:
     name: PR Check
     max_build_duration: 20
     environment:
-      flutter: stable
+      flutter: 3.44.4
       groups:
         - tasktap_dartDefines
     triggering:
@@ -30,7 +30,7 @@ workflows:
     name: Android Release
     max_build_duration: 40
     environment:
-      flutter: stable
+      flutter: 3.44.4
       groups:
         - tasktap_dartDefines
         - tasktap_google_play        # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, PACKAGE_NAME
@@ -122,7 +122,7 @@ workflows:
       # and provisioning profile for this app's bundle id.
       app_store_connect: gradertcg_ios_app
     environment:
-      flutter: stable
+      flutter: 3.44.4
       groups:
         - tasktap_dartDefines
       ios_signing:
@@ -195,7 +195,7 @@ workflows:
     integrations:
       app_store_connect: gradertcg_ios_app
     environment:
-      flutter: stable
+      flutter: 3.44.4
     scripts:
       - name: Download latest TestFlight build info
         script: |
