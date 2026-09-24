@@ -39,6 +39,16 @@ class _ChatMessage {
   final String text;
 }
 
+// A turn can legitimately take up to the server's ~45s wall-clock ceiling — a single static
+// "elaborando" label for that whole span reads as frozen, not working. Purely a client-side
+// staged message swap + spinner, no backend streaming involved.
+const _thinkingStageMessages = [
+  'Il copilot sta elaborando…',
+  'Sto verificando i dati con TaskTap…',
+  'Quasi fatto…',
+];
+const _thinkingStageDelays = [Duration.zero, Duration(seconds: 4), Duration(seconds: 12)];
+
 class AiCopilotScreen extends ConsumerStatefulWidget {
   const AiCopilotScreen({super.key, this.ticketId, this.cantiereId});
 
@@ -61,6 +71,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _confirming = false;
   String? _startError;
   String? _confirmKey;
+  int _thinkingStage = 0;
+  final _thinkingTimers = <Timer>[];
 
   @override
   void initState() {
@@ -70,9 +82,30 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
   @override
   void dispose() {
+    _cancelThinkingTimers();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _cancelThinkingTimers() {
+    for (final timer in _thinkingTimers) {
+      timer.cancel();
+    }
+    _thinkingTimers.clear();
+  }
+
+  void _startThinkingTimers() {
+    _cancelThinkingTimers();
+    _thinkingStage = 0;
+    for (var i = 1; i < _thinkingStageDelays.length; i++) {
+      _thinkingTimers.add(
+        Timer(_thinkingStageDelays[i], () {
+          if (!mounted) return;
+          setState(() => _thinkingStage = i);
+        }),
+      );
+    }
   }
 
   Future<void> _start() async {
@@ -109,12 +142,14 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       // A new turn moves the draft's Version on — any pending confirm key is now stale.
       _confirmKey = null;
     });
+    _startThinkingTimers();
     _inputCtrl.clear();
     _scrollToEnd();
 
     try {
       final result = await ref.read(aiApiClientProvider).sendTurn(sessionId, text);
       if (!mounted) return;
+      _cancelThinkingTimers();
       setState(() {
         _messages.add(_ChatMessage(isOperator: false, text: result.assistantReplyText));
         _draft = result.draft;
@@ -123,6 +158,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       _scrollToEnd();
     } catch (e) {
       if (!mounted) return;
+      _cancelThinkingTimers();
       setState(() => _sending = false);
       showAppToast(context, message: e.toString(), tone: ToastTone.error);
     }
@@ -283,9 +319,23 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             alignment: Alignment.centerLeft,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Text(
-                'Il copilot sta elaborando…',
-                style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.colors.inkMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _thinkingStageMessages[_thinkingStage],
+                    style: TextStyle(color: context.colors.inkMuted, fontSize: 12),
+                  ),
+                ],
               ),
             ),
           );
