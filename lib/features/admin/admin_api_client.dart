@@ -1175,8 +1175,7 @@ class AdminApiClient {
         if (externalId != null && externalId.isNotEmpty)
           'externalId': externalId,
         if (codice != null && codice.isNotEmpty) 'codice': codice,
-        if (prodottoAssistenzaIds != null)
-          'prodottoAssistenzaIds': prodottoAssistenzaIds,
+        'prodottoAssistenzaIds': ?prodottoAssistenzaIds,
       },
     );
     return res.data!['id'] as String;

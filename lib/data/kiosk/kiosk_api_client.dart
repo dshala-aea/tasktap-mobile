@@ -90,10 +90,12 @@ class KioskApiClient {
 
   KioskApiException _mapError(DioException e) {
     final status = e.response?.statusCode;
-    if (status == 401)
+    if (status == 401) {
       return const KioskApiException(KioskApiFailureReason.invalidOrRevoked);
-    if (status == 402)
+    }
+    if (status == 402) {
       return const KioskApiException(KioskApiFailureReason.notEntitled);
+    }
     switch (e.type) {
       case DioExceptionType.connectionError:
       case DioExceptionType.connectionTimeout:

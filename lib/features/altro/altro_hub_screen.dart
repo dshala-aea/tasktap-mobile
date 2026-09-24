@@ -11,7 +11,6 @@ import '../../core/widgets/widgets.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/entitlements/entitlement_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
-import 'notifiche_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 

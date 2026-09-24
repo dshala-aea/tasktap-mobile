@@ -105,8 +105,9 @@ class NotificationSettingsApiClient {
       '/api/NotificationSettings',
     );
     final data = response.data;
-    if (data == null)
+    if (data == null) {
       throw StateError('Risposta vuota da NotificationSettings');
+    }
     return NotificationSettingsDto.fromJson(data);
   }
 

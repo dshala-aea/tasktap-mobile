@@ -90,8 +90,9 @@ class _FakeApiClient extends CantiereWorklogApiClient {
     BatchStartCantiereRequest request,
   ) async {
     batchStartRequests.add(request);
-    if (batchStartResponseBuilder != null)
+    if (batchStartResponseBuilder != null) {
       return batchStartResponseBuilder!(request);
+    }
     return BatchStartResponse(
       results: request.userIds
           .map(

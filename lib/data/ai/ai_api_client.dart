@@ -383,8 +383,9 @@ class AiApiClient {
         },
       );
       final data = response.data;
-      if (data == null)
+      if (data == null) {
         throw const AiFailure('Risposta vuota dal servizio AI.');
+      }
       return AiReportDraftDto.fromJson(data);
     } on DioException catch (e) {
       throw _translate(e);
