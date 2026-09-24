@@ -1348,6 +1348,91 @@ void main() {
       expect(find.text('Fabbisogno non disponibile offline'), findsNothing);
       await resetAndDispose(tester);
     });
+
+    testWidgets(
+      'Modifica → add a row → Salva PUTs the full list and updates the local mirror',
+      (tester) async {
+        await seedBase(db);
+        await seedFabbisogno(db);
+
+        final dio = MockDio();
+        when(
+          () => dio.put<dynamic>(
+            '/api/Tickets/ticket-1/materiali',
+            data: any(named: 'data'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<dynamic>(
+            data: null,
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/Tickets/ticket-1/materiali'),
+          ),
+        );
+        when(
+          () => dio.get<dynamic>('/Materiali', queryParameters: any(named: 'queryParameters')),
+        ).thenAnswer(
+          (_) async => Response<dynamic>(
+            data: {'items': []},
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/Materiali'),
+          ),
+        );
+
+        await pump(tester, dio: dio, isOnline: true);
+        await tapTab(tester, 'Fabbisogno');
+
+        await tester.tap(find.text('Modifica'));
+        await tester.pumpAndSettle();
+
+        // Existing row's article field, seeded with its resolved name.
+        expect(find.text('Valvola idraulica'), findsOneWidget);
+
+        await tester.tap(find.text('Aggiungi materiale'));
+        await tester.pumpAndSettle();
+
+        // New row's own fields are the last 4 TextFormFields on screen (Articolo/Quantità/
+        // Unità/Note) — the article field is 4 before the last, quantity 3 before.
+        final fieldCount = tester.widgetList(find.byType(TextFormField)).length;
+        final articleFieldForNewRow = find.byType(TextFormField).at(fieldCount - 4);
+        await tester.enterText(articleFieldForNewRow, 'Guarnizione custom');
+        await tester.pump();
+        final qtyFieldForNewRow = find.byType(TextFormField).at(fieldCount - 3);
+        await tester.enterText(qtyFieldForNewRow, '5');
+        await tester.pump();
+
+        await tester.tap(find.text('Salva'));
+        await tester.pumpAndSettle();
+
+        final captured = verify(
+          () => dio.put<dynamic>(
+            '/api/Tickets/ticket-1/materiali',
+            data: captureAny(named: 'data'),
+          ),
+        ).captured;
+        final body = captured.first as List<dynamic>;
+        expect(body, hasLength(2));
+        expect(body[1], {
+          'materialeId': null,
+          'freeTextName': 'Guarnizione custom',
+          'quantity': 5.0,
+          'unitOfMeasure': null,
+          'notes': null,
+        });
+
+        // Back to the read view, showing both rows — proof the local Drift mirror was updated
+        // (ticketMaterialiProvider reads from the db, not from the PUT response).
+        expect(find.text('Modifica'), findsOneWidget);
+        expect(find.text('Valvola idraulica'), findsOneWidget);
+        expect(find.text('Guarnizione custom'), findsOneWidget);
+
+        final mirrored = await (db.select(
+          db.ticketMateriali,
+        )..where((m) => m.ticketId.equals('ticket-1'))).get();
+        expect(mirrored, hasLength(2));
+
+        await resetAndDispose(tester);
+      },
+    );
   });
 
   // ══════════════════════════════════════════════════════════════════════════
