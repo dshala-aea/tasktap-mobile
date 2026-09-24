@@ -73,6 +73,20 @@ workflows:
           # monotonic) counters stay correlatable to a source commit. Version *name* (1.0.0 etc.)
           # is bumped manually in pubspec.yaml per release; this only derives the build number.
           echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
+      - name: Work around AGP's android-37/android-37.0 SDK platform naming mismatch
+        script: |
+          # compileSdk 37 (set inside the permission_handler_android plugin's own build.gradle.kts,
+          # transitively pulled in via permission_handler — this repo's app-level compileSdk stays
+          # on flutter.compileSdkVersion and never sets 37 itself) resolves to the hash string
+          # "android-37" under AGP 9.1+, but the SDK manager installs API 37 under "android-37.0"
+          # (Android's newer minor-version platform naming). Gradle's own inline auto-download of
+          # the platform succeeds; the hash-string lookup right after it fails. Known upstream bug:
+          # https://github.com/flutter/flutter/issues/192478. Symlinked here, before either build
+          # step below needs it — dangling until Gradle's auto-download populates the real
+          # directory, then resolving correctly once it does.
+          SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/share/android-sdk}"
+          mkdir -p "$SDK_ROOT/platforms"
+          ln -sfn "$SDK_ROOT/platforms/android-37.0" "$SDK_ROOT/platforms/android-37"
       - name: Build Android App Bundle (release)
         script: |
           flutter build appbundle \
