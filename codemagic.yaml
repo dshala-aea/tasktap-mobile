@@ -78,15 +78,33 @@ workflows:
           # compileSdk 37 (set inside the permission_handler_android plugin's own build.gradle.kts,
           # transitively pulled in via permission_handler — this repo's app-level compileSdk stays
           # on flutter.compileSdkVersion and never sets 37 itself) resolves to the hash string
-          # "android-37" under AGP 9.1+, but the SDK manager installs API 37 under "android-37.0"
-          # (Android's newer minor-version platform naming). Gradle's own inline auto-download of
-          # the platform succeeds; the hash-string lookup right after it fails. Known upstream bug:
-          # https://github.com/flutter/flutter/issues/192478. Symlinked here, before either build
-          # step below needs it — dangling until Gradle's auto-download populates the real
-          # directory, then resolving correctly once it does.
+          # "android-37" under AGP 9.1+, and the SDK manager installs API 37 under "android-37.0"
+          # (Android's newer minor-version platform naming). This symlink alone does NOT reliably
+          # fix the build — see the priming step right below, which addresses the actual bug.
+          # Kept as a harmless extra safety net. Known upstream bug:
+          # https://github.com/flutter/flutter/issues/192478
           SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/share/android-sdk}"
           mkdir -p "$SDK_ROOT/platforms"
           ln -sfn "$SDK_ROOT/platforms/android-37.0" "$SDK_ROOT/platforms/android-37"
+      - name: Prime Android SDK Platform 37 install (AGP same-invocation cache bug)
+        script: |
+          # The real bug (confirmed by the upstream issue author's own repro, see
+          # https://github.com/flutter/flutter/issues/192478#issuecomment-5612822814): it is NOT
+          # a permanent filesystem naming mismatch the symlink above can patch around. AGP's
+          # SdkHandler caches the set of installed SDK components once per Gradle invocation. When
+          # AGP's own on-demand download installs a missing platform mid-build, later tasks in that
+          # SAME invocation still see a stale "not installed" cache entry and fail with "Failed to
+          # find target with hash string 'android-37'" — even though the install just completed.
+          # A fresh, separate Gradle invocation against an already-installed platform succeeds
+          # every time (confirmed both ways by the maintainer's own test). So: force the on-demand
+          # install to happen HERE, in a cheap throwaway invocation whose failure we ignore, so the
+          # real build below starts a fresh invocation with the platform already on disk from
+          # before it started — no on-demand install happens inside that invocation at all.
+          # Targets the exact task that fails in the real build ("Could not determine the
+          # dependencies of task :permission_handler_android:compileReleaseJavaWithJavac" is a
+          # dependency-resolution error, not a compile error — --dry-run triggers the same
+          # resolution without compiling anything, so it exercises the identical failing path.
+          (cd android && ./gradlew :permission_handler_android:compileReleaseJavaWithJavac --dry-run) || true
       - name: Build Android App Bundle (release)
         script: |
           flutter build appbundle \
