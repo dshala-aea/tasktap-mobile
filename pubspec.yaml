@@ -161,8 +161,6 @@ flutter_launcher_icons:
 flutter_native_splash:
   color: "#FFF10E"
   image: "assets/icons/tasktap_icon.png"
-  # Scale the logo to 33% of screen width on all densities
-  fill: false
   android_12:
     color: "#FFF10E"
     image: "assets/icons/tasktap_icon.png"
