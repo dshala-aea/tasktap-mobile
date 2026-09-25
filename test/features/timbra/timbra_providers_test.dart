@@ -63,6 +63,46 @@ class _NoopApiClient extends WorklogApiClient {
 TimbraSyncService _noopSyncService() =>
     TimbraSyncService(repo: _StubRepo(), apiClient: _NoopApiClient());
 
+/// Wraps a real repo with a genuine `Future.delayed` before each write — standing in for
+/// `NativeDatabase.createInBackground`'s real isolate round trip, which (unlike the in-memory DB
+/// this test suite otherwise uses) takes long enough for an autoDispose provider's
+/// `Timer`-scheduled dispose task to fire mid-write.
+class _DelayedRepo implements IWorkSessionRepository {
+  _DelayedRepo(this._inner);
+  final IWorkSessionRepository _inner;
+
+  @override
+  Future<void> addEvent({
+    required String id,
+    required DateTime eventTime,
+    required String eventType,
+    double? latitude,
+    double? longitude,
+    double? gpsAccuracyMeters,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 5));
+    await _inner.addEvent(
+      id: id,
+      eventTime: eventTime,
+      eventType: eventType,
+      latitude: latitude,
+      longitude: longitude,
+      gpsAccuracyMeters: gpsAccuracyMeters,
+    );
+  }
+
+  @override
+  Stream<List<WorkSession>> watchTodaySessions() => _inner.watchTodaySessions();
+  @override
+  Future<List<WorkSession>> getTodaySessions() => _inner.getTodaySessions();
+  @override
+  Future<void> markSynced(List<String> ids) => _inner.markSynced(ids);
+  @override
+  Future<void> clearToday() => _inner.clearToday();
+  @override
+  Future<void> markReconciledOrphan(String id) => _inner.markReconciledOrphan(id);
+}
+
 /// Fake location service returning a fixed coordinate, never prompting — same shape as
 /// cantiere_timbra_screen_test.dart's `_FakeLocationService`.
 class _FakeLocationService extends ILocationService {
@@ -333,6 +373,61 @@ void main() {
 
       final sessions = await container.read(todaySessionsProvider.future);
       expect(sessions, isEmpty);
+    });
+  });
+
+  // ── punchNotifierProvider lifetime (dashboard autoDispose race) ────────────
+  //
+  // punchNotifierProvider is `.autoDispose`, but dashboard_screen.dart's own doc comments
+  // describe it as "the one, app-wide punchNotifierProvider instance" — the whole guard/toast
+  // contract (`_throwIfPunchFailed` in active_tracker_strip.dart) depends on that single
+  // instance's `state` surviving from the write to the read-back. Only `_ClockInPrompt` (shown
+  // while idle) ever `ref.watch`es it; once a shift starts, that widget unmounts and
+  // ActiveTrackerStrip's Pausa/Ferma buttons only `ref.read` it — nothing keeps it alive. In
+  // production the write goes through `NativeDatabase.createInBackground` (a real isolate round
+  // trip); this test stands in for that with a genuine `Future.delayed` so the provider
+  // scheduler's dispose task (a `Timer`-scheduled macrotask — see riverpod's
+  // `ProviderScheduler._defaultVsync`) has a real chance to fire mid-write, exactly as it does on
+  // a device.
+  group('punchNotifierProvider survives an unwatched read across a real async gap', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = _makeDb();
+      container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          timbraSyncServiceProvider.overrideWithValue(_noopSyncService()),
+          workSessionRepositoryProvider.overrideWithValue(_DelayedRepo(WorkSessionRepository(db))),
+        ],
+      );
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    test('punch() does not throw when nothing ref.watch()es the provider', () async {
+      final notifier = container.read(punchNotifierProvider.notifier);
+
+      await notifier.punch(const TimbraState());
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      expect(sessions.length, equals(1));
+      expect(sessions.first.eventType, equals('ingresso'));
+    });
+
+    test('togglePause() does not throw when nothing ref.watch()es the provider', () async {
+      final notifier = container.read(punchNotifierProvider.notifier);
+      await notifier.punch(const TimbraState());
+
+      await notifier.togglePause(const TimbraState(isOnShift: true));
+
+      final sessions = await container.read(todaySessionsProvider.future);
+      expect(sessions.length, equals(2));
+      expect(sessions.last.eventType, equals('pausa'));
     });
   });
 

@@ -335,9 +335,19 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
   }
 }
 
-final punchNotifierProvider = StateNotifierProvider.autoDispose<PunchNotifier, AsyncValue<void>>((
-  ref,
-) {
+// Deliberately NOT `.autoDispose`: dashboard_screen.dart's `_ClockInPrompt` and
+// active_tracker_strip.dart's `_TrackerRowState` both treat this as one app-wide instance whose
+// `state` outlives whichever widget triggered the punch — see `_punchIn`'s and
+// `_throwIfPunchFailed`'s own doc comments. Only `_ClockInPrompt` ever `ref.watch`es it, and it's
+// unmounted (swapped for `ActiveTrackerStrip`) the moment a shift is running — the exact moment
+// Pausa/Ferma become reachable. With `.autoDispose`, a `ref.read` from those buttons created a
+// notifier with zero listeners, scheduled for disposal on the next frame; the write it triggers
+// goes through `NativeDatabase.createInBackground` (a real isolate round trip — see
+// app_database.dart's `_openConnection`), which routinely outlasts that one frame, so the
+// disposal fired mid-write and the notifier's own `state =` assignment threw ("Tried to use
+// PunchNotifier after `dispose` was called"), surfacing as a generic "Operazione non riuscita."
+// toast on every break/end tap from the dashboard.
+final punchNotifierProvider = StateNotifierProvider<PunchNotifier, AsyncValue<void>>((ref) {
   return PunchNotifier(
     ref.watch(workSessionRepositoryProvider),
     ref.watch(timbraSyncServiceProvider),
