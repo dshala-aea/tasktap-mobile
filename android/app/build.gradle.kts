@@ -83,3 +83,16 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Flutter's engine references Google Play Core's split-install classes
+    // (PlayStoreDeferredComponentManager, FlutterPlayStoreSplitApplication) even though this app
+    // uses no deferred components. FlutterPlayStoreSplitApplication extends
+    // SplitCompatApplication, and Android's default proguard rules keep every
+    // `extends android.app.Application` subclass, which forces R8 to resolve that class's full
+    // supertype hierarchy — `-dontwarn` alone can't suppress a *missing* superclass on a kept
+    // class, so R8 still hard-fails. Pulling in the real (still-maintained) Play Feature Delivery
+    // artifact — Play Core's split-install successor, same package names — gives R8 real classes
+    // to resolve instead. https://github.com/flutter/flutter/issues/139462
+    implementation("com.google.android.play:feature-delivery:2.1.0")
+}

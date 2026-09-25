@@ -24,12 +24,9 @@
 -keepattributes *Annotation*
 -keep class kotlin.Metadata { *; }
 
-# Flutter's engine references Google Play Core's split-install classes
-# (PlayStoreDeferredComponentManager) for deferred/dynamic feature delivery, a feature this app
-# does not use — the `com.google.android.play:core` dependency was never added, so R8 fails with
-# "Missing class com.google.android.play.core.*" during release minification. These classes are
-# only reachable through Flutter's deferred-component code path, which this app never calls into,
-# so it's safe to tell R8 not to warn about them rather than pulling in the (deprecated,
-# split-package-replaced) play-core artifact just to satisfy the shrinker.
+# Flutter's engine references Google Play Core's split-install classes for deferred/dynamic
+# feature delivery, a feature this app does not use. The real fix is the
+# com.google.android.play:feature-delivery dependency in build.gradle.kts (see the comment there
+# for why -dontwarn alone can't satisfy R8 here). Kept as a defensive fallback.
 # https://github.com/flutter/flutter/issues/139462
 -dontwarn com.google.android.play.core.**
