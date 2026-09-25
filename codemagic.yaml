@@ -97,14 +97,27 @@ workflows:
           # find target with hash string 'android-37'" — even though the install just completed.
           # A fresh, separate Gradle invocation against an already-installed platform succeeds
           # every time (confirmed both ways by the maintainer's own test). So: force the on-demand
-          # install to happen HERE, in a cheap throwaway invocation whose failure we ignore, so the
-          # real build below starts a fresh invocation with the platform already on disk from
-          # before it started — no on-demand install happens inside that invocation at all.
-          # Targets the exact task that fails in the real build ("Could not determine the
-          # dependencies of task :permission_handler_android:compileReleaseJavaWithJavac" is a
-          # dependency-resolution error, not a compile error — --dry-run triggers the same
-          # resolution without compiling anything, so it exercises the identical failing path.
-          (cd android && ./gradlew :permission_handler_android:compileReleaseJavaWithJavac --dry-run) || true
+          # install to happen HERE, in a throwaway invocation whose failure we ignore, so the real
+          # build below starts a fresh invocation with the platform already on disk from before it
+          # started — no on-demand install happens inside that invocation at all.
+          #
+          # A first attempt at this primer ran a raw `./gradlew ... --dry-run` directly, which
+          # reproduced the SAME failure even on a branch that already had this step (confirmed live)
+          # — most likely because a bare `./gradlew` invocation doesn't go through the same
+          # `flutter build` setup path (e.g. `android/local.properties`'s flutter.sdk entry) that a
+          # real `flutter build` run gets, so it may have failed for an unrelated, earlier reason
+          # before ever reaching Gradle's SDK provisioning at all, with `|| true` masking that.
+          # This version instead runs the EXACT SAME command as the real build step below, so there
+          # is no environment difference left to second-guess — only its success/failure differs
+          # (ignored here, authoritative there).
+          flutter build appbundle \
+            --release \
+            --build-number="$BUILD_NUMBER" \
+            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
+            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
+            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=SENTRY_DSN="$SENTRY_DSN" || true
       - name: Build Android App Bundle (release)
         script: |
           flutter build appbundle \
