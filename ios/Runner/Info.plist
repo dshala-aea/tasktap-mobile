@@ -68,6 +68,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>TaskTap utilizza la posizione per registrare l'ubicazione dei cantieri durante timbrate e interventi.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>TaskTap usa Face ID per proteggere l'accesso ai dati di clienti e interventi su questo dispositivo.</string>
 	<key>NSMicrophoneUsageDescription</key>
