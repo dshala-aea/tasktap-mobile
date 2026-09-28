@@ -61,6 +61,7 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   // during the widget tree's build phase, which Flutter disallows.
   StreamSubscription<DraftReport?>? _submitCompletionSub;
   bool _hasHandledSubmitSuccess = false;
+  bool _sawNonSubmittedState = false;
 
   @override
   void initState() {
@@ -89,7 +90,19 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
   void _handleDraftUpdateForNavigation(DraftReport? draft) {
     if (_hasHandledSubmitSuccess) return;
     final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
-    if (subState != DraftSubmissionState.submitted) return;
+    if (subState != DraftSubmissionState.submitted) {
+      // Real submissions always start from a non-submitted state within this sheet's own
+      // lifetime — only after seeing that do we trust the next `submitted` as one this session
+      // actually caused.
+      _sawNonSubmittedState = true;
+      return;
+    }
+    // Reopening an already-Respinto (or Inviato) report is the same persisted 'submitted'
+    // submissionState — nothing ever resets it on rejection (see sync_service.dart's own note)
+    // — so without this guard, the very first stream emission on open already reads as
+    // "just submitted," firing the toast-and-pop below the instant the screen opens: a
+    // rejected report could never actually be looked at, let alone reworked.
+    if (!_sawNonSubmittedState) return;
 
     _hasHandledSubmitSuccess = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -347,6 +360,22 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             builder: (context, snap) {
               final draft = snap.data;
               final subState = DraftSubmissionState.fromString(draft?.submissionState ?? 'draft');
+
+              // A Respinto report keeps submissionState == submitted forever (nothing resets it
+              // on rejection — see SyncService's own note on this) even though "inviato con
+              // successo" is now false. Check draft.stato first so a rejected report reads as
+              // rejected, not as a success it no longer is. Read-only here: this screen has no
+              // resubmit path for an id the backend's ReportStateMachine.CanInvia won't accept
+              // again (Bozza → Inviato only) — reworking it is the list's "Rilavora" flow.
+              if (draft?.stato == 'Respinto') {
+                return _StatusCard(
+                  color: context.colors.red,
+                  icon: LucideIcons.xCircle,
+                  title: "L'ufficio ha respinto questo rapportino.",
+                  subtitle: 'Sola lettura. Rilavoralo dalla lista rapportini per correggerlo '
+                      'e inviarlo di nuovo.',
+                );
+              }
 
               if (subState == DraftSubmissionState.submitted) {
                 return Column(
