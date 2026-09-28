@@ -476,5 +476,109 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets('a 409 conflict names the conflict and reseeds from a resync, not a stale retry', (
+      tester,
+    ) async {
+      when(
+        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data')),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-1'),
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: RequestOptions(path: '/api/tickets/ticket-1'),
+            statusCode: 409,
+          ),
+        ),
+      );
+
+      // A resync (performSync) races the failed PUT: the server's copy of the ticket already
+      // moved on — that is the whole point of a 409 — so the sync payload below stands in for
+      // whatever someone else changed in the meantime.
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/sync/mobile',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<Map<String, dynamic>>(
+          requestOptions: RequestOptions(path: '/api/sync/mobile'),
+          statusCode: 200,
+          data: {
+            'syncedAt': DateTime.utc(2026, 6, 21, 12).toIso8601String(),
+            'since': null,
+            'schedules': [],
+            'draftReports': [],
+            'submittedReports': [],
+            'customers': [],
+            'locations': [],
+            'tickets': [
+              {
+                'id': 'ticket-1',
+                'tenantId': 'tenant-1',
+                'createdAt': '2026-06-01T09:00:00Z',
+                'updatedAt': '2026-06-21T12:00:00Z',
+                'title': 'Titolo aggiornato da un collega',
+                'description': 'Acqua che perde dal tubo.',
+                'customerId': 'cust-1',
+                'locationId': 'loc-1',
+                'assignedUserId': null,
+                'statusId': 1,
+                'typeId': 1,
+                'agentId': null,
+                'closedAt': null,
+                'technicianNotes': null,
+                'internalNotes': null,
+                'contractId': null,
+                'prodottoAssistenzaId': null,
+                'commessaId': null,
+              },
+            ],
+            'ticketStatuses': [],
+            'ticketTypes': [],
+            'materiali': [],
+            'materialiBarcodes': [],
+            'cantieri': [],
+            'colleagues': [],
+          },
+        ),
+      );
+
+      await openEditor(tester);
+
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Perdita idrica bagno'),
+        'La mia modifica',
+      );
+      await tester.pump();
+
+      final salva = salvaOrAvantiButton(tester, 'Salva');
+      salva.onPressed!();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Names the conflict, not a generic "check your data" line — checked before the toast's
+      // own 3.5s auto-dismiss.
+      expect(find.textContaining('modificato questo elemento'), findsOneWidget);
+
+      // Reseeded from the resync instead of leaving the stale local edit in place — retrying
+      // "Salva" with the old form data would just 409 again forever otherwise. Bounded pumps
+      // rather than pumpAndSettle: a regression here would strand the screen on an
+      // indeterminate CircularProgressIndicator, which never stops scheduling frames on its own
+      // and would otherwise just time pumpAndSettle out instead of failing on the real assertion.
+      for (var i = 0; i < 50; i++) {
+        if (find.text('Titolo aggiornato da un collega').evaluate().isNotEmpty) break;
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Titolo aggiornato da un collega'), findsOneWidget);
+      expect(find.text('La mia modifica'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 }

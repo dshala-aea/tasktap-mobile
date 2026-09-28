@@ -1,6 +1,7 @@
 // dart format width=100
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,8 +81,12 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
     super.dispose();
   }
 
-  void _seedIfNeeded(Ticket? ticket) {
-    if (_formState != null || ticket == null) return;
+  /// [force] bypasses the once-only guard — used after a 409 to reseed from the record a resync
+  /// just pulled, rather than waiting on the passive listener (see [_onSave]'s own note on why
+  /// nulling `_formState` and hoping the listener's already-fired stream event replays is not
+  /// reliable: the DB write from `performSync()` and the null-out race, in either order).
+  void _seedIfNeeded(Ticket? ticket, {bool force = false}) {
+    if ((_formState != null && !force) || ticket == null) return;
     setState(() {
       _formState = NewTicketFormState(
         customerId: ticket.customerId,
@@ -182,6 +187,29 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
       showAppToast(context, message: 'Ticket aggiornato', tone: ToastTone.success);
       Navigator.of(context).pop(true);
     } catch (e) {
+      // 409: the ticket changed server-side since this form was seeded (another technician's
+      // edit, a status change, etc). Retrying "Salva" with the same stale form would just 409
+      // again forever, so pull the current record and reseed instead of leaving it stuck.
+      //
+      // Reseeds directly from a read after the sync, rather than nulling _formState and letting
+      // the passive `_ticketListener` pick it up: performSync's DB write and that null-out race
+      // against each other — if the listener's stream event lands first, it sees the still
+      // non-null _formState and skips (`_seedIfNeeded`'s once-only guard), and nothing fires
+      // again, stranding the screen on its loading spinner forever.
+      if (e is DioException && e.response?.statusCode == 409) {
+        await ref.read(syncProvider.notifier).performSync();
+        if (!mounted) return;
+        final refreshed = await ref.read(ticketByIdProvider(widget.ticketId).future);
+        if (!mounted) return;
+        setState(() => _isSaving = false);
+        _seedIfNeeded(refreshed, force: true);
+        showAppToast(
+          context,
+          message: humanErrorMessage(e, azione: 'salvare le modifiche'),
+          tone: ToastTone.error,
+        );
+        return;
+      }
       if (!mounted) return;
       setState(() => _isSaving = false);
       showAppToast(

@@ -69,6 +69,11 @@ void main() {
       expect(humanErrorMessage(withStatus(429)), contains('occupato'));
     });
 
+    test('409 with no server sentence names the conflict, not a generic refusal', () {
+      final message = humanErrorMessage(withStatus(409));
+      expect(message, contains('Ricarica e riprova'));
+    });
+
     // The status code is the part a technician cannot act on and the part that reads as their
     // fault. `Errore server (503)` was the old wording; the number must not come back.
     for (final status in [500, 502, 503, 504]) {

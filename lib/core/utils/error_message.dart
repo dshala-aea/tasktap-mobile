@@ -69,9 +69,15 @@ String _core(Object error, String? azione) {
   }
 
   // 4xx: the server usually has a better sentence than we can write, because it
-  // knows which rule was broken. Use it when it is prose and not a stack.
-  return _serverSentence(error.response?.data) ??
-      'Il server ha rifiutato la richiesta. Controlla i dati inseriti e riprova.';
+  // knows which rule was broken. Use it when it is prose and not a stack — a 409's own
+  // "Esiste già una sessione cantiere attiva" is more useful than any generic line here.
+  final serverSentence = _serverSentence(error.response?.data);
+  if (serverSentence != null) return serverSentence;
+
+  if (status == 409) {
+    return 'Qualcuno ha modificato questo elemento nel frattempo. Ricarica e riprova.';
+  }
+  return 'Il server ha rifiutato la richiesta. Controlla i dati inseriti e riprova.';
 }
 
 bool _isTransport(DioExceptionType type) =>
