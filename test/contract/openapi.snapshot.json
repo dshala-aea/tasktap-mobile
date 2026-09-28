@@ -1200,7 +1200,7 @@
         "tags": [
           "Billing"
         ],
-        "summary": "Schedules self-service cancellation: the subscription keeps running through\nDateTime? Tenant.SubscriptionCurrentPeriodEnd and then lapses on its own, rather than\ncancelling immediately. bool Tenant.CancelAtPeriodEnd is set here optimistically\nso the UI reflects the click without waiting on a webhook round-trip \u2014 the\ncustomer.subscription.updated webhook re-confirms (or corrects) it from Stripe afterwards.",
+        "summary": "Schedules self-service cancellation: the subscription keeps running through\nDateTime? TenantBilling.SubscriptionCurrentPeriodEnd and then lapses on its own, rather\nthan cancelling immediately. bool TenantBilling.CancelAtPeriodEnd is set here\noptimistically so the UI reflects the click without waiting on a webhook round-trip \u2014 the\ncustomer.subscription.updated webhook re-confirms (or corrects) it from Stripe afterwards.\nReads/writes \u0060TenantBilling\u0060 through AdminDbContext BillingController._adminDb \u2014 \u0060tasktap_api\u0060 (the\nrole ApplicationDbContext BillingController._db connects as) has INSERT/UPDATE/DELETE revoked on that table (Task 9,\n062_tenant_billing_revoke.sql), matching every other \u0060TenantBilling\u0060 writer in this\ncodebase.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1230,7 +1230,7 @@
         "tags": [
           "Billing"
         ],
-        "summary": "Reverses a scheduled cancellation. No-op-safe: calling it when the tenant was never\nscheduled for cancellation is not an error, it just confirms the (already) false state.",
+        "summary": "Reverses a scheduled cancellation. No-op-safe: calling it when the tenant was never\nscheduled for cancellation is not an error, it just confirms the (already) false state.\nReads/writes \u0060TenantBilling\u0060 through AdminDbContext BillingController._adminDb \u2014 see Task\u0026lt;IActionResult\u0026gt; BillingController.Cancel(CancellationToken ct)\u0027s\nremarks for why.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1305,7 +1305,7 @@
         "tags": [
           "Billing"
         ],
-        "summary": "Set office/field seat quantities on the tenant\u0027s Stripe subscription (proration automatic).\nUpdates Stripe only; tenant.OfficeSeats/FieldSeats re-sync via the customer.subscription.updated webhook.",
+        "summary": "Set office/field seat quantities on the tenant\u0027s Stripe subscription (proration automatic).\nUpdates Stripe only; TenantBilling.OfficeSeats/FieldSeats re-sync via the customer.subscription.updated webhook.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15949,7 +15949,7 @@
         "tags": [
           "WorkLog"
         ],
-        "summary": "The tenant\u0027s worked-hours rounding rule \u2014 how every WorkLog\u0027s raw duration rounds\nbefore feeding the JSON summary, monthly grid, and Excel export (all three via\nIWorkLogAggregator). Stored inside \u0060Tenant.WorkingHoursConfig\u0060\n(jsonb) alongside the holiday calendar/night-window settings already there \u2014 one\n\u0022tenant\u0027s time-accounting rules\u0022 blob, not a new table. Minutes: 0 means off (raw,\nunrounded hours \u2014 the only behavior before this setting existed).",
+        "summary": "The tenant\u0027s worked-hours rounding rule \u2014 how every WorkLog\u0027s raw duration rounds\nbefore feeding the JSON summary, monthly grid, and Excel export (all three via\nIWorkLogAggregator). Stored inside \u0060TenantSettings.WorkingHoursConfig\u0060\n(jsonb, tenant-responsibility-split Task 4 \u2014 moved off \u0060Tenant\u0060) alongside the\nholiday calendar/night-window settings already there \u2014 one \u0022tenant\u0027s time-accounting\nrules\u0022 blob, not a new table. Minutes: 0 means off (raw, unrounded hours \u2014 the only\nbehavior before this setting existed).",
         "responses": {
           "200": {
             "description": "OK",
@@ -29738,7 +29738,7 @@
           },
           "analyticsDigestOptOut": {
             "type": "boolean",
-            "description": "When true, this user does not receive the Analytics weekly digest email even when\ntheir tenant has bool Tenant.AnalyticsDigestEnabled on. Self-service via\nPUT /api/users/me/preferences. Has no effect on the in-app/push alerts\nAnalyticsNotificationHandler sends \u2014 those are per-event, not this digest."
+            "description": "When true, this user does not receive the Analytics weekly digest email even when\ntheir tenant has bool TenantSettings.AnalyticsDigestEnabled on. Self-service via\nPUT /api/users/me/preferences. Has no effect on the in-app/push alerts\nAnalyticsNotificationHandler sends \u2014 those are per-event, not this digest."
           },
           "clockInMethodOverride": {
             "oneOf": [
@@ -29746,7 +29746,7 @@
                 "type": "null"
               },
               {
-                "description": "Per-user override of the tenant\u0027s ClockInMethod Tenant.ClockInMethod default. Null (default)\nmeans \u0022inherit the tenant default\u0022 \u2014 set only when this one person needs to be narrowed (or\nwidened relative to a narrowed tenant is NOT possible; a user can only be equal to or more\nrestrictive than nothing, this simply names which single value applies to them instead of the\ntenant\u0027s). See ClockInMethodPolicy.Resolve for the exact precedence.",
+                "description": "Per-user override of the tenant\u0027s ClockInMethod TenantSettings.ClockInMethod default. Null (default)\nmeans \u0022inherit the tenant default\u0022 \u2014 set only when this one person needs to be narrowed (or\nwidened relative to a narrowed tenant is NOT possible; a user can only be equal to or more\nrestrictive than nothing, this simply names which single value applies to them instead of the\ntenant\u0027s). See ClockInMethodPolicy.Resolve for the exact precedence.",
                 "$ref": "#/components/schemas/ClockInMethod"
               }
             ]
