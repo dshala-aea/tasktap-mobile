@@ -19,6 +19,19 @@
          intent-based capture, so this needs declaring explicitly. -->
     <uses-permission
         android:name="android.permission.CAMERA"/>
+    <!-- open_filex only opens already-downloaded local files via FileProvider, never browses the
+         media store, but its own manifest declares these broad media permissions defensively.
+         Google Play's photo/video picker policy flags them as unused broad storage access, so
+         strip them from the merged manifest rather than justify a picker we don't use. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove"/>
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove"/>
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false"/>
