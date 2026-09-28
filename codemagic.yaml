@@ -68,11 +68,30 @@ workflows:
           echo "KEY_PASSWORD=$CM_KEY_PASSWORD" >> $CM_ENV
       - name: Compute build number
         script: |
-          # Shared across android_release and ios_release: same commit -> same build number on
-          # both Play Store and App Store Connect, so the two stores' independent (store-enforced
-          # monotonic) counters stay correlatable to a source commit. Version *name* (1.0.0 etc.)
-          # is bumped manually in pubspec.yaml per release; this only derives the build number.
-          echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
+          # Was `git rev-list --count HEAD` (matching ios_release's own step, so the two stores'
+          # independent monotonic counters stayed correlatable to a source commit) — but Play
+          # requires versionCode to be strictly increasing across EVERY track forever, and a
+          # count derived from git history isn't: it depends on which branch/commit a build runs
+          # from (main vs develop diverge), on Codemagic's clone depth for that run, and on the
+          # repo's own history (rebases, squash-merges). All three actually happened here and
+          # each produces a different count for what should be "the next release" — one of them
+          # uploaded versionCode 71 while Play's internal track was already well past that, and
+          # got rejected: "does not allow any existing users to upgrade to the newly added APKs".
+          #
+          # Ask Play itself instead: the google-play CLI tool (preinstalled on Codemagic images)
+          # reads the highest versionCode across every track via the Play Developer API, so this
+          # is correct regardless of branch, clone depth, or git history — the next number is
+          # always genuinely higher than anything Play has ever seen for this package. Falls back
+          # to a git-derived number only if the package has no prior release at all (a brand new
+          # app — get-latest-build-number then has nothing to report).
+          LATEST_PLAY_BUILD_NUMBER=$(google-play get-latest-build-number \
+            --package-name "$PACKAGE_NAME" \
+            --credentials "$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS")
+          if [ -z "$LATEST_PLAY_BUILD_NUMBER" ]; then
+            echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
+          else
+            echo "BUILD_NUMBER=$((LATEST_PLAY_BUILD_NUMBER + 1))" >> $CM_ENV
+          fi
       - name: Work around AGP's android-37/android-37.0 SDK platform naming mismatch
         script: |
           # compileSdk 37 (set inside the permission_handler_android plugin's own build.gradle.kts,
@@ -201,8 +220,12 @@ workflows:
           xcode-project use-profiles
       - name: Compute build number
         script: |
-          # Same derivation as android_release — see that step's comment. Keeps this build's
-          # CFBundleVersion correlated to the same commit's Play Store versionCode.
+          # android_release no longer uses this same git-derived number (see its own "Compute
+          # build number" step's comment: a git commit count isn't reliably monotonic across
+          # branches/clone depths/history rewrites, which is what actually broke a Play upload).
+          # App Store Connect's own build-number uniqueness rule is scoped per version string
+          # rather than a single ever-increasing track counter, so this hasn't shown the same
+          # failure — left as-is for now rather than changed speculatively.
           echo "BUILD_NUMBER=$(git rev-list --count HEAD)" >> $CM_ENV
       - name: Build iOS (release)
         script: |
