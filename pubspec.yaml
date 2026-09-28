@@ -152,9 +152,12 @@ flutter_launcher_icons:
   # Android adaptive icon
   adaptive_icon_background: "#FFF10E"
   adaptive_icon_foreground: "assets/icons/tasktap_icon.png"
-  # iOS background
-  background_color_ios: "#FFF10E"
-  remove_alpha_ios: true
+  # iOS: a separate, pre-flattened (fully opaque, no alpha) source — `remove_alpha_ios: true`
+  # against the RGBA source above generated a solid black icon at every size (App Store showed
+  # an all-black icon). flutter_launcher_icons' own alpha-removal composites onto black instead
+  # of `background_color_ios`, so the brand-yellow flattening is done ourselves ahead of time.
+  image_path_ios: "assets/icons/tasktap_icon_ios.png"
+  remove_alpha_ios: false
 
 # ── Splash screen configuration (flutter_native_splash) ───────────────────────
 # Regenerate with: dart run flutter_native_splash:create
