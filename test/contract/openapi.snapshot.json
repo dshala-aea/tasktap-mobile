@@ -3855,6 +3855,52 @@
         }
       }
     },
+    "/api/customer-portal/me/reports/{id}/attachments": {
+      "get": {
+        "tags": [
+          "CustomerPortal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer-portal/me/attachments/{id}/download": {
+      "get": {
+        "tags": [
+          "CustomerPortal"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/customer-portal/me/reports/{id}/pdf": {
       "get": {
         "tags": [
