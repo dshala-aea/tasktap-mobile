@@ -1386,6 +1386,56 @@
         }
       }
     },
+    "/api/billing/tier": {
+      "put": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Changes the tenant\u0027s tier on its existing Stripe subscription: both seat items move to the new\ntier\u0027s prices, immediately and prorated (both directions; free during a trial), quantities and\nthe AI metered item untouched. Entitlements (\u0060tenant_features\u0060) re-sync via the Stripe\nwebhooks a few seconds later; \u0060TenantBilling.RequestedTier\u0060 is kept consistent here when set.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTierRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTierRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTierRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeTierResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeTierResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeTierResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/billing/seats/holders": {
       "get": {
         "tags": [
@@ -18234,6 +18284,31 @@
       },
       "CantiereWorkLogTypeEnum": {
         "type": "integer"
+      },
+      "ChangeTierRequest": {
+        "required": [
+          "tier"
+        ],
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ChangeTierResponse": {
+        "required": [
+          "tier"
+        ],
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string"
+          }
+        }
       },
       "CheckoutRequest": {
         "type": "object",
