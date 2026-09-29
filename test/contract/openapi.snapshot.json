@@ -3700,6 +3700,37 @@
             "description": "OK"
           }
         }
+      },
+      "post": {
+        "tags": [
+          "CustomerPortal"
+        ],
+        "summary": "The customer asks for an intervention. Goes through the same command as the office\u0027s create,\nso numbering, default status and the staff notification behave identically; only the\ncustomer (from the token, never the body) and Source differ.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerPortalCreateTicketRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerPortalCreateTicketRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerPortalCreateTicketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/customer-portal/me/tickets/{id}": {
@@ -3717,6 +3748,30 @@
               "format": "uuid"
             }
           }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer-portal/me/locations": {
+      "get": {
+        "tags": [
+          "CustomerPortal"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer-portal/me/ticket-types": {
+      "get": {
+        "tags": [
+          "CustomerPortal"
         ],
         "responses": {
           "200": {
@@ -20690,6 +20745,41 @@
         },
         "description": "Represents a customer/client (Cliente) in the system."
       },
+      "CustomerPortalCreateTicketRequest": {
+        "required": [
+          "locationId",
+          "typeId",
+          "title",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "locationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "typeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 3,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "description": "A customer asking for an intervention. There is deliberately no CustomerId: the customer is\nwhoever the token says they are, never whoever the body claims."
+      },
       "DecideAbsenceRequestBody": {
         "type": "object",
         "properties": {
@@ -27292,6 +27382,10 @@
               "string"
             ],
             "description": "Client-generated id for a ticket raised on a phone, carried so the create can be retried\nsafely. Backed by a unique index filtered on NOT NULL over (TenantId, ClientId), which is\nwhat makes it an idempotency key rather than a note."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the ticket came from: string TicketSources.Staff (office or technician) or\nstring TicketSources.Portal (a customer requested it through the customer portal).\nSet once at creation; existing rows are all Staff (migration 064)."
           },
           "numero": {
             "type": [
