@@ -36,16 +36,10 @@ workflows:
         - tasktap_google_play        # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, PACKAGE_NAME
       android_signing:
         - tasktap_keystore
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: 'main'
-          include: true
-          source: true
-      tag_patterns:
-        - pattern: 'v*'
-          include: true
+    # No `triggering:` — Android release builds moved to GitHub Actions
+    # (.github/workflows/android-release.yml). This workflow is kept as a manual fallback only
+    # (Codemagic UI → Start new build): with the push trigger it would publish a second build
+    # for every release. iOS below still builds here.
     scripts:
       - name: Install dependencies
         script: flutter pub get
