@@ -1124,6 +1124,59 @@
         }
       }
     },
+    "/api/billing/payment-method": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Adds a payment method to the tenant\u0027s existing (trial) subscription via a Stripe\n    Checkout setup session. Tenants with no subscription use POST /billing/checkout.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PaymentMethodRequest"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PaymentMethodRequest"
+                  }
+                ]
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PaymentMethodRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/billing/portal": {
       "post": {
         "tags": [
@@ -11759,6 +11812,36 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/signup/plans": {
+      "get": {
+        "tags": [
+          "Signup"
+        ],
+        "summary": "The tiers offered at signup and whether plan-first signup is on. Anonymous: the\n    signup wizard has no session (BillingController.Plans is admin-only).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupPlansResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupPlansResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupPlansResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -23493,6 +23576,20 @@
       "PartTimeTipoEnum": {
         "type": "integer"
       },
+      "PaymentMethodRequest": {
+        "required": [
+          "sdiCode"
+        ],
+        "type": "object",
+        "properties": {
+          "sdiCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "PayrollPeriodStatus": {
         "required": [
           "year",
@@ -25468,6 +25565,32 @@
               "null",
               "string"
             ]
+          },
+          "tier": {
+            "maxLength": 20,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Plan-first signup: tier picked before registration (\u0022starter\u0022|\u0022pro\u0022|\u0022business\u0022)."
+          },
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         },
         "description": "Payload for the unauthenticated self-registration endpoint\n(\u0060POST /api/signup/register\u0060). The backend creates the identity-provider\nuser and provisions the new tenant \u002B initial administrator in one operation."
@@ -25562,6 +25685,25 @@
           }
         },
         "description": "Whether each signature block prints, as exposed over the wire."
+      },
+      "SignupPlansResponse": {
+        "required": [
+          "tiers",
+          "planFirst"
+        ],
+        "type": "object",
+        "properties": {
+          "tiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "planFirst": {
+            "type": "boolean"
+          }
+        },
+        "description": "Response of GET /api/signup/plans."
       },
       "SmtpTestRequest": {
         "required": [
@@ -26844,6 +26986,32 @@
               "null",
               "string"
             ]
+          },
+          "tier": {
+            "maxLength": 20,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Plan-first signup: tier picked before registration (\u0022starter\u0022|\u0022pro\u0022|\u0022business\u0022)."
+          },
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         },
         "description": "Payload sent by an already-authenticated user to claim a tenant.\nEmail \u002B firstName \u002B lastName are derived server-side from the JWT, not this body."
