@@ -33,7 +33,8 @@ void main() {
       expect(
         scheme,
         isNotEmpty,
-        reason: 'OIDC_REDIRECT_URI must be a custom-scheme URI, e.g. it.tasktap.app://callback',
+        reason:
+            'OIDC_REDIRECT_URI must be a custom-scheme URI, e.g. com.advantedge.tasktap.tasktapmobile://callback',
       );
 
       final placeholder = RegExp(
@@ -96,6 +97,47 @@ void main() {
           reason: activity,
         );
       }
+    });
+
+    /// The redirect URI is parsed by more than one party — the backend's native-login flow reads
+    /// the `code` out of the callback URL with `new Uri(...)`, and Android's intent filter matches
+    /// the scheme case-sensitively against what the browser sends (browsers lowercase schemes).
+    /// So the scheme must be RFC 3986 (`ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )` — no
+    /// underscore) AND already lowercase, and the URI must have the `://path` part.
+    ///
+    /// The Android application id (`..._mobile`) and iOS bundle id (`...Mobile`) are natural
+    /// candidates and are both wrong here: the underscore is illegal in a scheme (the backend
+    /// answers 500 `Invalid URI`), and the capital is silently never matched on Android.
+    test('the redirect URI is a well-formed URI with a lowercase RFC 3986 scheme', () {
+      const uri = Env.oidcRedirectUri;
+
+      expect(uri, contains('://'), reason: 'OIDC_REDIRECT_URI must be scheme://path, was "$uri"');
+      final scheme = uri.substring(0, uri.indexOf('://'));
+      expect(
+        RegExp(r'^[a-z][a-z0-9+.\-]*$').hasMatch(scheme),
+        isTrue,
+        reason:
+            'scheme "$scheme" must be lowercase and contain only a-z 0-9 + - . '
+            '(no underscore, no capitals)',
+      );
+      expect(uri.substring(uri.indexOf('://') + 3), isNotEmpty, reason: 'the URI needs a path/host');
+    });
+
+    /// iOS never had a scheme registered at all: without a CFBundleURLSchemes entry the browser's
+    /// redirect has nowhere to go and sign-in hangs, exactly like the Android placeholder bug.
+    test('iOS registers the same scheme Dart redirects to', () {
+      final plist = File('ios/Runner/Info.plist').readAsStringSync();
+      final scheme = Env.oidcRedirectUri.substring(0, Env.oidcRedirectUri.indexOf('://'));
+
+      final schemes = RegExp(
+        r'<key>CFBundleURLSchemes</key>\s*<array>([\s\S]*?)</array>',
+      ).allMatches(plist).expand((m) => RegExp(r'<string>([^<]+)</string>').allMatches(m.group(1)!));
+
+      expect(
+        schemes.map((m) => m.group(1)),
+        contains(scheme),
+        reason: 'ios/Runner/Info.plist must list "$scheme" under CFBundleURLSchemes',
+      );
     });
 
     /// A scheme has to be globally unique on the device: a second app claiming it can intercept

@@ -40,9 +40,14 @@ android {
         // never arrive — sign-in does not fail, it hangs, which is why the OIDC work read as
         // "code-complete" while no phone had ever completed a login.
         //
-        // Must equal the scheme of Env.oidcRedirectUri (it.tasktap.app://callback) and the
-        // redirect URI registered on the Zitadel Native application. All three or none.
-        manifestPlaceholders["appAuthRedirectScheme"] = "it.tasktap.app"
+        // Must equal the scheme of Env.oidcRedirectUri (com.advantedge.tasktap.tasktapmobile://callback),
+        // the iOS CFBundleURLSchemes entry and the redirect URI registered on the Zitadel Native
+        // application. All of them or none.
+        //
+        // Deliberately not the application id: that has an underscore, which is illegal in a URI
+        // scheme (the backend cannot parse the callback), and Android matches schemes
+        // case-sensitively against the lowercase form browsers send.
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.advantedge.tasktap.tasktapmobile"
     }
 
     signingConfigs {

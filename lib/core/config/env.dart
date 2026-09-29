@@ -34,10 +34,15 @@ abstract final class Env {
   );
 
   /// OIDC redirect URI (custom scheme). Must match the app's registered scheme
-  /// and the Zitadel Native app's redirect URI — e.g. it.tasktap.app://callback
+  /// (Android `appAuthRedirectScheme`, iOS `CFBundleURLSchemes`) and the Zitadel Native app's
+  /// redirect URI.
+  ///
+  /// The scheme must be lowercase RFC 3986 (no underscore, no capitals), so it is NOT the
+  /// Android application id (`..._mobile`) or the iOS bundle id (`...Mobile`): an underscore
+  /// makes the backend reject the callback, a capital never matches Android's intent filter.
   static const String oidcRedirectUri = String.fromEnvironment(
     'OIDC_REDIRECT_URI',
-    defaultValue: 'it.tasktap.app://callback',
+    defaultValue: 'com.advantedge.tasktap.tasktapmobile://callback',
   );
 
   /// TaskTap backend REST API base URL — e.g. https://api.tasktap.io
