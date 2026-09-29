@@ -3788,6 +3788,18 @@
         }
       }
     },
+    "/api/customer-portal/me/visits": {
+      "get": {
+        "tags": [
+          "CustomerPortal"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/customer-portal/me/reports/{id}/pdf": {
       "get": {
         "tags": [
