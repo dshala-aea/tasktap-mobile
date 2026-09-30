@@ -135,11 +135,31 @@ class TodayWorkLogDto {
   final bool isActive;
   final String? tipoOra;
 
+  /// `GET /worklog/mobile/today` serializes `startTime`/`endTime` as a .NET TimeSpan — a bare
+  /// "HH:mm:ss" (Rome-local, NO date, NO zone) — which `DateTime.parse` throws on. A full ISO
+  /// instant is still accepted. A bare time is combined with TODAY's date in the device's local
+  /// zone: that is only an approximation (an entry from before midnight would land on the wrong
+  /// day, and the device zone is assumed to be the server's), so nothing that needs a real instant
+  /// may rely on it — the clock state comes from `GET /worklog/active`, which carries true UTC.
+  static DateTime parseTimeOrInstant(String raw, {DateTime? today}) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?').firstMatch(raw);
+    if (m == null || raw.contains('T')) return DateTime.parse(raw);
+    final d = today ?? DateTime.now();
+    return DateTime(
+      d.year,
+      d.month,
+      d.day,
+      int.parse(m.group(1)!),
+      int.parse(m.group(2)!),
+      int.parse(m.group(3) ?? '0'),
+    );
+  }
+
   factory TodayWorkLogDto.fromJson(Map<String, dynamic> json) => TodayWorkLogDto(
     id: json['id'] as String,
     clientId: json['clientId'] as String,
-    startTime: DateTime.parse(json['startTime'] as String),
-    endTime: json['endTime'] != null ? DateTime.parse(json['endTime'] as String) : null,
+    startTime: parseTimeOrInstant(json['startTime'] as String),
+    endTime: json['endTime'] != null ? parseTimeOrInstant(json['endTime'] as String) : null,
     isActive: json['isActive'] as bool? ?? false,
     tipoOra: json['tipoOra'] as String?,
   );

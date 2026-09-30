@@ -18,6 +18,7 @@ import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
 import 'timbra_providers.dart';
+import 'work_log_live_refresh.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
@@ -105,8 +106,14 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
     }
   }
 
+  /// Re-reads the server's clock state every time the screen opens (and on resume / every 15s while
+  /// visible), so buttons reflect a clock started, paused or stopped on another device. The buttons
+  /// themselves derive from the local state, which the reconciler mirrors the server into — a punch
+  /// made offline is pending and therefore never overwritten. See WorkLogLiveRefresh.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => WorkLogLiveRefresh(child: _buildScreen(context));
+
+  Widget _buildScreen(BuildContext context) {
     final shiftState = ref.watch(timbraStateProvider);
     final sessionsAsync = ref.watch(todaySessionsProvider);
     final punchState = ref.watch(punchNotifierProvider);

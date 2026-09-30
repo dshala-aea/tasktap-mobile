@@ -12,7 +12,7 @@
 // converge to the server's truth — proving the fix reaches the screens, not just the service.
 
 import 'package:dio/dio.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,32 +52,15 @@ class _NoopApiClient extends WorklogApiClient {
   Future<List<TodayWorkLogDto>> getToday() async => [];
 }
 
-/// Answers GET /api/worklog/today the way the server would once the same-account clock-out
-/// on the web has already landed: status ClockedOut, no matter what mobile still has locally.
-class _ServerSaysClockedOutClient extends WorklogApiClient {
-  _ServerSaysClockedOutClient() : super(Dio());
-
-  @override
-  Future<GiornataDto> getGiornata() async => const GiornataDto(
-    status: 'ClockedOut',
-    workedMinutes: 480,
-    breakMinutes: 0,
-    isPayrollLocked: false,
-    actions: [],
-  );
-
-  @override
-  Future<List<UpsertSessionResponse>> upsertSessions(List<MobileSessionDto> sessions) async => [];
-  @override
-  Future<List<TodayWorkLogDto>> getToday() async => [];
-}
-
 void main() {
   group('WorkLogReconciler wired through providers', () {
     late AppDatabase db;
     late ProviderContainer container;
+    // What GET /worklog/active answers; the default is "nothing running" (clocked out elsewhere).
+    var serverTrackers = <ActiveTracker>[];
 
     setUp(() {
+      serverTrackers = [];
       db = _makeDb();
       container = ProviderContainer(
         overrides: [
@@ -85,7 +68,12 @@ void main() {
           timbraSyncServiceProvider.overrideWithValue(
             TimbraSyncService(repo: _StubRepoForSync(), apiClient: _NoopApiClient()),
           ),
-          worklogApiClientProvider.overrideWithValue(_ServerSaysClockedOutClient()),
+          workLogReconcilerProvider.overrideWith(
+            (ref) => WorkLogReconciler(
+              repo: ref.watch(workSessionRepositoryProvider),
+              fetchActive: () async => serverTrackers,
+            ),
+          ),
           // No other kind of tracker is running server-side for this scenario.
           activeTrackersProvider.overrideWith((ref) => Stream.value(const <ActiveTracker>[])),
         ],
@@ -106,6 +94,7 @@ void main() {
           eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
           eventType: 'ingresso',
         );
+        await repo.markSynced(['mobile-open-shift']);
         await _awaitTodaySessions(container);
 
         expect(container.read(timbraStateProvider).isOnShift, isTrue);
@@ -121,6 +110,7 @@ void main() {
           eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
           eventType: 'ingresso',
         );
+        await repo.markSynced(['mobile-open-shift']);
         await _awaitTodaySessions(container);
         expect(container.read(timbraStateProvider).isOnShift, isTrue, reason: 'sanity check');
 
@@ -141,6 +131,7 @@ void main() {
           eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
           eventType: 'ingresso',
         );
+        await repo.markSynced(['mobile-open-shift']);
         await _awaitTodaySessions(container);
         expect(
           container.read(visibleTrackersProvider).any((t) => t.kind == ActiveTrackerKind.attendance),
@@ -165,6 +156,7 @@ void main() {
         eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
         eventType: 'ingresso',
       );
+      await repo.markSynced(['mobile-open-shift']);
       await _awaitTodaySessions(container);
 
       await container.read(workLogReconcilerProvider).reconcile();
@@ -177,6 +169,71 @@ void main() {
 
       expect(afterSecond.length, afterFirst.length);
       expect(container.read(timbraStateProvider).isOnShift, isFalse);
+    });
+
+    test('a clock started on another device shows up: timbra state and dashboard follow', () async {
+      final started = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+      serverTrackers = [
+        ActiveTracker(
+          kind: ActiveTrackerKind.attendance,
+          id: 'wl-web',
+          startedAtUtc: started,
+          state: ActiveTrackerState.working,
+          shiftStartedAtUtc: started,
+        ),
+      ];
+      await _awaitTodaySessions(container);
+      expect(container.read(timbraStateProvider).isOnShift, isFalse, reason: 'sanity check');
+
+      await container.read(workLogReconcilerProvider).reconcile();
+      await _awaitTodaySessions(container);
+
+      final state = container.read(timbraStateProvider);
+      expect(state.isOnShift, isTrue);
+      expect(state.isOnPause, isFalse);
+      expect(state.shiftStartTime!.difference(started).inSeconds.abs(), lessThan(1));
+    });
+
+    test('a break started elsewhere flips the timbra buttons to Riprendi (isOnPause)', () async {
+      final started = DateTime.now().toUtc().subtract(const Duration(hours: 2));
+      final breakStart = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+      serverTrackers = [
+        ActiveTracker(
+          kind: ActiveTrackerKind.attendance,
+          id: 'wl-web',
+          startedAtUtc: breakStart,
+          state: ActiveTrackerState.onBreak,
+          shiftStartedAtUtc: started,
+        ),
+      ];
+      await _awaitTodaySessions(container);
+
+      await container.read(workLogReconcilerProvider).reconcile();
+      await _awaitTodaySessions(container);
+
+      final state = container.read(timbraStateProvider);
+      expect(state.isOnShift, isTrue);
+      expect(state.isOnPause, isTrue);
+      expect(state.pauseStartTime!.difference(breakStart).inSeconds.abs(), lessThan(1));
+    });
+
+    test('a punch made offline stays queued and is not overwritten by the server view', () async {
+      final repo = container.read(workSessionRepositoryProvider);
+      await repo.addEvent(
+        id: 'offline-punch',
+        eventTime: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
+        eventType: 'ingresso',
+      ); // pending: the server has not heard of it (serverTrackers is empty)
+      await _awaitTodaySessions(container);
+
+      await container.read(workLogReconcilerProvider).reconcile();
+      await _awaitTodaySessions(container);
+
+      final sessions = await repo.getTodaySessions();
+      expect(sessions.map((s) => s.id), ['offline-punch']);
+      expect(sessions.single.isPendingSync, isTrue);
+      expect(sessions.single.notes, isNull, reason: 'must stay pushable');
+      expect(container.read(timbraStateProvider).isOnShift, isTrue);
     });
   });
 }

@@ -20,7 +20,7 @@ import '../../../data/timbratura/cantiere_work_log_reconciler.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 import '../../../data/timbratura/work_log_reconcile_watcher.dart';
-import '../../../data/timbratura/work_log_reconciler.dart';
+import '../../../data/timbratura/work_log_refresh_coordinator.dart';
 import '../../../features/altro/notifiche_provider.dart';
 
 /// The main app shell with the 5-tab floating-pill bottom navigation.
@@ -157,7 +157,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
     _reconcilePoll?.cancel();
     if (!ref.read(backgroundSyncPreferenceProvider)) return;
     _reconcilePoll = Timer.periodic(const Duration(seconds: 60), (_) {
-      ref.read(workLogReconcilerProvider).reconcile();
+      ref.read(workLogRefreshCoordinatorProvider).refreshNow();
       ref.read(cantiereWorkLogReconcilerProvider).reconcile();
       ref.read(syncProvider.notifier).performSync();
     });
@@ -171,7 +171,7 @@ class _HomeShellState extends ConsumerState<HomeShell>
       // "Sincronizza dati in background".
       if (ref.read(backgroundSyncPreferenceProvider)) {
         ref.read(syncProvider.notifier).performSync();
-        ref.read(workLogReconcilerProvider).reconcile();
+        ref.read(workLogRefreshCoordinatorProvider).refreshNow();
         ref.read(cantiereWorkLogReconcilerProvider).reconcile();
       }
       // A rapportino whose send failed for a transient reason (or was queued offline) is

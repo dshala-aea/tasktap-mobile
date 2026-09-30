@@ -11,6 +11,7 @@ import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../altro/notifiche_provider.dart';
 import '../timbra/timbra_providers.dart';
+import '../timbra/work_log_live_refresh.dart';
 import 'active_tracker_strip.dart';
 import 'active_trackers_provider.dart';
 import 'dashboard_providers.dart';
@@ -25,8 +26,17 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 /// quick-action row: two things worth starting from here, plus "Le mie timbrature" — a view, not
 /// a start action, grouped in anyway as the personal-Timbra home now that its bottom-nav tab is
 /// gone. The stat grid that used to sit above all of it is gone — see the Oggi section.
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
+
+  /// Keeps the running clocks honest about other devices: refresh on focus/resume and a 15s
+  /// foreground poll. See WorkLogLiveRefresh.
+  @override
+  Widget build(BuildContext context) => const WorkLogLiveRefresh(child: _DashboardView());
+}
+
+class _DashboardView extends ConsumerWidget {
+  const _DashboardView();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

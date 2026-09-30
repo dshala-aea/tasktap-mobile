@@ -16,6 +16,10 @@ import 'package:dio/dio.dart';
 /// cantiere is time on a site, ticket is time against a job.
 enum ActiveTrackerKind { attendance, cantiere, ticket }
 
+/// Attendance trackers only: whether the working day is running or paused on a break. Null for
+/// cantiere/ticket, which have no break.
+enum ActiveTrackerState { working, onBreak }
+
 /// One running tracker.
 class ActiveTracker {
   const ActiveTracker({
@@ -24,6 +28,8 @@ class ActiveTracker {
     required this.startedAtUtc,
     this.label,
     this.entityId,
+    this.state,
+    this.shiftStartedAtUtc,
   });
 
   final ActiveTrackerKind kind;
@@ -41,6 +47,15 @@ class ActiveTracker {
 
   /// The cantiere or ticket, so a tap can open it. Null for attendance.
   final String? entityId;
+
+  /// `Working` / `OnBreak` for attendance, null otherwise. While [ActiveTrackerState.onBreak],
+  /// [startedAtUtc] is the START OF THE BREAK (so "in pausa da X" ticks from it) and
+  /// [shiftStartedAtUtc] is when the working day began.
+  final ActiveTrackerState? state;
+
+  /// When the attendance day started (true UTC); null for cantiere/ticket. Older servers omit it,
+  /// in which case [startedAtUtc] is the day start (there was no break-aware `startedAtUtc`).
+  final DateTime? shiftStartedAtUtc;
 
   Duration elapsedAt(DateTime nowUtc) {
     final elapsed = nowUtc.difference(startedAtUtc);
@@ -75,13 +90,22 @@ class ActiveTracker {
     }
   }
 
+  static ActiveTrackerState? _stateFrom(Object? raw) => switch (raw) {
+    'Working' || 0 => ActiveTrackerState.working,
+    'OnBreak' || 1 => ActiveTrackerState.onBreak,
+    _ => null,
+  };
+
   factory ActiveTracker.fromJson(Map<String, dynamic> json) {
+    final shift = json['shiftStartedAtUtc'] as String?;
     return ActiveTracker(
       kind: _kindFrom(json['kind']),
       id: json['id'] as String,
       startedAtUtc: _parseUtc(json['startedAtUtc'] as String),
       label: json['label'] as String?,
       entityId: json['entityId'] as String?,
+      state: _stateFrom(json['state']),
+      shiftStartedAtUtc: shift == null ? null : _parseUtc(shift),
     );
   }
 }

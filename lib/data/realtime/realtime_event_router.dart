@@ -41,13 +41,14 @@ import '../../features/ticket/ticket_providers.dart' show ticketWorklogsProvider
 import '../../presentation/providers/schedule_providers.dart' show ticketByIdProvider;
 import '../sync/connectivity_provider.dart';
 import '../sync/sync_service.dart' show syncProvider;
+import '../timbratura/work_log_refresh_coordinator.dart' show workLogRefreshCoordinatorProvider;
 import 'realtime_connection.dart';
 
 /// Routes one parsed realtime [event] to whichever existing provider(s) it should refresh — see
 /// this file's header comment for why some cases also trigger a general sync rather than
 /// invalidating alone.
 ///
-/// Exactly the 5 events this plan promises are handled. `MaterialeUpdated` is deliberately not a
+/// Exactly the 6 events this plan promises are handled. `MaterialeUpdated` is deliberately not a
 /// case here (explicitly out of scope). An unrecognized `event.type` is silently ignored rather
 /// than throwing — a future server-side event type must be safe to receive on an older,
 /// not-yet-updated app build.
@@ -82,6 +83,15 @@ void routeRealtimeEvent(ProviderContainer container, RealtimeEvent event) {
       container.invalidate(rapportiniListProvider);
       container.invalidate(adminReportsProvider);
       container.read(syncProvider.notifier).performSync();
+      break;
+
+    case 'WorkLogChanged':
+      // The caller's own clock changed on ANY device (start / end / break start / break end;
+      // `data.action` is informational and deliberately not read — same "signal to re-fetch, never
+      // a second source of truth" rule as every other case). Sent to the user's own hub group, so
+      // it reaches this phone even when the change was made here (harmless: reconcile is
+      // idempotent). Debounced ~1s so a burst of clock changes is one refresh.
+      container.read(workLogRefreshCoordinatorProvider).requestRefresh();
       break;
   }
 }

@@ -132,8 +132,12 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tracker;
+    // The tracker's own `state` is authoritative (it may describe a break started on another
+    // device); rows without one (older servers) fall back to this device's local state.
+    final localOnPause = ref.watch(timbraStateProvider).isOnPause;
     final onBreak =
-        t.kind == ActiveTrackerKind.attendance && ref.watch(timbraStateProvider).isOnPause;
+        t.kind == ActiveTrackerKind.attendance &&
+        (t.state == null ? localOnPause : t.state == ActiveTrackerState.onBreak);
 
     // Pause exists for the working day only. The guard is the server's, so a payroll-locked month
     // states its reason instead of failing on tap.

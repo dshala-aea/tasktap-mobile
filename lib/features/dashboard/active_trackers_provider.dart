@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
+import '../../data/local/app_database.dart' show WorkSession;
+import '../../data/timbratura/work_session_repository.dart' show reconciledOrphanMarker;
 import '../../data/worklogs/active_tracker_api_client.dart';
 import '../timbra/timbra_providers.dart';
 
@@ -89,38 +91,72 @@ String formatElapsed(Duration elapsed) {
 
 /// What to show as running: the server's list, corrected by what this device knows for certain.
 ///
-/// [activeTrackersProvider] polls once a minute, which is right for catching a stop performed on
-/// the office web or another handset — and wrong for the technician's own punch, which took up to
-/// sixty seconds to appear on the dashboard and another sixty to disappear. A clock the device
-/// itself started should not need a round trip to become visible.
+/// Attendance has two sources and they answer different questions:
 ///
-/// So attendance is taken from the local timbratura state, which is instant and correct offline,
-/// and the server's own attendance row is dropped in its favour. Cantiere and ticket clocks have
-/// no local mirror and keep coming from the poll.
+/// - The SERVER's row is the authority for a clock started, paused or stopped on ANOTHER device
+///   (the office web, a second handset). It also carries `state` (Working | OnBreak).
+/// - The LOCAL timbratura state is instant and correct offline, and knows about punches the server
+///   has not received yet.
 ///
-/// The local row reuses the server's id when there is one, so the two never render as two clocks
-/// during the window where both agree.
+/// The rule: local wins only while it holds events the server has not seen (pending sync) — that
+/// is the technician's own fresh punch, which must show at once and must not be overwritten by a
+/// stale server view. Otherwise the server's row wins, so a clock started elsewhere appears here
+/// even though this phone never punched. With no server row (offline, or nothing running) a
+/// locally running shift is still shown.
+///
+/// One more guard closes a race: right after a local, already-synced clock-out the server list can
+/// still show the old shift until the next refetch. A server row that began at or before this
+/// device's last local 'fine' is that stale view and is hidden; a shift that began AFTER the
+/// stop is a new one, started elsewhere, and is shown.
+///
+/// The local row reuses the server's id when there is one, so the two never render as two clocks.
+/// Cantiere and ticket clocks have no local mirror and always come from the server.
 final visibleTrackersProvider = Provider.autoDispose<List<ActiveTracker>>((ref) {
   final remote = ref.watch(activeTrackersProvider).valueOrNull ?? const <ActiveTracker>[];
   final timbra = ref.watch(timbraStateProvider);
+  final sessions = ref.watch(todaySessionsProvider).valueOrNull ?? const <WorkSession>[];
 
   final others = remote.where((t) => t.kind != ActiveTrackerKind.attendance).toList();
-
-  if (!timbra.isOnShift || timbra.shiftStartTime == null) {
-    // Punched out locally: drop the attendance row now rather than after the next poll.
-    return others;
-  }
-
   final serverAttendance = remote.where((t) => t.kind == ActiveTrackerKind.attendance).firstOrNull;
 
-  return [
-    ActiveTracker(
+  final hasUnsynced = sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
+
+  ActiveTracker? localRow() {
+    if (!timbra.isOnShift || timbra.shiftStartTime == null) return null;
+    final onBreak = timbra.isOnPause;
+    return ActiveTracker(
       kind: ActiveTrackerKind.attendance,
       id: serverAttendance?.id ?? 'local-attendance',
-      startedAtUtc: timbra.shiftStartTime!.toUtc(),
+      // Same convention as the server row: on a break the timer counts the break.
+      startedAtUtc: (onBreak ? timbra.pauseStartTime ?? timbra.shiftStartTime! : timbra.shiftStartTime!)
+          .toUtc(),
+      shiftStartedAtUtc: timbra.shiftStartTime!.toUtc(),
+      state: onBreak ? ActiveTrackerState.onBreak : ActiveTrackerState.working,
       label: serverAttendance?.label,
       entityId: serverAttendance?.entityId,
-    ),
-    ...others,
-  ];
+    );
+  }
+
+  ActiveTracker? attendance;
+  if (hasUnsynced) {
+    attendance = localRow();
+  } else if (serverAttendance != null && !_supersededByLocalStop(serverAttendance, sessions)) {
+    attendance = serverAttendance;
+  } else {
+    attendance = localRow();
+  }
+
+  return [?attendance, ...others];
 });
+
+/// True when this device stopped the day AFTER the server's open shift began — the server row is
+/// then a stale view that has not caught up with the local clock-out yet.
+bool _supersededByLocalStop(ActiveTracker server, List<WorkSession> sessions) {
+  DateTime? lastFine;
+  for (final s in sessions) {
+    if (s.eventType == 'fine') lastFine = s.eventTime;
+  }
+  if (lastFine == null) return false;
+  final shiftStart = server.shiftStartedAtUtc ?? server.startedAtUtc;
+  return !shiftStart.isAfter(lastFine);
+}

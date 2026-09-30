@@ -17,7 +17,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../sync/connectivity_provider.dart';
-import 'work_log_reconciler.dart';
+import 'work_log_refresh_coordinator.dart';
 
 /// Call once on app start (e.g. in HomeShell.initState via addPostFrameCallback).
 /// Registers the offline→online reconnect hook for worklog reconciliation.
@@ -27,13 +27,13 @@ import 'work_log_reconciler.dart';
 VoidCallback initWorkLogReconcileWatcher(WidgetRef ref) {
   final connectivity = ref.read(connectivityProvider.notifier);
   final cancel = connectivity.onReconnect(() {
-    ref.read(workLogReconcilerProvider).reconcile();
+    ref.read(workLogRefreshCoordinatorProvider).refreshNow();
   });
 
   // Also reconcile immediately on startup (covers a stop that happened on another surface while
   // this device was closed, and the common case of already being online).
   Future.microtask(() {
-    ref.read(workLogReconcilerProvider).reconcile();
+    ref.read(workLogRefreshCoordinatorProvider).refreshNow();
   });
 
   return cancel;
