@@ -537,7 +537,7 @@
           "Ai"
         ],
         "summary": "Transcribes an audio file to Italian text using Whisper.\nReturns the transcript for the frontend to include in a draft request.",
-        "description": "Gated on \u0060RapportiniReportWrite\u0060, same as Task\u0026lt;IActionResult\u0026gt; AiController.GenerateReportDraft(AiGenerateReportRequest request, CancellationToken ct): it feeds\ndirectly into that same draft workflow and consumes the same shared tenant AI quota, so a\nuser who cannot write a rapportino has no legitimate use for it. Mirrors\nTask\u0026lt;IActionResult\u0026gt; ReportsController.UploadAttachment(Guid id, IFormFile file, decimal? capturedLatitude = null, decimal? capturedLongitude = null, DateTime? capturedAt = null), a supporting/pre-processing action for the\nsame report-write workflow, which is gated on the identical permission rather than something\nlighter.",
+        "description": "Gated on \u0060RapportiniReportWrite\u0060, same as Task\u0026lt;IActionResult\u0026gt; AiController.GenerateReportDraft(AiGenerateReportRequest request, CancellationToken ct): it feeds\ndirectly into that same draft workflow and consumes the same shared tenant AI quota, so a\nuser who cannot write a rapportino has no legitimate use for it. Mirrors\nTask\u0026lt;IActionResult\u0026gt; ReportsController.UploadAttachment(Guid id, IFormFile file, decimal? capturedLatitude = null, decimal? capturedLongitude = null, DateTime? capturedAt = null, string? kind = null), a supporting/pre-processing action for the\nsame report-write workflow, which is gated on the identical permission rather than something\nlighter.",
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -9711,7 +9711,7 @@
           }
         ],
         "requestBody": {
-          "description": "Device UTC timestamp at capture, if the client provided it.",
+          "description": "Optional. Omit for a photo (default). \u0060signature-customer\u0060 or \u0060signature-technician\u0060\nstores the file as a system artifact (kept out of the report\u0027s photo list) so the submit\nbody can reference it as the customer/technician signature. Any other value is a 400.",
           "content": {
             "multipart/form-data": {
               "schema": {
@@ -9757,6 +9757,14 @@
                       "capturedAt": {
                         "type": "string",
                         "format": "date-time"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string"
                       }
                     }
                   }
@@ -11819,7 +11827,24 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleConflictCheckResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleConflictCheckResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleConflictCheckResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -25426,6 +25451,88 @@
           }
         }
       },
+      "ScheduleConflictCheckResponse": {
+        "required": [
+          "hasConflicts",
+          "conflicts",
+          "teamConflicts"
+        ],
+        "type": "object",
+        "properties": {
+          "hasConflicts": {
+            "type": "boolean"
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleConflictDto"
+            }
+          },
+          "teamConflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleTeamConflictDto"
+            }
+          }
+        },
+        "description": "Documented 200 body of \u0060POST /Schedules/check-conflicts\u0060 (camelCase on the wire)."
+      },
+      "ScheduleConflictDto": {
+        "required": [
+          "id",
+          "activityDate",
+          "timeStart",
+          "timeEnd",
+          "userId",
+          "squadraId",
+          "title",
+          "conflictOnUser",
+          "conflictOnSquadra"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "activityDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeStart": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "timeEnd": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "userId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "conflictOnUser": {
+            "type": "boolean"
+          },
+          "conflictOnSquadra": {
+            "type": "boolean"
+          }
+        },
+        "description": "One existing schedule that overlaps a proposed create/update window for the same technician\nor squadra.\n\nShared by every caller of the conflict rule: \u0060IScheduleCommandService.CheckConflictsAsync\u0060\n(the create/edit UI\u0027s preflight probe) and \u0060CreateAsync\u0060/\u0060UpdateAsync\u0060 themselves\n(via ScheduleConflictException when the caller didn\u0027t\npass force=true) \u2014 one shape, so a client sees the same fields whichever path produced them."
+      },
       "ScheduleOggiDto": {
         "required": [
           "id",
@@ -25479,6 +25586,75 @@
           }
         },
         "description": "One of today\u0027s schedules. Time-of-day fields are pre-formatted \u0060\u0022HH:mm\u0022\u0060 strings so the\nfrontend renders without touching a timezone; DateTime ScheduleOggiDto.Data is the UTC activity instant."
+      },
+      "ScheduleTeamConflictDto": {
+        "required": [
+          "id",
+          "activityDate",
+          "timeStart",
+          "timeEnd",
+          "userId",
+          "squadraId",
+          "title",
+          "viaSquadraId",
+          "viaSquadraName",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The overlapping schedule.",
+            "format": "uuid"
+          },
+          "activityDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "timeStart": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "timeEnd": {
+            "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
+            "type": "string"
+          },
+          "userId": {
+            "type": "string",
+            "description": "The person who is in the overlap.",
+            "format": "uuid"
+          },
+          "squadraId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The overlapping schedule\u0027s own squadra, when it has one.",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "viaSquadraId": {
+            "type": "string",
+            "description": "The squadra whose membership links the person to the overlap: the booked\n            squadra for ScheduleTeamConflictKind.MemberBookedViaTeam, the squadra being assigned\n            for ScheduleTeamConflictKind.TeamMemberBusy.",
+            "format": "uuid"
+          },
+          "viaSquadraName": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ScheduleTeamConflictKind"
+          }
+        },
+        "description": "An ADVISORY overlap that runs through squadra membership. Never blocks a create/update and is\nnever part of the 409 body; only \u0060POST /Schedules/check-conflicts\u0060 reports it, as\n\u0060teamConflicts\u0060."
+      },
+      "ScheduleTeamConflictKind": {
+        "enum": [
+          "MemberBookedViaTeam",
+          "TeamMemberBusy"
+        ],
+        "description": "Why a team-mediated overlap was reported (ADR-0009 \u00A76)."
       },
       "ScortaSottoMinimoDto": {
         "required": [
