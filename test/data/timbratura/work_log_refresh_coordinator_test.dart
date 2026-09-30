@@ -19,10 +19,11 @@ class _FakeCoordinator extends WorkLogRefreshCoordinator {
   void requestRefresh() => requested++;
 
   @override
-  Future<void> refreshNow() async => immediate++;
+  Future<void> refreshNow({bool sync = true}) async => immediate++;
 }
 
 void main() {
+  coordinatorSyncTests();
   group('WorkLogRefreshCoordinator', () {
     test('requestRefresh debounces a burst into one reconcile + one refetch', () {
       fakeAsync((async) {
@@ -130,6 +131,46 @@ void main() {
         );
       }
       expect(fake.requested, 4);
+    });
+  });
+}
+
+void coordinatorSyncTests() {
+  group('WorkLogRefreshCoordinator + pending command retry', () {
+    test('refreshNow retries queued commands BEFORE reconciling, so reconcile sees their result', () async {
+      final order = <String>[];
+      final c = WorkLogRefreshCoordinator(
+        syncPending: () async => order.add('sync'),
+        reconcile: () async => order.add('reconcile'),
+        refetchTrackers: () => order.add('refetch'),
+      );
+      await c.refreshNow();
+      expect(order, ['refetch', 'sync', 'reconcile']);
+      c.dispose();
+    });
+
+    test('sync:false (used by the sync service itself) does not loop back into sync', () async {
+      var syncs = 0;
+      final c = WorkLogRefreshCoordinator(
+        syncPending: () async => syncs++,
+        reconcile: () async {},
+        refetchTrackers: () {},
+      );
+      await c.refreshNow(sync: false);
+      expect(syncs, 0);
+      c.dispose();
+    });
+
+    test('a failing sync does not stop the reconcile', () async {
+      var reconciles = 0;
+      final c = WorkLogRefreshCoordinator(
+        syncPending: () async => throw Exception('x'),
+        reconcile: () async => reconciles++,
+        refetchTrackers: () {},
+      );
+      await c.refreshNow();
+      expect(reconciles, 1);
+      c.dispose();
     });
   });
 }

@@ -14,7 +14,7 @@ class _Fake extends WorkLogRefreshCoordinator {
   int immediate = 0;
 
   @override
-  Future<void> refreshNow() async => immediate++;
+  Future<void> refreshNow({bool sync = true}) async => immediate++;
 }
 
 Widget _host(_Fake fake, {bool background = true, bool visible = true}) => ProviderScope(
