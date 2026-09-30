@@ -238,11 +238,18 @@ class NotificationService {
       entityType: entityType,
       entityId: entityId,
     );
+    // Tell main.dart there is something to drain; it decides whether the app is ready.
+    onDeepLinkPending?.call();
 
     debugPrint('FCM deep-link: $entityType/$entityId');
   }
 
-  /// Pending deep-link to be consumed by the router on next build.
+  /// Called whenever a push tap stores a new pending deep-link (background or cold start).
+  /// `main.dart` wires this to a [DeepLinkDrainer]; the intent stays in [consumePendingDeepLink]'s
+  /// slot until the drainer finds the app ready, so a tap before auth is not lost.
+  void Function()? onDeepLinkPending;
+
+  /// Pending deep-link waiting for the app to be ready to navigate.
   DeepLinkIntent? _pendingDeepLink;
 
   /// Consume the pending deep-link (called by the router).
@@ -290,8 +297,13 @@ class DeepLinkIntent {
     return switch (entityType) {
       'Ticket' => AppRoutes.ticketDetailPath(entityId),
       'Schedule' => AppRoutes.calendario,
-      'Report' => AppRoutes.altroRapportini,
-      'Location' => AppRoutes.altroClienti,
+      // The report itself, not the list: the view screen loads by id and already surfaces a
+      // rejected report's reason, so one destination serves Reviewed/Rejected/Cancelled alike.
+      'Report' => '${AppRoutes.altroRapportini}/view/$entityId',
+      'Cantiere' => AppRoutes.cantieriDetailPath(entityId),
+      // No per-request detail screen exists; the list is where the decision is visible.
+      'AbsenceRequest' => AppRoutes.altroFerie,
+      // WorkLog, ProdottoAssistenza, User, Magazzino, Tenant, License: admin-side, no mobile screen.
       _ => null,
     };
   }

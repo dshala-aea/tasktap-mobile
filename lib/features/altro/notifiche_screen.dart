@@ -57,17 +57,24 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
 
   /// Navigates to whatever the notification is about, if it names something we can open.
   ///
-  /// Silently does nothing when the pair is absent or the type is one we have no screen for —
-  /// the notification has still been marked read, which is the part the technician asked for by
-  /// tapping. Bouncing them to an error for a notification that simply has no destination would
-  /// be worse than staying put.
+  /// When the pair is absent or the type has no mobile screen, stays put and says so with a
+  /// SnackBar — the notification has still been marked read, but a tap that visibly does nothing
+  /// reads as a broken app.
   void _openRelatedEntity(BuildContext context, AppNotifica n) {
     final type = n.relatedEntityType;
     final id = n.relatedEntityId;
-    if (type == null || id == null) return;
-
-    final route = DeepLinkIntent(entityType: type, entityId: id).resolveRoute();
-    if (route != null) context.push(route);
+    final route = (type == null || id == null || id.isEmpty)
+        ? null
+        : DeepLinkIntent(entityType: type, entityId: id).resolveRoute();
+    if (route != null) {
+      context.push(route);
+      return;
+    }
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('Nessuna pagina collegata a questa notifica')),
+      );
   }
 
   @override

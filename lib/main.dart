@@ -14,6 +14,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/config/env.dart';
 import 'core/crash_reporting/crash_reporter.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
+import 'core/notifications/deep_link_drainer.dart';
 import 'core/notifications/notification_service.dart';
 import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
@@ -163,6 +164,34 @@ class TaskTapApp extends ConsumerStatefulWidget {
 class _TaskTapAppState extends ConsumerState<TaskTapApp> {
   late final _router = buildRouter(ref);
 
+  /// Delivers push-tap deep-links with `push` once a user is authenticated. Null when FCM is
+  /// unavailable (nothing can ever be tapped).
+  DeepLinkDrainer? _deepLinks;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!NotificationService.isAvailable) return;
+    final service = NotificationService.instance;
+    _deepLinks = DeepLinkDrainer(
+      take: service.consumePendingDeepLink,
+      isReady: () => ref.read(authStateProvider).valueOrNull != null,
+      push: _router.push,
+    );
+    service.onDeepLinkPending = () => _deepLinks?.drain();
+    // Cold start: the tap may have been stored before this widget existed. Wait for the first
+    // frame so the router is mounted; if auth is still loading, the auth listener drains later.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
+  }
+
+  @override
+  void dispose() {
+    if (NotificationService.isAvailable) {
+      NotificationService.instance.onDeepLinkPending = null;
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Register the FCM device token whenever a user becomes authenticated
@@ -173,6 +202,8 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       final user = next.valueOrNull;
       if (NotificationService.isAvailable && user != null) {
         NotificationService.instance.registerDeviceToken(user.accessToken);
+        // A push tapped before sign-in resolved (cold start) is parked; deliver it now.
+        _deepLinks?.drain();
       }
     });
 
@@ -182,19 +213,6 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     if (NotificationService.isAvailable) {
       NotificationService.instance.onForegroundMessage = () =>
           ref.read(notificheProvider.notifier).refresh();
-    }
-
-    // Check for pending deep-links from notification taps.
-    if (NotificationService.isAvailable) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final deepLink = NotificationService.instance.consumePendingDeepLink();
-        if (deepLink != null) {
-          final route = deepLink.resolveRoute();
-          if (route != null) {
-            _router.go(route);
-          }
-        }
-      });
     }
 
     // Impostazioni → "Tema scuro". The switch existed, was persisted to SharedPreferences, and

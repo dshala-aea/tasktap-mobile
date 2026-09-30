@@ -15,6 +15,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/features/altro/notifiche_provider.dart';
@@ -22,12 +23,21 @@ import 'package:tasktap_mobile/features/altro/notifiche_screen.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-AppNotifica _fakeNotifica({String id = 'n1', bool letta = false}) => AppNotifica(
+AppNotifica _fakeNotifica({
+  String id = 'n1',
+  bool letta = false,
+  String tipo = 'TicketAssigned',
+  String? relatedEntityType,
+  String? relatedEntityId,
+}) => AppNotifica(
   id: id,
   titolo: 'Nuovo intervento',
   corpo: 'Ti è stato assegnato un intervento.',
   timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
   letta: letta,
+  tipo: tipo,
+  relatedEntityType: relatedEntityType,
+  relatedEntityId: relatedEntityId,
 );
 
 /// Builds a [NotificheScreen] backed by a real [NotificheNotifier] over an
@@ -58,9 +68,11 @@ Future<Widget> _buildScreen({
             userId: 'test-user',
             title: n.titolo,
             message: n.corpo,
-            type: 'TicketAssigned',
+            type: n.tipo ?? 'TicketAssigned',
             deliveryType: 'InApp',
             isRead: Value(n.letta),
+            relatedEntityType: Value(n.relatedEntityType),
+            relatedEntityId: Value(n.relatedEntityId),
           ),
         );
   }
@@ -70,7 +82,30 @@ Future<Widget> _buildScreen({
       notificheProvider.overrideWith((ref) => NotificheNotifier(db, Dio(), ref)),
       if (hasError) notificheHasErrorProvider.overrideWith((ref) => true),
     ],
-    child: const MaterialApp(home: NotificheScreen()),
+    child: MaterialApp.router(
+      routerConfig: GoRouter(
+        routes: [
+          GoRoute(path: '/', builder: (_, _) => const NotificheScreen()),
+          GoRoute(
+            path: '/ticket/:id',
+            builder: (_, s) => Text('STUB ticket ${s.pathParameters['id']}'),
+          ),
+          GoRoute(
+            path: '/cantieri/:id',
+            builder: (_, s) => Text('STUB cantiere ${s.pathParameters['id']}'),
+          ),
+          GoRoute(
+            path: '/altro/rapportini/view/:reportId',
+            builder: (_, s) => Text('STUB report ${s.pathParameters['reportId']}'),
+          ),
+          GoRoute(
+            path: '/altro/ferie',
+            builder: (_, _) => const Text('STUB ferie'),
+          ),
+          GoRoute(path: '/calendario', builder: (_, _) => const Text('STUB calendario')),
+        ],
+      ),
+    ),
   );
 }
 
@@ -167,6 +202,73 @@ void main() {
     expect(find.text('Impossibile caricare le notifiche'), findsOneWidget);
     expect(find.text('Riprova'), findsOneWidget);
     expect(find.text('Nessuna notifica'), findsNothing);
+    await drain(tester);
+  });
+
+  // ── 8. Tap navigates to the related entity and clears unread ──────────────
+  final routable = <(String, String, String, String)>[
+    ('Ticket', 't1', 'TicketAssigned', 'STUB ticket t1'),
+    ('Cantiere', 'c1', 'CantiereAssigned', 'STUB cantiere c1'),
+    ('Report', 'r1', 'ReportRejected', 'STUB report r1'),
+    ('AbsenceRequest', 'a1', 'AbsenceRequestDecided', 'STUB ferie'),
+    ('Schedule', 's1', 'ScheduleReminder', 'STUB calendario'),
+  ];
+  for (final (type, id, tipo, expected) in routable) {
+    testWidgets('tap on $type notification opens $expected and marks it read', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        await _buildScreen(
+          notifiche: [
+            _fakeNotifica(tipo: tipo, relatedEntityType: type, relatedEntityId: id),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Segna tutte'), findsOneWidget);
+
+      await tester.tap(find.text('Nuovo intervento'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(expected), findsOneWidget);
+      expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
+
+      // Back on the list the unread marker is gone.
+      final router = GoRouter.of(tester.element(find.text(expected)));
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Segna tutte'), findsNothing);
+      await drain(tester);
+    });
+  }
+
+  // ── 9. Unroutable tap: read + explanatory SnackBar, no navigation ─────────
+  for (final type in const ['WorkLog', 'Magazzino', 'User', 'Tenant']) {
+    testWidgets('tap on unroutable $type notification shows SnackBar', (tester) async {
+      await tester.pumpWidget(
+        await _buildScreen(
+          notifiche: [_fakeNotifica(tipo: 'SeatLimitAlert', relatedEntityType: type, relatedEntityId: 'x1')],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Nuovo intervento'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessuna pagina collegata a questa notifica'), findsOneWidget);
+      expect(find.text('Segna tutte'), findsNothing);
+      await drain(tester);
+    });
+  }
+
+  testWidgets('tap on notification without related entity shows SnackBar', (tester) async {
+    await tester.pumpWidget(await _buildScreen(notifiche: [_fakeNotifica()]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nuovo intervento'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessuna pagina collegata a questa notifica'), findsOneWidget);
     await drain(tester);
   });
 }
