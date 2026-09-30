@@ -252,6 +252,9 @@ class NotificationService {
   /// Pending deep-link waiting for the app to be ready to navigate.
   DeepLinkIntent? _pendingDeepLink;
 
+  /// Drop a parked deep-link (logout / user change) so it can never open for someone else.
+  void clearPendingDeepLink() => _pendingDeepLink = null;
+
   /// Consume the pending deep-link (called by the router).
   DeepLinkIntent? consumePendingDeepLink() {
     final link = _pendingDeepLink;
@@ -299,7 +302,7 @@ class DeepLinkIntent {
       'Schedule' => AppRoutes.calendario,
       // The report itself, not the list: the view screen loads by id and already surfaces a
       // rejected report's reason, so one destination serves Reviewed/Rejected/Cancelled alike.
-      'Report' => '${AppRoutes.altroRapportini}/view/$entityId',
+      'Report' => AppRoutes.rapportiniView(entityId),
       'Cantiere' => AppRoutes.cantieriDetailPath(entityId),
       // No per-request detail screen exists; the list is where the decision is visible.
       'AbsenceRequest' => AppRoutes.altroFerie,

@@ -22,6 +22,7 @@ void main() {
       },
       isReady: () => ready,
       push: pushed.add,
+      clear: () => pending = null,
     );
   });
 
@@ -36,6 +37,17 @@ void main() {
     drainer.drain();
     drainer.drain(); // e.g. a second auth/refresh event
     expect(pushed, ['/ticket/t1']);
+  });
+
+  test('intent parked while logged out is dropped on logout, not shown to next login', () {
+    pending = const DeepLinkIntent(entityType: 'Ticket', entityId: 't1');
+
+    drainer.drain(); // logged out: parked
+    drainer.reset(); // auth transition to unauthenticated
+    ready = true; // a different user signs in
+    drainer.drain();
+
+    expect(pushed, isEmpty);
   });
 
   test('nothing pending -> no navigation', () {

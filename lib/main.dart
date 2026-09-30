@@ -177,6 +177,7 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       take: service.consumePendingDeepLink,
       isReady: () => ref.read(authStateProvider).valueOrNull != null,
       push: _router.push,
+      clear: service.clearPendingDeepLink,
     );
     service.onDeepLinkPending = () => _deepLinks?.drain();
     // Cold start: the tap may have been stored before this widget existed. Wait for the first
@@ -202,9 +203,16 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
       final user = next.valueOrNull;
       if (NotificationService.isAvailable && user != null) {
         NotificationService.instance.registerDeviceToken(user.accessToken);
-        // A push tapped before sign-in resolved (cold start) is parked; deliver it now.
-        _deepLinks?.drain();
+        // A push tapped before sign-in resolved (cold start) is parked; deliver it after the
+        // frame so it does not land in the same tick as the router's own auth redirect.
+        WidgetsBinding.instance.addPostFrameCallback((_) => _deepLinks?.drain());
       }
+      // Session ended (or a different user signed in): a parked intent belongs to nobody now.
+      final signedOut = next is AsyncData && next.valueOrNull == null;
+      final userChanged = previous?.valueOrNull != null &&
+          user != null &&
+          previous!.valueOrNull!.id != user.id;
+      if (signedOut || userChanged) _deepLinks?.reset();
     });
 
     // A push arriving in the foreground is the moment we know there is something new; pull it

@@ -18,6 +18,7 @@ void main() {
       expect(_route('Cantiere'), '/cantieri/abc-1');
     });
     test('Report -> report view by id (not the list)', () {
+      expect(_route('Report'), AppRoutes.rapportiniView('abc-1'));
       expect(_route('Report'), '/altro/rapportini/view/abc-1');
     });
     test('AbsenceRequest -> ferie list', () {

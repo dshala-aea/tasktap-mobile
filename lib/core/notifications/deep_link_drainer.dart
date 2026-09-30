@@ -12,7 +12,11 @@ class DeepLinkDrainer {
     required this.take,
     required this.isReady,
     required this.push,
+    required this.clear,
   });
+
+  /// Discards a parked intent without navigating.
+  final void Function() clear;
 
   /// Consumes the pending intent (e.g. `NotificationService.consumePendingDeepLink`).
   final DeepLinkIntent? Function() take;
@@ -22,6 +26,10 @@ class DeepLinkDrainer {
 
   /// Pushes a route on top of the current stack (never `go`: it would discard the stack).
   final void Function(String route) push;
+
+  /// Call when the session ends or the user changes: an intent tapped while logged out must not
+  /// navigate a different user who signs in later.
+  void reset() => clear();
 
   void drain() {
     if (!isReady()) return;
