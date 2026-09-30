@@ -53,6 +53,8 @@ DraftReport _draft({
   submissionState: submissionState,
   idempotencyKey: null,
   submissionError: null,
+  submissionAttempts: 0,
+  submissionErrorTransient: false,
   technicianSignaturePrefillSuppressed: false,
 );
 

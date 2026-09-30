@@ -367,6 +367,8 @@ class ReportEditorState {
     submissionState: 'draft',
     idempotencyKey: null,
     submissionError: null,
+    submissionAttempts: 0,
+    submissionErrorTransient: false,
   );
 
   ReportEditorState copyWith({

@@ -420,6 +420,17 @@ class DraftReports extends Table {
   /// Human-readable error message from the last failed attempt (null when ok).
   TextColumn get submissionError => text().nullable()();
 
+  /// Consecutive failed automatic send attempts whose cause was transient (see
+  /// [submissionErrorTransient]). The submission queue auto-retries a transient failure on
+  /// reconnect/resume/startup until this reaches its cap; a manual "Riprova" resets it to 0.
+  /// Client-authored only, never synced.
+  IntColumn get submissionAttempts => integer().withDefault(const Constant(0))();
+
+  /// True when the last failure was worth retrying unattended (transport error, HTTP 5xx, 408,
+  /// 429). False for permanent causes (other 4xx, missing local file), which stay `failed`
+  /// until the technician acts. Client-authored only, never synced.
+  BoolColumn get submissionErrorTransient => boolean().withDefault(const Constant(false))();
+
   /// True once the technician has explicitly cleared their technician signature via the
   /// "Cancella" button (`ReportEditorNotifier.clearTechnicianSignature`).
   ///
@@ -830,7 +841,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration {
@@ -1051,6 +1062,14 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(pendingTickets, pendingTickets.technicianNotes);
           await m.addColumn(pendingTickets, pendingTickets.agentId);
           await m.addColumn(pendingTickets, pendingTickets.tagsJson);
+        }
+        if (from < 34) {
+          // Report-submit retry bookkeeping — see DraftReports.submissionAttempts's own doc
+          // comment. Client-authored only (never delta-synced): no syncCursorGeneration bump.
+          // Both default to "no attempts, not transient", the honest answer for every row
+          // written before this.
+          await m.addColumn(draftReports, draftReports.submissionAttempts);
+          await m.addColumn(draftReports, draftReports.submissionErrorTransient);
         }
       },
     );

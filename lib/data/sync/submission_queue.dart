@@ -1,8 +1,8 @@
 // dart format width=100
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
@@ -30,15 +30,35 @@ export 'draft_submission_state.dart';
 //   - The idempotency key is generated once and persisted; retries reuse it.
 //   - Attachment upload (per allegato) is tracked individually so a partial
 //     retry skips already-uploaded media.
+//   - Signatures are staged through POST /attachments with a `kind`
+//     (signature-customer | signature-technician): that endpoint works before the
+//     report row exists. The server allegato ids are then referenced by /submit.
+//   - Nothing is sent while offline: the row stays readyToSubmit (visible as pending).
+//   - Rows stuck in uploadingMedia/submitting after an app kill are reset to
+//     readyToSubmit on startup (recoverInterrupted) — safe because uploads are tracked
+//     per allegato and submit is idempotent by key.
+//   - A `failed` row with a TRANSIENT cause (transport, 5xx, 408, 429) is retried
+//     automatically on every processAll (reconnect / resume / startup) up to
+//     [maxAutoRetries]; permanent causes (other 4xx, missing local file) stay failed
+//     until the technician taps "Riprova".
 // ══════════════════════════════════════════════════════════════════════════════
 
 class SubmissionQueue {
-  SubmissionQueue({required DraftReportRepository repo, required ReportSubmitApiClient apiClient})
-    : _repo = repo,
-      _apiClient = apiClient;
+  SubmissionQueue({
+    required DraftReportRepository repo,
+    required ReportSubmitApiClient apiClient,
+    bool Function()? isOnline,
+    this.maxAutoRetries = 5,
+  }) : _repo = repo,
+       _apiClient = apiClient,
+       _isOnline = isOnline ?? (() => true);
 
   final DraftReportRepository _repo;
   final ReportSubmitApiClient _apiClient;
+  final bool Function() _isOnline;
+
+  /// Consecutive transient failures after which a `failed` row stops being retried unattended.
+  final int maxAutoRetries;
 
   bool _running = false;
 
@@ -65,17 +85,32 @@ class SubmissionQueue {
       state: DraftSubmissionState.readyToSubmit,
       idempotencyKey: key,
       error: null,
+      attempts: 0,
+      errorTransient: false,
     );
   }
 
-  /// Process all readyToSubmit drafts (called on reconnect or manual trigger).
-  /// Drafts are processed one at a time; a failure stops that draft but
-  /// continues with others.
+  /// Startup recovery: puts rows left in `uploadingMedia`/`submitting` by an app kill back to
+  /// `readyToSubmit`. Call once, before the first [processAll]. A no-op while this queue is
+  /// itself mid-send (e.g. the shell remounted), so it can never reset a live attempt.
+  Future<void> recoverInterrupted() async {
+    if (_running) return;
+    await _repo.resetInterruptedSubmissions();
+  }
+
+  /// Process all readyToSubmit drafts plus `failed` drafts with a transient cause and retry
+  /// budget left (called on reconnect, app resume, startup and manual trigger). Does nothing
+  /// while offline: rows stay `readyToSubmit`. Drafts are processed one at a time; a failure
+  /// stops that draft but continues with others.
   Future<void> processAll() async {
     if (_running) return; // prevent re-entrant calls
+    if (!_isOnline()) return;
     _running = true;
     try {
-      final ready = await _repo.getDraftsReadyToSubmit();
+      final ready = [
+        ...await _repo.getDraftsReadyToSubmit(),
+        ...await _repo.getRetryableFailedDrafts(maxAttempts: maxAutoRetries),
+      ];
       for (final draft in ready) {
         await _processDraft(draft);
       }
@@ -92,10 +127,13 @@ class SubmissionQueue {
       return;
     }
     // Reuse the existing idempotency key so the server still deduplicates.
+    // A manual retry gets a fresh attempt budget.
     await _repo.updateSubmissionState(
       reportId: reportId,
       state: DraftSubmissionState.readyToSubmit,
       error: null,
+      attempts: 0,
+      errorTransient: false,
     );
     await processAll();
   }
@@ -120,45 +158,27 @@ class SubmissionQueue {
         final isCustomerSignature = draft.customerSignatureAllegatoId == allegato.id;
         final isTechnicianSignature = draft.technicianSignatureAllegatoId == allegato.id;
 
-        final String serverAllegatoId;
-        if (isCustomerSignature || isTechnicianSignature) {
-          // Signatures go through the dedicated firma-cliente/firma-tecnico endpoints — not
-          // the generic attachments endpoint — so the server classifies them as
-          // Kind=SystemArtifact instead of Kind=UserUpload (which would wrongly surface them
-          // in the report's Foto list). See ReportSubmitApiClient's header comment.
-          final signatureBase64 = base64Encode(await File(allegato.storagePath).readAsBytes());
-          final signed = isCustomerSignature
-              ? await _apiClient.signCustomer(
-                  reportId: draft.id,
-                  signatureBase64: signatureBase64,
-                  capturedLatitude: allegato.capturedLatitude,
-                  capturedLongitude: allegato.capturedLongitude,
-                  // Normalize to UTC: drift's default (non-text) DateTime storage round-trips
-                  // the same instant but drops the UTC flag (reads back as a local-zone
-                  // DateTime), which would otherwise make this value's `==` disagree with the
-                  // UTC value it started as.
-                  capturedAt: allegato.capturedAt?.toUtc(),
-                )
-              : await _apiClient.signTechnician(
-                  reportId: draft.id,
-                  signatureBase64: signatureBase64,
-                  capturedLatitude: allegato.capturedLatitude,
-                  capturedLongitude: allegato.capturedLongitude,
-                  capturedAt: allegato.capturedAt?.toUtc(),
-                );
-          serverAllegatoId = signed.allegatoId;
-        } else {
-          final uploaded = await _apiClient.uploadAttachment(
-            reportId: draft.id,
-            localPath: allegato.storagePath,
-            fileName: allegato.fileName,
-            contentType: allegato.contentType,
-            capturedLatitude: allegato.capturedLatitude,
-            capturedLongitude: allegato.capturedLongitude,
-            capturedAt: allegato.capturedAt?.toUtc(),
-          );
-          serverAllegatoId = uploaded.allegatoId;
-        }
+        // Signatures ride the generic attachments endpoint with a `kind` (works before the
+        // report exists; server stores them as SystemArtifact, out of the Foto list). Photos
+        // carry no kind.
+        final uploaded = await _apiClient.uploadAttachment(
+          reportId: draft.id,
+          localPath: allegato.storagePath,
+          fileName: allegato.fileName,
+          contentType: allegato.contentType,
+          kind: isCustomerSignature
+              ? 'signature-customer'
+              : isTechnicianSignature
+              ? 'signature-technician'
+              : null,
+          capturedLatitude: allegato.capturedLatitude,
+          capturedLongitude: allegato.capturedLongitude,
+          // Normalize to UTC: drift's default (non-text) DateTime storage round-trips the same
+          // instant but drops the UTC flag, which would otherwise make this value's `==`
+          // disagree with the UTC value it started as.
+          capturedAt: allegato.capturedAt?.toUtc(),
+        );
+        final serverAllegatoId = uploaded.allegatoId;
 
         // Mark this allegato as uploaded and store the server id.
         await _repo.markAllegatoUploaded(localId: allegato.id, serverAllegatoId: serverAllegatoId);
@@ -200,6 +220,7 @@ class SubmissionQueue {
       // Clear the isLocalOnly flag so the list no longer treats this as a local draft.
       await _repo.markSubmitted(draft.id);
     } catch (e) {
+      final transient = _isTransient(e);
       // NEVER delete the draft on failure — keep it for retry.
       //
       // Humanised here rather than at the point it is drawn, because this column is the *only*
@@ -210,9 +231,26 @@ class SubmissionQueue {
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,
-        error: humanErrorMessage(e, azione: 'inviare il rapportino'),
+        error: e is FileSystemException
+            ? 'File non trovato sul dispositivo: una foto o una firma non è più disponibile. '
+                  'Rimuovila dal rapportino e riprova.'
+            : humanErrorMessage(e, azione: 'inviare il rapportino'),
+        errorTransient: transient,
+        // Only transient failures consume the auto-retry budget; permanent ones are never
+        // auto-retried, so their counter is irrelevant.
+        attempts: transient ? draft.submissionAttempts + 1 : draft.submissionAttempts,
       );
     }
+  }
+
+  /// Whether retrying the same request unattended could plausibly succeed: no response at all
+  /// (radio/timeout), a server fault (5xx), or explicit back-pressure (408/429). Everything else
+  /// — other 4xx, a missing local file, a programming error — needs the technician.
+  static bool _isTransient(Object e) {
+    if (e is! DioException) return false;
+    final status = e.response?.statusCode;
+    if (status == null) return e.type != DioExceptionType.badResponse;
+    return status >= 500 || status == 408 || status == 429;
   }
 
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {

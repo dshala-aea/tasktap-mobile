@@ -174,6 +174,10 @@ class _HomeShellState extends ConsumerState<HomeShell>
         ref.read(workLogReconcilerProvider).reconcile();
         ref.read(cantiereWorkLogReconcilerProvider).reconcile();
       }
+      // A rapportino whose send failed for a transient reason (or was queued offline) is
+      // retried on resume too — reconnect alone misses a device that never lost its interface.
+      // Deliberately outside the background-sync gate: this is the technician's own record.
+      flushSubmissionQueue(ref);
       // connectivityProvider.onReconnect (wired in initRealtimeEventWatcher) only fires on an
       // offline→online transition — it does NOT fire when the app is simply backgrounded past
       // the SignalR client's automatic-reconnect retry window (~42s) on a device that never lost

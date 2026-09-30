@@ -17168,6 +17168,25 @@
               "string"
             ],
             "description": "Display name to go with UserId. Same null-unless-tenant-scoped rule."
+          },
+          "state": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Attendance trackers only (null for cantiere/ticket): ActiveTrackerState.Working or\nActiveTrackerState.OnBreak, the same rule as \u0060GET /worklog/today\u0060 (the open row\nis a Break row). While on break StartedAtUtc stays the START OF THE BREAK (the\nopen row\u0027s own start), so \u0022in pausa da X\u0022 ticks from it; use ShiftStartedAtUtc\nfor total time worked.",
+                "$ref": "#/components/schemas/ActiveTrackerState"
+              }
+            ]
+          },
+          "shiftStartedAtUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Attendance trackers only (null otherwise): the start of the current continuous shift. Clock-in,\nbreak and resume each close one row and open the next at the very same instant, so this walks\nback through the user\u0027s closed rows of the same WorkDate whose end equals the next row\u0027s start.\nA shift that crosses midnight is not chained across the date (rows are keyed by WorkDate), so it\nrestarts at the first row of the current WorkDate.",
+            "format": "date-time"
           }
         },
         "description": "One running tracker."
@@ -17179,6 +17198,13 @@
           "Ticket"
         ],
         "description": "What kind of time this is. The three are not interchangeable: attendance is the working day,\ncantiere is time on a site, ticket is time against a job."
+      },
+      "ActiveTrackerState": {
+        "enum": [
+          "Working",
+          "OnBreak",
+          null
+        ]
       },
       "AddCantiereCrewAssignmentRequest": {
         "type": "object",

@@ -162,6 +162,8 @@ class DraftReportRepository {
     String? idempotencyKey,
     String? error,
     bool clearError = false,
+    int? attempts,
+    bool? errorTransient,
   }) async {
     final companion = DraftReportsCompanion(
       id: Value(reportId),
@@ -169,6 +171,10 @@ class DraftReportRepository {
       updatedAt: Value(DateTime.now().toUtc()),
       idempotencyKey: idempotencyKey != null ? Value(idempotencyKey) : const Value.absent(),
       submissionError: clearError || error == null ? const Value(null) : Value(error),
+      submissionAttempts: attempts != null ? Value(attempts) : const Value.absent(),
+      submissionErrorTransient: errorTransient != null
+          ? Value(errorTransient)
+          : const Value.absent(),
     );
     await (_db.update(_db.draftReports)..where((r) => r.id.equals(reportId))).write(companion);
   }
@@ -179,6 +185,36 @@ class DraftReportRepository {
           (r) => r.submissionState.equals(DraftSubmissionState.readyToSubmit.toPersistedString()),
         ))
         .get();
+  }
+
+  /// `failed` drafts whose last failure was transient and that still have retry budget
+  /// (`submissionAttempts < maxAttempts`). These are re-sent unattended on reconnect, app resume
+  /// and the startup flush; anything else stays `failed` until the technician taps "Riprova".
+  Future<List<DraftReport>> getRetryableFailedDrafts({required int maxAttempts}) async {
+    return (_db.select(_db.draftReports)..where(
+          (r) =>
+              r.submissionState.equals(DraftSubmissionState.failed.toPersistedString()) &
+              r.submissionErrorTransient.equals(true) &
+              r.submissionAttempts.isSmallerThanValue(maxAttempts),
+        ))
+        .get();
+  }
+
+  /// Puts drafts left in `uploadingMedia`/`submitting` (the app was killed mid-send) back to
+  /// `readyToSubmit`. Returns how many rows were reset.
+  Future<int> resetInterruptedSubmissions() async {
+    return (_db.update(_db.draftReports)..where(
+          (r) => r.submissionState.isIn([
+            DraftSubmissionState.uploadingMedia.toPersistedString(),
+            DraftSubmissionState.submitting.toPersistedString(),
+          ]),
+        ))
+        .write(
+          DraftReportsCompanion(
+            submissionState: Value(DraftSubmissionState.readyToSubmit.toPersistedString()),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
   }
 
   /// Return all [ReportAllegatiData] for [reportId] that are still pending upload.
