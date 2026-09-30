@@ -51,7 +51,20 @@ class _Repo implements IWorkSessionRepository {
   @override
   Stream<List<WorkSession>> watchTodaySessions() => Stream.value(sessions);
   @override
-  Future<void> markSynced(List<String> ids) async {}
+  Future<void> markSynced(List<String> ids) async {
+    for (final id in ids) {
+      final i = sessions.indexWhere((s) => s.id == id);
+      final s = sessions[i];
+      sessions[i] = WorkSession(
+        id: s.id,
+        eventTime: s.eventTime,
+        eventType: s.eventType,
+        notes: s.notes,
+        isPendingSync: false,
+      );
+    }
+  }
+
   @override
   Future<void> clearToday() async {}
 }
@@ -303,6 +316,111 @@ void main() {
       await make(repo).reconcile();
 
       expect(deriveShiftState(repo.sessions).isOnShift, isFalse);
+    });
+  });
+
+  group('convergence: repeated reconciles with unchanged inputs add ZERO rows', () {
+    ActiveTracker att(ActiveTrackerState st, DateTime shift, {DateTime? started}) => ActiveTracker(
+      kind: ActiveTrackerKind.attendance,
+      id: 'wl',
+      startedAtUtc: started ?? shift,
+      state: st,
+      shiftStartedAtUtc: shift,
+    );
+
+    Future<void> converges(_Repo repo, {int extraRuns = 3}) async {
+      final r = make(repo);
+      await r.reconcile();
+      final after = repo.sessions.length;
+      for (var i = 0; i < extraRuns; i++) {
+        await r.reconcile();
+      }
+      expect(repo.sessions.length, after, reason: 'a repeat reconcile inserted rows');
+    }
+
+    test('refused Ripresa (server stays OnBreak, local retired the command)', () async {
+      final b = DateTime.now().toUtc().subtract(const Duration(minutes: 30));
+      final started = b.subtract(const Duration(hours: 2));
+      server = [att(ActiveTrackerState.onBreak, started, started: b)];
+      final repo = _Repo([
+        WorkSession(id: 'i', eventTime: started, eventType: 'ingresso', notes: reconciledOrphanMarker, isPendingSync: true),
+        WorkSession(id: 'p', eventTime: b, eventType: 'pausa', notes: reconciledOrphanMarker, isPendingSync: true),
+        _synced('r', 'ripresa', b.add(const Duration(minutes: 10))), // retired after a refusal
+      ]);
+      await converges(repo);
+
+      final local = deriveShiftState(repo.sessions);
+      expect(local.isOnShift, isTrue);
+      expect(local.isOnPause, isTrue, reason: 'local reverted to the server truth');
+    });
+
+    test('clock skew: phone behind the server (local event AFTER the server break start)', () async {
+      final b = DateTime.now().toUtc().subtract(const Duration(minutes: 30));
+      final started = b.subtract(const Duration(hours: 2));
+      server = [att(ActiveTrackerState.onBreak, started, started: b)];
+      final repo = _Repo([_synced('i', 'ingresso', b.add(const Duration(seconds: 5)))]);
+      await converges(repo);
+      expect(deriveShiftState(repo.sessions).isOnPause, isTrue);
+    });
+
+    test('stale post-Fine server view: local batch-synced stop, server still Working', () async {
+      final stop = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+      final started = stop.subtract(const Duration(hours: 2));
+      server = [att(ActiveTrackerState.working, started)];
+      final repo = _Repo([_synced('i', 'ingresso', started), _synced('f', 'fine', stop)]);
+      await converges(repo);
+      expect(repo.sessions, hasLength(2), reason: 'no ghost shift, no rows at all');
+      expect(deriveShiftState(repo.sessions).isOnShift, isFalse);
+    });
+
+    test('server Working, local OnBreak with a skewed clock: ripresa is placed last', () async {
+      final started = DateTime.now().toUtc().subtract(const Duration(hours: 2));
+      server = [att(ActiveTrackerState.working, started)];
+      final future = DateTime.now().toUtc().add(const Duration(minutes: 3)); // phone ahead
+      final repo = _Repo([_synced('i', 'ingresso', started), _synced('p', 'pausa', future)]);
+      await converges(repo);
+      expect(deriveShiftState(repo.sessions).isOnPause, isFalse);
+    });
+
+    test('server has nothing, local synced shift with a future-stamped opener: fine is placed last', () async {
+      server = const [];
+      final future = DateTime.now().toUtc().add(const Duration(minutes: 3));
+      final repo = _Repo([_synced('i', 'ingresso', future)]);
+      await converges(repo);
+      expect(deriveShiftState(repo.sessions).isOnShift, isFalse);
+    });
+  });
+
+  group('stale fetch race (local snapshot read BEFORE the network call)', () {
+    test('a sync that lands while the fetch is in flight makes the fetch stale: no close, then re-run', () async {
+      final started = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+      final repo = _Repo([_pending('i', 'ingresso', started)]);
+      var calls = 0;
+      final r = WorkLogReconciler(
+        repo: repo,
+        fetchActive: () async {
+          calls++;
+          if (calls == 1) {
+            // The concurrent sync pushed the shift and marked it synced while we were waiting;
+            // the answer we are about to return was computed before the server saw it.
+            await repo.markSynced(['i']);
+            return const [];
+          }
+          return [
+            ActiveTracker(
+              kind: ActiveTrackerKind.attendance,
+              id: 'wl',
+              startedAtUtc: started,
+              state: ActiveTrackerState.working,
+              shiftStartedAtUtc: started,
+            ),
+          ];
+        },
+      );
+      await r.reconcile();
+
+      expect(calls, 2, reason: 'the stale answer was discarded and re-fetched');
+      expect(repo.sessions.map((s) => s.eventType), ['ingresso'], reason: 'the shift was not closed');
     });
   });
 

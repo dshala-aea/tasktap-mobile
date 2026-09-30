@@ -1,3 +1,4 @@
+// dart format width=100
 // ══════════════════════════════════════════════════════════════════════════════
 // WorkLogReconciler
 //
@@ -111,7 +112,15 @@ class WorkLogReconciler {
   bool _running = false;
   bool _rerun = false;
 
+  /// Bound on stale-fetch re-runs within one call, so a permanently busy sync cannot spin us.
+  static const _maxPasses = 3;
+
   /// Fetches the server's running trackers and reconciles local state against them.
+  ///
+  /// The local snapshot is read BEFORE the network call and compared again when the answer
+  /// arrives: if local events changed meanwhile (a concurrent sync marked a shift synced, a tap
+  /// landed) the answer was computed against a world that no longer exists — acting on it could
+  /// close or re-open a shift that was just changed — so it is discarded and re-fetched.
   ///
   /// Network/parse errors are swallowed, matching every other sync path in this app: offline is
   /// the normal condition of a phone in the field, not a failure to report. Without a server
@@ -123,35 +132,50 @@ class WorkLogReconciler {
     }
     _running = true;
     try {
+      var passes = 0;
       do {
         _rerun = false;
+        passes++;
         try {
+          final before = _signature(await _repo.getTodaySessions());
           final trackers = await _fetchActive();
-          await _reconcileWith(ServerWorkLogSnapshot.fromActiveTrackers(trackers));
+          final snapshot = ServerWorkLogSnapshot.fromActiveTrackers(trackers);
+          final now = await _repo.getTodaySessions();
+          if (_signature(now) != before) {
+            _rerun = true; // stale answer: discard, fetch again
+            continue;
+          }
+          await _reconcileWithSessions(snapshot, now);
         } catch (_) {
           // Swallow — see doc comment above.
         }
-      } while (_rerun);
+      } while (_rerun && passes < _maxPasses);
     } finally {
       _running = false;
     }
   }
 
+  static String _signature(List<WorkSession> s) =>
+      s.map((e) => '${e.id}|${e.isPendingSync}|${e.notes}').join(';');
+
   /// Reconciles local state against an already-known [server] snapshot.
   ///
   /// Exposed separately from [reconcile] so the correction logic is testable without a network
   /// round trip. Not reentrancy-guarded itself (only [reconcile] is).
-  Future<void> reconcileWith(ServerWorkLogSnapshot server) => _reconcileWith(server);
+  Future<void> reconcileWith(ServerWorkLogSnapshot server) async =>
+      _reconcileWithSessions(server, await _repo.getTodaySessions());
 
-  Future<void> _reconcileWith(ServerWorkLogSnapshot server) async {
-    final sessions = await _repo.getTodaySessions();
-
+  Future<void> _reconcileWithSessions(
+    ServerWorkLogSnapshot server,
+    List<WorkSession> sessions,
+  ) async {
     // Local unsynced events win — see header. Our own marked corrections are excluded: they are
     // pending by construction but never pushed, and must not freeze reconciliation forever.
     final hasUnsynced = sessions.any((s) => s.isPendingSync && s.notes != reconciledOrphanMarker);
     if (hasUnsynced) return;
 
     final local = deriveShiftState(sessions);
+    final last = sessions.isEmpty ? null : sessions.last.eventTime;
 
     if (server.isOnShift) {
       if (!local.isOnShift) {
@@ -159,11 +183,11 @@ class WorkLogReconciler {
         return;
       }
       if (server.isOnPause && !local.isOnPause) {
-        await _addMarked('pausa', server.breakStartTime ?? DateTime.now().toUtc());
+        await _addMarked('pausa', server.breakStartTime ?? DateTime.now().toUtc(), last);
       } else if (!server.isOnPause && local.isOnPause) {
         // The instant the break ended elsewhere is not in the snapshot; "now" only affects what
         // this device displays (the event is never pushed).
-        await _addMarked('ripresa', DateTime.now().toUtc());
+        await _addMarked('ripresa', DateTime.now().toUtc(), last);
       }
       return;
     }
@@ -176,7 +200,7 @@ class WorkLogReconciler {
     if (opener != null) {
       await _repo.markReconciledOrphan(opener.id);
     }
-    await _addMarked('fine', DateTime.now().toUtc());
+    await _addMarked('fine', DateTime.now().toUtc(), last);
   }
 
   /// Server has an open day this device has no local record of (started elsewhere, or a fresh
@@ -185,15 +209,17 @@ class WorkLogReconciler {
   /// local state equals the server's. No-ops without a start time: fabricating one is worse than
   /// staying briefly stale.
   ///
-  /// Two adjustments keep the backfilled event effective, i.e. inside the window `getTodaySessions`
-  /// reads and after everything already recorded:
-  /// - an overnight shift (server start before local midnight) is anchored at local midnight,
-  ///   otherwise the row would fall outside "today", derive nothing, and be re-inserted on every
-  ///   reconcile;
-  /// - when the last local event is a `fine` tapped on a shift that was itself backfilled and the
-  ///   server REFUSED it (e.g. payroll period locked), the server shift is still open, so the
-  ///   re-opened shift is placed just after that stop — otherwise it would sort before it and the
-  ///   refusal would look like a successful clock-out.
+  /// CONVERGENCE: every event written by this class must actually change the derived local state,
+  /// otherwise the next reconcile sees the same disagreement and inserts again, forever. Events
+  /// are ordered by time, so:
+  /// - pausa / ripresa / fine are clamped to `max(desired, lastLocalEvent + 1s)` — strictly the
+  ///   newest event, hence always effective (this also absorbs a phone clock that is behind or
+  ///   ahead of the server, and a Ripresa the server refused and the app retired);
+  /// - an ingresso is anchored at local midnight when the server start is earlier (overnight
+  ///   shift; else it falls outside `getTodaySessions`). If it would still sort before the last
+  ///   local event it is skipped — that is a stale server view of a stop this device just made
+  ///   (writing a ghost shift would be wrong) — EXCEPT after a Fine that the server refused on a
+  ///   remote-origin shift, where the shift really is still open and is re-opened after the stop.
   Future<void> _backfillMissingShift(
     ServerWorkLogSnapshot server,
     List<WorkSession> sessions,
@@ -205,27 +231,33 @@ class WorkLogReconciler {
     final midnight = DateTime(now.year, now.month, now.day).toUtc();
     if (start.isBefore(midnight)) start = midnight;
 
-    final lastRefused = _lastFineOfRemoteShift(sessions);
-    if (lastRefused != null && !start.isAfter(lastRefused)) {
-      start = lastRefused.add(_epsilon);
+    final last = sessions.isEmpty ? null : sessions.last.eventTime;
+    final refusedFine = _lastFineOfRemoteShift(sessions);
+    if (last != null && !start.isAfter(last)) {
+      if (refusedFine == null) return; // stale/skewed view: would be inert, insert nothing
+      start = last.add(_gap);
     }
 
-    await _addMarked('ingresso', start);
+    await _addMarked('ingresso', start, null);
     if (server.isOnPause) {
       final breakStart = server.breakStartTime;
       if (breakStart != null) {
         // Events are ordered by time; keep the pausa strictly after its ingresso even if the
         // server reports them equal.
-        await _addMarked('pausa', breakStart.isAfter(start) ? breakStart : start.add(_epsilon));
+        await _addMarked('pausa', breakStart.isAfter(start) ? breakStart : start.add(_epsilon), null);
       }
     }
   }
 
   static const _epsilon = Duration(milliseconds: 1);
+  static const _gap = Duration(seconds: 1);
 
-  Future<void> _addMarked(String type, DateTime time) async {
+  /// Writes a marked, never-pushed event at `max(time, [last] + 1s)` so it is always the newest.
+  Future<void> _addMarked(String type, DateTime time, DateTime? last) async {
+    var t = time;
+    if (last != null && !t.isAfter(last)) t = last.add(_gap);
     final id = _uuid.v4();
-    await _repo.addEvent(id: id, eventTime: time, eventType: type);
+    await _repo.addEvent(id: id, eventTime: t, eventType: type);
     await _repo.markReconciledOrphan(id);
   }
 
