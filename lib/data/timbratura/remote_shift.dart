@@ -14,7 +14,7 @@
 // time, a Pausa+Ripresa delivered back to back would create a zero-length paid break, and a tap
 // crossing midnight would flip the WorkDate. Until the backend accepts an optional client
 // timestamp on end / break/start / break/end, the app is conservative: these taps are ONLINE-ONLY
-// (refused offline), executed immediately, retried only within [remoteCommandTtl] and never sent
+// (refused offline), executed immediately, retried only within [remoteCommandTtl], re-validated against GET /worklog/active before any send that is not the instance's first fresh one, and never sent
 // as a Pausa+Ripresa pair. Backend follow-up for the product owner.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -24,10 +24,6 @@ import 'work_session_repository.dart';
 /// A tap older than this is dropped instead of retried: the server would stamp it "now".
 const remoteCommandTtl = Duration(minutes: 2);
 
-/// A command older than this (or one already attempted once) is re-validated against
-/// `GET /worklog/active` before it is sent, so a lost response can never double-deliver.
-const remoteCommandStateCheckAfter = Duration(seconds: 20);
-
 const offlineRemoteShiftMessage =
     'Sei offline: per fermare o mettere in pausa un turno avviato su un altro dispositivo '
     'serve la connessione';
@@ -36,6 +32,12 @@ const remoteCommandDroppedMessage = 'Timbratura non inviata, riprova';
 
 const batchConflictMessage =
     'Timbratura non sincronizzata: esiste già un turno aperto su un altro dispositivo';
+
+/// Any other permanent refusal of the batch (403/400/404/413/422...): the events are HELD, not lost.
+const serverErrorMessage = 'Timbratura non sincronizzata (errore del server). Contatta l\'ufficio.';
+
+const payrollLockedMessage =
+    'Periodo paghe chiuso: la timbratura non è stata inviata. Contatta l\'ufficio.';
 
 /// Thrown by the punch path when a remote-origin shift is tapped while offline.
 class OfflineRemoteShiftException implements Exception {
@@ -63,7 +65,11 @@ class RemoteShiftAnalysis {
     required this.ids,
     required this.commands,
     required this.openShiftIsRemote,
+    this.openRemoteOpenerTime,
   });
+
+  /// Opener time of the open remote-origin shift, when [openShiftIsRemote].
+  final DateTime? openRemoteOpenerTime;
 
   /// Every event belonging to a remote-origin shift (kept out of the mobile batch).
   final Set<String> ids;
@@ -112,5 +118,10 @@ RemoteShiftAnalysis analyseRemoteShifts(List<WorkSession> sessions) {
         }
     }
   }
-  return RemoteShiftAnalysis(ids: ids, commands: commands, openShiftIsRemote: open && remote);
+  return RemoteShiftAnalysis(
+    ids: ids,
+    commands: commands,
+    openShiftIsRemote: open && remote,
+    openRemoteOpenerTime: open && remote ? opener : null,
+  );
 }

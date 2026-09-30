@@ -32,6 +32,9 @@ class MockDio extends Mock implements Dio {}
 /// standing in for whatever can genuinely go wrong writing the local event: full disk, a Drift
 /// constraint violation, anything that would legitimately reach `PunchNotifier`'s own catch block.
 class _FailingOnEventTypeRepo implements IWorkSessionRepository {
+  @override
+  Future<void> markSyncFailed(String id) async {}
+
   _FailingOnEventTypeRepo(this._inner, this._failingType);
 
   final IWorkSessionRepository _inner;

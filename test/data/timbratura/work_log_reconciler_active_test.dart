@@ -17,6 +17,9 @@ import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show deriv
 import '../../support/active_tracker_fixtures.dart';
 
 class _Repo implements IWorkSessionRepository {
+  @override
+  Future<void> markSyncFailed(String id) async {}
+
   _Repo(this.sessions);
   final List<WorkSession> sessions;
 
@@ -421,6 +424,42 @@ void main() {
 
       expect(calls, 2, reason: 'the stale answer was discarded and re-fetched');
       expect(repo.sessions.map((s) => s.eventType), ['ingresso'], reason: 'the shift was not closed');
+    });
+  });
+
+  group('events held after a refused batch (still pending, unmarked)', () {
+    test('count as unsynced: the phone\'s own view wins and stays visible (safe payroll direction)', () async {
+      final started = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+      // Server says nothing is running — but our punch was refused and is being held.
+      server = const [];
+      final repo = _Repo([_pending('i', 'ingresso', started)]);
+      await make(repo).reconcile();
+      await make(repo).reconcile();
+
+      expect(repo.sessions, hasLength(1), reason: 'no fine appended, nothing retired');
+      expect(deriveShiftState(repo.sessions).isOnShift, isTrue);
+    });
+  });
+
+  group('a Fine dropped by the TTL', () {
+    test('the shift is still open on the server: the reconciler re-opens it', () async {
+      final stop = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+      final started = stop.subtract(const Duration(hours: 2));
+      server = [
+        ActiveTracker(
+          kind: ActiveTrackerKind.attendance,
+          id: 'wl',
+          startedAtUtc: started,
+          state: ActiveTrackerState.working,
+          shiftStartedAtUtc: started,
+        ),
+      ];
+      final repo = _Repo([
+        WorkSession(id: 'i', eventTime: started, eventType: 'ingresso', notes: reconciledOrphanMarker, isPendingSync: true),
+        _synced('f', 'fine', stop), // dropped by the TTL: retired without being sent
+      ]);
+      await make(repo).reconcile();
+      expect(deriveShiftState(repo.sessions).isOnShift, isTrue);
     });
   });
 

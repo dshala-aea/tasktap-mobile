@@ -39,6 +39,9 @@ import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show deriv
 // In-memory list, mutated the same way the real Drift-backed repo would be.
 
 class _FakeRepo implements IWorkSessionRepository {
+  @override
+  Future<void> markSyncFailed(String id) async {}
+
   final List<WorkSession> sessions;
   final List<String> orphanedIds = [];
 

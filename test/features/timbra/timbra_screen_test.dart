@@ -26,6 +26,9 @@ import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
 abstract class _StubRepo implements IWorkSessionRepository {
   @override
+  Future<void> markSyncFailed(String id) async {}
+
+  @override
   Future<void> addEvent({
     required String id,
     required DateTime eventTime,

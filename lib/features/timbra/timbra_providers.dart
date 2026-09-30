@@ -321,7 +321,13 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
       } else {
         // End shift
         await _requireOnlineForRemoteShift();
-        await _repo.addEvent(id: _uuid.v4(), eventTime: DateTime.now().toUtc(), eventType: _kFine);
+        var stop = DateTime.now().toUtc();
+        // A remote shift's opener carries the SERVER's start; a phone clock that is behind would
+        // stamp the stop before it and leave a negative interval. Keep it at least 1s after.
+        final opener =
+            analyseRemoteShifts(await _repo.getTodaySessions()).openRemoteOpenerTime;
+        if (opener != null && !stop.isAfter(opener)) stop = opener.add(const Duration(seconds: 1));
+        await _repo.addEvent(id: _uuid.v4(), eventTime: stop, eventType: _kFine);
       }
       state = const AsyncData(null);
       // Best-effort sync after punch (fire-and-forget; ignore failure).

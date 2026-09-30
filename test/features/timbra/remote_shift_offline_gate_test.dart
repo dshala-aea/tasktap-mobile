@@ -118,4 +118,17 @@ void main() {
     expect(n.state, isA<AsyncData<void>>());
     expect((await local()).isOnShift, isTrue);
   });
+
+  test('a Fine on a remote shift is never stamped before its opener (phone clock behind the server)', () async {
+    final n0 = DateTime.now().toUtc().add(const Duration(minutes: 5)); // server ahead of phone
+    final opener = DateTime.utc(n0.year, n0.month, n0.day, n0.hour, n0.minute, n0.second);
+    await repo.addEvent(id: 'remote-i', eventTime: opener, eventType: 'ingresso');
+    await repo.markReconciledOrphan('remote-i');
+    final n = notifier();
+    await n.punch(await local());
+
+    final fine = (await repo.getTodaySessions()).firstWhere((s) => s.eventType == 'fine');
+    expect(fine.eventTime.isAtSameMomentAs(opener.add(const Duration(seconds: 1))), isTrue);
+    expect((await local()).isOnShift, isFalse);
+  });
 }

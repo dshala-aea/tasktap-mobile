@@ -920,9 +920,9 @@ void main() {
       'POST /api/worklog/end':
           'optional body, app sends none',
       'POST /api/worklog/break/start':
-          'sends no request body — there is no schema to check it against',
+          'no body',
       'POST /api/worklog/break/end':
-          'sends no request body — there is no schema to check it against',
+          'no body',
       'POST /api/reports/submit':
           'covered by openapi_contract_test.dart, which also checks the three nested DTOs',
       'POST /api/reports/{}/attachments':

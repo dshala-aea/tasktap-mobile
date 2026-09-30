@@ -18,6 +18,14 @@ import '../local/app_database.dart';
 
 const String reconciledOrphanMarker = 'reconciled_orphan';
 
+/// Written into `notes` for events the server permanently refused with 409 `active_session_exists`
+/// (another device already holds the open row). Deliberately NOT [reconciledOrphanMarker]: such an
+/// event must never act as a remote-shift opener or be mistaken for a reconciler correction.
+/// The row and all its data are RETAINED for support; it is hidden from every query that derives
+/// state or feeds the sync ([WorkSessionRepository.getTodaySessions] / `watchTodaySessions`) and
+/// survives `clearToday`. Nothing else in the app deletes work_sessions rows.
+const String syncFailedMarker = 'sync_failed_conflict';
+
 // ══════════════════════════════════════════════════════════════════════════════
 // IWorkSessionRepository — seam for future backend sync (ClickUp D6).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -52,6 +60,10 @@ abstract interface class IWorkSessionRepository {
   /// Marks event [id] (an ingresso/ripresa opener) as a stale interval the server has already
   /// closed elsewhere. See [reconciledOrphanMarker].
   Future<void> markReconciledOrphan(String id);
+
+  /// Retires event [id] after a permanent 409 `active_session_exists`: keeps it for support under
+  /// [syncFailedMarker], stops it being pending, and hides it from today's view.
+  Future<void> markSyncFailed(String id);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -93,7 +105,10 @@ class WorkSessionRepository implements IWorkSessionRepository {
     final end = start.add(const Duration(days: 1));
     return (_db.select(_db.workSessions)
           ..where(
-            (s) => s.eventTime.isBiggerOrEqualValue(start) & s.eventTime.isSmallerThanValue(end),
+            (s) =>
+                s.eventTime.isBiggerOrEqualValue(start) &
+                s.eventTime.isSmallerThanValue(end) &
+                (s.notes.isNull() | s.notes.equals(syncFailedMarker).not()),
           )
           ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
         .watch();
@@ -106,7 +121,10 @@ class WorkSessionRepository implements IWorkSessionRepository {
     final end = start.add(const Duration(days: 1));
     return (_db.select(_db.workSessions)
           ..where(
-            (s) => s.eventTime.isBiggerOrEqualValue(start) & s.eventTime.isSmallerThanValue(end),
+            (s) =>
+                s.eventTime.isBiggerOrEqualValue(start) &
+                s.eventTime.isSmallerThanValue(end) &
+                (s.notes.isNull() | s.notes.equals(syncFailedMarker).not()),
           )
           ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
         .get();
@@ -126,7 +144,10 @@ class WorkSessionRepository implements IWorkSessionRepository {
     final start = DateTime(now.year, now.month, now.day).toUtc();
     final end = start.add(const Duration(days: 1));
     await (_db.delete(_db.workSessions)..where(
-          (s) => s.eventTime.isBiggerOrEqualValue(start) & s.eventTime.isSmallerThanValue(end),
+          (s) =>
+              s.eventTime.isBiggerOrEqualValue(start) &
+              s.eventTime.isSmallerThanValue(end) &
+              (s.notes.isNull() | s.notes.equals(syncFailedMarker).not()),
         ))
         .go();
   }
@@ -135,6 +156,13 @@ class WorkSessionRepository implements IWorkSessionRepository {
   Future<void> markReconciledOrphan(String id) async {
     await (_db.update(_db.workSessions)..where((s) => s.id.equals(id))).write(
       const WorkSessionsCompanion(notes: Value(reconciledOrphanMarker)),
+    );
+  }
+
+  @override
+  Future<void> markSyncFailed(String id) async {
+    await (_db.update(_db.workSessions)..where((s) => s.id.equals(id))).write(
+      const WorkSessionsCompanion(notes: Value(syncFailedMarker), isPendingSync: Value(false)),
     );
   }
 }

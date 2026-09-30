@@ -23,6 +23,9 @@ import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 // ── Fake repo ─────────────────────────────────────────────────────────────────
 
 class _FakeRepo implements IWorkSessionRepository {
+  @override
+  Future<void> markSyncFailed(String id) async {}
+
   final List<WorkSession> sessions;
   final List<String> markedSynced = [];
 

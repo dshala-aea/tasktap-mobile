@@ -32,6 +32,9 @@ AppDatabase _makeDb() {
 // No-op stub repo and API client so timbraSyncServiceProvider never hits Dio.
 class _StubRepo implements IWorkSessionRepository {
   @override
+  Future<void> markSyncFailed(String id) async {}
+
+  @override
   Future<void> addEvent({
     required String id,
     required DateTime eventTime,
@@ -68,6 +71,9 @@ TimbraSyncService _noopSyncService() =>
 /// this test suite otherwise uses) takes long enough for an autoDispose provider's
 /// `Timer`-scheduled dispose task to fire mid-write.
 class _DelayedRepo implements IWorkSessionRepository {
+  @override
+  Future<void> markSyncFailed(String id) async {}
+
   _DelayedRepo(this._inner);
   final IWorkSessionRepository _inner;
 

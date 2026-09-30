@@ -242,6 +242,9 @@ void main() {
 // PunchNotifier's fire-and-forget syncNow() call happens to run during these tests.
 class _StubRepoForSync implements IWorkSessionRepository {
   @override
+  Future<void> markSyncFailed(String id) async {}
+
+  @override
   Future<void> addEvent({
     required String id,
     required DateTime eventTime,

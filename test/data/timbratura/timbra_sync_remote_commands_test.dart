@@ -8,6 +8,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/timbratura/remote_shift.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
@@ -53,6 +54,19 @@ class _Repo implements IWorkSessionRepository {
   @override
   Future<void> clearToday() async {}
   @override
+  Future<void> markSyncFailed(String id) async {
+    final i = sessions.indexWhere((s) => s.id == id);
+    final s = sessions[i];
+    sessions[i] = WorkSession(
+      id: s.id,
+      eventTime: s.eventTime,
+      eventType: s.eventType,
+      notes: syncFailedMarker,
+      isPendingSync: false,
+    );
+  }
+
+  @override
   Future<void> markReconciledOrphan(String id) async {
     final i = sessions.indexWhere((s) => s.id == id);
     final s = sessions[i];
@@ -95,6 +109,16 @@ DioException _status(int code) => DioException(
   requestOptions: RequestOptions(),
   type: DioExceptionType.badResponse,
   response: Response(requestOptions: RequestOptions(), statusCode: code),
+);
+
+DioException _problem(int code, String? errCode, {String? detail}) => DioException(
+  requestOptions: RequestOptions(),
+  type: DioExceptionType.badResponse,
+  response: Response(
+    requestOptions: RequestOptions(),
+    statusCode: code,
+    data: {'status': code, 'code': ?errCode, 'detail': ?detail},
+  ),
 );
 
 DioException get _offline =>
@@ -151,11 +175,11 @@ void main() {
     applied = 0;
     notices.clear();
     clock = _now;
-    active = null;
+    active = [_srv(ActiveTrackerState.working, _t0)];
   });
 
   test('Fine on a backfilled shift => POST /worklog/end, event synced, refresh requested', () async {
-    final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(3))]);
+    final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
     await svc(repo).syncNow();
 
     expect(api.calls, ['end']);
@@ -190,12 +214,13 @@ void main() {
       _remoteMarked('bp', 'pausa', _t0.add(const Duration(hours: 1))),
       _cmd('r', 'ripresa', _ago(3)),
     ]);
+    active = [_srv(ActiveTrackerState.onBreak, _t0, startedAt: _ago(3000))];
     await svc(repo).syncNow();
     expect(api.calls, ['break/end']);
   });
 
   test('offline tap stays queued, then executes once on the next sync', () async {
-    final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(3))]);
+    final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
     final service = svc(repo);
     api.error = _offline;
     await service.syncNow();
@@ -230,7 +255,7 @@ void main() {
 
   for (final code in [400, 404, 409, 422]) {
     test('HTTP $code is permanent: dropped (not looped) and the reconciler is asked to converge', () async {
-      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(3))]);
+      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
       api.error = _status(code);
       await svc(repo).syncNow();
 
@@ -246,7 +271,7 @@ void main() {
     final repo = _Repo([
       _cmd('i', 'ingresso', _t0),
       _cmd('p', 'pausa', _ago(8)),
-      _cmd('f', 'fine', _ago(3)),
+      _cmd('f', 'fine', _ago(2)),
     ]);
     await svc(repo).syncNow();
 
@@ -258,7 +283,7 @@ void main() {
   test('remote shift ended by a tap, then a NEW local shift: REST for the first, batch for the second', () async {
     final repo = _Repo([
       _remoteIngresso(),
-      _cmd('f', 'fine', _ago(3)),
+      _cmd('f', 'fine', _ago(2)),
       _cmd('i2', 'ingresso', _ago(1)),
     ]);
     await svc(repo).syncNow();
@@ -270,7 +295,7 @@ void main() {
   test('a still-queued remote command is not marked synced by the batch path', () async {
     final repo = _Repo([
       _remoteIngresso(),
-      _cmd('f', 'fine', _ago(3)),
+      _cmd('f', 'fine', _ago(2)),
       _cmd('i2', 'ingresso', _ago(1)),
     ]);
     api.error = _offline;
@@ -302,7 +327,7 @@ void main() {
 
   group('state check before a retry (lost response must not double-deliver)', () {
     test('a newer shift started elsewhere is NOT ended by a retried Fine', () async {
-      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(3))]);
+      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(2))]);
       final service = svc(repo);
       api.error = _offline; // response lost: unknown whether the server applied it
       await service.syncNow();
@@ -369,10 +394,120 @@ void main() {
     });
   });
 
+  group('restart safety: state check first, always', () {
+    test('a fresh service instance (restart) never resends blind a tap that is not brand new', () async {
+      final repo = _Repo([_remoteIngresso(), _cmd('f', 'fine', _ago(10))]);
+      // The previous process sent it (response lost); ANOTHER shift has begun since.
+      active = [_srv(ActiveTrackerState.working, _t0.add(const Duration(hours: 2)))];
+      await svc(repo).syncNow();
+
+      expect(api.calls, isEmpty, reason: 'must not end the newer shift');
+      expect(repo.isPending('f'), isFalse);
+    });
+
+    test('the first send of an instance on a tap younger than 3s skips the check; the next one does not', () async {
+      var fetches = 0;
+      final repo = _Repo([_remoteIngresso(), _cmd('p', 'pausa', _ago(2))]);
+      final s = TimbraSyncService(
+        repo: repo,
+        apiClient: api,
+        clock: () => _now,
+        fetchActive: () async {
+          fetches++;
+          return active!;
+        },
+      );
+      await s.syncNow();
+      expect(api.calls, ['break/start']);
+      expect(fetches, 0);
+
+      repo.sessions.add(_cmd('f', 'fine', _ago(1)));
+      await s.syncNow();
+      expect(api.calls, ['break/start', 'end']);
+      expect(fetches, 1, reason: 'not the first send any more: verify before sending');
+    });
+  });
+
+  group('batch refused with a NON-conflict 4xx: events are held, never retired', () {
+    final held = <(String, DioException, String)>[
+      ('403', _problem(403, null), serverErrorMessage),
+      ('400', _problem(400, null), serverErrorMessage),
+      ('404', _problem(404, null), serverErrorMessage),
+      ('413', _problem(413, null), serverErrorMessage),
+      ('422', _problem(422, 'validation_error'), serverErrorMessage),
+      ('409 other code', _problem(409, 'already_closed'), serverErrorMessage),
+      (
+        'payroll_period_locked (server detail)',
+        _problem(409, 'payroll_period_locked', detail: 'Il periodo di settembre è chiuso.'),
+        'Il periodo di settembre è chiuso.',
+      ),
+      (
+        'payroll_period_locked (no detail)',
+        _problem(400, 'payroll_period_locked'),
+        payrollLockedMessage,
+      ),
+    ];
+
+    for (final (name, error, message) in held) {
+      test('$name: stays pending, data untouched, one accurate message, capped at 5 attempts', () async {
+        final repo = _Repo([_cmd('i', 'ingresso', _ago(10)), _cmd('f', 'fine', _ago(5))]);
+        final before = List.of(repo.sessions);
+        final failing = _FailingBatchApi(error);
+        final s = TimbraSyncService(
+          repo: repo,
+          apiClient: failing,
+          onRemoteCommandsApplied: () => applied++,
+          onNotice: notices.add,
+          clock: () => clock,
+        );
+
+        for (var i = 0; i < 12; i++) {
+          await s.syncNow();
+          clock = clock.add(const Duration(hours: 1)); // well past any backoff
+        }
+
+        expect(failing.batchCalls, 5, reason: 'cap of 5 attempts per app session');
+        expect(repo.isPending('i') && repo.isPending('f'), isTrue);
+        expect(repo.sessions.map((e) => e.notes), [null, null], reason: 'no marker, nothing retired');
+        expect(repo.sessions.map((e) => e.id), before.map((e) => e.id));
+        expect(applied, 0);
+        expect(notices, [message], reason: 'ONE message per failure kind');
+      });
+    }
+
+    test('backoff: an immediate second attempt is not made', () async {
+      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
+      final failing = _FailingBatchApi(_problem(403, null));
+      final s = TimbraSyncService(repo: repo, apiClient: failing, clock: () => clock);
+      await s.syncNow();
+      await s.syncNow();
+      expect(failing.batchCalls, 1);
+    });
+
+    test('a manual sync clears the hold', () async {
+      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
+      final failing = _FailingBatchApi(_problem(403, null));
+      final s = TimbraSyncService(repo: repo, apiClient: failing, clock: () => clock);
+      await s.syncNow();
+      await s.syncNow(manual: true);
+      expect(failing.batchCalls, 2);
+    });
+
+    test('401 stays transient: no message, no hold', () async {
+      final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
+      final failing = _FailingBatchApi(_status(401));
+      final s = TimbraSyncService(repo: repo, apiClient: failing, onNotice: notices.add, clock: () => clock);
+      await s.syncNow();
+      await s.syncNow();
+      expect(failing.batchCalls, 2);
+      expect(notices, isEmpty);
+    });
+  });
+
   group('a permanently failing batch (e.g. 409 active_session_exists)', () {
     test('retires the dead events, tells the user, and hands the shift to the REST path', () async {
       final repo = _Repo([_cmd('i', 'ingresso', _ago(10))]);
-      final failing = _FailingBatchApi(_status(409));
+      final failing = _FailingBatchApi(_problem(409, 'active_session_exists'));
       final service = TimbraSyncService(
         repo: repo,
         apiClient: failing,
@@ -383,8 +518,10 @@ void main() {
       await service.syncNow();
 
       expect(repo.isPending('i'), isFalse, reason: 'no longer blocks the reconciler (hasUnsynced)');
-      expect(repo.sessions.single.notes, reconciledOrphanMarker);
-      expect(notices, ['Timbratura non sincronizzata: esiste già un turno aperto su un altro dispositivo']);
+      expect(repo.sessions.single.notes, syncFailedMarker, reason: 'kept for support, distinct marker');
+      expect(repo.sessions.single.notes, isNot(reconciledOrphanMarker));
+      expect(notices.single, startsWith(batchConflictMessage));
+      expect(notices.single, contains('1 evento conservato'));
       expect(applied, 1);
       expect(failing.batchCalls, 1);
 

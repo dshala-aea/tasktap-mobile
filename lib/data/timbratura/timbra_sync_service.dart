@@ -25,6 +25,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/timbra/timbra_providers.dart' show workSessionRepositoryProvider;
@@ -84,10 +85,21 @@ class TimbraSyncService {
   bool _running = false;
   bool _rerun = false;
 
-  /// Commands this instance has already sent at least once (response possibly lost). A retry of
-  /// one of these is re-validated against the server first. Not persisted: after a restart the
-  /// 20s age rule covers the same case.
-  final Set<String> _attempted = {};
+  /// True once this instance has sent any remote command. Only the very first send of an instance,
+  /// on a tap younger than [_freshTap], may skip the server-state check: anything else could be a
+  /// retry of a send whose response was lost (possibly by a previous process — nothing about
+  /// "already attempted" survives a restart, so it is never trusted).
+  bool _sentAny = false;
+  static const _freshTap = Duration(seconds: 3);
+
+  // ── Batch refusal hold (non-conflict 4xx) ───────────────────────────────────
+  // A refused batch is atomic and may carry the technician's only record of the day, so it is never
+  // discarded: the events stay pending. To avoid hammering the server we back off in memory and
+  // give up after [_maxBatchAttempts] until the next app start or a manual sync.
+  static const _maxBatchAttempts = 5;
+  int _batchFailures = 0;
+  DateTime? _batchRetryAt;
+  final Set<String> _noticeKinds = {};
 
   /// Sync all of today's work intervals to the server.
   ///
@@ -103,7 +115,13 @@ class TimbraSyncService {
   ///
   /// Reentrancy: overlapping calls (punch + reconnect + poll) must not execute the same REST
   /// command twice, so a call arriving mid-run schedules one more pass instead of running beside.
-  Future<void> syncNow() async {
+  ///
+  /// [manual] (a user-initiated sync) clears the refusal hold so a held batch is tried again.
+  Future<void> syncNow({bool manual = false}) async {
+    if (manual) {
+      _batchFailures = 0;
+      _batchRetryAt = null;
+    }
     if (_running) {
       _rerun = true;
       return;
@@ -136,6 +154,7 @@ class TimbraSyncService {
           .where((s) => s.notes != reconciledOrphanMarker && !remote.ids.contains(s.id))
           .toList();
       if (sessions.isEmpty) return;
+      if (_batchHeld()) return;
 
       final intervals = assembleIntervals(sessions);
       if (intervals.isEmpty) return;
@@ -159,9 +178,11 @@ class TimbraSyncService {
 
       try {
         await _apiClient.upsertSessions(dtos);
+        _batchFailures = 0;
+        _batchRetryAt = null;
       } catch (e) {
         if (!_isTransient(e) && e is DioException && e.response != null) {
-          await _retireRefusedBatch(sessions, e);
+          await _handleRefusedBatch(sessions, e);
         }
         return; // transient: keeps isPendingSync = true for the next attempt.
       }
@@ -175,19 +196,67 @@ class TimbraSyncService {
     }
   }
 
-  /// The server will never accept these pending events (a 4xx that is not back-pressure/auth).
-  /// Marks them as reconciler-owned (so a still-open one behaves as a shift started elsewhere and
-  /// later taps go through the REST path) and synced (so they stop blocking reconciliation), tells
-  /// the user, and asks for a reconcile so local state converges to the server's.
-  Future<void> _retireRefusedBatch(List<WorkSession> sessions, DioException e) async {
-    final dead = sessions.where((s) => s.isPendingSync).toList();
-    if (dead.isEmpty) return;
-    for (final s in dead) {
-      await _repo.markReconciledOrphan(s.id);
+  bool _batchHeld() {
+    if (_batchFailures >= _maxBatchAttempts) return true;
+    final at = _batchRetryAt;
+    return at != null && _clock().isBefore(at);
+  }
+
+  /// The batch endpoint is whole-batch atomic (one refused item fails everything), so what to do
+  /// depends on WHY, read from the ProblemDetails `code`:
+  ///
+  /// - 409 `active_session_exists`: another device already holds the open row. The punch can never
+  ///   be accepted as a new shift, so the pending events are retired — kept for support under
+  ///   [syncFailedMarker], hidden, never uploaded — the user is told (with how many events were
+  ///   kept) and the reconciler adopts the server's shift.
+  /// - EVERYTHING ELSE (403, 400, 404, 413, 422, `payroll_period_locked`, other 409s): the server
+  ///   refused, but the data is the technician's record. Nothing is retired or discarded; events
+  ///   stay pending. We back off (30s, 60s, 120s, ...), stop after 5 attempts per app session, and
+  ///   show ONE accurate message per failure kind. Held events count as unsynced, so the
+  ///   reconciler leaves the phone's own view in charge and visible — the safe payroll direction —
+  ///   until the office resolves it or a later attempt succeeds.
+  Future<void> _handleRefusedBatch(List<WorkSession> sessions, DioException e) async {
+    final data = e.response?.data;
+    final code = data is Map ? data['code'] as String? : null;
+    final detail = data is Map ? data['detail'] as String? : null;
+
+    if (e.response?.statusCode == 409 && code == 'active_session_exists') {
+      final dead = sessions.where((s) => s.isPendingSync).toList();
+      if (dead.isEmpty) return;
+      for (final s in dead) {
+        await _repo.markSyncFailed(s.id);
+      }
+      debugPrint(
+        'TimbraSyncService: batch refused (409 active_session_exists); retained '
+        '${dead.length} event(s) as $syncFailedMarker: '
+        '${dead.map((s) => '${s.eventType}@${s.eventTime.toIso8601String()}#${s.id}').join(', ')}',
+      );
+      final n = dead.length;
+      _onNotice?.call(
+        '$batchConflictMessage ($n ${n == 1 ? 'evento conservato' : 'eventi conservati'})',
+      );
+      _onRemoteCommandsApplied?.call();
+      return;
     }
-    await _repo.markSynced(dead.map((s) => s.id).toList());
-    _onNotice?.call(batchConflictMessage);
-    _onRemoteCommandsApplied?.call();
+
+    _batchFailures++;
+    final backoff = Duration(seconds: 30 * (1 << (_batchFailures - 1).clamp(0, 6)));
+    _batchRetryAt = _clock().add(backoff);
+
+    final payroll = code == 'payroll_period_locked';
+    final kind = payroll ? 'payroll' : 'server';
+    if (_noticeKinds.add(kind)) {
+      _onNotice?.call(
+        payroll
+            ? (detail != null && detail.trim().isNotEmpty ? detail : payrollLockedMessage)
+            : serverErrorMessage,
+      );
+    }
+    debugPrint(
+      'TimbraSyncService: batch refused (${e.response?.statusCode} $code); held '
+      '${sessions.where((s) => s.isPendingSync).length} pending event(s), attempt $_batchFailures/'
+      '$_maxBatchAttempts',
+    );
   }
 
   // ── Shifts started on another device ────────────────────────────────────────
@@ -204,7 +273,7 @@ class TimbraSyncService {
   ///   zero-length paid break); both are retired and the reconciler converges.
   /// - A tap older than [remoteCommandTtl] is dropped with a visible message.
   /// - A command already attempted once (response possibly lost), older than
-  ///   [remoteCommandStateCheckAfter], or queued behind another one is re-validated against
+  ///   3s old, or not the first send of this instance is re-validated against
   ///   `GET /worklog/active` before sending — see [_verdict]. If that read fails it stays queued.
   /// - Transient failure (no response, 5xx, 401, 408, 429): stop, keep queued (later taps must not
   ///   overtake it). Any other 4xx: the server already disagrees, retire and reconcile — no loop.
@@ -238,8 +307,7 @@ class TimbraSyncService {
         continue;
       }
 
-      final mustCheck =
-          sentOrChecked || _attempted.contains(e.id) || age > remoteCommandStateCheckAfter;
+      final mustCheck = _sentAny || sentOrChecked || age >= _freshTap;
       final fetch = _fetchActive;
       if (mustCheck && fetch != null) {
         final List<ActiveTracker> active;
@@ -256,7 +324,7 @@ class TimbraSyncService {
         }
       }
 
-      _attempted.add(e.id);
+      _sentAny = true;
       try {
         switch (e.eventType) {
           case 'fine':
