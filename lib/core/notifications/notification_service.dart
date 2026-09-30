@@ -228,20 +228,23 @@ class NotificationService {
 
     final entityType = data['relatedEntityType'] as String?;
     final entityId = data['relatedEntityId'] as String?;
+    // The backend puts the NotificationTypeEnum *name* in `type`.
+    final type = data['type'] as String?;
 
-    if (entityType == null || entityId == null || entityId.isEmpty) return;
-
-    // Navigate based on entity type.
-    // This uses a global navigator key or a routing callback.
-    // For now, store the deep-link intent; the router will consume it.
-    _pendingDeepLink = DeepLinkIntent(
+    // Entity pair when present; otherwise a type-keyed route (the overdue digest has no entity).
+    final intent = DeepLinkIntent.fromNotification(
+      type: type,
       entityType: entityType,
       entityId: entityId,
     );
+    if (intent == null) return;
+
+    // Store the deep-link intent; the router will consume it.
+    _pendingDeepLink = intent;
     // Tell main.dart there is something to drain; it decides whether the app is ready.
     onDeepLinkPending?.call();
 
-    debugPrint('FCM deep-link: $entityType/$entityId');
+    debugPrint('FCM deep-link: ${intent.entityType}/${intent.entityId}');
   }
 
   /// Called whenever a push tap stores a new pending deep-link (background or cold start).
@@ -288,12 +291,42 @@ class NotificationService {
   }
 }
 
+/// Routes for notification types that carry no related entity, keyed by the
+/// `NotificationTypeEnum` name. A new such type (e.g. a future `WorkLogCorrected`) needs only an
+/// entry here; types with an entity resolve through [DeepLinkIntent.resolveRoute] instead.
+const Map<String, String> kNotificationTypeRoutes = {
+  // "N ticket in ritardo" daily digest: no single ticket, so open the list. The list has no
+  // overdue filter parameter today.
+  'TicketOverdueDigest': AppRoutes.ticket,
+};
+
 /// Deep-link intent parsed from a notification tap.
 class DeepLinkIntent {
   const DeepLinkIntent({required this.entityType, required this.entityId});
 
   final String entityType;
   final String entityId;
+
+  /// The one place list taps and push taps decide what a notification opens.
+  ///
+  /// A complete entity pair wins; otherwise a type-only route from [kNotificationTypeRoutes];
+  /// otherwise null (nothing to open).
+  static DeepLinkIntent? fromNotification({
+    String? type,
+    String? entityType,
+    String? entityId,
+  }) {
+    if (entityType != null &&
+        entityType.isNotEmpty &&
+        entityId != null &&
+        entityId.isNotEmpty) {
+      return DeepLinkIntent(entityType: entityType, entityId: entityId);
+    }
+    if (type != null && kNotificationTypeRoutes.containsKey(type)) {
+      return DeepLinkIntent(entityType: type, entityId: '');
+    }
+    return null;
+  }
 
   /// Resolve the route path for this deep-link.
   String? resolveRoute() {
@@ -307,7 +340,7 @@ class DeepLinkIntent {
       // No per-request detail screen exists; the list is where the decision is visible.
       'AbsenceRequest' => AppRoutes.altroFerie,
       // WorkLog, ProdottoAssistenza, User, Magazzino, Tenant, License: admin-side, no mobile screen.
-      _ => null,
+      _ => kNotificationTypeRoutes[entityType],
     };
   }
 }

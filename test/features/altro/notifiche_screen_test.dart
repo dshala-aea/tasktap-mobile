@@ -86,6 +86,7 @@ Future<Widget> _buildScreen({
       routerConfig: GoRouter(
         routes: [
           GoRoute(path: '/', builder: (_, _) => const NotificheScreen()),
+          GoRoute(path: '/ticket', builder: (_, _) => const Text('STUB ticket list')),
           GoRoute(
             path: '/ticket/:id',
             builder: (_, s) => Text('STUB ticket ${s.pathParameters['id']}'),
@@ -260,6 +261,20 @@ void main() {
       await drain(tester);
     });
   }
+
+  testWidgets('tap on the overdue digest (no entity) opens the ticket list', (tester) async {
+    await tester.pumpWidget(
+      await _buildScreen(notifiche: [_fakeNotifica(tipo: 'TicketOverdueDigest')]),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nuovo intervento'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('STUB ticket list'), findsOneWidget);
+    expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
+    await drain(tester);
+  });
 
   testWidgets('tap on notification without related entity shows SnackBar', (tester) async {
     await tester.pumpWidget(await _buildScreen(notifiche: [_fakeNotifica()]));

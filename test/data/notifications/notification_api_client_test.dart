@@ -48,6 +48,15 @@ void main() {
       expect(dto.deliveryType, 'Whatever');
     });
 
+    test('ordinals past the end of the known list decode to Unknown without throwing', () {
+      // A server newer than this build (e.g. WorkLogCorrected, appended after
+      // TicketOverdueDigest) must degrade to the neutral label, never crash the list.
+      for (final ordinal in const [24, 25, 999, -1]) {
+        final dto = NotificationDto.fromJson(_baseJson(type: ordinal, deliveryType: 0));
+        expect(dto.type, 'Unknown', reason: 'ordinal $ordinal');
+      }
+    });
+
     test('every named NotificationTypeEnum ordinal decodes to its real name', () {
       const expected = [
         'TicketAssigned',
@@ -64,6 +73,16 @@ void main() {
         'SystemAnnouncement',
         'UserMention',
         'LowStock',
+        'AbsenceRequestDecided',
+        'MaintenanceDue',
+        'OvertimeThresholdCrossed',
+        'ReportReviewed',
+        'ReportRejected',
+        'ReportCancelled',
+        'AbsenceRequestSubmitted',
+        'CantiereAssigned',
+        'SeatLimitAlert',
+        'TicketOverdueDigest',
       ];
 
       for (var i = 0; i < expected.length; i++) {

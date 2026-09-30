@@ -158,6 +158,12 @@ class NotificationDto {
 // branches on the specific value today, so a safe label is enough.
 // ══════════════════════════════════════════════════════════════════════════════
 
+// APPEND-ONLY, in the exact order of the server's `NotificationTypeEnum`. Adding a new server type
+// (e.g. `WorkLogCorrected`, planned next) needs exactly one change here: append its name at the
+// next index. Decoding and the fallback below need nothing else — an ordinal this list does not
+// know yet decodes to 'Unknown' (generic bell icon, no deep link), never a crash. Optionally add an
+// icon in notifiche_screen.dart `_iconForTipo` and, for a type without a related entity that
+// should open a screen, a route in notification_service.dart `kNotificationTypeRoutes`.
 const _kNotificationTypeNames = [
   'TicketAssigned', // 0
   'TicketStatusChanged', // 1
@@ -182,6 +188,7 @@ const _kNotificationTypeNames = [
   'AbsenceRequestSubmitted', // 20
   'CantiereAssigned', // 21
   'SeatLimitAlert', // 22
+  'TicketOverdueDigest', // 23
 ];
 
 const _kDeliveryTypeNames = ['InApp', 'Push', 'Email', 'SMS'];

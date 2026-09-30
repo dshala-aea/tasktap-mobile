@@ -29,6 +29,34 @@ void main() {
     });
   });
 
+  group('DeepLinkIntent.fromNotification (type-based fallback)', () {
+    test('digest without an entity -> ticket list', () {
+      final intent = DeepLinkIntent.fromNotification(type: 'TicketOverdueDigest');
+      expect(intent, isNotNull);
+      expect(intent!.resolveRoute(), AppRoutes.ticket);
+    });
+    test('digest with empty entity fields -> ticket list', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'TicketOverdueDigest',
+        entityType: '',
+        entityId: '',
+      );
+      expect(intent?.resolveRoute(), AppRoutes.ticket);
+    });
+    test('an entity pair wins over the type', () {
+      final intent = DeepLinkIntent.fromNotification(
+        type: 'TicketOverdueDigest',
+        entityType: 'Ticket',
+        entityId: 't9',
+      );
+      expect(intent?.resolveRoute(), '/ticket/t9');
+    });
+    test('a type with no entity and no type route -> null', () {
+      expect(DeepLinkIntent.fromNotification(type: 'SystemAnnouncement'), isNull);
+      expect(DeepLinkIntent.fromNotification(), isNull);
+    });
+  });
+
   group('DeepLinkIntent.resolveRoute types without a mobile destination', () {
     for (final t in const [
       'WorkLog',

@@ -125,6 +125,7 @@ void main() {
     expect(find.text('Ore e presenze'), findsOneWidget);
     expect(find.text('Rapportini'), findsOneWidget);
     expect(find.text('Menzioni'), findsOneWidget);
+    expect(find.text('Ticket in ritardo'), findsOneWidget);
     await drain(tester);
   });
 

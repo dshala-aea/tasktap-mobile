@@ -42,6 +42,7 @@ class NotificationSettingsDto {
     required this.workLogNotifications,
     required this.documentNotifications,
     required this.mentionNotifications,
+    this.ticketOverdueNotifications = true,
   });
 
   /// In-app delivery — the SignalR-pushed entry into the technician's own Notifiche list
@@ -77,6 +78,12 @@ class NotificationSettingsDto {
   /// Mention notifications — the app's "Menzioni" toggle (comments/notes that @-mention the user).
   final bool mentionNotifications;
 
+  /// "Ticket in ritardo" — gates both `TicketOverdue` (the assignee's one-off) and
+  /// `TicketOverdueDigest` (the daily office digest). Separate from [ticketNotifications] so a
+  /// technician can keep assignment alerts and mute overdue ones. Defaults to true, including for
+  /// older servers that do not send the field yet.
+  final bool ticketOverdueNotifications;
+
   factory NotificationSettingsDto.fromJson(
     Map<String, dynamic> json,
   ) => NotificationSettingsDto(
@@ -91,6 +98,8 @@ class NotificationSettingsDto {
     workLogNotifications: json['workLogNotifications'] as bool? ?? true,
     documentNotifications: json['documentNotifications'] as bool? ?? true,
     mentionNotifications: json['mentionNotifications'] as bool? ?? true,
+    ticketOverdueNotifications:
+        json['ticketOverdueNotifications'] as bool? ?? true,
   );
 }
 
@@ -114,7 +123,7 @@ class NotificationSettingsApiClient {
   /// PUT /api/NotificationSettings
   ///
   /// Every field on the request is nullable and the server only applies the ones present, so this
-  /// sends exactly the nine the app has toggles for (everything except `enableSMS`, which has no
+  /// sends exactly the ten the app has toggles for (everything except `enableSMS`, which has no
   /// UI here — see the class doc on [NotificationSettingsDto]) and leaves any other server field
   /// untouched. Sending the full set with client-side defaults would silently reset preferences
   /// this app never showed.
@@ -128,6 +137,7 @@ class NotificationSettingsApiClient {
     bool? workLogNotifications,
     bool? documentNotifications,
     bool? mentionNotifications,
+    bool? ticketOverdueNotifications,
   }) {
     return _dio.put<dynamic>(
       '/api/NotificationSettings',
@@ -141,6 +151,7 @@ class NotificationSettingsApiClient {
         'workLogNotifications': ?workLogNotifications,
         'documentNotifications': ?documentNotifications,
         'mentionNotifications': ?mentionNotifications,
+        'ticketOverdueNotifications': ?ticketOverdueNotifications,
       },
     );
   }

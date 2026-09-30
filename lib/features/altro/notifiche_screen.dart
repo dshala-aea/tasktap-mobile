@@ -61,11 +61,13 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
   /// SnackBar — the notification has still been marked read, but a tap that visibly does nothing
   /// reads as a broken app.
   void _openRelatedEntity(BuildContext context, AppNotifica n) {
-    final type = n.relatedEntityType;
-    final id = n.relatedEntityId;
-    final route = (type == null || id == null || id.isEmpty)
-        ? null
-        : DeepLinkIntent(entityType: type, entityId: id).resolveRoute();
+    // Entity pair first; a notification without one (the overdue digest) falls back to a route
+    // keyed on its type — the same rule a push tap applies.
+    final route = DeepLinkIntent.fromNotification(
+      type: n.tipo,
+      entityType: n.relatedEntityType,
+      entityId: n.relatedEntityId,
+    )?.resolveRoute();
     if (route != null) {
       context.push(route);
       return;
@@ -237,7 +239,7 @@ IconData _iconForTipo(String? tipo) {
   return switch (tipo) {
     'TicketAssigned' || 'TicketCreated' => LucideIcons.ticket,
     'TicketStatusChanged' || 'TicketCompleted' => LucideIcons.clipboardCheck,
-    'TicketOverdue' => LucideIcons.alertTriangle,
+    'TicketOverdue' || 'TicketOverdueDigest' => LucideIcons.alertTriangle,
     'ScheduleReminder' || 'ScheduleStarting' => LucideIcons.calendar,
     'WorkLogSubmitted' => LucideIcons.fileText,
     'ReportReviewed' => LucideIcons.clipboardCheck,

@@ -49,6 +49,7 @@ class _FakeApi implements NotificationSettingsApiClient {
     bool? workLogNotifications,
     bool? documentNotifications,
     bool? mentionNotifications,
+    bool? ticketOverdueNotifications,
   }) async {
     updates.add({
       'enableInApp': enableInApp,
@@ -60,6 +61,7 @@ class _FakeApi implements NotificationSettingsApiClient {
       'workLogNotifications': workLogNotifications,
       'documentNotifications': documentNotifications,
       'mentionNotifications': mentionNotifications,
+      'ticketOverdueNotifications': ticketOverdueNotifications,
     });
     if (failUpdate) throw DioException(requestOptions: RequestOptions(path: '/x'));
   }
@@ -183,8 +185,49 @@ void main() {
         'workLogNotifications',
         'documentNotifications',
         'mentionNotifications',
+        'ticketOverdueNotifications',
       });
       expect(api.updates.single['ticketNotifications'], isFalse);
+    });
+
+    test('toggling "Ticket in ritardo" persists locally and is sent to the server', () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = _FakeApi();
+      final n = await build(api);
+      api.updates.clear();
+
+      n.toggle(key: 'notificheTicketRitardo');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(n.state.notificheTicketRitardo, isFalse);
+      expect(api.updates.single['ticketOverdueNotifications'], isFalse);
+      // Independent of the "Interventi" flag.
+      expect(api.updates.single['ticketNotifications'], isTrue);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('settings.notifiche_ticket_ritardo'), isFalse);
+    });
+
+    test('reconcile pulls ticketOverdueNotifications from the server', () async {
+      SharedPreferences.setMockInitialValues({});
+      final api = _FakeApi(
+        remote: const NotificationSettingsDto(
+          enableInApp: true,
+          enablePush: true,
+          enableEmail: true,
+          ticketNotifications: true,
+          scheduleNotifications: true,
+          licenseNotifications: true,
+          workLogNotifications: true,
+          documentNotifications: true,
+          mentionNotifications: true,
+          ticketOverdueNotifications: false,
+        ),
+      );
+
+      final n = await build(api);
+
+      expect(n.state.notificheTicketRitardo, isFalse);
     });
 
     test('toggling a new category (Pianificazione) is reflected in the next send', () async {
@@ -280,6 +323,16 @@ void main() {
       expect(dto.workLogNotifications, isTrue);
       expect(dto.documentNotifications, isTrue);
       expect(dto.mentionNotifications, isTrue);
+      // Older servers do not send the overdue flag; absent must read as on.
+      expect(dto.ticketOverdueNotifications, isTrue);
+    });
+
+    test('reads ticketOverdueNotifications when the server sends it', () {
+      expect(
+        NotificationSettingsDto.fromJson({'ticketOverdueNotifications': false})
+            .ticketOverdueNotifications,
+        isFalse,
+      );
     });
 
     test('round-trips all nine fields from a full JSON payload', () {

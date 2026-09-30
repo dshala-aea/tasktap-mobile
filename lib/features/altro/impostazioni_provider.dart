@@ -21,6 +21,7 @@ const _kNotificheLicenza = 'settings.notifiche_licenza';
 const _kNotificheOrePresenze = 'settings.notifiche_ore_presenze';
 const _kNotificheRapportini = 'settings.notifiche_rapportini';
 const _kNotificheMenzioni = 'settings.notifiche_menzioni';
+const _kNotificheTicketRitardo = 'settings.notifiche_ticket_ritardo';
 const _kSyncOffline = 'settings.sync_offline';
 const _kGeoLocazione = 'settings.geo_locazione';
 const _kTemaScuro = 'settings.tema_scuro';
@@ -51,6 +52,7 @@ class ImpostazioniState {
     this.notificheOrePresenze = true,
     this.notificheRapportini = true,
     this.notificheMenzioni = true,
+    this.notificheTicketRitardo = true,
     // App
     this.syncOffline = true,
     // True, not false. GPS was captured on every cantiere clock-in regardless of this flag, so
@@ -75,6 +77,7 @@ class ImpostazioniState {
   final bool notificheOrePresenze;
   final bool notificheRapportini;
   final bool notificheMenzioni;
+  final bool notificheTicketRitardo;
 
   // ── App ──────────────────────────────────────────────────────────────────
   final bool syncOffline;
@@ -94,6 +97,7 @@ class ImpostazioniState {
     bool? notificheOrePresenze,
     bool? notificheRapportini,
     bool? notificheMenzioni,
+    bool? notificheTicketRitardo,
     bool? syncOffline,
     bool? geoLocazione,
     bool? temaScuro,
@@ -110,6 +114,8 @@ class ImpostazioniState {
       notificheOrePresenze: notificheOrePresenze ?? this.notificheOrePresenze,
       notificheRapportini: notificheRapportini ?? this.notificheRapportini,
       notificheMenzioni: notificheMenzioni ?? this.notificheMenzioni,
+      notificheTicketRitardo:
+          notificheTicketRitardo ?? this.notificheTicketRitardo,
       syncOffline: syncOffline ?? this.syncOffline,
       geoLocazione: geoLocazione ?? this.geoLocazione,
       temaScuro: temaScuro ?? this.temaScuro,
@@ -152,6 +158,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       notificheOrePresenze: prefs.getBool(_kNotificheOrePresenze) ?? true,
       notificheRapportini: prefs.getBool(_kNotificheRapportini) ?? true,
       notificheMenzioni: prefs.getBool(_kNotificheMenzioni) ?? true,
+      notificheTicketRitardo: prefs.getBool(_kNotificheTicketRitardo) ?? true,
       syncOffline: prefs.getBool(_kSyncOffline) ?? true,
       geoLocazione: prefs.getBool(_kGeoLocazione) ?? true,
       temaScuro: prefs.getBool(_kTemaScuro) ?? false,
@@ -208,6 +215,9 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       'notificheMenzioni' => state.copyWith(
         notificheMenzioni: !state.notificheMenzioni,
       ),
+      'notificheTicketRitardo' => state.copyWith(
+        notificheTicketRitardo: !state.notificheTicketRitardo,
+      ),
       'syncOffline' => state.copyWith(syncOffline: !state.syncOffline),
       'geoLocazione' => state.copyWith(geoLocazione: !state.geoLocazione),
       'temaScuro' => state.copyWith(temaScuro: !state.temaScuro),
@@ -247,7 +257,8 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     'notificheLicenza' ||
     'notificheOrePresenze' ||
     'notificheRapportini' ||
-    'notificheMenzioni' => true,
+    'notificheMenzioni' ||
+    'notificheTicketRitardo' => true,
     _ => false,
   };
 
@@ -270,6 +281,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
         workLogNotifications: state.notificheOrePresenze,
         documentNotifications: state.notificheRapportini,
         mentionNotifications: state.notificheMenzioni,
+        ticketOverdueNotifications: state.notificheTicketRitardo,
       );
       await prefs.setBool(_kNotifichePending, false);
     } catch (_) {
@@ -311,6 +323,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
       notificheOrePresenze: remote.workLogNotifications,
       notificheRapportini: remote.documentNotifications,
       notificheMenzioni: remote.mentionNotifications,
+      notificheTicketRitardo: remote.ticketOverdueNotifications,
     );
 
     await prefs.setBool(_kPushAbilitate, remote.enablePush);
@@ -325,6 +338,10 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     await prefs.setBool(_kNotificheOrePresenze, remote.workLogNotifications);
     await prefs.setBool(_kNotificheRapportini, remote.documentNotifications);
     await prefs.setBool(_kNotificheMenzioni, remote.mentionNotifications);
+    await prefs.setBool(
+      _kNotificheTicketRitardo,
+      remote.ticketOverdueNotifications,
+    );
 
     // Push arriving from another device still has to register or unregister *this* one.
     if (pushChanged) _syncPushRegistration(remote.enablePush);
@@ -340,6 +357,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     'notificheOrePresenze' => state.notificheOrePresenze,
     'notificheRapportini' => state.notificheRapportini,
     'notificheMenzioni' => state.notificheMenzioni,
+    'notificheTicketRitardo' => state.notificheTicketRitardo,
     'syncOffline' => state.syncOffline,
     'geoLocazione' => state.geoLocazione,
     'temaScuro' => state.temaScuro,
@@ -357,6 +375,7 @@ class ImpostazioniNotifier extends StateNotifier<ImpostazioniState> {
     'notificheOrePresenze' => _kNotificheOrePresenze,
     'notificheRapportini' => _kNotificheRapportini,
     'notificheMenzioni' => _kNotificheMenzioni,
+    'notificheTicketRitardo' => _kNotificheTicketRitardo,
     'syncOffline' => _kSyncOffline,
     'geoLocazione' => _kGeoLocazione,
     'temaScuro' => _kTemaScuro,

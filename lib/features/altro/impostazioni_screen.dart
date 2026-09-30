@@ -95,6 +95,13 @@ class ImpostazioniScreen extends ConsumerWidget {
                     onChanged: (_) => notifier.toggle(key: 'notificheInterventi'),
                   ),
                   _ToggleRow(
+                    icon: LucideIcons.alertTriangle,
+                    title: 'Ticket in ritardo',
+                    subtitle: 'Avviso quando un ticket supera la scadenza',
+                    value: settings.notificheTicketRitardo,
+                    onChanged: (_) => notifier.toggle(key: 'notificheTicketRitardo'),
+                  ),
+                  _ToggleRow(
                     icon: LucideIcons.calendar,
                     title: 'Pianificazione',
                     subtitle: 'Promemoria e cambi di programmazione',
