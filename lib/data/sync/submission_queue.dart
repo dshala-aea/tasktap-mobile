@@ -48,14 +48,21 @@ class SubmissionQueue {
     required DraftReportRepository repo,
     required ReportSubmitApiClient apiClient,
     bool Function()? isOnline,
+    Future<bool> Function()? recheckOnline,
     this.maxAutoRetries = 5,
   }) : _repo = repo,
        _apiClient = apiClient,
-       _isOnline = isOnline ?? (() => true);
+       _isOnline = isOnline ?? (() => true),
+       _recheckOnline = recheckOnline;
 
   final DraftReportRepository _repo;
   final ReportSubmitApiClient _apiClient;
   final bool Function() _isOnline;
+
+  /// Authoritative connectivity probe used when [_isOnline] (a cached provider value that is
+  /// false until the first check resolves and is never re-polled) says offline, so a stale
+  /// value cannot hold rows forever. Null = no probe: the cached value stands.
+  final Future<bool> Function()? _recheckOnline;
 
   /// Consecutive transient failures after which a `failed` row stops being retried unattended.
   final int maxAutoRetries;
@@ -102,9 +109,15 @@ class SubmissionQueue {
   /// budget left (called on reconnect, app resume, startup and manual trigger). Does nothing
   /// while offline: rows stay `readyToSubmit`. Drafts are processed one at a time; a failure
   /// stops that draft but continues with others.
-  Future<void> processAll() async {
+  ///
+  /// [force] is for a manual "Invia"/"Riprova": skip the connectivity gate and just attempt the
+  /// network, so a real failure surfaces as a transient `failed` row with its Italian message
+  /// instead of a silent no-op. Automatic flushes keep the gate, but confirm "offline" with a
+  /// real probe before skipping.
+  Future<void> processAll({bool force = false}) async {
     if (_running) return; // prevent re-entrant calls
-    if (!_isOnline()) return;
+    if (!force && !await _confirmedOnline()) return;
+    if (_running) return; // another caller got in while probing
     _running = true;
     try {
       final ready = [
@@ -116,6 +129,17 @@ class SubmissionQueue {
       }
     } finally {
       _running = false;
+    }
+  }
+
+  Future<bool> _confirmedOnline() async {
+    if (_isOnline()) return true;
+    final probe = _recheckOnline;
+    if (probe == null) return false;
+    try {
+      return await probe();
+    } catch (_) {
+      return false;
     }
   }
 
@@ -135,7 +159,7 @@ class SubmissionQueue {
       attempts: 0,
       errorTransient: false,
     );
-    await processAll();
+    await processAll(force: true);
   }
 
   // ── Internal processing ────────────────────────────────────────────────────
@@ -246,11 +270,13 @@ class SubmissionQueue {
   /// Whether retrying the same request unattended could plausibly succeed: no response at all
   /// (radio/timeout), a server fault (5xx), or explicit back-pressure (408/429). Everything else
   /// — other 4xx, a missing local file, a programming error — needs the technician.
+  /// 401 counts as transient: the auth interceptor's silent refresh can leave the original 401
+  /// surfacing when the refresh failed for a non-definitive reason; the retry cap bounds it.
   static bool _isTransient(Object e) {
     if (e is! DioException) return false;
     final status = e.response?.statusCode;
     if (status == null) return e.type != DioExceptionType.badResponse;
-    return status >= 500 || status == 408 || status == 429;
+    return status >= 500 || status == 401 || status == 408 || status == 429;
   }
 
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {

@@ -16,6 +16,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
+import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/draft_submission_state.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/users/user_signature_api_client.dart';
@@ -185,7 +186,9 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
     });
     try {
       await queue.enqueue(widget.reportId);
-      await queue.processAll();
+      // Manual send: attempt the network regardless of the cached connectivity value, so a real
+      // failure becomes a visible "Invio fallito" instead of a silent no-op.
+      await queue.processAll(force: true);
     } catch (e) {
       // The red line under the submit button. It printed `e.toString()`, which put a Dio stack at
       // the exact moment two people have just signed and the only question is whether the record
@@ -438,7 +441,18 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (validation.isValid)
+                  // Queued but the device is offline: say so, instead of a form that looks unsent.
+                  // The button below stays live — a stale connectivity value must never remove the
+                  // technician's manual, forced send. The queue also flushes on reconnect/resume.
+                  if (subState == DraftSubmissionState.readyToSubmit &&
+                      !ref.watch(isOnlineProvider))
+                    _StatusCard(
+                      color: context.colors.blue,
+                      icon: LucideIcons.refreshCw,
+                      title: 'In attesa di connessione',
+                      subtitle: 'Il rapportino è salvato e verrà inviato appena torni online.',
+                    )
+                  else if (validation.isValid)
                     _StatusCard(
                       color: context.colors.green,
                       icon: LucideIcons.checkCircle2,

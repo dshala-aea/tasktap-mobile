@@ -1,4 +1,5 @@
 // dart format width=100
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -1137,6 +1138,7 @@ void main() {
   // ── Resilience: offline gating, startup recovery, transient auto-retry ────────────────────
   group('SubmissionQueue — resilience', () {
     var online = true;
+    var recheck = false; // what a real connectivity re-check would answer
     late SubmissionQueue gated;
     final reqOpts = RequestOptions(path: '/api/reports/submit');
 
@@ -1176,10 +1178,12 @@ void main() {
 
     setUp(() {
       online = true;
+      recheck = false;
       gated = SubmissionQueue(
         repo: repo,
         apiClient: mockApiClient,
         isOnline: () => online,
+        recheckOnline: () async => recheck,
         maxAutoRetries: 5,
       );
     });
@@ -1204,6 +1208,135 @@ void main() {
       stubSubmitOk();
       online = true;
       await gated.processAll();
+      expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
+    });
+
+    test('a forced (manual) send attempts the network even when the provider says offline',
+        () async {
+      online = false;
+      await _insertDraft(db);
+      stubSubmitOk();
+      await gated.enqueue('report-1');
+      await gated.processAll(force: true);
+      expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
+    });
+
+    test('a forced send that really has no network becomes a transient failed row', () async {
+      online = false;
+      await _insertDraft(db);
+      stubSubmitThrows(
+        DioException(requestOptions: reqOpts, type: DioExceptionType.connectionError),
+      );
+      await gated.enqueue('report-1');
+      await gated.processAll(force: true);
+      final d = (await repo.getDraft('report-1'))!;
+      expect(d.submissionState, 'failed');
+      expect(d.submissionErrorTransient, isTrue);
+      expect(d.submissionError, contains('Nessuna connessione'));
+    });
+
+    test('manual retry() is forced too', () async {
+      online = false;
+      await _insertDraft(db, submissionState: 'failed', idempotencyKey: 'k');
+      stubSubmitOk();
+      await gated.retry('report-1');
+      expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
+    });
+
+    test('an automatic flush with a stale offline provider re-checks connectivity and sends',
+        () async {
+      online = false;
+      recheck = true;
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
+      stubSubmitOk();
+      await gated.processAll();
+      expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
+    });
+
+    test('an automatic flush stays put when the re-check confirms offline', () async {
+      online = false;
+      recheck = false;
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
+      await gated.processAll();
+      expect((await repo.getDraft('report-1'))!.submissionState, 'readyToSubmit');
+    });
+
+    test('a re-check that throws is treated as offline', () async {
+      online = false;
+      final q = SubmissionQueue(
+        repo: repo,
+        apiClient: mockApiClient,
+        isOnline: () => false,
+        recheckOnline: () async => throw StateError('no plugin'),
+      );
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
+      await q.processAll();
+      expect((await repo.getDraft('report-1'))!.submissionState, 'readyToSubmit');
+    });
+
+    test('HTTP 401 is transient (a failed silent refresh must not strand the row)', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
+      stubSubmitThrows(http(401));
+      await gated.processAll();
+      final d = (await repo.getDraft('report-1'))!;
+      expect(d.submissionState, 'failed');
+      expect(d.submissionErrorTransient, isTrue);
+      expect(d.submissionAttempts, 1);
+    });
+
+    for (final status in [403, 409, 422]) {
+      test('HTTP $status is permanent', () async {
+        await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
+        stubSubmitThrows(http(status));
+        await gated.processAll();
+        await gated.processAll();
+        final d = (await repo.getDraft('report-1'))!;
+        expect(d.submissionState, 'failed');
+        expect(d.submissionErrorTransient, isFalse);
+        expect(submitCalls(), 1);
+      });
+    }
+
+    test('a poison draft does not stop a good one in the same processAll', () async {
+      await _insertDraft(db, id: 'a-poison', submissionState: 'readyToSubmit', idempotencyKey: 'k1');
+      await _insertDraft(db, id: 'b-good', submissionState: 'readyToSubmit', idempotencyKey: 'k2');
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        final r = inv.namedArguments[#request] as SubmitReportRequest;
+        if (r.id == 'a-poison') throw http(422);
+        return SubmitReportResponse(id: r.id, title: 'T', stato: '1', inviatoAt: null);
+      });
+      await gated.processAll();
+      expect((await repo.getDraft('a-poison'))!.submissionState, 'failed');
+      expect((await repo.getDraft('b-good'))!.submissionState, 'submitted');
+    });
+
+    test('recoverInterrupted is a no-op while a send is in flight', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'k');
+      final gate = Completer<SubmitReportResponse>();
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((_) => gate.future);
+
+      final running = gated.processAll();
+      // Let processAll reach the awaiting submit call.
+      while ((await repo.getDraft('report-1'))!.submissionState != 'submitting') {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      await gated.recoverInterrupted();
+      expect((await repo.getDraft('report-1'))!.submissionState, 'submitting');
+
+      gate.complete(
+        const SubmitReportResponse(id: 'report-1', title: 'T', stato: '1', inviatoAt: null),
+      );
+      await running;
       expect((await repo.getDraft('report-1'))!.submissionState, 'submitted');
     });
 

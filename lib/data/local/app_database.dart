@@ -1070,6 +1070,13 @@ class AppDatabase extends _$AppDatabase {
           // written before this.
           await m.addColumn(draftReports, draftReports.submissionAttempts);
           await m.addColumn(draftReports, draftReports.submissionErrorTransient);
+          // Rows already `failed` were stuck by the old firma-* 404 bug (signatures POSTed
+          // before the report existed). Flag them transient so the next startup flush retries
+          // them once the fixed client is in place — bounded by the queue's retry cap.
+          await customStatement(
+            'UPDATE draft_reports SET submission_error_transient = 1 '
+            "WHERE submission_state = 'failed'",
+          );
         }
       },
     );

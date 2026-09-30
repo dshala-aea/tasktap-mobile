@@ -1,4 +1,5 @@
 // dart format width=100
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
@@ -30,6 +31,10 @@ final realSubmissionQueueProvider = Provider<SubmissionQueue>((ref) {
     repo: repo,
     apiClient: apiClient,
     isOnline: () => ref.read(isOnlineProvider),
+    recheckOnline: () async {
+      final r = await Connectivity().checkConnectivity();
+      return r.any((c) => c != ConnectivityResult.none);
+    },
   );
 });
 

@@ -251,7 +251,7 @@ void main() {
       await _seedDraft(db, reportId);
       final fakeQueue = MockSubmissionQueue();
       when(() => fakeQueue.enqueue(any())).thenAnswer((_) async {});
-      when(() => fakeQueue.processAll()).thenAnswer((_) async {});
+      when(() => fakeQueue.processAll(force: true)).thenAnswer((_) async {});
 
       // Pre-populate editor state with customer + signatures using the repo
       // so validateDraft() returns isValid=true.
@@ -346,7 +346,7 @@ void main() {
 
       // Queue must have been called
       verify(() => fakeQueue.enqueue(reportId)).called(1);
-      verify(() => fakeQueue.processAll()).called(1);
+      verify(() => fakeQueue.processAll(force: true)).called(1);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

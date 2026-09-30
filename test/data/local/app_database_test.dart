@@ -138,6 +138,9 @@ void main() {
               "submission_state TEXT NOT NULL DEFAULT 'draft');",
             );
             raw.execute("INSERT INTO draft_reports (id, submission_state) VALUES ('old', 'failed');");
+            raw.execute(
+              "INSERT INTO draft_reports (id, submission_state) VALUES ('ok', 'readyToSubmit');",
+            );
           },
         ),
       );
@@ -157,7 +160,17 @@ void main() {
           .getSingle();
       expect(row.read<String>('submission_state'), 'failed'); // untouched
       expect(row.read<int>('submission_attempts'), 0);
-      expect(row.read<int>('submission_error_transient'), 0);
+      // A row stuck `failed` by the old firma-* 404 bug is flagged transient so the next
+      // startup flush retries it (bounded by the queue's retry cap).
+      expect(row.read<int>('submission_error_transient'), 1);
+
+      final other = await db
+          .customSelect(
+            'SELECT submission_error_transient FROM draft_reports '
+            "WHERE id = 'ok'",
+          )
+          .getSingle();
+      expect(other.read<int>('submission_error_transient'), 0);
     });
 
     test('a fresh database has the columns with defaults', () async {
