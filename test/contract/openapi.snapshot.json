@@ -29520,6 +29520,13 @@
             ],
             "description": "URL slug."
           },
+          "timeZoneId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "IANA time zone id (e.g. \u0022Europe/Rome\u0022). Absent means no change. Must be a valid IANA id for\nwhich the system supports business-date ranges, otherwise 400 \u0060invalid_timezone\u0060."
+          },
           "companyVATNumber": {
             "type": [
               "null",
