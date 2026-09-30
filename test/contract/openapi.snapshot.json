@@ -29424,6 +29424,13 @@
             ],
             "description": "Enable ticket-related notifications."
           },
+          "ticketOverdueNotifications": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Enable overdue-ticket notifications (per-ticket notice and daily admin digest)."
+          },
           "scheduleNotifications": {
             "type": [
               "null",
