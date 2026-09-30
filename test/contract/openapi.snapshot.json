@@ -12845,7 +12845,7 @@
         "tags": [
           "Sync"
         ],
-        "summary": "Returns all records modified after since for the requested entity types.\nUsage: GET /api/sync/delta?since=2024-01-01T00:00:00Z\u0026amp;entities=reports,schedules\nIf entities is omitted, all supported types are returned.",
+        "summary": "Returns all records modified after since for the requested entity types.\nUsage: GET /api/sync/delta?since=2024-01-01T00:00:00Z\u0026amp;entities=reports,schedules\nIf entities is omitted, all supported types are returned.\nOffice/Admin/SuperUser only (403 otherwise): the store filters on tenant \u002B UpdatedAt alone,\nso this is a whole-tenant dump. Within it, \u0060worklogs\u0060 needs presenze.worklog.configure\nand \u0060cantiereworklogs\u0060 needs cantieri.worklog.approve (ADR-0021): omitted from an\nunfiltered request, 403 when explicitly requested without the permission.",
         "parameters": [
           {
             "name": "since",
