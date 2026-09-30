@@ -18,6 +18,7 @@ import '../../../data/timbratura/cantiere_timbra_sync_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/cantiere_work_log_reconciler.dart';
 import '../../../data/sync/submission_queue_watcher.dart';
+import '../../../data/timbratura/timbra_notice.dart';
 import '../../../data/timbratura/timbra_sync_watcher.dart';
 import '../../../data/timbratura/work_log_reconcile_watcher.dart';
 import '../../../data/timbratura/work_log_refresh_coordinator.dart';
@@ -206,6 +207,12 @@ class _HomeShellState extends ConsumerState<HomeShell>
 
   @override
   Widget build(BuildContext context) {
+    // A tap on a shift started elsewhere was dropped/refused by the background sync (see
+    // timbra_sync_service.dart): the technician must be told, not left guessing.
+    ref.listen<TimbraNotice?>(timbraNoticeProvider, (prev, next) {
+      if (next != null) showAppToast(context, message: next.message, tone: ToastTone.error);
+    });
+
     // Rack is a passthrough now (see its own doc comment) — kept only so this one call site
     // needs no change from when it painted the van-racking rail behind every tab.
     final content = Rack(

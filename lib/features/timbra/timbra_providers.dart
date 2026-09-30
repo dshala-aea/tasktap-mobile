@@ -1,10 +1,13 @@
 // dart format width=100
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../data/local/app_database.dart';
+import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart';
+import '../../data/timbratura/remote_shift.dart';
 import '../../data/timbratura/timbra_sync_service.dart';
 import '../../data/timbratura/work_session_repository.dart';
 import '../../data/timbratura/worklog_api_client.dart';
@@ -257,11 +260,30 @@ final pauseGuardProvider = Provider.autoDispose<TimbraGuard>((ref) {
 
 /// Notifier for punch-in / punch-out / pause / resume.
 class PunchNotifier extends StateNotifier<AsyncValue<void>> {
-  PunchNotifier(this._repo, [this._syncService, ILocationService? locationService])
-    : _locationService = locationService ?? const DisabledLocationService(),
-      super(const AsyncData(null));
+  PunchNotifier(
+    this._repo, [
+    this._syncService,
+    ILocationService? locationService,
+    this._confirmOnline,
+  ]) : _locationService = locationService ?? const DisabledLocationService(),
+       super(const AsyncData(null));
 
   final IWorkSessionRepository _repo;
+
+  /// Authoritative "is there really a connection right now" probe. Null = never gate.
+  final Future<bool> Function()? _confirmOnline;
+
+  /// Fine / Pausa / Ripresa on a shift started on ANOTHER device are online-only — the server
+  /// stamps its own clock, so an offline tap would be recorded at delivery time. See
+  /// remote_shift.dart (incl. the backend follow-up). Throws [OfflineRemoteShiftException] so the
+  /// caller records nothing and local state stays unchanged.
+  Future<void> _requireOnlineForRemoteShift() async {
+    final probe = _confirmOnline;
+    if (probe == null) return;
+    final remote = analyseRemoteShifts(await _repo.getTodaySessions()).openShiftIsRemote;
+    if (!remote) return;
+    if (!await probe()) throw const OfflineRemoteShiftException();
+  }
   final TimbraSyncService? _syncService;
   final ILocationService _locationService;
 
@@ -298,7 +320,8 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
         );
       } else {
         // End shift
-        await _repo.addEvent(id: _uuid.v4(), eventTime: now, eventType: _kFine);
+        await _requireOnlineForRemoteShift();
+        await _repo.addEvent(id: _uuid.v4(), eventTime: DateTime.now().toUtc(), eventType: _kFine);
       }
       state = const AsyncData(null);
       // Best-effort sync after punch (fire-and-forget; ignore failure).
@@ -312,6 +335,7 @@ class PunchNotifier extends StateNotifier<AsyncValue<void>> {
     if (!current.isOnShift) return;
     state = const AsyncLoading();
     try {
+      await _requireOnlineForRemoteShift();
       final now = DateTime.now().toUtc();
       if (current.isOnPause) {
         final coords = await _captureGpsSilently();
@@ -352,5 +376,11 @@ final punchNotifierProvider = StateNotifierProvider<PunchNotifier, AsyncValue<vo
     ref.watch(workSessionRepositoryProvider),
     ref.watch(timbraSyncServiceProvider),
     ref.watch(locationServiceProvider),
+    () async {
+      if (ref.read(isOnlineProvider)) return true;
+      // The cached provider value can be stale-false; confirm with a real probe.
+      final r = await Connectivity().checkConnectivity();
+      return r.any((c) => c != ConnectivityResult.none);
+    },
   );
 });

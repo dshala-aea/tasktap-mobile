@@ -10,6 +10,7 @@ import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
 import '../../data/worklogs/active_tracker_api_client.dart';
 import '../../features/ticket/ticket_workflow_api_client.dart';
+import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
 import '../timbra/timbra_providers.dart';
 import 'active_trackers_provider.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -84,7 +85,11 @@ class _TrackerRowState extends ConsumerState<_TrackerRow> {
       if (!mounted) return;
       showAppToast(
         context,
-        message: e is TicketWorkflowFailure ? e.message : 'Operazione non riuscita.',
+        message: switch (e) {
+          TicketWorkflowFailure() => e.message,
+          OfflineRemoteShiftException() => e.message,
+          _ => 'Operazione non riuscita.',
+        },
         tone: ToastTone.error,
       );
     } finally {

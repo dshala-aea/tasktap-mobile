@@ -918,7 +918,7 @@ void main() {
     /// not when writing the case is inconvenient.
     const unguarded = <String, String>{
       'POST /api/worklog/end':
-          'sends no request body — there is no schema to check it against',
+          'optional body, app sends none',
       'POST /api/worklog/break/start':
           'sends no request body — there is no schema to check it against',
       'POST /api/worklog/break/end':

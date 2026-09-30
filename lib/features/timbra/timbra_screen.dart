@@ -17,6 +17,7 @@ import '../../core/widgets/screen_header.dart';
 import '../../data/entitlements/entitlement_providers.dart';
 import '../../data/local/app_database.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider;
+import '../../data/timbratura/remote_shift.dart' show OfflineRemoteShiftException;
 import 'timbra_providers.dart';
 import 'work_log_live_refresh.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -129,7 +130,9 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
       if (next is AsyncError) {
         showAppToast(
           context,
-          message: 'Errore durante la timbratura. Riprova.',
+          message: next.error is OfflineRemoteShiftException
+              ? (next.error as OfflineRemoteShiftException).message
+              : 'Errore durante la timbratura. Riprova.',
           tone: ToastTone.error,
         );
       }
