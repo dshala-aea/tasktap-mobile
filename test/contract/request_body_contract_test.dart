@@ -917,6 +917,12 @@ void main() {
     /// A route belongs in this map only when checking it would prove nothing —
     /// not when writing the case is inconvenient.
     const unguarded = <String, String>{
+      'POST /api/worklog/end':
+          'sends no request body — there is no schema to check it against',
+      'POST /api/worklog/break/start':
+          'sends no request body — there is no schema to check it against',
+      'POST /api/worklog/break/end':
+          'sends no request body — there is no schema to check it against',
       'POST /api/reports/submit':
           'covered by openapi_contract_test.dart, which also checks the three nested DTOs',
       'POST /api/reports/{}/attachments':

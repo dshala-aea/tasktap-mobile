@@ -240,6 +240,72 @@ void main() {
     });
   });
 
+  group('backfill placement', () {
+    test('an overnight shift (server start before local midnight) is anchored at local midnight', () async {
+      final now = DateTime.now();
+      final midnight = DateTime(now.year, now.month, now.day).toUtc();
+      final started = midnight.subtract(const Duration(hours: 3));
+      server = [
+        ActiveTracker(
+          kind: ActiveTrackerKind.attendance,
+          id: 'wl',
+          startedAtUtc: started,
+          state: ActiveTrackerState.working,
+          shiftStartedAtUtc: started,
+        ),
+      ];
+      final repo = _Repo([]);
+      await make(repo).reconcile();
+
+      expect(repo.sessions.single.eventTime, midnight);
+    });
+
+    test('a Fine the server refused (shift still open) re-opens the shift AFTER that stop', () async {
+      final stop = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+      final started = stop.subtract(const Duration(hours: 2));
+      server = [
+        ActiveTracker(
+          kind: ActiveTrackerKind.attendance,
+          id: 'wl',
+          startedAtUtc: started,
+          state: ActiveTrackerState.working,
+          shiftStartedAtUtc: started,
+        ),
+      ];
+      final repo = _Repo([
+        WorkSession(
+          id: 'i',
+          eventTime: started,
+          eventType: 'ingresso',
+          notes: reconciledOrphanMarker,
+          isPendingSync: true,
+        ),
+        _synced('f', 'fine', stop), // retired after a permanent refusal
+      ]);
+      await make(repo).reconcile();
+
+      expect(deriveShiftState(repo.sessions).isOnShift, isTrue);
+    });
+
+    test('a batch-synced local stop is NOT overridden by a stale server view', () async {
+      final stop = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+      final started = stop.subtract(const Duration(hours: 2));
+      server = [
+        ActiveTracker(
+          kind: ActiveTrackerKind.attendance,
+          id: 'wl',
+          startedAtUtc: started,
+          state: ActiveTrackerState.working,
+          shiftStartedAtUtc: started,
+        ),
+      ];
+      final repo = _Repo([_synced('i', 'ingresso', started), _synced('f', 'fine', stop)]);
+      await make(repo).reconcile();
+
+      expect(deriveShiftState(repo.sessions).isOnShift, isFalse);
+    });
+  });
+
   group('failure and concurrency', () {
     test('a failed fetch changes nothing', () async {
       fetchError = Exception('offline');

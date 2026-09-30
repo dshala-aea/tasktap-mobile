@@ -155,7 +155,7 @@ class WorkLogReconciler {
 
     if (server.isOnShift) {
       if (!local.isOnShift) {
-        await _backfillMissingShift(server);
+        await _backfillMissingShift(server, sessions);
         return;
       }
       if (server.isOnPause && !local.isOnPause) {
@@ -184,9 +184,31 @@ class WorkLogReconciler {
   /// which would understate worked time — and, when the server is on a break, the 'pausa' too so
   /// local state equals the server's. No-ops without a start time: fabricating one is worse than
   /// staying briefly stale.
-  Future<void> _backfillMissingShift(ServerWorkLogSnapshot server) async {
-    final start = server.activeStartTime;
+  ///
+  /// Two adjustments keep the backfilled event effective, i.e. inside the window `getTodaySessions`
+  /// reads and after everything already recorded:
+  /// - an overnight shift (server start before local midnight) is anchored at local midnight,
+  ///   otherwise the row would fall outside "today", derive nothing, and be re-inserted on every
+  ///   reconcile;
+  /// - when the last local event is a `fine` tapped on a shift that was itself backfilled and the
+  ///   server REFUSED it (e.g. payroll period locked), the server shift is still open, so the
+  ///   re-opened shift is placed just after that stop — otherwise it would sort before it and the
+  ///   refusal would look like a successful clock-out.
+  Future<void> _backfillMissingShift(
+    ServerWorkLogSnapshot server,
+    List<WorkSession> sessions,
+  ) async {
+    var start = server.activeStartTime;
     if (start == null) return;
+
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day).toUtc();
+    if (start.isBefore(midnight)) start = midnight;
+
+    final lastRefused = _lastFineOfRemoteShift(sessions);
+    if (lastRefused != null && !start.isAfter(lastRefused)) {
+      start = lastRefused.add(_epsilon);
+    }
 
     await _addMarked('ingresso', start);
     if (server.isOnPause) {
@@ -205,6 +227,23 @@ class WorkLogReconciler {
     final id = _uuid.v4();
     await _repo.addEvent(id: id, eventTime: time, eventType: type);
     await _repo.markReconciledOrphan(id);
+  }
+
+  /// Time of the last `fine` if it closed a shift whose opener was backfilled (remote-origin), else
+  /// null. Only that kind of stop can be "refused by the server while local already shows stopped".
+  DateTime? _lastFineOfRemoteShift(List<WorkSession> sessions) {
+    var remote = false;
+    DateTime? last;
+    for (final s in sessions) {
+      switch (s.eventType) {
+        case 'ingresso':
+          remote = s.notes == reconciledOrphanMarker;
+        case 'fine':
+          last = remote ? s.eventTime : null;
+          remote = false;
+      }
+    }
+    return last;
   }
 
   /// The most recent ingresso/ripresa that has no closing fine/pausa after it — i.e. the opener

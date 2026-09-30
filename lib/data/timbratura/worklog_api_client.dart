@@ -315,6 +315,23 @@ class WorklogApiClient {
     return list.cast<Map<String, dynamic>>().map(TodayWorkLogDto.fromJson).toList();
   }
 
+  /// POST /api/worklog/end — clock out. The server ends whatever open row the caller has (during
+  /// a break that is the break row, which closes the day) using ITS clock; 404 when nothing is
+  /// open. Used for a shift that was started on another device — see TimbraSyncService.
+  Future<void> endWork() async {
+    await _dio.post<dynamic>('/api/worklog/end');
+  }
+
+  /// POST /api/worklog/break/start — 400 unless an ordinary (non-break) row is open.
+  Future<void> startBreak() async {
+    await _dio.post<dynamic>('/api/worklog/break/start');
+  }
+
+  /// POST /api/worklog/break/end — 404 unless a break is open.
+  Future<void> endBreak() async {
+    await _dio.post<dynamic>('/api/worklog/break/end');
+  }
+
   /// GET /api/WorkLog?userId=&dateFrom=&dateTo=
   ///
   /// This user's own plain WorkLog entries (no ticket/cantiere scope) between [dateFrom] and

@@ -146,7 +146,8 @@ void main() {
     test(
       'local never punched in + server on shift with a start time → backfills ingresso, marked orphaned',
       () async {
-        final serverStart = DateTime.utc(2026, 8, 31, 7, 45);
+        // Relative to now: a start before local midnight is (deliberately) clamped to midnight.
+        final serverStart = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
         final repo = _FakeRepo([]);
         final reconciler = WorkLogReconciler(repo: repo, fetchActive: _noTrackers);
 
@@ -176,7 +177,8 @@ void main() {
     test(
       'idempotent: backfill correction run 3 times converges, no duplicate ingresso rows',
       () async {
-        final serverStart = DateTime.utc(2026, 8, 31, 7, 45);
+        // Relative to now: a start before local midnight is (deliberately) clamped to midnight.
+        final serverStart = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
         final repo = _FakeRepo([]);
         final reconciler = WorkLogReconciler(repo: repo, fetchActive: _noTrackers);
         final snapshot = ServerWorkLogSnapshot(
@@ -228,7 +230,8 @@ void main() {
     });
 
     test('backfills from the attendance row of /worklog/active', () async {
-      final serverStart = DateTime.utc(2026, 8, 31, 7, 45);
+      // Relative to now: a start before local midnight is (deliberately) clamped to midnight.
+        final serverStart = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
       final repo = _FakeRepo([]);
       final reconciler = WorkLogReconciler(
         repo: repo,

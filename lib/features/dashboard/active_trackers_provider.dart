@@ -140,7 +140,8 @@ final visibleTrackersProvider = Provider.autoDispose<List<ActiveTracker>>((ref) 
   ActiveTracker? attendance;
   if (hasUnsynced) {
     attendance = localRow();
-  } else if (serverAttendance != null && !_supersededByLocalStop(serverAttendance, sessions)) {
+  } else if (serverAttendance != null &&
+      (timbra.isOnShift || !_supersededByLocalStop(serverAttendance, sessions))) {
     attendance = serverAttendance;
   } else {
     attendance = localRow();
