@@ -133,7 +133,7 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
   final subtitle = [
     location?.address,
     location?.city,
-    location?.province,
+    location?.postalCode,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
   final customerLabel = customerName;
   // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
