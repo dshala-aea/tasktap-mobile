@@ -3551,8 +3551,25 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "OK"
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalInviteResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalInviteResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalInviteResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -3658,6 +3675,36 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/customer-portal/landing": {
+      "get": {
+        "tags": [
+          "CustomerPortal"
+        ],
+        "summary": "Slug-less landing: tells a signed-in portal customer which portal they belong to, so the\nclient can route by identity instead of by a slug remembered from a login page. The slug\ncomes from the principal\u0027s tenant claim, never from the request.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPortalLandingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPortalLandingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPortalLandingDto"
+                }
+              }
+            }
           }
         }
       }
@@ -20847,6 +20894,18 @@
         },
         "description": "A customer asking for an intervention. There is deliberately no CustomerId: the customer is\nwhoever the token says they are, never whoever the body claims."
       },
+      "CustomerPortalLandingDto": {
+        "required": [
+          "tenantSlug"
+        ],
+        "type": "object",
+        "properties": {
+          "tenantSlug": {
+            "type": "string"
+          }
+        },
+        "description": "Where a signed-in portal customer belongs. Only the tenant\u0027s public slug (already in every\nportal login URL), nothing else about the tenant or the customer."
+      },
       "DecideAbsenceRequestBody": {
         "type": "object",
         "properties": {
@@ -23953,6 +24012,30 @@
           }
         },
         "description": "What can be bought. Prices are deliberately absent \u2014 Stripe quotes them, not this\n    app (see the endpoint\u0027s original remarks). As of the seat-tier-pricing redesign, seat/tier\n    lookup keys are absent too: nothing in this app\u0027s own UI ever read them (confirmed \u2014 see\n    docs/superpowers/specs/2026-09-17-seat-tier-pricing-design.md), and a single lookup key per\n    seat type stopped being a coherent concept once seat price became tier-specific."
+      },
+      "PortalInviteResponse": {
+        "required": [
+          "id",
+          "portalUrl",
+          "portalLinkSent"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "portalUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "portalLinkSent": {
+            "type": "boolean"
+          }
+        },
+        "description": "Result of an invitation. \u0060PortalUrl\u0060 is the generic portal entry page the customer uses after setting the\npassword (null when the public base URL is not configured); \u0060PortalLinkSent\u0060 says whether\nTaskTap\u0027s own mail carrying it was accepted for delivery."
       },
       "ProblemDetails": {
         "type": "object",
