@@ -81,7 +81,7 @@ void main() {
       expect(find.text('user-1'), findsNothing);
     });
 
-    testWidgets('a staff row unknown to the colleagues mirror falls back to the raw id', (
+    testWidgets('a staff row unknown to the colleagues mirror falls back to a placeholder, never the raw id', (
       tester,
     ) async {
       final container = _buildContainer(
@@ -93,7 +93,8 @@ void main() {
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
-      expect(find.text('user-unsynced'), findsOneWidget);
+      expect(find.text('Collega non ancora sincronizzato'), findsOneWidget);
+      expect(find.text('user-unsynced'), findsNothing);
     });
   });
 }
