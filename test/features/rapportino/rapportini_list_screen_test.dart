@@ -23,7 +23,48 @@ import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:go_router/go_router.dart';
+import 'package:tasktap_mobile/data/reports/server_report_api_client.dart';
+import 'package:tasktap_mobile/data/reports/server_report_dto.dart';
 import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
+
+import '../../data/reports/server_report_dto_test.dart' show backendFixture;
+
+class _FakeServerApi extends ServerReportApiClient {
+  _FakeServerApi({this.fail = false}) : super(Dio());
+  final bool fail;
+  @override
+  Future<ServerReportDto> fetchReport(String reportId) async {
+    if (fail) throw DioException(requestOptions: RequestOptions(path: '/x'));
+    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId});
+  }
+}
+
+class _NoopSync extends SyncNotifier {
+  _NoopSync(AppDatabase db) : super(SyncService(db: db, dio: Dio()), db);
+  @override
+  Future<void> performSync() async {}
+}
+
+Widget _buildRouted({required AppDatabase db, required ServerReportApiClient api}) {
+  final router = GoRouter(
+    routes: [
+      GoRoute(path: '/', builder: (_, _) => const RapportiniListScreen()),
+      GoRoute(
+        path: '/altro/rapportini/editor/:reportId',
+        builder: (_, s) => Scaffold(body: Text('editor:${s.pathParameters['reportId']}')),
+      ),
+    ],
+  );
+  return ProviderScope(
+    overrides: [
+      appDatabaseProvider.overrideWithValue(db),
+      syncProvider.overrideWith((ref) => _NoopSync(db)),
+      serverReportApiClientProvider.overrideWithValue(api),
+    ],
+    child: MaterialApp.router(routerConfig: router),
+  );
+}
 
 class MockDio extends Mock implements Dio {}
 
@@ -37,6 +78,7 @@ Future<void> _seedDraft(
   String title = 'Rapportino di test',
   String submissionState = 'draft',
   String stato = 'Bozza',
+  bool isLocalOnly = true,
 }) async {
   await db
       .into(db.draftReports)
@@ -48,7 +90,7 @@ Future<void> _seedDraft(
           title: title,
           insertedUserId: 'user-1',
           locationId: 'loc-1',
-          isLocalOnly: const Value(true),
+          isLocalOnly: Value(isLocalOnly),
           stato: Value(stato),
           submissionState: Value(submissionState),
         ),
@@ -120,6 +162,55 @@ void main() {
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
       expect(find.text('INVIATA'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('RapportiniListScreen — opening a server-created Bozza', () {
+    testWidgets('imports the full report before opening the editor', (tester) async {
+      await _seedDraft(db, id: 'srv-1', title: 'Da server', isLocalOnly: false);
+
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Da server'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('editor:srv-1'), findsOneWidget);
+      expect(await db.select(db.reportStaffTable).get(), hasLength(1));
+      final row = await (db.select(db.draftReports)..where((r) => r.id.equals('srv-1'))).getSingle();
+      expect(row.diagnosi, 'Pompa bloccata');
+      expect(row.isLocalOnly, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a failed import shows an error and does not open a blank editor', (tester) async {
+      await _seedDraft(db, id: 'srv-1', title: 'Da server', isLocalOnly: false);
+
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi(fail: true)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Da server'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('serve la connessione'), findsOneWidget);
+      expect(find.text('editor:srv-1'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a local draft opens straight away, no import', (tester) async {
+      await _seedDraft(db, id: 'loc-1', title: 'Locale');
+
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi(fail: true)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Locale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('editor:loc-1'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -5,7 +5,6 @@ import 'package:uuid/uuid.dart';
 
 import '../local/app_database.dart';
 import 'server_report_api_client.dart';
-import 'server_report_dto.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // importServerReport — make a report that was created SERVER-side (the AI copilot's Confirm, or a

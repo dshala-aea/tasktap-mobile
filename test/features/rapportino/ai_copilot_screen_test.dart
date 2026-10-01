@@ -9,6 +9,7 @@
 // Confirm navigates to the created report's editor route.
 
 import 'package:dio/dio.dart';
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,17 @@ import 'package:go_router/go_router.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/reports/server_report_api_client.dart';
+import 'package:tasktap_mobile/data/reports/server_report_dto.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart'
+    show SyncNotifier, SyncService, appDatabaseProvider, syncProvider;
 import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
+import 'package:tasktap_mobile/features/rapportino/steps/step_dettagli.dart';
+import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
+import 'package:tasktap_mobile/core/location/location_service.dart' show gpsPreferenceProvider;
+
+import '../../data/reports/server_report_dto_test.dart' show backendFixture;
 
 class _FakeAiApiClient extends AiApiClient {
   _FakeAiApiClient({
@@ -61,7 +72,35 @@ class _FakeAiApiClient extends AiApiClient {
   Future<void> abandonConversation(String sessionId) async {}
 }
 
-Widget _wrap(AiApiClient client, {String? ticketId}) {
+/// Serves the backend-shaped fixture (re-keyed to the confirmed report id) or fails on demand.
+class _FakeServerReportApi extends ServerReportApiClient {
+  _FakeServerReportApi({this.fail = false}) : super(Dio());
+  bool fail;
+  final fetched = <String>[];
+
+  @override
+  Future<ServerReportDto> fetchReport(String reportId) async {
+    fetched.add(reportId);
+    if (fail) throw DioException(requestOptions: RequestOptions(path: '/api/Reports/$reportId'));
+    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId});
+  }
+}
+
+/// Keeps the post-import lookup sync off the network in widget tests.
+class _NoopSync extends SyncNotifier {
+  _NoopSync(AppDatabase db) : super(SyncService(db: db, dio: Dio()), db);
+  @override
+  Future<void> performSync() async {}
+}
+
+Widget _wrap(
+  AiApiClient client, {
+  String? ticketId,
+  AppDatabase? db,
+  ServerReportApiClient? serverApi,
+}) {
+  final database = db ?? AppDatabase(NativeDatabase.memory());
+  if (db == null) addTearDown(database.close);
   final router = GoRouter(
     initialLocation: '/copilot',
     routes: [
@@ -71,16 +110,45 @@ Widget _wrap(AiApiClient client, {String? ticketId}) {
       ),
       GoRoute(
         path: '/altro/rapportini/editor/:reportId',
-        builder: (context, state) =>
-            Scaffold(body: Text('editor:${state.pathParameters['reportId']}')),
+        // The real Dettagli step stands in for the editor: it reads ONLY from Drift, exactly like
+        // the real editor, so what it shows is what the import wrote.
+        builder: (context, state) => Scaffold(
+          body: Column(
+            children: [
+              Text('editor:${state.pathParameters['reportId']}'),
+              Expanded(
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final id = state.pathParameters['reportId']!;
+                    // Like the real form screen: build the step only once hydration finished.
+                    if (ref.watch(reportEditorProvider(id)).isLoading) return const SizedBox();
+                    return StepDettagli(reportId: id);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     ],
   );
 
   return ProviderScope(
-    overrides: [aiApiClientProvider.overrideWithValue(client)],
+    overrides: [
+      aiApiClientProvider.overrideWithValue(client),
+      appDatabaseProvider.overrideWithValue(database),
+      syncProvider.overrideWith((ref) => _NoopSync(database)),
+      serverReportApiClientProvider.overrideWithValue(serverApi ?? _FakeServerReportApi()),
+      gpsPreferenceProvider.overrideWithValue(false),
+    ],
     child: MaterialApp.router(routerConfig: router),
   );
+}
+
+/// Tear the tree down and let drift's stream-cleanup timers fire before the test ends.
+Future<void> _unmount(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pump(const Duration(seconds: 1));
 }
 
 void main() {
@@ -166,28 +234,6 @@ void main() {
     expect(confirmButton.onPressed, isNull);
   });
 
-  testWidgets('a successful Confirm navigates to the created report editor', (tester) async {
-    final client = _FakeAiApiClient(
-      turnResult: const AiConversationTurnResult(
-        assistantReplyText: 'Fatto.',
-        draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], activities: [], openItems: []),
-      ),
-      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
-    );
-
-    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byType(TextFormField), 'Ho fatto il lavoro');
-    await tester.tap(find.byTooltip('Invia'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(AppButton, 'Conferma e crea rapportino'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('editor:rpt-1'), findsOneWidget);
-  });
-
   testWidgets('a failed Confirm shows the error and stays on the screen', (tester) async {
     final client = _FakeAiApiClient(
       turnResult: const AiConversationTurnResult(
@@ -209,5 +255,115 @@ void main() {
 
     expect(find.textContaining('La bozza è cambiata'), findsOneWidget);
     expect(find.text('editor:rpt-1'), findsNothing);
+  });
+
+  Future<void> confirmFlow(WidgetTester tester) async {
+    await tester.enterText(find.byType(TextFormField), 'Ho fatto il lavoro');
+    await tester.tap(find.byTooltip('Invia'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(AppButton, 'Conferma e crea rapportino'));
+    await tester.pumpAndSettle();
+  }
+
+  const emptyDraft = AiConversationTurnResult(
+    assistantReplyText: 'Fatto.',
+    draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], activities: [], openItems: []),
+  );
+
+  testWidgets('Confirm imports the server report into Drift before opening the editor', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final serverApi = _FakeServerReportApi();
+    final client = _FakeAiApiClient(
+      turnResult: emptyDraft,
+      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
+    );
+
+    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db, serverApi: serverApi));
+    await tester.pumpAndSettle();
+    await confirmFlow(tester);
+
+    expect(serverApi.fetched, ['rpt-1']);
+    expect(find.text('editor:rpt-1'), findsOneWidget);
+    // The editor shows the confirmed values, not a blank form.
+    expect(find.text('Sostituita pompa; verificata tenuta'), findsOneWidget);
+    expect(find.text('Pompa bloccata'), findsOneWidget);
+    expect(find.text('Sostituita'), findsOneWidget);
+    expect(await db.select(db.reportStaffTable).get(), hasLength(1));
+    expect(await db.select(db.reportMateriali).get(), hasLength(2));
+    final row = await (db.select(db.draftReports)..where((r) => r.id.equals('rpt-1'))).getSingle();
+    expect(row.tenantId, '22222222-2222-2222-2222-222222222222');
+    await _unmount(tester);
+  });
+
+  testWidgets('a cantiere-bound copilot keeps its cantiereId on the imported report', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final router = GoRouter(
+      initialLocation: '/copilot',
+      routes: [
+        GoRoute(path: '/copilot', builder: (_, _) => const AiCopilotScreen(cantiereId: 'cant-7')),
+        GoRoute(
+          path: '/altro/rapportini/editor/:reportId',
+          builder: (_, state) => Scaffold(body: Text('editor:${state.pathParameters['reportId']}')),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          aiApiClientProvider.overrideWithValue(
+            _FakeAiApiClient(
+              turnResult: emptyDraft,
+              confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
+            ),
+          ),
+          appDatabaseProvider.overrideWithValue(db),
+          syncProvider.overrideWith((ref) => _NoopSync(db)),
+          serverReportApiClientProvider.overrideWithValue(_FakeServerReportApi()),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await confirmFlow(tester);
+
+    final row = await (db.select(db.draftReports)..where((r) => r.id.equals('rpt-1'))).getSingle();
+    expect(row.cantiereId, 'cant-7');
+  });
+
+  testWidgets('a failed import keeps the session, shows an error and does NOT open the editor', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final serverApi = _FakeServerReportApi(fail: true);
+    final client = _FakeAiApiClient(
+      turnResult: emptyDraft,
+      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
+    );
+
+    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db, serverApi: serverApi));
+    await tester.pumpAndSettle();
+    await confirmFlow(tester);
+
+    expect(find.textContaining('non è stato possibile scaricarlo'), findsWidgets);
+    expect(find.text('editor:rpt-1'), findsNothing);
+    expect(find.text('Fatto.'), findsOneWidget); // conversation still on screen
+    expect(await db.select(db.draftReports).get(), isEmpty);
+
+    // Retry re-runs only the import (Confirm is not repeated) and then opens the editor.
+    serverApi.fail = false;
+    await tester.tap(find.widgetWithText(AppButton, 'Riprova'));
+    await tester.pumpAndSettle();
+
+    expect(serverApi.fetched, ['rpt-1', 'rpt-1']);
+    expect(find.text('editor:rpt-1'), findsOneWidget);
+    expect(find.text('Pompa bloccata'), findsOneWidget);
+    await _unmount(tester);
   });
 }

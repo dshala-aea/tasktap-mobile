@@ -488,7 +488,8 @@ class _StaffTileState extends State<_StaffTile> {
                   builder: (context, ref, _) => Text(
                     row.displayName.isNotEmpty
                         ? row.displayName
-                        : (ref.watch(colleagueNameProvider(row.userId)).valueOrNull ?? row.userId),
+                        : (ref.watch(colleagueNameProvider(row.userId)).valueOrNull ??
+                            'Collega non ancora sincronizzato'),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,

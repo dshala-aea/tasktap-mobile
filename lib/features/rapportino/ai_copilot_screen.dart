@@ -14,6 +14,7 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
+import 'import_server_report_action.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AiCopilotScreen — the multi-turn AI copilot (distinct from step_dettagli.dart's
@@ -69,6 +70,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _starting = true;
   bool _sending = false;
   bool _confirming = false;
+
+  /// Set once Confirm succeeded: the report exists on the server and only the local import is
+  /// left. A failed import retries THAT step (never Confirm again, never a blank editor).
+  String? _confirmedReportId;
+  String? _importError;
   String? _startError;
   String? _confirmKey;
   int _thinkingStage = 0;
@@ -134,7 +140,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     final sessionId = _sessionId;
-    if (text.isEmpty || sessionId == null || _sending) return;
+    if (text.isEmpty || sessionId == null || _sending || _confirmedReportId != null) return;
 
     setState(() {
       _messages.add(_ChatMessage(isOperator: true, text: text));
@@ -176,8 +182,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           .read(aiApiClientProvider)
           .confirmConversation(sessionId, idempotencyKey: _confirmKey!);
       if (!mounted) return;
-      showAppToast(context, message: 'Rapportino creato', tone: ToastTone.success);
-      context.go(AppRoutes.rapportiniEditor(result.reportId));
+      _confirmedReportId = result.reportId;
+      await _importAndOpen();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -187,6 +193,40 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         if (e is AiConversationException && e.isStaleVersionConflict) _confirmKey = null;
       });
       showAppToast(context, message: e.toString(), tone: ToastTone.error);
+    }
+  }
+
+  /// Mirror the server-created report into the local DB, THEN open the editor. The editor reads
+  /// only Drift, so opening it first shows a blank form whose submit would wipe the server's
+  /// diagnosi/soluzione and child rows.
+  Future<void> _importAndOpen() async {
+    final reportId = _confirmedReportId;
+    if (reportId == null) return;
+    setState(() {
+      _confirming = true;
+      _importError = null;
+    });
+    try {
+      await importServerReportForEditing(
+        ref,
+        reportId: reportId,
+        cantiereId: widget.cantiereId,
+        // Replay of an earlier Confirm may find an already-imported row: keep the technician's
+        // edits (default) rather than overwrite.
+      );
+      if (!mounted) return;
+      showAppToast(context, message: 'Rapportino creato', tone: ToastTone.success);
+      context.go(AppRoutes.rapportiniEditor(reportId));
+    } catch (e) {
+      if (!mounted) return;
+      const message =
+          'Il rapportino è stato creato ma non è stato possibile scaricarlo sul telefono. '
+          'Controlla la connessione e riprova.';
+      setState(() {
+        _confirming = false;
+        _importError = message;
+      });
+      showAppToast(context, message: message, tone: ToastTone.error);
     }
   }
 
@@ -259,6 +299,19 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                     _draft.openItems.isNotEmpty)
                   _buildDraftSummary(context),
                 _buildInputRow(context, sessionReady, quotaExhausted),
+                if (_importError != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.pagePadding,
+                      AppSpacing.sm,
+                      AppSpacing.pagePadding,
+                      0,
+                    ),
+                    child: Text(
+                      _importError!,
+                      style: TextStyle(color: context.colors.red, fontSize: 13),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.pagePadding,
@@ -273,12 +326,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: AppButton(
-                          label: _confirming ? 'Creazione…' : 'Conferma e crea rapportino',
-                          onPressed: !sessionReady || _messages.isEmpty || blocked || _confirming
-                              ? null
-                              : _confirm,
-                        ),
+                        child: _confirmedReportId != null
+                            ? AppButton(
+                                label: _confirming ? 'Scarico il rapportino…' : 'Riprova',
+                                onPressed: _confirming ? null : _importAndOpen,
+                              )
+                            : AppButton(
+                                label: _confirming ? 'Creazione…' : 'Conferma e crea rapportino',
+                                onPressed:
+                                    !sessionReady || _messages.isEmpty || blocked || _confirming
+                                    ? null
+                                    : _confirm,
+                              ),
                       ),
                     ],
                   ),

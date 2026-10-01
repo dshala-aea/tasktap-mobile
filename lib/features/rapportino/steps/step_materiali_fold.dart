@@ -731,7 +731,12 @@ class _MaterialeQtyStepper extends ConsumerWidget {
     final resolvedName = row.freeTextName != null || row.materialeId == null
         ? null
         : ref.watch(materialeNameProvider(row.materialeId!)).valueOrNull;
-    final displayName = row.freeTextName ?? resolvedName ?? row.materialeId ?? '';
+    // An imported row can point at a catalog entry this device has not synced yet: say so
+    // instead of showing a bare GUID (the id is still kept and submitted).
+    final displayName =
+        row.freeTextName ??
+        resolvedName ??
+        (row.materialeId != null ? 'Materiale non ancora sincronizzato' : '');
 
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 10),

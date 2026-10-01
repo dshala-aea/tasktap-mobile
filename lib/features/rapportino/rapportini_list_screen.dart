@@ -16,6 +16,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/report_editor_providers.dart';
 import 'create_draft.dart';
+import 'import_server_report_action.dart';
 import 'rapportino_list_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -343,8 +344,28 @@ class _RapportinoRow extends ConsumerWidget {
     final subtitle = subParts.join(' · ');
 
     final row = InkWell(
-      onTap: () {
+      onTap: () async {
         if (canEditOrDelete) {
+          // A Bozza that only arrived through sync (created server-side, e.g. by the AI copilot,
+          // or on another device) is a header with no staff/materiali/controlli: opening it as is
+          // would show a blank form whose submit deletes the server's data. Pull the full report
+          // first; offline or failed means we do not open it at all.
+          if (draft.stato == 'Bozza' && !draft.isLocalOnly) {
+            try {
+              await importServerReportForEditing(ref, reportId: draft.id);
+            } catch (_) {
+              if (!context.mounted) return;
+              showAppToast(
+                context,
+                message:
+                    'Per aprire questo rapportino serve la connessione: i dati completi vanno '
+                    'scaricati sul telefono. Riprova più tardi.',
+                tone: ToastTone.error,
+              );
+              return;
+            }
+            if (!context.mounted) return;
+          }
           context.push(AppRoutes.rapportiniEditor(draft.id));
         } else {
           context.push(AppRoutes.rapportiniView(draft.id));
