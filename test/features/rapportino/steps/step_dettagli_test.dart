@@ -40,6 +40,8 @@ AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 ProviderContainer _buildContainer({
   required AppDatabase db,
   String details = '',
+  String? diagnosi,
+  String? soluzione,
   String? ticketId,
   String? ticketFreeText,
   String? cantiereId,
@@ -68,6 +70,8 @@ ProviderContainer _buildContainer({
             insertedUserId: 'user-1',
             scheduleId: 'sched-1',
             details: details,
+            diagnosi: diagnosi,
+            soluzione: soluzione,
             ticketId: ticketId,
             ticketFreeText: ticketFreeText,
             cantiereId: cantiereId,
@@ -111,6 +115,46 @@ void main() {
 
       expect(find.text('Genera'), findsNothing);
       expect(find.text('Bozza automatica'), findsNothing);
+    });
+  });
+
+  group('StepDettagli — Diagnosi / Soluzione', () {
+    testWidgets('hidden on a report with no ticket and no stored diagnosi/soluzione', (
+      tester,
+    ) async {
+      final container = _buildContainer(db: db);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DIAGNOSI', findRichText: true), findsNothing);
+      expect(find.text('SOLUZIONE', findRichText: true), findsNothing);
+    });
+
+    testWidgets('shown with the imported values and editable', (tester) async {
+      final container = _buildContainer(db: db, diagnosi: 'Pompa bloccata', soluzione: 'Sostituita');
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DIAGNOSI', findRichText: true), findsOneWidget);
+      expect(find.text('SOLUZIONE', findRichText: true), findsOneWidget);
+      expect(find.text('Pompa bloccata'), findsOneWidget);
+      expect(find.text('Sostituita'), findsOneWidget);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Pompa bloccata'), 'Guasto');
+      await tester.pump();
+      expect(container.read(reportEditorProvider(_reportId)).diagnosi, 'Guasto');
+    });
+
+    testWidgets('shown on a ticket-linked report even when empty', (tester) async {
+      final container = _buildContainer(db: db, ticketId: 'ticket-1');
+      addTearDown(container.dispose);
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DIAGNOSI', findRichText: true), findsOneWidget);
+      expect(find.text('SOLUZIONE', findRichText: true), findsOneWidget);
     });
   });
 

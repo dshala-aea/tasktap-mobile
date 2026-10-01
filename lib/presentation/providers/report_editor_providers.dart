@@ -219,6 +219,8 @@ class ReportEditorState {
     this.currentStep = RapportinoStep.dati,
     this.title = '',
     this.details = '',
+    this.diagnosi,
+    this.soluzione,
     this.customerId,
     this.customerFreeText,
     this.workAddress,
@@ -257,6 +259,12 @@ class ReportEditorState {
   // Step 1 — Dati
   final String title;
   final String details;
+
+  /// Diagnosi / Soluzione. Tri-state like the Drift columns they mirror: null = never touched
+  /// (submit omits it, the server keeps its value, e.g. text from an AI-confirmed report),
+  /// '' = the technician cleared it, anything else replaces it.
+  final String? diagnosi;
+  final String? soluzione;
   final String? customerId;
   final String? customerFreeText;
   final String? workAddress;
@@ -343,6 +351,8 @@ class ReportEditorState {
     ticketId: ticketId,
     customerId: customerId,
     details: details.isEmpty ? null : details,
+    diagnosi: diagnosi,
+    soluzione: soluzione,
     metadataJson: null, // not consulted by validateDraft
     insertedUserId: insertedUserId,
     locationId: locationId ?? '',
@@ -375,6 +385,8 @@ class ReportEditorState {
     RapportinoStep? currentStep,
     String? title,
     String? details,
+    String? diagnosi,
+    String? soluzione,
     String? customerId,
     String? customerFreeText,
     String? workAddress,
@@ -422,6 +434,8 @@ class ReportEditorState {
       currentStep: currentStep ?? this.currentStep,
       title: title ?? this.title,
       details: details ?? this.details,
+      diagnosi: diagnosi ?? this.diagnosi,
+      soluzione: soluzione ?? this.soluzione,
       customerId: clearCustomerId ? null : (customerId ?? this.customerId),
       customerFreeText: clearCustomerFreeText ? null : (customerFreeText ?? this.customerFreeText),
       workAddress: workAddress ?? this.workAddress,
@@ -562,6 +576,8 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     state = state.copyWith(
       title: draft.title,
       details: draft.details ?? '',
+      diagnosi: draft.diagnosi,
+      soluzione: draft.soluzione,
       customerId: draft.customerId,
       locationId: draft.locationId,
       ticketId: draft.ticketId,
@@ -681,6 +697,16 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
 
   Future<void> setDetails(String value) async {
     state = state.copyWith(details: value);
+    await _autosave();
+  }
+
+  Future<void> setDiagnosi(String value) async {
+    state = state.copyWith(diagnosi: value);
+    await _autosave();
+  }
+
+  Future<void> setSoluzione(String value) async {
+    state = state.copyWith(soluzione: value);
     await _autosave();
   }
 
@@ -1070,6 +1096,10 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       // blob that never included it, and that blob is what reached the backend/customer PDF as
       // "Descrizione". `details` and `metadataJson` are independent columns now.
       details: Value(state.details.isEmpty ? null : state.details),
+      // Written as-is: null (never touched) must stay null and '' (cleared) must stay '' — the
+      // submit body turns them into "keep server value" vs "clear" respectively.
+      diagnosi: Value(state.diagnosi),
+      soluzione: Value(state.soluzione),
       metadataJson: Value(_buildMetadataJson()),
       insertedUserId: Value(state.insertedUserId),
       locationId: Value(state.locationId ?? ''),

@@ -142,6 +142,48 @@ void main() {
       expect(draft!.details, 'Intervento ordinario');
     });
 
+    test('setDiagnosi/setSoluzione persist verbatim; untouched stays null', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, repo) = await _makeEditor(db);
+
+      // Untouched: another autosave must not turn null into '' (null = keep the server value).
+      await notifier.setTitle('Titolo');
+      var draft = await repo.getDraft('draft-1');
+      expect(draft!.diagnosi, isNull);
+      expect(draft.soluzione, isNull);
+
+      await notifier.setDiagnosi('Pompa bloccata');
+      await notifier.setSoluzione('Sostituita');
+      draft = await repo.getDraft('draft-1');
+      expect(draft!.diagnosi, 'Pompa bloccata');
+      expect(draft.soluzione, 'Sostituita');
+
+      // Clearing is an explicit empty string, not null.
+      await notifier.setDiagnosi('');
+      draft = await repo.getDraft('draft-1');
+      expect(draft!.diagnosi, '');
+    });
+
+    test('hydrates diagnosi/soluzione from the stored draft', () async {
+      await db
+          .into(db.draftReports)
+          .insert(
+            DraftReportsCompanion.insert(
+              id: 'draft-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 6, 21, 10),
+              title: 'init',
+              insertedUserId: 'user-1',
+              locationId: 'l1',
+              diagnosi: const Value('D'),
+              soluzione: const Value('S'),
+            ),
+          );
+      final (notifier, _) = await _makeEditor(db);
+      expect(notifier.state.diagnosi, 'D');
+      expect(notifier.state.soluzione, 'S');
+    });
+
     test('setCustomerFromCache sets customerId and clears freeText', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);

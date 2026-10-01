@@ -36,6 +36,8 @@ class StepDettagli extends ConsumerStatefulWidget {
 class _StepDettagliState extends ConsumerState<StepDettagli> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _detailsCtrl;
+  late final TextEditingController _diagnosiCtrl;
+  late final TextEditingController _soluzioneCtrl;
   late final TextEditingController _workAddressCtrl;
 
   /// Whether the optional ticket/cantiere link is expanded.
@@ -51,6 +53,8 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     final s = ref.read(reportEditorProvider(widget.reportId));
     _titleCtrl = TextEditingController(text: s.title);
     _detailsCtrl = TextEditingController(text: s.details);
+    _diagnosiCtrl = TextEditingController(text: s.diagnosi ?? '');
+    _soluzioneCtrl = TextEditingController(text: s.soluzione ?? '');
     _workAddressCtrl = TextEditingController(text: s.workAddress ?? '');
     _showCollegamento =
         (s.ticketFreeText?.isNotEmpty ?? false) || (s.cantiereFreeText?.isNotEmpty ?? false);
@@ -68,6 +72,8 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   void dispose() {
     _titleCtrl.dispose();
     _detailsCtrl.dispose();
+    _diagnosiCtrl.dispose();
+    _soluzioneCtrl.dispose();
     _workAddressCtrl.dispose();
     super.dispose();
   }
@@ -184,6 +190,37 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               onChanged: (v) => notifier.setDetails(v),
             ),
           ),
+
+          // Diagnosi / Soluzione belong to an intervention on a ticket, so they appear for a
+          // ticket-linked report — and whenever a value is already stored (e.g. imported from an
+          // AI-confirmed report on a cantiere), so it can be read and corrected instead of being
+          // silently re-sent. Left untouched they stay null and the server keeps its own text.
+          if (state.ticketId != null || state.diagnosi != null || state.soluzione != null) ...[
+            const SizedBox(height: 12),
+            AppTextField(
+              controller: _diagnosiCtrl,
+              label: 'Diagnosi',
+              hint: 'Cosa hai riscontrato...',
+              maxLines: 3,
+              onChanged: (v) => notifier.setDiagnosi(v),
+              suffixIcon: DictateButton(
+                controller: _diagnosiCtrl,
+                onChanged: (v) => notifier.setDiagnosi(v),
+              ),
+            ),
+            const SizedBox(height: 12),
+            AppTextField(
+              controller: _soluzioneCtrl,
+              label: 'Soluzione',
+              hint: 'Come hai risolto...',
+              maxLines: 3,
+              onChanged: (v) => notifier.setSoluzione(v),
+              suffixIcon: DictateButton(
+                controller: _soluzioneCtrl,
+                onChanged: (v) => notifier.setSoluzione(v),
+              ),
+            ),
+          ],
 
           // ── Collegamento, only when there isn't one already ─────────────────
           if (linkedTicket == null && linkedCantiere == null) ...[
