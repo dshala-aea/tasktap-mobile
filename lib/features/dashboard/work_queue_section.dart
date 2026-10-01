@@ -90,9 +90,10 @@ extension on _Tier {
 // ── Row content (shared between the focus card and the compact row) ─────────────
 
 class _RowContent {
-  const _RowContent({required this.title, required this.subtitle, required this.timeLabel});
+  const _RowContent({required this.title, required this.subtitle, required this.timeLabel, required this.customerLabel});
   final String title;
   final String subtitle;
+  final String? customerLabel;
 
   /// Null for an all-day schedule — there is no real start time to show (see
   /// `_resolveRow`'s own doc comment), so the badge/meta row omits the time entirely rather
@@ -130,11 +131,11 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
       ? ref.watch(customerByIdProvider(location.customerId)).valueOrNull?.companyName
       : null;
   final subtitle = [
-    customerName,
     location?.address,
     location?.city,
     location?.province,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
+  final customerLabel = customerName;
   // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
   // 0/0), not a real time of day — formatting them unconditionally produced a literal "00:00"
   // that read as "starts at midnight" rather than "no time, all day". Gate on `allDay` the
@@ -145,6 +146,7 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
   return _RowContent(
     title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
     subtitle: subtitle,
+    customerLabel: customerLabel,
     timeLabel: timeLabel,
   );
 }
@@ -197,6 +199,15 @@ class _FocusCard extends ConsumerWidget {
               const SizedBox(height: 2),
               Text(
                 row.subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: c.inkMuted),
+              ),
+            ],
+            if (row.customerLabel?.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                row.customerLabel!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: c.inkMuted),

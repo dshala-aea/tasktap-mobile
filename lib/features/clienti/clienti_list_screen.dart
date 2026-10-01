@@ -150,11 +150,6 @@ class _ClienteRow extends ConsumerWidget {
       leading: AppAvatar(name: customer.companyName, size: 40),
       title: customer.companyName,
       subtitle: subLabel,
-      meta: Icon(
-        LucideIcons.chevronRight,
-        size: 16,
-        color: context.colors.inkMuted,
-      ),
       showDivider: !isLast,
       onTap: () => context.push(AppRoutes.clientiDetail(customer.id)),
     );
