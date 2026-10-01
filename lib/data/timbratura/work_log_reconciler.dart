@@ -99,11 +99,16 @@ class WorkLogReconciler {
   WorkLogReconciler({
     required IWorkSessionRepository repo,
     required Future<List<ActiveTracker>> Function() fetchActive,
+    DateTime Function() clock = DateTime.now,
   }) : _repo = repo,
-       _fetchActive = fetchActive;
+       _fetchActive = fetchActive,
+       _clock = clock;
 
   final IWorkSessionRepository _repo;
   final Future<List<ActiveTracker>> Function() _fetchActive;
+
+  /// Wall clock; injectable so the "today" boundary used by the backfill is testable.
+  final DateTime Function() _clock;
 
   // Reentrancy guard: resume, reconnect, a push and the poll can all fire close together. Without
   // it two overlapping reads of local state could both see the same stale "open" shift and each
@@ -227,7 +232,7 @@ class WorkLogReconciler {
     var start = server.activeStartTime;
     if (start == null) return;
 
-    final now = DateTime.now();
+    final now = _clock();
     final midnight = DateTime(now.year, now.month, now.day).toUtc();
     if (start.isBefore(midnight)) start = midnight;
 
