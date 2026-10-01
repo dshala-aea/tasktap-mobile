@@ -60,4 +60,39 @@ void main() {
       expect(json.containsKey('boolValue'), isTrue);
     });
   });
+
+  group('SubmitReportRequest diagnosi/soluzione', () {
+    const base = SubmitReportRequest(id: 'r1', locationId: 'l1', title: 'T');
+
+    test('are omitted when null so the server keeps its own value', () {
+      final json = base.toJson();
+      expect(json.containsKey('diagnosi'), isFalse);
+      expect(json.containsKey('soluzione'), isFalse);
+    });
+
+    test('are sent when set', () {
+      final json = const SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        diagnosi: 'Pompa bloccata',
+        soluzione: 'Sostituita',
+      ).toJson();
+      expect(json['diagnosi'], 'Pompa bloccata');
+      expect(json['soluzione'], 'Sostituita');
+    });
+
+    /// "" is the backend's explicit "clear" (null means keep), so it must reach the wire.
+    test('an empty string is sent, not dropped', () {
+      final json = const SubmitReportRequest(
+        id: 'r1',
+        locationId: 'l1',
+        title: 'T',
+        diagnosi: '',
+        soluzione: '',
+      ).toJson();
+      expect(json['diagnosi'], '');
+      expect(json['soluzione'], '');
+    });
+  });
 }

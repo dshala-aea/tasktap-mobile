@@ -17,6 +17,8 @@ class SubmitReportRequest {
     required this.locationId,
     required this.title,
     this.details,
+    this.diagnosi,
+    this.soluzione,
     this.technicianNotes,
     this.startedAt,
     this.endedAt,
@@ -49,6 +51,12 @@ class SubmitReportRequest {
 
   /// Full description / body.
   final String? details;
+
+  /// What was found / what was done. Tri-state, matching the backend rule in
+  /// `ReportSubmitService`: null = leave the server value alone (omitted from the JSON), ""
+  /// = clear it, any other text = replace it.
+  final String? diagnosi;
+  final String? soluzione;
 
   /// Internal technician notes (not printed on customer PDF).
   final String? technicianNotes;
@@ -100,6 +108,8 @@ class SubmitReportRequest {
     'locationId': locationId,
     'title': title,
     if (details != null) 'details': details,
+    if (diagnosi != null) 'diagnosi': diagnosi,
+    if (soluzione != null) 'soluzione': soluzione,
     if (technicianNotes != null) 'technicianNotes': technicianNotes,
     if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
     if (endedAt != null) 'endedAt': endedAt!.toUtc().toIso8601String(),

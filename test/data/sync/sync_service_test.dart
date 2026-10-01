@@ -388,6 +388,29 @@ void main() {
       expect(rows.first.stato, 'Bozza');
     });
 
+    test('carries diagnosi, soluzione and cantiereId from the synced report', () async {
+      _stubDioGet(
+        mockDio,
+        _syncPayload(
+          draftReports: [
+            {
+              ..._draftReportJson(),
+              'diagnosi': 'Pompa bloccata',
+              'soluzione': 'Sostituita',
+              'cantiereId': 'cantiere-9',
+            },
+          ],
+        ),
+      );
+
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(row.diagnosi, 'Pompa bloccata');
+      expect(row.soluzione, 'Sostituita');
+      expect(row.cantiereId, 'cantiere-9');
+    });
+
     test('inserts multiple entities in one sync', () async {
       _stubDioGet(
         mockDio,

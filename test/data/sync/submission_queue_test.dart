@@ -332,6 +332,64 @@ void main() {
     });
   });
 
+  group('SubmissionQueue.processAll — diagnosi/soluzione', () {
+    Future<SubmitReportRequest?> submitWith({String? diagnosi, String? soluzione}) async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      await (db.update(db.draftReports)..where((r) => r.id.equals('report-1'))).write(
+        DraftReportsCompanion(diagnosi: Value(diagnosi), soluzione: Value(soluzione)),
+      );
+      SubmitReportRequest? captured;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        captured = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(id: 'report-1', title: 'T', stato: '1', inviatoAt: null);
+      });
+      await queue.processAll();
+      return captured;
+    }
+
+    test('sends the draft diagnosi/soluzione on the request body', () async {
+      final req = await submitWith(diagnosi: 'Pompa bloccata', soluzione: 'Sostituita');
+      expect(req!.toJson()['diagnosi'], 'Pompa bloccata');
+      expect(req.toJson()['soluzione'], 'Sostituita');
+    });
+
+    test('omits them when null so the server keeps its value', () async {
+      final req = await submitWith();
+      expect(req!.toJson().containsKey('diagnosi'), isFalse);
+      expect(req.toJson().containsKey('soluzione'), isFalse);
+    });
+
+    test('an empty string is sent (explicit clear)', () async {
+      final req = await submitWith(diagnosi: '', soluzione: '');
+      expect(req!.toJson()['diagnosi'], '');
+      expect(req.toJson()['soluzione'], '');
+    });
+
+    test('carries material unitPrice so an imported price is not wiped on replace', () async {
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-1');
+      await (db.update(db.reportMateriali)..where((m) => m.reportId.equals('report-1'))).write(
+        const ReportMaterialiCompanion(unitPrice: Value(12.5)),
+      );
+      SubmitReportRequest? captured;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        captured = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(id: 'report-1', title: 'T', stato: '1', inviatoAt: null);
+      });
+      await queue.processAll();
+      expect(captured!.materiali.single.unitPrice, 12.5);
+    });
+  });
+
   group('SubmissionQueue.processAll — with pending allegati', () {
     test('uploads pending allegati before submitting', () async {
       await _insertDraft(

@@ -694,7 +694,10 @@ class ReportDto {
   final String? scheduleId;
   final String? ticketId;
   final String? customerId;
+  final String? cantiereId;
   final String? details;
+  final String? diagnosi;
+  final String? soluzione;
   final String insertedUserId;
   final String locationId;
   final DateTime? startedAt;
@@ -722,7 +725,10 @@ class ReportDto {
     this.scheduleId,
     this.ticketId,
     this.customerId,
+    this.cantiereId,
     this.details,
+    this.diagnosi,
+    this.soluzione,
     required this.insertedUserId,
     required this.locationId,
     this.startedAt,
@@ -751,7 +757,10 @@ class ReportDto {
     scheduleId: j['scheduleId'] as String?,
     ticketId: j['ticketId'] as String?,
     customerId: j['customerId'] as String?,
+    cantiereId: j['cantiereId'] as String?,
     details: j['details'] as String?,
+    diagnosi: j['diagnosi'] as String?,
+    soluzione: j['soluzione'] as String?,
     insertedUserId: j['insertedUserId'] as String,
     locationId: j['locationId'] as String,
     startedAt: _dt(j['startedAt']),
