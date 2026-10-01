@@ -1,168 +1,13 @@
 workflows:
   # ──────────────────────────────────────────────────────────────────────────────
-  # PR / branch checks — analyse + test, no artefacts
-  # ──────────────────────────────────────────────────────────────────────────────
-  check:
-    name: PR Check
-    max_build_duration: 20
-    environment:
-      flutter: 3.44.4
-      groups:
-        - tasktap_dartDefines
-    triggering:
-      events:
-        - pull_request
-    scripts:
-      - name: Install dependencies
-        script: flutter pub get
-      - name: Generate code (drift, riverpod)
-        script: dart run build_runner build --delete-conflicting-outputs
-      - name: Analyse
-        script: flutter analyze
-      - name: Unit tests
-        script: flutter test
-
-  # ──────────────────────────────────────────────────────────────────────────────
-  # Android — build APK + AAB, upload to Google Play (internal track)
-  # Triggered on push to main or manual tag v*
-  # ──────────────────────────────────────────────────────────────────────────────
-  android_release:
-    name: Android Release
-    max_build_duration: 40
-    environment:
-      flutter: 3.44.4
-      groups:
-        - tasktap_dartDefines
-        - tasktap_google_play        # GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, PACKAGE_NAME
-      android_signing:
-        - tasktap_keystore
-    # No `triggering:` — Android release builds moved to GitHub Actions
-    # (.github/workflows/android-release.yml). This workflow is kept as a manual fallback only
-    # (Codemagic UI → Start new build): with the push trigger it would publish a second build
-    # for every release. iOS below still builds here.
-    scripts:
-      - name: Install dependencies
-        script: flutter pub get
-      - name: Generate code (drift, riverpod)
-        script: dart run build_runner build --delete-conflicting-outputs
-      - name: Analyse
-        script: flutter analyze
-      - name: Unit tests
-        script: flutter test
-      - name: Bridge Codemagic's CM_-prefixed signing vars
-        script: |
-          # android/app/build.gradle.kts reads the plain names (KEYSTORE_PATH etc.) so a local
-          # release build can also pick up a developer's own keystore without any CM_ prefix.
-          # Codemagic's managed android_signing integration only exports the CM_-prefixed ones —
-          # without this bridge the release buildType's `if (KEYSTORE_PATH != null)` check is
-          # always false here and the CI build silently falls back to debug signing.
-          echo "KEYSTORE_PATH=$CM_KEYSTORE_PATH" >> $CM_ENV
-          echo "KEYSTORE_PASSWORD=$CM_KEYSTORE_PASSWORD" >> $CM_ENV
-          echo "KEY_ALIAS=$CM_KEY_ALIAS" >> $CM_ENV
-          echo "KEY_PASSWORD=$CM_KEY_PASSWORD" >> $CM_ENV
-      - name: Compute build number
-        script: |
-          # Was `git rev-list --count HEAD`, then `google-play get-latest-build-number + 1` —
-          # both turned out unreliable here. The git count isn't monotonic across branches/clone
-          # depths/history rewrites (produced versionCode 71 while Play's internal track was
-          # already past that). Switching to the Play API's own "latest build number" then
-          # produced 70 — LOWER than the already-rejected 71 — and still failed with the same
-          # "does not allow any existing users to upgrade" error: a failed release's uploaded
-          # bundle apparently isn't reliably reflected back by that query (the upload+set-release
-          # call's Android Publisher "edit" likely never got committed since the release-set step
-          # failed), so it cannot be trusted as a floor either.
-          #
-          # Epoch seconds sidesteps both failure modes: it only ever moves forward in real time,
-          # so it is unconditionally higher than any small-integer scheme this project has ever
-          # used (git counts in the low hundreds, Play query answers in the tens) — no query, no
-          # git history, nothing to be stale or wrong about. Safe as an Android versionCode
-          # (max allowed is 2100000000) until the year 2036, comfortably past this app's horizon.
-          echo "BUILD_NUMBER=$(date +%s)" >> $CM_ENV
-      - name: Work around AGP's android-37/android-37.0 SDK platform naming mismatch
-        script: |
-          # compileSdk 37 (set inside the permission_handler_android plugin's own build.gradle.kts,
-          # transitively pulled in via permission_handler — this repo's app-level compileSdk stays
-          # on flutter.compileSdkVersion and never sets 37 itself) resolves to the hash string
-          # "android-37" under AGP 9.1+, and the SDK manager installs API 37 under "android-37.0"
-          # (Android's newer minor-version platform naming). This symlink alone does NOT reliably
-          # fix the build — see the priming step right below, which addresses the actual bug.
-          # Kept as a harmless extra safety net. Known upstream bug:
-          # https://github.com/flutter/flutter/issues/192478
-          SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/share/android-sdk}"
-          mkdir -p "$SDK_ROOT/platforms"
-          ln -sfn "$SDK_ROOT/platforms/android-37.0" "$SDK_ROOT/platforms/android-37"
-      - name: Prime Android SDK Platform 37 install (AGP same-invocation cache bug)
-        script: |
-          # The real bug (confirmed by the upstream issue author's own repro, see
-          # https://github.com/flutter/flutter/issues/192478#issuecomment-5612822814): it is NOT
-          # a permanent filesystem naming mismatch the symlink above can patch around. AGP's
-          # SdkHandler caches the set of installed SDK components once per Gradle invocation. When
-          # AGP's own on-demand download installs a missing platform mid-build, later tasks in that
-          # SAME invocation still see a stale "not installed" cache entry and fail with "Failed to
-          # find target with hash string 'android-37'" — even though the install just completed.
-          # A fresh, separate Gradle invocation against an already-installed platform succeeds
-          # every time (confirmed both ways by the maintainer's own test). So: force the on-demand
-          # install to happen HERE, in a throwaway invocation whose failure we ignore, so the real
-          # build below starts a fresh invocation with the platform already on disk from before it
-          # started — no on-demand install happens inside that invocation at all.
-          #
-          # A first attempt at this primer ran a raw `./gradlew ... --dry-run` directly, which
-          # reproduced the SAME failure even on a branch that already had this step (confirmed live)
-          # — most likely because a bare `./gradlew` invocation doesn't go through the same
-          # `flutter build` setup path (e.g. `android/local.properties`'s flutter.sdk entry) that a
-          # real `flutter build` run gets, so it may have failed for an unrelated, earlier reason
-          # before ever reaching Gradle's SDK provisioning at all, with `|| true` masking that.
-          # This version instead runs the EXACT SAME command as the real build step below, so there
-          # is no environment difference left to second-guess — only its success/failure differs
-          # (ignored here, authoritative there).
-          flutter build appbundle \
-            --release \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
-            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
-            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --dart-define=SENTRY_DSN="$SENTRY_DSN" || true
-      - name: Build Android App Bundle (release)
-        script: |
-          flutter build appbundle \
-            --release \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
-            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
-            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --dart-define=SENTRY_DSN="$SENTRY_DSN"
-      - name: Build APK (release, for testing)
-        script: |
-          flutter build apk \
-            --release \
-            --build-number="$BUILD_NUMBER" \
-            --dart-define=OIDC_ISSUER="$OIDC_ISSUER" \
-            --dart-define=OIDC_CLIENT_ID="$OIDC_CLIENT_ID" \
-            --dart-define=OIDC_REDIRECT_URI="$OIDC_REDIRECT_URI" \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --dart-define=SENTRY_DSN="$SENTRY_DSN"
-    artifacts:
-      - build/**/outputs/**/*.aab
-      - build/**/outputs/**/*.apk
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-      email:
-        recipients:
-          - dev@advantedge.com
-        notify:
-          success: true
-          failure: true
-
-  # ──────────────────────────────────────────────────────────────────────────────
   # iOS — build IPA, upload to TestFlight
-  # Triggered on push to main or manual tag v*
+  # Triggered ONLY by a `v*` tag, or manually (Codemagic UI -> Start new build). Not on push to
+  # main. analyze + test are NOT run here: they run (free) in GitHub Actions ci.yml on every
+  # push/PR and again on the tag. Android is published by GitHub Actions android-release.yml.
   # ──────────────────────────────────────────────────────────────────────────────
   ios_release:
     name: iOS Release
+    instance_type: mac_mini_m2
     max_build_duration: 40
     integrations:
       # Same App Store Connect API key/integration already set up for GraderTCG
@@ -172,6 +17,7 @@ workflows:
       # and provisioning profile for this app's bundle id.
       app_store_connect: gradertcg_ios_app
     environment:
+      # Keep in lockstep with FLUTTER_VERSION in .github/workflows/ci.yml (and android-release.yml).
       flutter: 3.44.4
       groups:
         - tasktap_dartDefines
@@ -180,23 +26,20 @@ workflows:
         bundle_identifier: com.advantedge.tasktap.tasktapMobile
     triggering:
       events:
-        - push
-      branch_patterns:
-        - pattern: 'main'
-          include: true
-          source: true
+        - tag
       tag_patterns:
         - pattern: 'v*'
           include: true
+      cancel_previous_builds: true
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
     scripts:
       - name: Install dependencies
         script: flutter pub get
       - name: Generate code (drift, riverpod)
         script: dart run build_runner build --delete-conflicting-outputs
-      - name: Analyse
-        script: flutter analyze
-      - name: Unit tests
-        script: flutter test
       - name: Set up code signing settings on Xcode project
         script: |
           # Reads the cert/profile Codemagic already fetched via the managed `ios_signing`
