@@ -131,7 +131,9 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
       : null;
   final subtitle = [
     customerName,
+    location?.address,
     location?.city,
+    location?.province,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
   // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
   // 0/0), not a real time of day — formatting them unconditionally produced a literal "00:00"
