@@ -406,6 +406,15 @@ class DraftReports extends Table {
   TextColumn get customerSignoffText => text().nullable()();
   DateTimeColumn get customerSignoffAt => dateTime().nullable()();
 
+  /// What was found wrong / what was done (backend `Report.Diagnosi` / `Report.Soluzione`).
+  ///
+  /// Three-valued on purpose, mirroring the submit rule in `ReportSubmitService`: null = the
+  /// technician never touched it, so the submit omits it and the server keeps whatever it holds
+  /// (e.g. text the AI copilot's Confirm wrote); empty string = the technician cleared it; any
+  /// other text replaces it. Do not collapse empty into null anywhere on the write path.
+  TextColumn get diagnosi => text().nullable()();
+  TextColumn get soluzione => text().nullable()();
+
   /// True for drafts that only exist locally (not yet submitted).
   BoolColumn get isLocalOnly => boolean().withDefault(const Constant(false))();
 
@@ -841,7 +850,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration {
@@ -1077,6 +1086,14 @@ class AppDatabase extends _$AppDatabase {
             'UPDATE draft_reports SET submission_error_transient = 1 '
             "WHERE submission_state = 'failed'",
           );
+        }
+        if (from < 35) {
+          // Diagnosi / Soluzione on the rapportino — see DraftReports.diagnosi's own doc comment.
+          // Already on the wire (Report entity in the sync payload), but only Bozza headers sync
+          // down and a Bozza opened for editing is re-imported in full (importServerReport), so
+          // no syncCursorGeneration bump is needed. Null for every row written before this.
+          await m.addColumn(draftReports, draftReports.diagnosi);
+          await m.addColumn(draftReports, draftReports.soluzione);
         }
       },
     );
