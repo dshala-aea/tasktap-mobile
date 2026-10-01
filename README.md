@@ -115,61 +115,47 @@ The configuration is already in `pubspec.yaml` under `flutter_launcher_icons:` a
 
 ---
 
-## CI/CD (CodeMagic)
+## CI/CD (GitHub Actions + Codemagic)
 
-The project uses [CodeMagic](https://codemagic.io) for automated builds, testing, and deployment.
+Work is split by what each service is good (and free) at:
 
-### Workflows
+| Where | Workflow | Trigger | What it does |
+|---|---|---|---|
+| GitHub Actions | `ci.yml` ("Analyze & Test") | every push/PR to `main`/`develop` (except docs-only changes) and every `v*` tag | `build_runner`, `flutter analyze`, `flutter test`; on branch pushes also an unsigned-release Android APK and an unsigned iOS build (build smoke checks, kept 7 days) |
+| GitHub Actions | `android-release.yml` | `v*` tag or manual dispatch | signed AAB, published to the Play internal track |
+| Codemagic | `ios_release` | `v*` tag or manual start only | `build_runner`, sign, `flutter build ipa`, upload to TestFlight |
+| Codemagic | `ios_app_store` | manual only | promote the TestFlight build to the App Store |
 
-| Workflow | Trigger | What it does |
-|---|---|---|
-| `check` | Pull requests | `flutter analyze` + `flutter test` |
-| `android_release` | Push to `main` or tag `v*` | Build AAB + APK → Google Play internal track |
-| `ios_release` | Push to `main` or tag `v*` | Build IPA → TestFlight |
-| `ios_app_store` | Manual | Promote TestFlight build to App Store |
+Analyze and test run **only** on GitHub Actions (free for this public repo); Codemagic does not run them, so pushing to `main` does not start a Codemagic build. The Flutter version (`3.44.4`) is pinned in `ci.yml`, `android-release.yml`, `debug-apk.yml` and `codemagic.yaml` and must be changed in all of them together.
 
-### CodeMagic secrets (encrypted variable groups)
+### Cutting a release
 
-Create these groups in CodeMagic UI (Team settings > Encrypted variables):
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-**`tasktap_dartDefines`** — environment variables passed as `--dart-define`:
+The tag starts, in parallel: `ci.yml` (re-verifies the tagged commit), `android-release.yml` (Play internal track) and Codemagic `ios_release` (TestFlight). Wait for `Analyze & Test` to be green on the tag before promoting any build.
 
-| Variable | Description |
-|---|---|
-| `SUPABASE_URL` | `https://<project>.supabase.co` |
-| `SUPABASE_ANON_KEY` | Supabase anon (public) key |
-| `API_BASE_URL` | TaskTap backend REST API base URL |
-| `SENTRY_DSN` | Sentry DSN for crash reporting (optional) |
+### Starting a Codemagic build manually
 
-**`tasktap_keystore`** — Android release signing (set up via CodeMagic UI signing tab):
+Codemagic UI > the app > **Start new build** > choose the branch or tag and the workflow (`ios_release` or `ios_app_store`). Use this for an iOS build without a tag, and for `ios_app_store` after QA on TestFlight.
 
-| Variable | Description |
-|---|---|
-| `KEYSTORE_PATH` | Path to uploaded keystore (CodeMagic sets this) |
-| `KEYSTORE_PASSWORD` | Keystore password |
-| `KEY_ALIAS` | Key alias |
-| `KEY_PASSWORD` | Key password |
+### Secrets and groups (names only)
 
-**`tasktap_google_play`** — Google Play deployment:
+**GitHub repository secrets** (`android-release.yml`; set with `gh secret set NAME -R dshala-aea/tasktap-mobile`): `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`, optional `SENTRY_DSN`. `ci.yml` needs no secrets.
 
-| Variable | Description |
-|---|---|
-| `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` | Service account JSON for Google Play API |
+**Codemagic** (`ios_release`):
 
-**`tasktap_app_store_connect`** — App Store Connect (iOS):
+- Variable group `tasktap_dartDefines`: `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI`, `API_BASE_URL`, `SENTRY_DSN` (passed as `--dart-define`).
+- Team integration `gradertcg_ios_app` (App Store Connect API key), used for signing and publishing.
+- iOS signing for bundle id `com.advantedge.tasktap.tasktapMobile` (managed by Codemagic from that integration).
 
-| Variable | Description |
-|---|---|
-| `APP_STORE_CONNECT_API_KEY` | App Store Connect API private key (text) |
-| `APP_STORE_CONNECT_API_KEY_ID` | Key ID |
-| `APP_STORE_CONNECT_ISSUER_ID` | Issuer ID |
+The Codemagic groups `tasktap_google_play` and the `tasktap_keystore` Android keystore are no longer referenced by `codemagic.yaml` and can be removed in the Codemagic UI once nobody needs the old Android path.
 
 ### Android release signing
 
-Android release builds use a keystore uploaded to CodeMagic. The `android/app/build.gradle.kts` checks for the `KEYSTORE_PATH` env var:
-
-- **CodeMagic CI**: keystore is available → release signing is used.
-- **Local builds**: no keystore → falls back to debug signing.
+`android/app/build.gradle.kts` reads `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. `android-release.yml` decodes the keystore from `KEYSTORE_BASE64` and exports them; local builds without them fall back to debug signing.
 
 To generate a release keystore locally (one-time):
 
@@ -177,16 +163,6 @@ To generate a release keystore locally (one-time):
 keytool -genkey -v -keystore tasktap-release.jks \
   -alias tasktap -keyalg RSA -keysize 2048 -validity 10000
 ```
-
-### Tagging a release
-
-```sh
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-This triggers both `android_release` and `ios_release` workflows.
-
 ---
 
 ## Project structure
