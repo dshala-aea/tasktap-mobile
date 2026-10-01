@@ -62,13 +62,11 @@ void main() {
   });
 
   test('markSynced clears isPendingSync for the given ids only', () async {
-    // getTodayEvents() buckets by the real UTC calendar day, so DateTime.now() + 1h crosses into
-    // tomorrow (dropping 'b' out of the "today" window entirely) whenever this runs after 23:00
-    // UTC — same class of flake as "events are returned in chronological order" above. Anchor to
-    // today's own UTC midnight instead.
-    final todayUtc = DateTime.now().toUtc();
-    final midnight = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
-    final now = midnight.add(const Duration(hours: 8));
+    // getTodayEvents() buckets by the device's LOCAL calendar day (_todayBounds), so DateTime.now()
+    // + 1h can cross into tomorrow, and a UTC-midnight anchor lands on the wrong local day in any
+    // zone whose date differs from UTC's. Anchor to today's own LOCAL 08:00 instead.
+    final today = DateTime.now();
+    final now = DateTime(today.year, today.month, today.day, 8).toUtc();
     await repo.addEvent(id: 'a', eventTime: now, eventType: 'ingresso', cantiereId: 'cant-1');
     await repo.addEvent(
       id: 'b',
@@ -118,14 +116,13 @@ void main() {
   });
 
   test('events are returned in chronological order', () async {
-    // getTodayEvents() buckets by the real UTC calendar day, so a fixed literal date is wrong on
-    // every day but that one, and DateTime.now() + 2h crosses into tomorrow (dropping out of the
-    // "today" window entirely) whenever this runs after 22:00 UTC. Anchor to today's own
-    // UTC midnight instead — 08:00/10:00 always land in the same calendar day it started in.
-    final todayUtc = DateTime.now().toUtc();
-    final midnight = DateTime.utc(todayUtc.year, todayUtc.month, todayUtc.day);
-    final earlier = midnight.add(const Duration(hours: 8));
-    final later = midnight.add(const Duration(hours: 10));
+    // getTodayEvents() buckets by the device's LOCAL calendar day (_todayBounds), so a fixed
+    // literal date is wrong on every day but that one, DateTime.now() + 2h can cross into
+    // tomorrow, and a UTC-midnight anchor lands on the wrong local day in any zone whose date
+    // differs from UTC's. Anchor to today's own LOCAL 08:00/10:00 instead.
+    final today = DateTime.now();
+    final earlier = DateTime(today.year, today.month, today.day, 8).toUtc();
+    final later = DateTime(today.year, today.month, today.day, 10).toUtc();
     await repo.addEvent(id: 'later', eventTime: later, eventType: 'uscita');
     await repo.addEvent(
       id: 'earlier',
