@@ -31,12 +31,17 @@ import 'package:tasktap_mobile/features/rapportino/rapportini_list_screen.dart';
 import '../../data/reports/server_report_dto_test.dart' show backendFixture;
 
 class _FakeServerApi extends ServerReportApiClient {
-  _FakeServerApi({this.fail = false}) : super(Dio());
+  _FakeServerApi({this.fail = false, this.stato = 0, this.delay = Duration.zero}) : super(Dio());
   final bool fail;
+  final int stato;
+  final Duration delay;
+  int calls = 0;
   @override
   Future<ServerReportDto> fetchReport(String reportId) async {
+    calls++;
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (fail) throw DioException(requestOptions: RequestOptions(path: '/x'));
-    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId});
+    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId, 'stato': stato});
   }
 }
 
@@ -197,6 +202,43 @@ void main() {
 
       expect(find.textContaining('serve la connessione'), findsOneWidget);
       expect(find.text('editor:srv-1'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a server report no longer Bozza says so, not "serve la connessione"', (
+      tester,
+    ) async {
+      await _seedDraft(db, id: 'srv-1', title: 'Da server', isLocalOnly: false);
+
+      await tester.pumpWidget(_buildRouted(db: db, api: _FakeServerApi(stato: 1)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Da server'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Questo rapportino non è più modificabile.'), findsOneWidget);
+      expect(find.textContaining('serve la connessione'), findsNothing);
+      expect(find.text('editor:srv-1'), findsNothing);
+      expect(await db.select(db.reportStaffTable).get(), isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('two fast taps run ONE import', (tester) async {
+      await _seedDraft(db, id: 'srv-1', title: 'Da server', isLocalOnly: false);
+      final api = _FakeServerApi(delay: const Duration(milliseconds: 200));
+
+      await tester.pumpWidget(_buildRouted(db: db, api: api));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Da server'));
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.tap(find.text('Da server'));
+      await tester.pumpAndSettle();
+
+      expect(api.calls, 1);
+      expect(find.text('editor:srv-1'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

@@ -14,6 +14,7 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
+import '../../data/reports/import_server_report.dart' show ServerReportNotEditableException;
 import 'import_server_report_action.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -75,6 +76,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   /// left. A failed import retries THAT step (never Confirm again, never a blank editor).
   String? _confirmedReportId;
   String? _importError;
+
+  /// The server report is no longer a Bozza: retrying cannot help, only leaving can.
+  bool _importNotEditable = false;
   String? _startError;
   String? _confirmKey;
   int _thinkingStage = 0;
@@ -217,6 +221,15 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       if (!mounted) return;
       showAppToast(context, message: 'Rapportino creato', tone: ToastTone.success);
       context.go(AppRoutes.rapportiniEditor(reportId));
+    } on ServerReportNotEditableException {
+      if (!mounted) return;
+      const message = 'Questo rapportino non è più modificabile.';
+      setState(() {
+        _confirming = false;
+        _importNotEditable = true;
+        _importError = message;
+      });
+      showAppToast(context, message: message, tone: ToastTone.warning);
     } catch (e) {
       if (!mounted) return;
       const message =
@@ -326,7 +339,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _confirmedReportId != null
+                        child: _importNotEditable
+                            ? AppButton(label: 'Chiudi', onPressed: _abandon)
+                            : _confirmedReportId != null
                             ? AppButton(
                                 label: _confirming ? 'Scarico il rapportino…' : 'Riprova',
                                 onPressed: _confirming ? null : _importAndOpen,

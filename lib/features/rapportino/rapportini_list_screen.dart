@@ -15,6 +15,7 @@ import '../../data/api/dio_client.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import '../../data/reports/import_server_report.dart' show ServerReportNotEditableException;
 import 'create_draft.dart';
 import 'import_server_report_action.dart';
 import 'rapportino_list_providers.dart';
@@ -303,6 +304,9 @@ class _RapportiniListBody extends ConsumerWidget {
 /// with the same Vetro tint used everywhere else for "this one needs you," so a technician reads
 /// one accent language across the whole app, not the safety-orange strap on this list and the
 /// indigo tint on Tickets.
+/// Report ids whose server import is in flight (double-tap guard).
+final _importingReportIds = <String>{};
+
 class _RapportinoRow extends ConsumerWidget {
   const _RapportinoRow({required this.draft, required this.isLast});
 
@@ -351,8 +355,22 @@ class _RapportinoRow extends ConsumerWidget {
           // would show a blank form whose submit deletes the server's data. Pull the full report
           // first; offline or failed means we do not open it at all.
           if (draft.stato == 'Bozza' && !draft.isLocalOnly) {
+            // Two fast taps must run ONE import (the second would race the first's
+            // delete-and-reinsert of the children).
+            if (!_importingReportIds.add(draft.id)) return;
             try {
               await importServerReportForEditing(ref, reportId: draft.id);
+            } on ServerReportNotEditableException {
+              if (!context.mounted) return;
+              // The server moved on (submitted/checked by the office): no retry will help.
+              // Refresh so the row shows its real state.
+              unawaited(ref.read(syncProvider.notifier).performSync());
+              showAppToast(
+                context,
+                message: 'Questo rapportino non è più modificabile.',
+                tone: ToastTone.warning,
+              );
+              return;
             } catch (_) {
               if (!context.mounted) return;
               showAppToast(
@@ -363,6 +381,8 @@ class _RapportinoRow extends ConsumerWidget {
                 tone: ToastTone.error,
               );
               return;
+            } finally {
+              _importingReportIds.remove(draft.id);
             }
             if (!context.mounted) return;
           }

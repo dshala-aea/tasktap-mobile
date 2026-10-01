@@ -337,6 +337,10 @@ class SubmissionQueue {
               freeTextName: m.freeTextName,
               quantity: m.quantity,
               unitOfMeasure: m.unitOfMeasure,
+              // Backend ReportSubmitService builds each ReportMateriale with `UnitPrice =
+              // m.UnitPrice` from this request, and submit REPLACES the materials: omitting it
+              // would null a price the server (or an import) already holds. The editor never
+              // edits it, so the local value is the server's.
               unitPrice: m.unitPrice,
               notes: m.notes,
               magazzinoId: m.magazzinoId,

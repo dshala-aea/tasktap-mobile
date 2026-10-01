@@ -74,15 +74,16 @@ class _FakeAiApiClient extends AiApiClient {
 
 /// Serves the backend-shaped fixture (re-keyed to the confirmed report id) or fails on demand.
 class _FakeServerReportApi extends ServerReportApiClient {
-  _FakeServerReportApi({this.fail = false}) : super(Dio());
+  _FakeServerReportApi({this.fail = false, this.stato = 0}) : super(Dio());
   bool fail;
+  final int stato;
   final fetched = <String>[];
 
   @override
   Future<ServerReportDto> fetchReport(String reportId) async {
     fetched.add(reportId);
     if (fail) throw DioException(requestOptions: RequestOptions(path: '/api/Reports/$reportId'));
-    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId});
+    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId, 'stato': stato});
   }
 }
 
@@ -364,6 +365,29 @@ void main() {
     expect(serverApi.fetched, ['rpt-1', 'rpt-1']);
     expect(find.text('editor:rpt-1'), findsOneWidget);
     expect(find.text('Pompa bloccata'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('a report no longer Bozza shows the not-editable message with Chiudi, no retry loop', (
+    tester,
+  ) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final serverApi = _FakeServerReportApi(stato: 1);
+    final client = _FakeAiApiClient(
+      turnResult: emptyDraft,
+      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
+    );
+
+    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db, serverApi: serverApi));
+    await tester.pumpAndSettle();
+    await confirmFlow(tester);
+
+    expect(find.text('Questo rapportino non è più modificabile.'), findsWidgets);
+    expect(find.textContaining('Controlla la connessione'), findsNothing);
+    expect(find.widgetWithText(AppButton, 'Chiudi'), findsOneWidget);
+    expect(find.widgetWithText(AppButton, 'Riprova'), findsNothing);
+    expect(find.text('editor:rpt-1'), findsNothing);
     await _unmount(tester);
   });
 }
