@@ -78,15 +78,22 @@ WorkSession _pending(String id, String type, DateTime t) =>
     WorkSession(id: id, eventType: type, eventTime: t, isPendingSync: true);
 
 final _shift = DateTime.utc(2026, 9, 30, 8, 23, 45);
+// The fixtures are anchored on 2026-09-30; the reconciler clamps a start earlier than local
+// midnight "today", so tests using them must pin the clock (see [pinToFixtureDay]) or they rot
+// the day after the fixture. Tests built on DateTime.now() keep the real clock.
+final _fixtureNow = DateTime(2026, 9, 30, 15);
 final _break = DateTime.utc(2026, 9, 30, 11, 2, 10);
 
 void main() {
   late List<ActiveTracker> server;
   Object? fetchError;
   var fetchCalls = 0;
+  DateTime Function() clock = DateTime.now;
+  void pinToFixtureDay() => clock = () => _fixtureNow;
 
   WorkLogReconciler make(_Repo repo) => WorkLogReconciler(
     repo: repo,
+    clock: () => clock(),
     fetchActive: () async {
       fetchCalls++;
       if (fetchError != null) throw fetchError!;
@@ -98,6 +105,7 @@ void main() {
     server = const [];
     fetchError = null;
     fetchCalls = 0;
+    clock = DateTime.now;
   });
 
   group('wire shape', () {
@@ -155,6 +163,7 @@ void main() {
 
   group('server open, local unaware (started on another device)', () {
     test('Working: backfills ingresso at the shift start, marked so it is never re-uploaded', () async {
+      pinToFixtureDay();
       server = trackersFromWire([attendanceWorkingJson, cantiereJson]);
       final repo = _Repo([]);
       await make(repo).reconcile();
@@ -166,6 +175,7 @@ void main() {
     });
 
     test('OnBreak: backfills ingresso AND pausa so local == OnBreak', () async {
+      pinToFixtureDay();
       server = trackersFromWire([attendanceOnBreakJson]);
       final repo = _Repo([]);
       await make(repo).reconcile();
@@ -180,6 +190,7 @@ void main() {
     });
 
     test('is idempotent: a second reconcile adds nothing', () async {
+      pinToFixtureDay();
       server = trackersFromWire([attendanceOnBreakJson]);
       final repo = _Repo([]);
       final r = make(repo);

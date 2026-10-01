@@ -62,7 +62,7 @@ class ReportSubmitApiClient {
         filename: fileName,
         contentType: DioMediaType.parse(contentType),
       ),
-      'kind': kind,
+      'kind': ?kind,
       if (capturedLatitude != null) 'capturedLatitude': capturedLatitude.toString(),
       if (capturedLongitude != null) 'capturedLongitude': capturedLongitude.toString(),
       if (capturedAt != null) 'capturedAt': capturedAt.toUtc().toIso8601String(),
