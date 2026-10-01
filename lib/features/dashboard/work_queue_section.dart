@@ -135,7 +135,6 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
     location?.city,
     location?.postalCode,
   ].where((s) => s != null && s.isNotEmpty).join(' · ');
-  final customerLabel = customerName;
   // An all-day schedule's timeStartMinutes/timeEndMinutes are placeholder bounds (always
   // 0/0), not a real time of day — formatting them unconditionally produced a literal "00:00"
   // that read as "starts at midnight" rather than "no time, all day". Gate on `allDay` the
@@ -146,7 +145,7 @@ _RowContent _resolveRow(WidgetRef ref, Schedule schedule) {
   return _RowContent(
     title: schedule.title.isNotEmpty ? schedule.title : 'Intervento',
     subtitle: subtitle,
-    customerLabel: customerLabel,
+    customerLabel: customerName,
     timeLabel: timeLabel,
   );
 }
@@ -204,7 +203,7 @@ class _FocusCard extends ConsumerWidget {
                 style: TextStyle(fontFamily: 'Archivo', fontSize: 13, color: c.inkMuted),
               ),
             ],
-            if (row.customerLabel?.isNotEmpty) ...[
+            if (row.customerLabel != null && row.customerLabel!.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(
                 row.customerLabel!,
