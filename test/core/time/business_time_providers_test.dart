@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// Transitive dependency; needed only to inject a failing platform store.
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 
 class _SlowStore extends BusinessZoneStore {
@@ -14,6 +17,32 @@ class _SlowStore extends BusinessZoneStore {
   Future<String?> readCached() async {
     await gate.future;
     return value;
+  }
+}
+
+class _FailingPrefsPlatform extends SharedPreferencesStorePlatform {
+  @override
+  Future<bool> clear() async => throw StateError('prefs down');
+  @override
+  Future<Map<String, Object>> getAll() async => throw StateError('prefs down');
+  @override
+  Future<bool> remove(String key) async => throw StateError('prefs down');
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      throw StateError('prefs down');
+}
+
+class _CountingStore extends BusinessZoneStore {
+  _CountingStore(this.gates, this.values);
+  final List<Completer<void>> gates;
+  final List<String?> values;
+  int reads = 0;
+
+  @override
+  Future<String?> readCached() async {
+    final i = reads++;
+    await gates[i].future;
+    return values[i];
   }
 }
 
@@ -151,6 +180,69 @@ void main() {
         null,
       ); // what the /me callback does for a body without the key
       expect(c.read(businessZoneIdProvider), 'Europe/Rome');
+    },
+  );
+
+  test('prefs failure is swallowed by the store', () async {
+    final previous = SharedPreferencesStorePlatform.instance;
+    addTearDown(() {
+      SharedPreferencesStorePlatform.instance = previous;
+      SharedPreferences.resetStatic();
+    });
+    SharedPreferences.resetStatic();
+    SharedPreferencesStorePlatform.instance = _FailingPrefsPlatform();
+    final store = BusinessZoneStore();
+    expect(await store.readCached(), isNull);
+    await store.write('Asia/Tokyo');
+    await store.clear();
+  });
+
+  test(
+    'a throwing store leaves the default and does not escape hydrate',
+    () async {
+      final c = _container(
+        overrides: [
+          businessZoneStoreProvider.overrideWithValue(
+            _SlowStore(
+              Completer<void>()..completeError(StateError('boom')),
+              null,
+            ),
+          ),
+        ],
+      );
+      await c.read(businessZoneIdProvider.notifier).hydrateForTest();
+      expect(c.read(businessZoneIdProvider), 'Europe/Rome');
+    },
+  );
+
+  test(
+    'invalidate bumps the epoch: a stale in-flight hydrate is dropped',
+    () async {
+      final gates = [Completer<void>(), Completer<void>()];
+      final store = _CountingStore(gates, ['Asia/Tokyo', 'America/New_York']);
+      final c = _container(
+        overrides: [businessZoneStoreProvider.overrideWithValue(store)],
+      );
+      final first = c.read(businessZoneIdProvider.notifier).hydrateForTest();
+      c.invalidate(businessZoneIdProvider);
+      final second = c.read(businessZoneIdProvider.notifier).hydrateForTest();
+      gates[1].complete();
+      await second;
+      expect(c.read(businessZoneIdProvider), 'America/New_York');
+      gates[0].complete(); // stale read lands last
+      await first;
+      expect(c.read(businessZoneIdProvider), 'America/New_York');
+    },
+  );
+
+  test(
+    'set after reset is not blocked by the notifier (caller guards)',
+    () async {
+      final c = _container();
+      final n = c.read(businessZoneIdProvider.notifier);
+      await n.reset();
+      await n.set('Asia/Tokyo');
+      expect(c.read(businessZoneIdProvider), 'Asia/Tokyo');
     },
   );
 }

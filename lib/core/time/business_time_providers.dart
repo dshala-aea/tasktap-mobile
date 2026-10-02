@@ -56,17 +56,22 @@ class BusinessZoneIdNotifier extends Notifier<String> {
   }
 
   Future<void> _hydrate() async {
-    final epoch = _epoch;
-    final cached = await _store.readCached();
-    if (epoch != _epoch) return;
-    state = resolveBusinessZoneId(cached);
+    // Runs unawaited from build(): nothing may escape, or it surfaces as an
+    // uncaught async error. Failure keeps the current (Rome) value.
+    try {
+      final epoch = _epoch;
+      final cached = await _store.readCached();
+      if (epoch != _epoch) return;
+      state = resolveBusinessZoneId(cached);
+    } catch (_) {}
   }
 
   @visibleForTesting
   Future<void> hydrateForTest() => _hydration ?? Future<void>.value();
 
   /// Adopts [zoneId] when it is a known IANA id; null, empty and unknown ids
-  /// keep the current value.
+  /// keep the current value. NOT blocked after [reset]: a late `/me` landing
+  /// after sign-out would re-set the zone, so the caller (Task 5) must guard.
   Future<void> set(String? zoneId) async {
     if (zoneId == null || zoneId.trim().isEmpty) return;
     if (resolveBusinessZoneId(zoneId) != zoneId) return;
