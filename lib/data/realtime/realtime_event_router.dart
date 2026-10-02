@@ -86,11 +86,13 @@ void routeRealtimeEvent(ProviderContainer container, RealtimeEvent event) {
       break;
 
     case 'WorkLogChanged':
-      // The caller's own clock changed on ANY device (start / end / break start / break end;
-      // `data.action` is informational and deliberately not read — same "signal to re-fetch, never
-      // a second source of truth" rule as every other case). Sent to the user's own hub group, so
-      // it reaches this phone even when the change was made here (harmless: reconcile is
-      // idempotent). Debounced ~1s so a burst of clock changes is one refresh.
+      // The caller's own clock changed on ANY device, or the office corrected a row.
+      // `data.action` is `started | ended | breakStarted | breakEnded | corrected` and
+      // `data.source` includes `admin`; the action is still informational and deliberately not
+      // read — same "signal to re-fetch, never a second source of truth" rule as every other
+      // case. Sent to the user's own hub group, so it reaches this phone even when the change was
+      // made here (harmless: reconcile is idempotent). Debounced ~1s so a burst of clock changes
+      // is one refresh.
       container.read(workLogRefreshCoordinatorProvider).requestRefresh();
       break;
   }

@@ -121,7 +121,7 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      for (final action in ['started', 'ended', 'breakStarted', 'breakEnded']) {
+      for (final action in ['started', 'ended', 'breakStarted', 'breakEnded', 'corrected']) {
         routeRealtimeEvent(
           container,
           RealtimeEvent.fromHubPayload({
@@ -130,7 +130,59 @@ void main() {
           }),
         );
       }
-      expect(fake.requested, 4);
+      expect(fake.requested, 5);
+    });
+
+    test('an admin correction nudge requests exactly one refresh', () {
+      final fake = _FakeCoordinator();
+      final container = ProviderContainer(
+        overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
+      );
+      addTearDown(container.dispose);
+
+      routeRealtimeEvent(
+        container,
+        RealtimeEvent.fromHubPayload({
+          'type': 'WorkLogChanged',
+          'data': {'action': 'corrected', 'source': 'admin', 'at': '2026-09-30T08:23:45Z'},
+        }),
+      );
+
+      expect(fake.requested, 1);
+    });
+
+    test('a future unknown action still refreshes and does not throw', () {
+      final fake = _FakeCoordinator();
+      final container = ProviderContainer(
+        overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
+      );
+      addTearDown(container.dispose);
+
+      routeRealtimeEvent(
+        container,
+        RealtimeEvent.fromHubPayload({
+          'type': 'WorkLogChanged',
+          'data': {'action': 'somethingNew', 'source': 'admin', 'at': '2026-09-30T08:23:45Z'},
+        }),
+      );
+
+      expect(fake.requested, 1);
+    });
+
+    test('an envelope with no data never reaches the router (parse throws, nothing refreshes)', () {
+      final fake = _FakeCoordinator();
+      final container = ProviderContainer(
+        overrides: [workLogRefreshCoordinatorProvider.overrideWithValue(fake)],
+      );
+      addTearDown(container.dispose);
+
+      // Observed: RealtimeEvent.fromHubPayload does `(raw['data'] as Map)`, so a missing `data`
+      // throws a TypeError at parse time (inside the hub `ReceiveEvent` handler). Pinned as-is.
+      expect(
+        () => RealtimeEvent.fromHubPayload({'type': 'WorkLogChanged'}),
+        throwsA(isA<TypeError>()),
+      );
+      expect(fake.requested, 0);
     });
   });
 }
