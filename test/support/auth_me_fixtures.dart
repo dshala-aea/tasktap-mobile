@@ -1,9 +1,9 @@
 // dart format width=100
 // Fixture bodies of `GET /api/Auth/me`.
 //
-// `tenantTimeZone` is a top-level string field emitted by AuthController.cs (me action,
-// ~L105-122: the `tenantTimeZone` member of the anonymous response object, resolved through
-// IBusinessTime with a fallback to the default zone id). OpenAPI does NOT type this response,
+// `tenantTimeZone` is a top-level string field emitted by AuthController.cs:107-127 (me action:
+// resolve block L107-120 through IBusinessTime with a fallback to the default zone id, member
+// `tenantTimeZone` of the anonymous response object at L127). OpenAPI does NOT type this response,
 // so the mobile contract gate cannot see the key: this fixture IS the contract. If the backend
 // ever types auth/me, replace it with the snapshot check.
 

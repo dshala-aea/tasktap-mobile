@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,11 +35,12 @@ class EntitlementService {
   /// Receives the raw `tenantTimeZone` of every successfully parsed `/auth/me` (null when the key
   /// is absent or not a string) so the receiver can adopt it or fall back to the default. Called
   /// only after the rest of the refresh succeeded; a throwing callback never fails the refresh.
-  final void Function(String? tenantTimeZone)? onTenantTimeZone;
+  final FutureOr<void> Function(String? tenantTimeZone)? onTenantTimeZone;
 
   /// Identity of the signed-in session. When given, a response whose session differs from the one
   /// that issued the request (signed out, or another user signed in meanwhile) is not applied to
-  /// the zone: it belongs to the previous tenant.
+  /// anything: it belongs to the previous tenant (cache, internal user id and zone alike). With no
+  /// guard supplied this is a no-op and behaviour is unchanged.
   final String? Function()? currentSessionId;
 
   /// Pulls `/api/Auth/me` and caches what it says.
@@ -82,6 +85,9 @@ class EntitlementService {
       return false;
     }
 
+    // Nothing is persisted for a session that ended while the request was in flight.
+    if (!_stillCurrent(sessionAtRequest)) return false;
+
     await _repository.write(
       features: features,
       capabilities: capabilities,
@@ -101,24 +107,31 @@ class EntitlementService {
     final internalUserId = user is Map ? user['id'] as String? : null;
     if (internalUserId != null && internalUserId.isNotEmpty) {
       final prefs = await SharedPreferences.getInstance();
+      if (!_stillCurrent(sessionAtRequest)) return false;
       await prefs.setString(internalUserIdPrefsKey, internalUserId);
     }
 
-    _applyTenantTimeZone(body['tenantTimeZone'], sessionAtRequest);
+    await _applyTenantTimeZone(body['tenantTimeZone'], sessionAtRequest);
 
     return true;
   }
 
-  void _applyTenantTimeZone(Object? raw, String? sessionAtRequest) {
+  /// True when the session that issued the request is still the signed-in one. Always true when
+  /// no [currentSessionId] was supplied.
+  bool _stillCurrent(String? sessionAtRequest) {
+    final sessionNow = currentSessionId;
+    if (sessionNow == null) return true;
+    final now = sessionNow();
+    return now != null && now == sessionAtRequest;
+  }
+
+  Future<void> _applyTenantTimeZone(Object? raw, String? sessionAtRequest) async {
     final callback = onTenantTimeZone;
     if (callback == null) return;
     try {
-      final sessionNow = currentSessionId;
-      if (sessionNow != null) {
-        final now = sessionNow();
-        if (now == null || now != sessionAtRequest) return;
-      }
-      callback(raw is String ? raw : null);
+      if (!_stillCurrent(sessionAtRequest)) return;
+      // Awaited so refresh() does not report success before the zone is persisted.
+      await callback(raw is String ? raw : null);
     } catch (_) {
       // The zone is an enhancement of this refresh, never a reason to fail it.
     }

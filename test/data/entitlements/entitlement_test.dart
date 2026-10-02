@@ -355,8 +355,10 @@ void main() {
       session = null; // signed out while the request is in flight
       gate.complete(ok(meBody(tenantTimeZone: 'Europe/Berlin')));
 
-      expect(await pending, isTrue);
+      // A response for an ended session is dropped whole: not cached, not reported as success.
+      expect(await pending, isFalse);
       expect(seen, isEmpty);
+      expect(await repo.read(), isNull);
     });
 
     test('a different user signing in during the flight also suppresses it', () async {

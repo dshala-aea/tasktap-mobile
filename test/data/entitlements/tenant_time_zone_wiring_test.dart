@@ -10,8 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart'
+    show internalUserIdPrefsKey;
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
@@ -148,5 +151,118 @@ void main() {
 
     expect(container.read(businessZoneIdProvider), 'Europe/Rome');
     expect(await prefsZone(), isNull);
+  });
+
+  test(
+    'a /me answered after sign-out writes neither the entitlement row nor internal_user_id',
+    () async {
+      final gate = Completer<Response<Map<String, dynamic>>>();
+      when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) => gate.future);
+
+      final pending = container.read(entitlementServiceProvider).refresh();
+      await container.read(loginProvider.notifier).signOut();
+
+      gate.complete(
+        ok({
+          ...authMeBody(tenantTimeZone: 'Pacific/Auckland'),
+          'user': {'id': 'guid-of-old-tenant-user'},
+        }),
+      );
+
+      expect(await pending, isFalse);
+      await pumpEventQueue();
+
+      expect(await container.read(entitlementRepositoryProvider).read(), isNull);
+      expect((await SharedPreferences.getInstance()).getString(internalUserIdPrefsKey), isNull);
+      expect(container.read(businessZoneIdProvider), 'Europe/Rome');
+    },
+  );
+
+  test('refresh() does not return before the zone is persisted', () async {
+    stubMe(authMeBody(tenantTimeZone: 'Europe/Berlin'));
+
+    expect(await container.read(entitlementServiceProvider).refresh(), isTrue);
+
+    // No event-queue pump: persistence must already be finished.
+    expect(container.read(businessZoneIdProvider), 'Europe/Berlin');
+    expect(await prefsZone(), 'Europe/Berlin');
+  });
+
+  group('re-applying an unchanged zone does not rebuild dependents', () {
+    // Equal but never identical: what a zone string parsed out of a fresh /me JSON looks like.
+    String fresh(String s) => String.fromCharCodes(s.codeUnits);
+
+    late int businessTimeBuilds;
+    late int repoBuilds;
+
+    setUp(() {
+      businessTimeBuilds = 0;
+      repoBuilds = 0;
+      container.listen(businessTimeProvider, (_, _) => businessTimeBuilds++);
+      container.listen(workSessionRepositoryProvider, (_, _) => repoBuilds++);
+    });
+
+    test('set() with an equal non-identical string notifies nobody', () async {
+      final notifier = container.read(businessZoneIdProvider.notifier);
+      await notifier.set('Europe/Berlin');
+      await pumpEventQueue();
+      businessTimeBuilds = 0;
+      repoBuilds = 0;
+
+      await notifier.set(fresh('Europe/Berlin'));
+      await notifier.applyServerZone(fresh('Europe/Berlin'));
+      await pumpEventQueue();
+
+      expect(businessTimeBuilds, 0);
+      expect(repoBuilds, 0);
+      expect(await prefsZone(), 'Europe/Berlin');
+    });
+
+    test('a refresh repeating the same zone notifies nobody', () async {
+      stubMe(authMeBody(tenantTimeZone: fresh('Asia/Tokyo')));
+      await refresh();
+      await pumpEventQueue();
+      businessTimeBuilds = 0;
+      repoBuilds = 0;
+
+      stubMe(authMeBody(tenantTimeZone: fresh('Asia/Tokyo')));
+      await refresh();
+      await pumpEventQueue();
+
+      expect(businessTimeBuilds, 0);
+      expect(repoBuilds, 0);
+    });
+
+    test('a genuine change still rebuilds', () async {
+      final notifier = container.read(businessZoneIdProvider.notifier);
+      await notifier.set('Europe/Berlin');
+      await pumpEventQueue();
+      businessTimeBuilds = 0;
+      repoBuilds = 0;
+
+      await notifier.set('Asia/Tokyo');
+      await pumpEventQueue();
+
+      expect(businessTimeBuilds, 1);
+      expect(repoBuilds, 1);
+    });
+
+    test('reset() when already Rome does not rebuild but still clears the prefs key', () async {
+      (await SharedPreferences.getInstance()).setString(tenantTimeZonePrefsKey, 'stale');
+      final notifier = container.read(businessZoneIdProvider.notifier);
+      await notifier.hydrateForTest();
+      await notifier.set('Europe/Rome');
+      await pumpEventQueue();
+      businessTimeBuilds = 0;
+      repoBuilds = 0;
+
+      await notifier.reset();
+      await notifier.applyServerZone(null);
+      await pumpEventQueue();
+
+      expect(businessTimeBuilds, 0);
+      expect(repoBuilds, 0);
+      expect(await prefsZone(), isNull);
+    });
   });
 }

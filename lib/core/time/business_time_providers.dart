@@ -76,7 +76,9 @@ class BusinessZoneIdNotifier extends Notifier<String> {
     if (zoneId == null || zoneId.trim().isEmpty) return;
     if (resolveBusinessZoneId(zoneId) != zoneId) return;
     _epoch++;
-    state = zoneId;
+    // Equality, not identity: a zone string re-parsed from /me is never identical, and a spurious
+    // notification rebuilds every dependent (repositories, streams, sync services).
+    if (state != zoneId) state = zoneId;
     await _store.write(zoneId);
   }
 
@@ -94,7 +96,7 @@ class BusinessZoneIdNotifier extends Notifier<String> {
   /// Back to Rome and forget the persisted value (sign-out).
   Future<void> reset() async {
     _epoch++;
-    state = kDefaultBusinessZoneId;
+    if (state != kDefaultBusinessZoneId) state = kDefaultBusinessZoneId;
     await _store.clear();
   }
 }
