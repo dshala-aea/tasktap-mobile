@@ -178,6 +178,18 @@ void main() {
       );
     });
 
+    test('time that is a gap on the DEVICE zone is not shifted', () {
+      // 02:30 in New York on 2027-03-28 does not exist in Rome (device gap).
+      expect(
+          _at('America/New_York')
+              .formatInZone(DateTime.utc(2027, 3, 28, 6, 30), 'HH:mm'),
+          '02:30');
+    });
+
+    test('midnight prints 00:00', () {
+      expect(rome.formatInZone(DateTime.utc(2026, 7, 9, 22), 'HH:mm'), '00:00');
+    });
+
     test('local-flagged instant equals its UTC twin', () {
       final utc = DateTime.utc(2026, 7, 10, 6);
       expect(
@@ -227,6 +239,7 @@ void main() {
             r == DateTime.utc(2026, 10, 25, 1, 30),
         isTrue,
       );
+      expect(r, DateTime.utc(2026, 10, 25, 1, 30));
       expect(rome.formatInZone(r, 'HH:mm'), '02:30');
     });
 
@@ -240,6 +253,7 @@ void main() {
         returnsNormally,
       );
       expect(rome.formatInZone(r, 'yyyy-MM-dd'), '2027-03-28');
+      expect(r, DateTime.utc(2027, 3, 28, 1, 30)); // forward shift to 03:30
     });
   });
 

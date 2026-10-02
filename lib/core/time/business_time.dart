@@ -77,7 +77,9 @@ class BusinessTime {
 
   /// Half-open `[start, end)` UTC range of the business-zone calendar day
   /// [civilDate] (read by its y/m/d fields). End is local midnight of the next
-  /// calendar date, so 23 h / 25 h days are exact.
+  /// calendar date, so 23 h / 25 h days are exact. In a zone whose local
+  /// midnight does not exist on that date (e.g. America/Havana) the start is
+  /// shifted forward by the library.
   (DateTime startUtc, DateTime endUtc) utcRangeForBusinessDate(
     DateTime civilDate,
   ) {
@@ -112,19 +114,15 @@ class BusinessTime {
   (DateTime, DateTime) todayRangeUtc() =>
       utcRangeForBusinessDate(businessToday());
 
-  /// Formats [instant] as wall-clock time in the business zone.
+  /// Formats [instant] as wall-clock time in the business zone. A non-null
+  /// [locale] needs `initializeDateFormatting(locale)` first (otherwise
+  /// `LocaleDataException`); null works with numeric patterns.
   String formatInZone(DateTime instant, String pattern, {String? locale}) {
     final z = tz.TZDateTime.from(instant.toUtc(), location);
-    // DateFormat reads fields only; hand it a plain DateTime carrying them.
-    final carrier = DateTime(
-      z.year,
-      z.month,
-      z.day,
-      z.hour,
-      z.minute,
-      z.second,
-      z.millisecond,
-    );
+    // DateFormat reads fields only. A UTC carrier cannot hit a device-zone
+    // DST gap (a local-zone constructor would shift e.g. 02:30 to 03:30).
+    final carrier = DateTime.utc(
+        z.year, z.month, z.day, z.hour, z.minute, z.second, z.millisecond);
     return DateFormat(pattern, locale).format(carrier);
   }
 
