@@ -16,6 +16,7 @@
 
 import 'package:drift/drift.dart';
 
+import '../../core/time/business_time.dart';
 import '../local/app_database.dart';
 
 /// Marker written into `CantierePunche.notes` (mirrors `reconciledOrphanMarker` in
@@ -73,9 +74,11 @@ abstract interface class ICantiereSessionRepository {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class CantiereSessionRepository implements ICantiereSessionRepository {
-  CantiereSessionRepository(this._db);
+  CantiereSessionRepository(this._db, {BusinessTime? businessTime})
+    : _businessTime = businessTime ?? BusinessTime.fallback();
 
   final AppDatabase _db;
+  final BusinessTime _businessTime;
 
   @override
   Future<void> addEvent({
@@ -106,15 +109,12 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
         );
   }
 
-  (DateTime, DateTime) _todayBounds() {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day).toUtc();
-    return (start, start.add(const Duration(days: 1)));
-  }
+  /// The one definition of "today": the tenant business day as a half-open UTC window.
+  (DateTime, DateTime) _todayRange() => _businessTime.todayRangeUtc();
 
   @override
   Stream<List<CantierePunche>> watchTodayEvents() {
-    final (start, end) = _todayBounds();
+    final (start, end) = _todayRange();
     return (_db.select(_db.cantierePunches)
           ..where(
             (t) => t.eventTime.isBiggerOrEqualValue(start) & t.eventTime.isSmallerThanValue(end),
@@ -125,7 +125,7 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
 
   @override
   Future<List<CantierePunche>> getTodayEvents() {
-    final (start, end) = _todayBounds();
+    final (start, end) = _todayRange();
     return (_db.select(_db.cantierePunches)
           ..where(
             (t) => t.eventTime.isBiggerOrEqualValue(start) & t.eventTime.isSmallerThanValue(end),
@@ -158,7 +158,7 @@ class CantiereSessionRepository implements ICantiereSessionRepository {
 
   @override
   Future<void> clearToday() async {
-    final (start, end) = _todayBounds();
+    final (start, end) = _todayRange();
     await (_db.delete(_db.cantierePunches)..where(
           (t) => t.eventTime.isBiggerOrEqualValue(start) & t.eventTime.isSmallerThanValue(end),
         ))

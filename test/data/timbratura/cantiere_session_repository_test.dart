@@ -4,12 +4,19 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_session_repository.dart';
 
 AppDatabase _makeDb() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   return AppDatabase(NativeDatabase.memory());
+}
+
+/// [hour]:00 after the start of the current business (default Rome) day, as a UTC instant.
+DateTime _businessTodayAt(int hour) {
+  final bt = BusinessTime.fallback();
+  return bt.utcRangeForBusinessDate(bt.businessToday()).$1.add(Duration(hours: hour));
 }
 
 void main() {
@@ -62,11 +69,9 @@ void main() {
   });
 
   test('markSynced clears isPendingSync for the given ids only', () async {
-    // getTodayEvents() buckets by the device's LOCAL calendar day (_todayBounds), so DateTime.now()
-    // + 1h can cross into tomorrow, and a UTC-midnight anchor lands on the wrong local day in any
-    // zone whose date differs from UTC's. Anchor to today's own LOCAL 08:00 instead.
-    final today = DateTime.now();
-    final now = DateTime(today.year, today.month, today.day, 8).toUtc();
+    // getTodayEvents() buckets by the business (Rome) day, so DateTime.now() + 1h can cross into
+    // tomorrow. Anchor to today's own business-day 08:00 instead.
+    final now = _businessTodayAt(8);
     await repo.addEvent(id: 'a', eventTime: now, eventType: 'ingresso', cantiereId: 'cant-1');
     await repo.addEvent(
       id: 'b',
@@ -116,13 +121,11 @@ void main() {
   });
 
   test('events are returned in chronological order', () async {
-    // getTodayEvents() buckets by the device's LOCAL calendar day (_todayBounds), so a fixed
-    // literal date is wrong on every day but that one, DateTime.now() + 2h can cross into
-    // tomorrow, and a UTC-midnight anchor lands on the wrong local day in any zone whose date
-    // differs from UTC's. Anchor to today's own LOCAL 08:00/10:00 instead.
-    final today = DateTime.now();
-    final earlier = DateTime(today.year, today.month, today.day, 8).toUtc();
-    final later = DateTime(today.year, today.month, today.day, 10).toUtc();
+    // getTodayEvents() buckets by the business (Rome) day, so a fixed literal date is wrong on
+    // every day but that one and DateTime.now() + 2h can cross into tomorrow. Anchor to today's
+    // own business-day 08:00/10:00 instead.
+    final earlier = _businessTodayAt(8);
+    final later = _businessTodayAt(10);
     await repo.addEvent(id: 'later', eventTime: later, eventType: 'uscita');
     await repo.addEvent(
       id: 'earlier',

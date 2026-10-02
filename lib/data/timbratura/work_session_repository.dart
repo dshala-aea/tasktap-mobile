@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:drift/drift.dart';
 
+import '../../core/time/business_time.dart';
 import '../local/app_database.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -71,9 +72,27 @@ abstract interface class IWorkSessionRepository {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class WorkSessionRepository implements IWorkSessionRepository {
-  WorkSessionRepository(this._db);
+  WorkSessionRepository(this._db, {BusinessTime? businessTime})
+    : _businessTime = businessTime ?? BusinessTime.fallback();
 
   final AppDatabase _db;
+  final BusinessTime _businessTime;
+
+  /// The one definition of "today": the tenant business day as a half-open UTC window.
+  (DateTime, DateTime) _todayRange() => _businessTime.todayRangeUtc();
+
+  /// Today's visible rows (failed-conflict rows excluded), shared by get/watch.
+  SimpleSelectStatement<$WorkSessionsTable, WorkSession> _todayQuery() {
+    final (start, end) = _todayRange();
+    return _db.select(_db.workSessions)
+      ..where(
+        (s) =>
+            s.eventTime.isBiggerOrEqualValue(start) &
+            s.eventTime.isSmallerThanValue(end) &
+            (s.notes.isNull() | s.notes.equals(syncFailedMarker).not()),
+      )
+      ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]);
+  }
 
   @override
   Future<void> addEvent({
@@ -99,36 +118,10 @@ class WorkSessionRepository implements IWorkSessionRepository {
   }
 
   @override
-  Stream<List<WorkSession>> watchTodaySessions() {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day).toUtc();
-    final end = start.add(const Duration(days: 1));
-    return (_db.select(_db.workSessions)
-          ..where(
-            (s) =>
-                s.eventTime.isBiggerOrEqualValue(start) &
-                s.eventTime.isSmallerThanValue(end) &
-                (s.notes.isNull() | s.notes.equals(syncFailedMarker).not()),
-          )
-          ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
-        .watch();
-  }
+  Stream<List<WorkSession>> watchTodaySessions() => _todayQuery().watch();
 
   @override
-  Future<List<WorkSession>> getTodaySessions() {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day).toUtc();
-    final end = start.add(const Duration(days: 1));
-    return (_db.select(_db.workSessions)
-          ..where(
-            (s) =>
-                s.eventTime.isBiggerOrEqualValue(start) &
-                s.eventTime.isSmallerThanValue(end) &
-                (s.notes.isNull() | s.notes.equals(syncFailedMarker).not()),
-          )
-          ..orderBy([(s) => OrderingTerm.asc(s.eventTime)]))
-        .get();
-  }
+  Future<List<WorkSession>> getTodaySessions() => _todayQuery().get();
 
   @override
   Future<void> markSynced(List<String> ids) async {
@@ -140,9 +133,7 @@ class WorkSessionRepository implements IWorkSessionRepository {
 
   @override
   Future<void> clearToday() async {
-    final now = DateTime.now();
-    final start = DateTime(now.year, now.month, now.day).toUtc();
-    final end = start.add(const Duration(days: 1));
+    final (start, end) = _todayRange();
     await (_db.delete(_db.workSessions)..where(
           (s) =>
               s.eventTime.isBiggerOrEqualValue(start) &

@@ -20,6 +20,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../sync/sync_service.dart' show appDatabaseProvider;
 import 'cantiere_session_assembler.dart';
 import 'cantiere_session_repository.dart';
@@ -28,7 +29,10 @@ import 'cantiere_worklog_api_client.dart';
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 final cantiereSessionRepositoryProvider = Provider<ICantiereSessionRepository>((ref) {
-  return CantiereSessionRepository(ref.watch(appDatabaseProvider));
+  return CantiereSessionRepository(
+    ref.watch(appDatabaseProvider),
+    businessTime: ref.watch(businessTimeProvider),
+  );
 });
 
 final cantiereTimbraSyncServiceProvider = Provider<CantiereTimbraSyncService>((ref) {

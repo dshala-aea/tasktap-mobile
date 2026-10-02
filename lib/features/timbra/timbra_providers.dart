@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart' show isOnlineProvider;
 import '../../data/sync/sync_service.dart';
@@ -24,7 +25,10 @@ const _uuid = Uuid();
 
 /// Provides the [WorkSessionRepository] backed by the local Drift DB.
 final workSessionRepositoryProvider = Provider<IWorkSessionRepository>((ref) {
-  return WorkSessionRepository(ref.watch(appDatabaseProvider));
+  return WorkSessionRepository(
+    ref.watch(appDatabaseProvider),
+    businessTime: ref.watch(businessTimeProvider),
+  );
 });
 
 // ── Today's sessions (reactive stream) ───────────────────────────────────────

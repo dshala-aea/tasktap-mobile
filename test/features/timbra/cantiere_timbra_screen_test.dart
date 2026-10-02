@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -232,6 +233,12 @@ Future<void> _teardown(WidgetTester tester) async {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+/// [hour]:00 after the start of the current business (default Rome) day, as a UTC instant.
+DateTime _businessTodayAt(int hour) {
+  final bt = BusinessTime.fallback();
+  return bt.utcRangeForBusinessDate(bt.businessToday()).$1.add(Duration(hours: hour));
+}
 
 void main() {
   setUpAll(() async {
@@ -1265,8 +1272,7 @@ void main() {
               name: 'Cantiere Via Roma',
             ),
           );
-      final today = DateTime.now();
-      final start = DateTime(today.year, today.month, today.day, 7).toUtc();
+      final start = _businessTodayAt(7);
       await db
           .into(db.cantierePunches)
           .insert(
@@ -1594,18 +1600,12 @@ void main() {
     testWidgets(
       'still shows the pending-sync indicator when a punch has not synced',
       (tester) async {
-        // eventTime must fall within today's real-clock bounds (see
-        // CantiereSessionRepository._todayBounds(), DateTime.now()-based) for
+        // eventTime must fall within today's real-clock business-day bounds (see
+        // CantiereSessionRepository._todayRange()) for
         // todayCantiereEventsProvider to pick it up and derive an active local session — a fixed
         // historical date would never qualify, same reasoning as the check-in body's own
         // "today"-scoped OGGI test above.
-        final today = DateTime.now();
-        final eventTime = DateTime(
-          today.year,
-          today.month,
-          today.day,
-          8,
-        ).toUtc();
+        final eventTime = _businessTodayAt(8);
         await db
             .into(db.cantierePunches)
             .insert(
@@ -1671,8 +1671,7 @@ void main() {
       () async {
         final container = buildContainer(db);
         addTearDown(container.dispose);
-        final today = DateTime.now();
-        final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+        final start = _businessTodayAt(8);
 
         await punch(
           db,
@@ -1701,8 +1700,7 @@ void main() {
     test('ignores events for a different cantiere', () async {
       final container = buildContainer(db);
       addTearDown(container.dispose);
-      final today = DateTime.now();
-      final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+      final start = _businessTodayAt(8);
 
       await punch(
         db,
@@ -1729,13 +1727,7 @@ void main() {
     test('excludes a still-open interval (no matching uscita yet)', () async {
       final container = buildContainer(db);
       addTearDown(container.dispose);
-      final today = DateTime.now();
-      final closedStart = DateTime(
-        today.year,
-        today.month,
-        today.day,
-        7,
-      ).toUtc();
+      final closedStart = _businessTodayAt(7);
 
       await punch(
         db,
@@ -1772,9 +1764,8 @@ void main() {
     test('sums multiple closed intervals for the same cantiere', () async {
       final container = buildContainer(db);
       addTearDown(container.dispose);
-      final today = DateTime.now();
-      final s1 = DateTime(today.year, today.month, today.day, 7).toUtc();
-      final s2 = DateTime(today.year, today.month, today.day, 12).toUtc();
+      final s1 = _businessTodayAt(7);
+      final s2 = _businessTodayAt(12);
 
       await punch(
         db,

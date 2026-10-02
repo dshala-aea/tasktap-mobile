@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/cantiere/cantieri_list_screen.dart';
@@ -118,8 +119,9 @@ void main() {
             name: 'Alfa Cantiere',
           ),
         );
-    final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day, 8).toUtc();
+    // The repository's "today" is the business (Rome) day, not the device day.
+    final bt = BusinessTime.fallback();
+    final start = bt.utcRangeForBusinessDate(bt.businessToday()).$1.add(const Duration(hours: 8));
     await db
         .into(db.cantierePunches)
         .insert(
