@@ -116,6 +116,7 @@ class StepOre extends ConsumerWidget {
                 child: _StaffTile(
                   row: row,
                   worklogSuggestion: suggestion,
+                  businessTime: businessTime,
                   onUpdate: (updated) => notifier.updateStaff(updated),
                   onRemove: () => notifier.removeStaff(row.id),
                   onStartTimer: () => notifier.startTimer(row.id),
@@ -342,7 +343,7 @@ WorklogHoursSuggestion? worklogSuggestionFor(
   return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
 }
 
-/// Cantiere tier — same matching/summing shape as [_worklogSuggestionFor], against this
+/// Cantiere tier — same matching/summing shape as [worklogSuggestionFor], against this
 /// cantiere's own CantiereWorkLog sessions instead of a ticket's. Only reached (see the tiering
 /// in `StepOre.build`) when the ticket tier found nothing for this row.
 ///
@@ -424,11 +425,13 @@ final recentWorkLogProvider = FutureProvider.autoDispose.family<List<UserWorkLog
 ) async {
   if (!ref.watch(isOnlineProvider)) return const [];
   final api = ref.watch(worklogApiClientProvider);
-  final now = DateTime.now();
+  // The API reads the y/m/d fields of these as date labels. WorkDate labels live in the legacy
+  // (Rome) frame, so the window is anchored there, not on the device zone.
+  final today = ref.watch(businessTimeProvider).legacyToday();
   return api.fetchForUser(
     userId: userId,
-    dateFrom: now.subtract(const Duration(days: 30)),
-    dateTo: now,
+    dateFrom: today.subtract(const Duration(days: 30)),
+    dateTo: today,
   );
 });
 
@@ -436,12 +439,14 @@ class _StaffTile extends StatefulWidget {
   const _StaffTile({
     required this.row,
     this.worklogSuggestion,
+    required this.businessTime,
     required this.onUpdate,
     required this.onRemove,
     required this.onStartTimer,
     required this.onStopTimer,
   });
 
+  final BusinessTime businessTime;
   final StaffRow row;
   final WorklogHoursSuggestion? worklogSuggestion;
   final ValueChanged<StaffRow> onUpdate;
@@ -568,6 +573,7 @@ class _StaffTileState extends State<_StaffTile> {
             const SizedBox(height: 8),
             _WorklogSuggestionChip(
               suggestion: widget.worklogSuggestion!,
+              businessTime: widget.businessTime,
               onApply: () {
                 final s = widget.worklogSuggestion!;
                 widget.onUpdate(
@@ -599,20 +605,23 @@ class _StaffTileState extends State<_StaffTile> {
     );
   }
 
-  String _fmtTime(DateTime dt) =>
-      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  String _fmtTime(DateTime dt) => widget.businessTime.formatInZone(dt, 'HH:mm');
 }
 
 // ── Worklog suggestion chip ─────────────────────────────────────────────────────
 
 class _WorklogSuggestionChip extends StatelessWidget {
-  const _WorklogSuggestionChip({required this.suggestion, required this.onApply});
+  const _WorklogSuggestionChip({
+    required this.suggestion,
+    required this.businessTime,
+    required this.onApply,
+  });
 
   final WorklogHoursSuggestion suggestion;
+  final BusinessTime businessTime;
   final VoidCallback onApply;
 
-  static String _fmtTime(DateTime dt) =>
-      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  String _fmtTime(DateTime dt) => businessTime.formatInZone(dt, 'HH:mm');
 
   @override
   Widget build(BuildContext context) {

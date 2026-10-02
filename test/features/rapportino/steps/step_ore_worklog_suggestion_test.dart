@@ -19,6 +19,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/core/time/business_time_providers.dart';
@@ -132,6 +133,7 @@ Widget _buildStep(ProviderContainer container) {
 void main() {
   late AppDatabase db;
 
+  setUpAll(() async => initializeDateFormatting('it'));
   setUp(() => db = _makeDb());
   tearDown(() async => db.close());
 
@@ -456,6 +458,77 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Da worklog:'), findsNothing);
+    });
+  });
+
+  group('StepOre — staff times render in the business zone', () {
+    // P1's server-report import stores startTime/endTime as real UTC instants.
+    final imported = StaffRow(
+      id: 'staff-1',
+      userId: 'user-1',
+      hoursWorked: 8.5,
+      startTime: DateTime.utc(2026, 7, 10, 6),
+      endTime: DateTime.utc(2026, 7, 10, 14, 30),
+    );
+
+    testWidgets('Rome tenant: Inizio 08:00 / Fine 16:30 for an imported UTC instant', (
+      tester,
+    ) async {
+      final container = _buildContainer(
+        db: db,
+        staffRows: [imported],
+        businessTime: BusinessTime('Europe/Rome', clock: () => DateTime.utc(2026, 7, 10, 12)),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Inizio: 08:00'), findsOneWidget);
+      expect(find.textContaining('Fine: 16:30'), findsOneWidget);
+    });
+
+    testWidgets('New York tenant: the same instants read 02:00 / 10:30', (tester) async {
+      final container = _buildContainer(
+        db: db,
+        staffRows: [imported],
+        businessTime: BusinessTime(
+          'America/New_York',
+          clock: () => DateTime.utc(2026, 7, 10, 12),
+        ),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Inizio: 02:00'), findsOneWidget);
+      expect(find.textContaining('Fine: 10:30'), findsOneWidget);
+    });
+
+    testWidgets('the suggestion chip reads 08:00–16:30 (Rome), never the UTC hour', (
+      tester,
+    ) async {
+      final container = _buildContainer(
+        db: db,
+        staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
+        worklogEntries: [
+          _entry(
+            userId: 'user-1',
+            workDate: DateTime.utc(2026, 8, 31),
+            startTime: const Duration(hours: 8),
+            endTime: const Duration(hours: 16, minutes: 30),
+            duration: const Duration(hours: 8, minutes: 30),
+          ),
+        ],
+        businessTime: BusinessTime('Europe/Rome', clock: () => DateTime.utc(2026, 8, 31, 12)),
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Da worklog: 8,5h (08:00–16:30)'), findsOneWidget);
     });
   });
 

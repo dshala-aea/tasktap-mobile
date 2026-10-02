@@ -50,6 +50,16 @@ DateTime? parseDateOnly(Object? raw) {
 DateTime parseDateOnlyOrThrow(Object? raw) =>
     parseDateOnly(raw) ?? (throw FormatException('Invalid date', raw));
 
+/// Formats the y/m/d fields of a date label with NO zone conversion. A label
+/// is `DateTime.utc(y, m, d)` (or a local twin); `toLocal()` on it would show
+/// the previous day west of UTC. A non-null [locale] needs
+/// `initializeDateFormatting(locale)` first.
+String formatWorkDate(DateTime workDate, String pattern, {String? locale}) =>
+    DateFormat(
+      pattern,
+      locale,
+    ).format(DateTime.utc(workDate.year, workDate.month, workDate.day));
+
 /// Frame of every legacy `WorkDate/StartTime/EndTime` label the backend
 /// writes. Independent of the tenant zone (plan Ruling 3).
 const kLegacyLabelZoneId = 'Europe/Rome';

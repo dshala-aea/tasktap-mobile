@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/router/app_router.dart';
+import '../../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../../core/utils/error_message.dart';
 import '../../../core/widgets/app_map_card.dart';
 import '../../../core/widgets/widgets.dart';
@@ -884,9 +885,9 @@ class _WorkLogsSection extends ConsumerWidget {
               child: Column(
                 children: logs.asMap().entries.map((entry) {
                   final log = entry.value;
-                  final workDate = DateTime.tryParse(log['workDate'] as String? ?? '');
+                  final workDate = parseDateOnly(log['workDate']);
                   final dateLabel = workDate != null
-                      ? DateFormat('dd/MM/yyyy', 'it').format(workDate.toLocal())
+                      ? formatWorkDate(workDate, 'dd/MM/yyyy', locale: 'it')
                       : '—';
                   final startTime = (log['startTime'] as String?)?.substring(0, 5) ?? '—';
                   final endTime = (log['endTime'] as String?)?.substring(0, 5);

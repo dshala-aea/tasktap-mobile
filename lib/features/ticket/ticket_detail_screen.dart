@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
+import '../../core/time/business_time.dart' show formatWorkDate;
 import '../../core/widgets/app_compartment_tile.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
@@ -2052,7 +2053,7 @@ class _OreTab extends ConsumerWidget {
                   ),
                 ),
               const SizedBox(height: 10),
-              for (final e in entries) _WorklogRow(entry: e),
+              for (final e in entries) TicketWorklogRow(entry: e),
             ],
           ),
         );
@@ -2061,15 +2062,16 @@ class _OreTab extends ConsumerWidget {
   }
 }
 
-class _WorklogRow extends StatelessWidget {
-  const _WorklogRow({required this.entry});
+@visibleForTesting
+class TicketWorklogRow extends StatelessWidget {
+  const TicketWorklogRow({super.key, required this.entry});
 
   final TicketWorkLogDto entry;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final dateLabel = DateFormat('EEE d MMM', 'it').format(entry.workDate.toLocal());
+    final dateLabel = formatWorkDate(entry.workDate, 'EEE d MMM', locale: 'it');
     final span = entry.endTime == null
         ? '${_hhmm(entry.startTime)} → in corso'
         : '${_hhmm(entry.startTime)} – ${_hhmm(entry.endTime!)}';
