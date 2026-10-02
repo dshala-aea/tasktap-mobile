@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
@@ -233,6 +234,22 @@ void main() {
 
       expect(await db.select(db.customers).get(), isEmpty);
       expect(prefs.getBool('autenticazioneBiometrica'), isNull);
+    });
+
+    test('signOut resets the business zone to Europe/Rome', () async {
+      when(() => repo.signOut()).thenAnswer((_) async {});
+
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final container = _makeContainer(repo, db: db);
+      addTearDown(container.dispose);
+
+      await container.read(businessZoneIdProvider.notifier).set('Asia/Tokyo');
+      expect(container.read(businessZoneIdProvider), 'Asia/Tokyo');
+
+      await container.read(loginProvider.notifier).signOut();
+
+      expect(container.read(businessZoneIdProvider), 'Europe/Rome');
     });
 
     // Regression: logout used to never unregister this device's FCM token, so a signed-out

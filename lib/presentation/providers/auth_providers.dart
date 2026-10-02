@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/notifications/notification_service.dart';
+import '../../core/time/business_time_providers.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
 import '../../data/entitlements/entitlement_service.dart'
     show internalUserIdPrefsKey;
@@ -138,6 +139,9 @@ class LoginNotifier extends StateNotifier<LoginState> {
     // previous account's full cached tickets/customers/cantieri/notifications and settings.
     await _ref.read(appDatabaseProvider).wipeAllData();
     await (await SharedPreferences.getInstance()).clear();
+    // Riverpod state outlives the prefs wipe: without this the next tenant would
+    // inherit this tenant's business zone until its own /me answers.
+    await _ref.read(businessZoneIdProvider.notifier).reset();
 
     state = const LoginState();
   }
