@@ -51,6 +51,18 @@ void main() {
       );
       expect(intent?.resolveRoute(), '/ticket/t9');
     });
+    test('WorkLogCorrected is informational: no route, with or without an entity pair', () {
+      expect(DeepLinkIntent.fromNotification(type: 'WorkLogCorrected'), isNull);
+      expect(
+        DeepLinkIntent.fromNotification(
+          type: 'WorkLogCorrected',
+          entityType: 'WorkLog',
+          entityId: 'x1',
+        )?.resolveRoute(),
+        isNull,
+      );
+      expect(kInformationalNotificationTypes, contains('WorkLogCorrected'));
+    });
     test('a type with no entity and no type route -> null', () {
       expect(DeepLinkIntent.fromNotification(type: 'SystemAnnouncement'), isNull);
       expect(DeepLinkIntent.fromNotification(), isNull);

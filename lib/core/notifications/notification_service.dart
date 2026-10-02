@@ -292,13 +292,18 @@ class NotificationService {
 }
 
 /// Routes for notification types that carry no related entity, keyed by the
-/// `NotificationTypeEnum` name. A new such type (e.g. a future `WorkLogCorrected`) needs only an
-/// entry here; types with an entity resolve through [DeepLinkIntent.resolveRoute] instead.
+/// `NotificationTypeEnum` name. A new such type needs only an entry here; types with an entity
+/// resolve through [DeepLinkIntent.resolveRoute] instead. `WorkLogCorrected` deliberately has no
+/// entry: it is informational (see [kInformationalNotificationTypes]).
 const Map<String, String> kNotificationTypeRoutes = {
   // "N ticket in ritardo" daily digest: no single ticket, so open the list. The list has no
   // overdue filter parameter today.
   'TicketOverdueDigest': AppRoutes.ticket,
 };
+
+/// Types that only inform: tapping one marks it read and opens nothing, and the list shows no
+/// "no page linked" SnackBar for them.
+const Set<String> kInformationalNotificationTypes = {'WorkLogCorrected'};
 
 /// Deep-link intent parsed from a notification tap.
 class DeepLinkIntent {

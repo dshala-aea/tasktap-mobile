@@ -72,6 +72,9 @@ class _NotificheScreenState extends ConsumerState<NotificheScreen> {
       context.push(route);
       return;
     }
+    // Informational types ("your entry was corrected") have nothing to open and nothing to
+    // explain: the tap just marks them read.
+    if (kInformationalNotificationTypes.contains(n.tipo)) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -249,6 +252,8 @@ IconData _iconForTipo(String? tipo) {
     'AbsenceRequestDecided' => LucideIcons.calendarCheck,
     'CantiereAssigned' => LucideIcons.hardHat,
     'SeatLimitAlert' => LucideIcons.alertTriangle,
+    // lucide_icons ^0.257.0 has no clockAlert; pencil reads as "edited".
+    'WorkLogCorrected' => LucideIcons.pencil,
     _ => LucideIcons.bell,
   };
 }

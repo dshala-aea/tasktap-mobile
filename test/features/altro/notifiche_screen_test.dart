@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/features/altro/notifiche_provider.dart';
 import 'package:tasktap_mobile/features/altro/notifiche_screen.dart';
@@ -261,6 +262,40 @@ void main() {
       await drain(tester);
     });
   }
+
+  testWidgets('WorkLogCorrected row: pencil icon, tap marks read, no SnackBar, no navigation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      await _buildScreen(
+        notifiche: [
+          _fakeNotifica(
+            tipo: 'WorkLogCorrected',
+            relatedEntityType: 'WorkLog',
+            relatedEntityId: 'x1',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byWidgetPredicate((w) => w is Icon && w.icon == LucideIcons.pencil), findsOneWidget);
+    expect(find.text('Segna tutte'), findsOneWidget);
+
+    await tester.tap(find.text('Nuovo intervento'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nessuna pagina collegata a questa notifica'), findsNothing);
+    expect(find.text('Nuovo intervento'), findsOneWidget); // still on the list
+    expect(find.text('Segna tutte'), findsNothing); // marked read
+    await drain(tester);
+  });
+
+  testWidgets('an unknown tipo gets the generic bell', (tester) async {
+    await tester.pumpWidget(await _buildScreen(notifiche: [_fakeNotifica(tipo: 'Unknown')]));
+    await tester.pumpAndSettle();
+    expect(find.byWidgetPredicate((w) => w is Icon && w.icon == LucideIcons.bell), findsOneWidget);
+    await drain(tester);
+  });
 
   testWidgets('tap on the overdue digest (no entity) opens the ticket list', (tester) async {
     await tester.pumpWidget(

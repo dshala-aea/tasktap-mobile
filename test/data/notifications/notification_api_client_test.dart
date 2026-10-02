@@ -49,9 +49,9 @@ void main() {
     });
 
     test('ordinals past the end of the known list decode to Unknown without throwing', () {
-      // A server newer than this build (e.g. WorkLogCorrected, appended after
-      // TicketOverdueDigest) must degrade to the neutral label, never crash the list.
-      for (final ordinal in const [24, 25, 999, -1]) {
+      // A server newer than this build (a type appended after WorkLogCorrected, ordinal 24)
+      // must degrade to the neutral label, never crash the list.
+      for (final ordinal in const [25, 26, 999, -1]) {
         final dto = NotificationDto.fromJson(_baseJson(type: ordinal, deliveryType: 0));
         expect(dto.type, 'Unknown', reason: 'ordinal $ordinal');
       }
@@ -83,12 +83,18 @@ void main() {
         'CantiereAssigned',
         'SeatLimitAlert',
         'TicketOverdueDigest',
+        'WorkLogCorrected',
       ];
 
       for (var i = 0; i < expected.length; i++) {
         final dto = NotificationDto.fromJson(_baseJson(type: i, deliveryType: 0));
         expect(dto.type, expected[i], reason: 'ordinal $i');
       }
+    });
+
+    test('a WorkLogCorrected name string (FCM data.type shape) passes through unchanged', () {
+      final dto = NotificationDto.fromJson(_baseJson(type: 'WorkLogCorrected', deliveryType: 0));
+      expect(dto.type, 'WorkLogCorrected');
     });
   });
 }
