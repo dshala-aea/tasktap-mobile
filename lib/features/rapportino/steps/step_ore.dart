@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/time/business_time.dart';
+import '../../../core/time/business_time_providers.dart';
+import '../../../core/time/work_time.dart' show parseTimeSpan;
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/timbratura/cantiere_worklog_api_client.dart' show CantiereWorkLogDto;
 import '../../../data/timbratura/worklog_api_client.dart'
@@ -37,6 +40,7 @@ class StepOre extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(reportEditorProvider(reportId));
+    final businessTime = ref.watch(businessTimeProvider);
     final notifier = ref.read(reportEditorProvider(reportId).notifier);
     final totalOre = state.staffRows.fold<double>(0, (sum, r) => sum + r.effectiveHours);
 
@@ -89,21 +93,21 @@ class StepOre extends ConsumerWidget {
               // loading or genuinely has nothing correctly falls through to the next one below.
               var suggestion = worklogEntries == null
                   ? null
-                  : _worklogSuggestionFor(worklogEntries, row);
+                  : worklogSuggestionFor(businessTime, worklogEntries, row);
 
               if (suggestion == null && cantiereId != null) {
                 final cantiereEntries = ref
                     .watch(cantiereWorklogsProvider((userId: row.userId, cantiereId: cantiereId)))
                     .valueOrNull;
                 if (cantiereEntries != null) {
-                  suggestion = _cantiereWorklogSuggestionFor(cantiereEntries, row);
+                  suggestion = cantiereWorklogSuggestionFor(businessTime, cantiereEntries, row);
                 }
               }
 
               if (suggestion == null) {
                 final recentEntries = ref.watch(recentWorkLogProvider(row.userId)).valueOrNull;
                 if (recentEntries != null) {
-                  suggestion = _recentWorkLogSuggestionFor(recentEntries, row);
+                  suggestion = recentWorkLogSuggestionFor(businessTime, recentEntries, row);
                 }
               }
 
@@ -303,7 +307,16 @@ class WorklogHoursSuggestion {
 /// startTime/endTime, and effectiveHours prefers that range over hoursWorked whenever both are
 /// set — so setting hoursWorked alongside an existing range would silently do nothing visible,
 /// which is worse than not offering the suggestion at all.
-WorklogHoursSuggestion? _worklogSuggestionFor(List<TicketWorkLogDto> entries, StaffRow row) {
+///
+/// Times are real instants: the legacy `workDate` + `HH:mm:ss` label is a Rome wall-clock label
+/// (plan Ruling 3, whatever the tenant zone), turned into an instant by
+/// [BusinessTime.instantOfLegacyLabel]; the end is that instant plus the server duration.
+@visibleForTesting
+WorklogHoursSuggestion? worklogSuggestionFor(
+  BusinessTime businessTime,
+  List<TicketWorkLogDto> entries,
+  StaffRow row,
+) {
   // .duration (not a hand-derived endTime-startTime/workDate+endTime) is what handles an
   // overnight session correctly — see TicketWorkLogDto.duration's doc comment. A completed entry
   // with a null duration (a malformed/legacy payload missing durationHours) is excluded rather
@@ -315,7 +328,7 @@ WorklogHoursSuggestion? _worklogSuggestionFor(List<TicketWorkLogDto> entries, St
 
   if (completed.length == 1) {
     final e = completed.single;
-    final start = e.workDate.add(e.startTime);
+    final start = businessTime.instantOfLegacyLabel(e.workDate, e.startTime);
     final end = start.add(e.duration!);
     return WorklogHoursSuggestion(
       hours: e.duration!.inMinutes / 60.0,
@@ -329,33 +342,31 @@ WorklogHoursSuggestion? _worklogSuggestionFor(List<TicketWorkLogDto> entries, St
   return WorklogHoursSuggestion(hours: totalMinutes / 60.0);
 }
 
-/// Combines a calendar day with a backend "HH:mm:ss" time-of-day string into one [DateTime] —
-/// [CantiereWorkLogDto.startTime]/[UserWorkLogDto.startTime] carry the same bare TimeSpan shape
-/// `TicketWorkLogDto` moved away from (see that class's own [Duration]-typed `startTime`), so
-/// this is the cantiere/plain-tier equivalent of `e.workDate.add(e.startTime)` above.
-DateTime _combineWorkDateAndHms(DateTime workDate, String hms) {
-  final parts = hms.split(':');
-  final hours = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 0;
-  final minutes = int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0;
-  final seconds = int.tryParse(parts.elementAtOrNull(2) ?? '') ?? 0;
-  return workDate.add(Duration(hours: hours, minutes: minutes, seconds: seconds));
-}
-
 /// Cantiere tier — same matching/summing shape as [_worklogSuggestionFor], against this
 /// cantiere's own CantiereWorkLog sessions instead of a ticket's. Only reached (see the tiering
 /// in `StepOre.build`) when the ticket tier found nothing for this row.
-WorklogHoursSuggestion? _cantiereWorklogSuggestionFor(
+///
+/// An entry whose `startTime` is not a valid time-of-day is skipped, never read as midnight.
+@visibleForTesting
+WorklogHoursSuggestion? cantiereWorklogSuggestionFor(
+  BusinessTime businessTime,
   List<CantiereWorkLogDto> entries,
   StaffRow row,
 ) {
   final completed = entries
-      .where((e) => e.userId == row.userId && !e.isActive && e.duration != null)
+      .where(
+        (e) =>
+            e.userId == row.userId &&
+            !e.isActive &&
+            e.duration != null &&
+            parseTimeSpan(e.startTime) != null,
+      )
       .toList();
   if (completed.isEmpty) return null;
 
   if (completed.length == 1) {
     final e = completed.single;
-    final start = _combineWorkDateAndHms(e.workDate, e.startTime);
+    final start = businessTime.instantOfLegacyLabel(e.workDate, parseTimeSpan(e.startTime)!);
     final end = start.add(e.duration!);
     return WorklogHoursSuggestion(
       hours: e.duration!.inMinutes / 60.0,
@@ -379,19 +390,25 @@ WorklogHoursSuggestion? _cantiereWorklogSuggestionFor(
 /// clocked in and haven't clocked out), and "now" is an honest end for a rapportino being
 /// compiled while that clock is still running. No sum, unlike the two tiers above: an open
 /// timbratura is at most one entry, never several to combine.
-WorklogHoursSuggestion? _recentWorkLogSuggestionFor(List<UserWorkLogDto> entries, StaffRow row) {
-  final active = entries.where((e) => e.userId == row.userId && e.endTime == null).toList();
+@visibleForTesting
+WorklogHoursSuggestion? recentWorkLogSuggestionFor(
+  BusinessTime businessTime,
+  List<UserWorkLogDto> entries,
+  StaffRow row,
+) {
+  // Entries with an unparseable startTime are skipped, never read as midnight.
+  final active = <(UserWorkLogDto, DateTime)>[];
+  for (final e in entries) {
+    if (e.userId != row.userId || e.endTime != null) continue;
+    final t = parseTimeSpan(e.startTime);
+    if (t == null) continue;
+    active.add((e, businessTime.instantOfLegacyLabel(e.workDate, t)));
+  }
   if (active.isEmpty) return null;
 
-  active.sort(
-    (a, b) => _combineWorkDateAndHms(
-      b.workDate,
-      b.startTime,
-    ).compareTo(_combineWorkDateAndHms(a.workDate, a.startTime)),
-  );
-  final e = active.first;
-  final start = _combineWorkDateAndHms(e.workDate, e.startTime);
-  final end = DateTime.now();
+  active.sort((a, b) => b.$2.compareTo(a.$2));
+  final start = active.first.$2;
+  final end = businessTime.nowInstant();
   final hours = end.difference(start).inMinutes / 60.0;
   return WorklogHoursSuggestion(hours: hours, startTime: start, endTime: end);
 }

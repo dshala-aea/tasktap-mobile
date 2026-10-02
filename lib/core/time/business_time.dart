@@ -77,6 +77,9 @@ class BusinessTime {
         isUtc: true,
       );
 
+  /// The clock as a UTC instant.
+  DateTime nowInstant() => _clock().toUtc();
+
   tz.TZDateTime _nowInZone(tz.Location loc) =>
       tz.TZDateTime.from(_clock().toUtc(), loc);
 

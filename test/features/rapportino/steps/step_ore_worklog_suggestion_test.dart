@@ -20,9 +20,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart';
+import 'package:tasktap_mobile/core/time/work_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
+import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart'
+    show CantiereWorkLogDto;
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart' show UserWorkLogDto;
 import 'package:tasktap_mobile/features/rapportino/steps/step_ore.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
@@ -52,37 +57,50 @@ TicketWorkLogDto _entry({
   duration: duration,
 );
 
-String _hms(DateTime dt) =>
-    '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:'
-    '${dt.second.toString().padLeft(2, '0')}';
-
-/// A plain [UserWorkLogDto] (StepOre's last-resort tier) at a given [start] moment, stripped to
-/// whole-second precision — the backend's "HH:mm:ss" wire format has no room for milli/micros, so
-/// round-tripping through it must not lose anything a test then compares against.
+/// A plain [UserWorkLogDto] (StepOre's last-resort tier) with a legacy Rome-frame label.
 UserWorkLogDto _plainEntry({
   required String userId,
-  required DateTime start,
-  DateTime? end,
+  required DateTime workDate,
+  required String startTime,
+  String? endTime,
   Duration? duration,
-}) {
-  final workDate = DateTime(start.year, start.month, start.day);
-  return UserWorkLogDto(
-    id: 'plain-${userId}_${start.millisecondsSinceEpoch}',
-    userId: userId,
-    workDate: workDate,
-    startTime: _hms(start),
-    endTime: end == null ? null : _hms(end),
-    duration: duration,
-  );
-}
+}) => UserWorkLogDto(
+  id: 'plain-${userId}_$startTime',
+  userId: userId,
+  workDate: workDate,
+  startTime: startTime,
+  endTime: endTime,
+  duration: duration,
+);
+
+CantiereWorkLogDto _cantiereEntry({
+  required String userId,
+  required DateTime workDate,
+  required String startTime,
+  String? endTime,
+  Duration? duration,
+}) => CantiereWorkLogDto(
+  id: 'c-${userId}_$startTime',
+  cantiereId: 'cantiere-1',
+  customerId: 'customer-1',
+  userId: userId,
+  workDate: workDate,
+  startTime: startTime,
+  endTime: endTime,
+  duration: duration,
+);
+
+const _row = StaffRow(id: 'staff-1', userId: 'user-1');
 
 ProviderContainer _buildContainer({
   required AppDatabase db,
   required List<StaffRow> staffRows,
   List<TicketWorkLogDto>? worklogEntries,
+  BusinessTime? businessTime,
 }) {
   return ProviderContainer(
     overrides: [
+      if (businessTime != null) businessTimeProvider.overrideWithValue(businessTime),
       appDatabaseProvider.overrideWithValue(db),
       reportEditorProvider(_reportId).overrideWith(
         (ref) => ReportEditorNotifier(
@@ -105,7 +123,9 @@ ProviderContainer _buildContainer({
 Widget _buildStep(ProviderContainer container) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(home: Scaffold(body: StepOre(reportId: _reportId))),
+    child: const MaterialApp(
+      home: Scaffold(body: StepOre(reportId: _reportId)),
+    ),
   );
 }
 
@@ -139,14 +159,14 @@ void main() {
 
       expect(find.textContaining('Da worklog:'), findsOneWidget);
       expect(find.textContaining('3,8h'), findsOneWidget);
-      expect(find.textContaining('08:00–11:45'), findsOneWidget);
 
       await tester.tap(find.textContaining('Da worklog:'));
       await tester.pumpAndSettle();
 
       final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
-      expect(row.startTime, workDate.add(const Duration(hours: 8)));
-      expect(row.endTime, workDate.add(const Duration(hours: 11, minutes: 45)));
+      // 08:00 is a Rome wall-clock label: 06:00Z in August (UTC+2), a real instant.
+      expect(row.startTime, DateTime.utc(2026, 8, 31, 6));
+      expect(row.endTime, DateTime.utc(2026, 8, 31, 9, 45));
       expect(row.hoursWorked, closeTo(3.75, 0.01));
     });
 
@@ -178,7 +198,11 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.textContaining('Da worklog: 3,5h'), findsOneWidget);
-        expect(find.textContaining('–'), findsNothing, reason: 'no time range for a multi-session sum');
+        expect(
+          find.textContaining('–'),
+          findsNothing,
+          reason: 'no time range for a multi-session sum',
+        );
 
         await tester.tap(find.textContaining('Da worklog:'));
         await tester.pumpAndSettle();
@@ -235,7 +259,11 @@ void main() {
         db: db,
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
         worklogEntries: [
-          _entry(userId: 'user-1', workDate: DateTime.utc(2026, 8, 31), startTime: const Duration(hours: 8)),
+          _entry(
+            userId: 'user-1',
+            workDate: DateTime.utc(2026, 8, 31),
+            startTime: const Duration(hours: 8),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -334,9 +362,11 @@ void main() {
     ProviderContainer buildNoTicketContainer({
       required List<StaffRow> staffRows,
       required List<UserWorkLogDto> recentEntries,
+      BusinessTime? businessTime,
     }) {
       return ProviderContainer(
         overrides: [
+          if (businessTime != null) businessTimeProvider.overrideWithValue(businessTime),
           appDatabaseProvider.overrideWithValue(db),
           reportEditorProvider(_reportId).overrideWith(
             (ref) => ReportEditorNotifier(
@@ -355,60 +385,54 @@ void main() {
     }
 
     testWidgets(
-      'an open punch suggests its start time and now as the end; applying writes exactly that',
+      'an open punch suggests its start instant and the injected clock as the end; applying '
+      'writes exactly that',
       (tester) async {
-        final now = DateTime.now();
-        final start = DateTime(
-          now.year,
-          now.month,
-          now.day,
-          now.hour,
-          now.minute,
-          now.second,
-        ).subtract(const Duration(hours: 2));
         final container = buildNoTicketContainer(
-          staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
-          recentEntries: [_plainEntry(userId: 'user-1', start: start)],
+          staffRows: [_row],
+          recentEntries: [
+            _plainEntry(
+              userId: 'user-1',
+              workDate: DateTime.utc(2026, 8, 31),
+              startTime: '08:00:00',
+            ),
+          ],
+          // 08:00 Rome = 06:00Z; now = 08:30Z.
+          businessTime: BusinessTime('Europe/Rome', clock: () => DateTime.utc(2026, 8, 31, 8, 30)),
         );
         addTearDown(container.dispose);
 
         await tester.pumpWidget(_buildStep(container));
         await tester.pumpAndSettle();
 
-        final startLabel =
-            '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
         expect(find.textContaining('Da worklog:'), findsOneWidget);
-        expect(find.textContaining('$startLabel–'), findsOneWidget);
+        expect(find.textContaining('2,5h'), findsOneWidget);
 
         await tester.tap(find.textContaining('Da worklog:'));
         await tester.pumpAndSettle();
 
         final row = container.read(reportEditorProvider(_reportId)).staffRows.single;
-        expect(row.startTime, start);
-        expect(row.endTime, isNotNull);
-        // "now" as of the tap, not the fixed 30-day-old closed-session time the old fallback used.
-        expect(row.endTime!.difference(DateTime.now()).inSeconds.abs(), lessThan(10));
-        expect(
-          row.hoursWorked,
-          closeTo(row.endTime!.difference(row.startTime!).inMinutes / 60.0, 0.001),
-        );
+        expect(row.startTime, DateTime.utc(2026, 8, 31, 6));
+        expect(row.endTime, DateTime.utc(2026, 8, 31, 8, 30));
+        expect(row.hoursWorked, closeTo(2.5, 0.001));
       },
     );
 
     testWidgets(
       'a closed session in the last 30 days is never suggested — no more "last closed worklog"',
       (tester) async {
-        final workDate = DateTime.now().subtract(const Duration(days: 5));
         final container = buildNoTicketContainer(
-          staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
+          staffRows: [_row],
           recentEntries: [
             _plainEntry(
               userId: 'user-1',
-              start: workDate,
-              end: workDate.add(const Duration(hours: 3)),
+              workDate: DateTime.utc(2026, 8, 26),
+              startTime: '08:00:00',
+              endTime: '11:00:00',
               duration: const Duration(hours: 3),
             ),
           ],
+          businessTime: BusinessTime('Europe/Rome', clock: () => DateTime.utc(2026, 8, 31, 8, 30)),
         );
         addTearDown(container.dispose);
 
@@ -422,7 +446,9 @@ void main() {
     testWidgets('no chip when the open punch belongs to a different user', (tester) async {
       final container = buildNoTicketContainer(
         staffRows: [const StaffRow(id: 'staff-1', userId: 'user-1')],
-        recentEntries: [_plainEntry(userId: 'user-2', start: DateTime.now())],
+        recentEntries: [
+          _plainEntry(userId: 'user-2', workDate: DateTime.utc(2026, 8, 31), startTime: '08:00:00'),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -430,6 +456,144 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Da worklog:'), findsNothing);
+    });
+  });
+
+  group('suggestion combiner — true instants (Rome label frame, any tenant zone)', () {
+    final rome = BusinessTime('Europe/Rome', clock: () => DateTime.utc(2026, 8, 31, 12));
+    final newYork = BusinessTime('America/New_York', clock: () => DateTime.utc(2026, 8, 31, 12));
+
+    TicketWorkLogDto ticket(DateTime d, String hms, Duration dur) => _entry(
+      userId: 'user-1',
+      workDate: d,
+      startTime: parseTimeSpan(hms)!,
+      endTime: parseTimeSpan(hms)! + dur,
+      duration: dur,
+    );
+
+    // (workDate, hms, expected instant). Rome frame: summer UTC+2, winter UTC+1.
+    final table = <(DateTime, String, DateTime)>[
+      (DateTime.utc(2026, 8, 31), '08:00:00', DateTime.utc(2026, 8, 31, 6)),
+      (DateTime.utc(2026, 7, 10), '08:00:00', DateTime.utc(2026, 7, 10, 6)),
+      (DateTime.utc(2026, 12, 1), '08:00:00', DateTime.utc(2026, 12, 1, 7)),
+      (DateTime.utc(2026, 10, 25), '08:00:00', DateTime.utc(2026, 10, 25, 7)),
+      (DateTime.utc(2027, 3, 28), '08:00:00', DateTime.utc(2027, 3, 28, 6)),
+    ];
+
+    for (final bt in [rome, newYork]) {
+      for (final (date, hms, want) in table) {
+        test('${bt.zoneId}: $date $hms -> $want, identical in all three tiers', () {
+          const dur = Duration(hours: 1);
+          final t = worklogSuggestionFor(bt, [ticket(date, hms, dur)], _row)!;
+          final c = cantiereWorklogSuggestionFor(bt, [
+            _cantiereEntry(
+              userId: 'user-1',
+              workDate: date,
+              startTime: hms,
+              endTime: '23:00:00',
+              duration: dur,
+            ),
+          ], _row)!;
+          final p = recentWorkLogSuggestionFor(bt, [
+            _plainEntry(userId: 'user-1', workDate: date, startTime: hms),
+          ], _row)!;
+          expect(t.startTime, want);
+          expect(c.startTime, want);
+          expect(p.startTime, want);
+          expect(t.endTime, want.add(dur));
+          expect(c.endTime, want.add(dur));
+          expect(t.startTime!.isUtc, isTrue);
+        });
+      }
+    }
+
+    test('a local-flagged workDate gives the same instant as a UTC-flagged one', () {
+      final s = worklogSuggestionFor(newYork, [
+        ticket(DateTime(2026, 7, 10), '08:00:00', const Duration(hours: 1)),
+      ], _row)!;
+      expect(s.startTime, DateTime.utc(2026, 7, 10, 6));
+    });
+
+    test('overnight 20:02 + 10 h 8 min ends at start + duration (all tiers)', () {
+      final d = DateTime.utc(2026, 8, 31);
+      const dur = Duration(hours: 10, minutes: 8);
+      final t = worklogSuggestionFor(rome, [ticket(d, '20:02:00', dur)], _row)!;
+      expect(t.startTime, DateTime.utc(2026, 8, 31, 18, 2));
+      expect(t.endTime, DateTime.utc(2026, 9, 1, 4, 10));
+      final c = cantiereWorklogSuggestionFor(rome, [
+        _cantiereEntry(
+          userId: 'user-1',
+          workDate: d,
+          startTime: '20:02:00',
+          endTime: '06:10:00',
+          duration: dur,
+        ),
+      ], _row)!;
+      expect(c.endTime, DateTime.utc(2026, 9, 1, 4, 10));
+    });
+
+    test('end is instant arithmetic across the autumn DST change (25 h day)', () {
+      // 2026-10-25 22:00 Rome (UTC+1) + 8 h: 06:00 next day Rome = 05:00Z, i.e. 8 real hours.
+      final s = worklogSuggestionFor(rome, [
+        ticket(DateTime.utc(2026, 10, 25), '22:00:00', const Duration(hours: 8)),
+      ], _row)!;
+      expect(s.startTime, DateTime.utc(2026, 10, 25, 21));
+      expect(s.endTime, DateTime.utc(2026, 10, 26, 5));
+    });
+
+    test('a malformed or missing startTime string produces no suggestion for that entry', () {
+      final d = DateTime.utc(2026, 8, 31);
+      for (final bad in ['', 'abc', '8', '25:00:00', '2026-08-31T08:00:00Z']) {
+        expect(
+          cantiereWorklogSuggestionFor(rome, [
+            _cantiereEntry(
+              userId: 'user-1',
+              workDate: d,
+              startTime: bad,
+              endTime: '10:00:00',
+              duration: const Duration(hours: 2),
+            ),
+          ], _row),
+          isNull,
+          reason: 'cantiere "$bad"',
+        );
+        expect(
+          recentWorkLogSuggestionFor(rome, [
+            _plainEntry(userId: 'user-1', workDate: d, startTime: bad),
+          ], _row),
+          isNull,
+          reason: 'plain "$bad"',
+        );
+      }
+    });
+
+    test('plain tier: end is the business-time clock instant; hours from the real difference', () {
+      final bt = BusinessTime('America/New_York', clock: () => DateTime.utc(2026, 8, 31, 9, 15));
+      final s = recentWorkLogSuggestionFor(bt, [
+        _plainEntry(userId: 'user-1', workDate: DateTime.utc(2026, 8, 31), startTime: '08:00:00'),
+      ], _row)!;
+      expect(s.startTime, DateTime.utc(2026, 8, 31, 6));
+      expect(s.endTime, DateTime.utc(2026, 8, 31, 9, 15));
+      expect(s.hours, closeTo(3.25, 0.001));
+    });
+
+    test('plain tier picks the latest start by instant', () {
+      final s = recentWorkLogSuggestionFor(rome, [
+        _plainEntry(userId: 'user-1', workDate: DateTime.utc(2026, 8, 30), startTime: '23:00:00'),
+        _plainEntry(userId: 'user-1', workDate: DateTime.utc(2026, 8, 31), startTime: '07:00:00'),
+      ], _row)!;
+      expect(s.startTime, DateTime.utc(2026, 8, 31, 5));
+    });
+
+    test('multi-session sum is unchanged and carries no range', () {
+      final d = DateTime.utc(2026, 8, 31);
+      final s = worklogSuggestionFor(newYork, [
+        ticket(d, '08:00:00', const Duration(hours: 2)),
+        ticket(d, '13:00:00', const Duration(hours: 1, minutes: 30)),
+      ], _row)!;
+      expect(s.hours, closeTo(3.5, 0.001));
+      expect(s.startTime, isNull);
+      expect(s.endTime, isNull);
     });
   });
 }
