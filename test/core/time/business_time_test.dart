@@ -106,6 +106,53 @@ void main() {
     });
   });
 
+  group('businessDateOf', () {
+    DateTime dateOf(DateTime instant, [String zone = 'Europe/Rome']) =>
+        _at(zone).businessDateOf(instant);
+
+    test('Rome summer midnight boundary', () {
+      expect(dateOf(DateTime.utc(2026, 7, 10, 21, 59, 59)), _d(2026, 7, 10));
+      expect(dateOf(DateTime.utc(2026, 7, 10, 22)), _d(2026, 7, 11));
+    });
+
+    test('Rome winter midnight boundary', () {
+      expect(dateOf(DateTime.utc(2026, 12, 1, 22, 59, 59)), _d(2026, 12, 1));
+      expect(dateOf(DateTime.utc(2026, 12, 1, 23)), _d(2026, 12, 2));
+    });
+
+    test('Rome DST days: 2027-03-28 starts 23:00Z and ends 22:00Z', () {
+      expect(dateOf(DateTime.utc(2027, 3, 27, 23)), _d(2027, 3, 28));
+      expect(dateOf(DateTime.utc(2027, 3, 28, 21, 59)), _d(2027, 3, 28));
+      expect(dateOf(DateTime.utc(2027, 3, 28, 22)), _d(2027, 3, 29));
+    });
+
+    test('Rome DST days: 2026-10-25 is 25 h long', () {
+      expect(dateOf(DateTime.utc(2026, 10, 24, 22)), _d(2026, 10, 25));
+      expect(dateOf(DateTime.utc(2026, 10, 25, 22, 59)), _d(2026, 10, 25));
+      expect(dateOf(DateTime.utc(2026, 10, 25, 23)), _d(2026, 10, 26));
+    });
+
+    test('Los Angeles', () {
+      const la = 'America/Los_Angeles';
+      // 2026-07-10 07:00Z is 00:00 PDT.
+      expect(dateOf(DateTime.utc(2026, 7, 10, 6, 59), la), _d(2026, 7, 9));
+      expect(dateOf(DateTime.utc(2026, 7, 10, 7), la), _d(2026, 7, 10));
+    });
+
+    test('a UTC-boundary instant belongs to different dates per zone', () {
+      final instant = DateTime.utc(2026, 7, 10, 23, 30);
+      expect(dateOf(instant), _d(2026, 7, 11));
+      expect(dateOf(instant, 'UTC'), _d(2026, 7, 10));
+      expect(dateOf(instant, 'America/Los_Angeles'), _d(2026, 7, 10));
+    });
+
+    test('result is a UTC-flagged civil date and a local-flagged input is fine', () {
+      final instant = DateTime.utc(2026, 7, 10, 22);
+      expect(dateOf(instant).isUtc, isTrue);
+      expect(dateOf(instant.toLocal()), _d(2026, 7, 11));
+    });
+  });
+
   group('todayRangeUtc', () {
     test('23 h day contains the clock instant', () {
       final now = DateTime.utc(2027, 3, 28, 10);

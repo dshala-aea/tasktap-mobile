@@ -30,8 +30,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_palette.dart';
-import '../../core/time/business_time_providers.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_text_styles.dart';
+import '../../core/time/business_time_providers.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
 import '../../data/timbratura/cantiere_worklog_api_client.dart';
@@ -47,7 +48,6 @@ import 'cantiere_timbra_screen.dart'
         formatHoursMinutes,
         isOfflineFailure;
 import 'gps_status_indicator.dart';
-import '../../core/theme/app_text_styles.dart';
 
 const _uuid = Uuid();
 

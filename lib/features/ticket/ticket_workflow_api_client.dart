@@ -184,7 +184,6 @@ class TicketWorkflowApiClient {
       '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
-
 }
 
 /// A workflow write that did not happen, with a reason worth showing.
@@ -251,6 +250,8 @@ class TicketWorkLogDto {
   Duration? get duration =>
       endTime == null ? null : (_duration ?? endTime! - startTime);
 
+  /// An unreadable `startTime`/`endTime` falls back to [Duration.zero] (00:00:00): a tolerance so
+  /// one bad row does not fail the whole list, not a meaningful value.
   factory TicketWorkLogDto.fromJson(Map<String, dynamic> json) =>
       TicketWorkLogDto(
         id: json['id'] as String? ?? '',

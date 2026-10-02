@@ -388,8 +388,10 @@ final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession
       serverLog.startTime,
       ref.watch(businessTimeProvider),
     );
-  } on FormatException {
+  } on FormatException catch (e) {
     // A start we cannot read is "no server session", never a session that began at midnight.
+    // Note: the screen may then offer to start while the server still has this log open.
+    debugPrint('cantiereActiveSession: unreadable server startTime ignored ($e)');
     return null;
   }
   return CantiereActiveSession(

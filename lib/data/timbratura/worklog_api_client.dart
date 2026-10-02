@@ -150,6 +150,9 @@ class TodayWorkLogDto {
     return businessTime.instantOfLegacyLabel(businessTime.legacyToday(), time);
   }
 
+  /// [businessTime] defaults to [BusinessTime.fallback] (Rome zone, real clock) for tolerance
+  /// only: production callers must pass the provider's instance so a bare "HH:mm:ss" is dated
+  /// with the tenant's clock.
   factory TodayWorkLogDto.fromJson(Map<String, dynamic> json, {BusinessTime? businessTime}) {
     final bt = businessTime ?? BusinessTime.fallback();
     return TodayWorkLogDto(

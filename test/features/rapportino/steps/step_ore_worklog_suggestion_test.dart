@@ -640,6 +640,34 @@ void main() {
       }
     });
 
+    test('malformed entry is skipped while a valid sibling is still suggested', () {
+      final d = DateTime.utc(2026, 8, 31);
+      final cantiere = cantiereWorklogSuggestionFor(rome, [
+        _cantiereEntry(
+          userId: 'user-1',
+          workDate: d,
+          startTime: 'garbage',
+          endTime: '10:00:00',
+          duration: const Duration(hours: 2),
+        ),
+        _cantiereEntry(
+          userId: 'user-1',
+          workDate: d,
+          startTime: '08:00:00',
+          endTime: '10:00:00',
+          duration: const Duration(hours: 2),
+        ),
+      ], _row);
+      expect(cantiere, isNotNull);
+      expect(cantiere!.startTime, DateTime.utc(2026, 8, 31, 6));
+      final plain = recentWorkLogSuggestionFor(rome, [
+        _plainEntry(userId: 'user-1', workDate: d, startTime: 'garbage'),
+        _plainEntry(userId: 'user-1', workDate: d, startTime: '08:00:00'),
+      ], _row);
+      expect(plain, isNotNull);
+      expect(plain!.startTime, DateTime.utc(2026, 8, 31, 6));
+    });
+
     test('plain tier: end is the business-time clock instant; hours from the real difference', () {
       final bt = BusinessTime('America/New_York', clock: () => DateTime.utc(2026, 8, 31, 9, 15));
       final s = recentWorkLogSuggestionFor(bt, [

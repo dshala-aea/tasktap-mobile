@@ -1857,20 +1857,17 @@ void main() {
       );
     });
 
-    test('spring-forward gap label 02:30 resolves forward (00:30Z)', () {
+    test('spring-forward gap label 02:30 resolves forward (01:30Z)', () {
       expect(
         start('Europe/Rome', DateTime.utc(2026, 3, 29), '02:30:00'),
         DateTime.utc(2026, 3, 29, 1, 30),
       );
     });
 
-    test('autumn fold label 02:30 resolves to a single instant', () {
+    test('autumn fold label 02:30 resolves to the later instant (01:30Z)', () {
       expect(
         start('Europe/Rome', DateTime.utc(2026, 10, 25), '02:30:00'),
-        anyOf(
-          DateTime.utc(2026, 10, 25, 0, 30),
-          DateTime.utc(2026, 10, 25, 1, 30),
-        ),
+        DateTime.utc(2026, 10, 25, 1, 30),
       );
     });
 
