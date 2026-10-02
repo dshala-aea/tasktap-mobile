@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -7,6 +8,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_service.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
+
+import '../../support/auth_me_fixtures.dart';
 
 class MockDio extends Mock implements Dio {}
 
@@ -33,7 +36,13 @@ void main() {
     List<String> features = const ['clienti', 'team', 'sistema', 'rapportini', 'magazzino'],
     List<String> capabilities = const ['rapportini.report.write'],
     String seatType = 'field',
-  }) => {'features': features, 'capabilities': capabilities, 'seatType': seatType};
+    Object? tenantTimeZone = authMeAbsent,
+  }) => authMeBody(
+    features: features,
+    capabilities: capabilities,
+    seatType: seatType,
+    tenantTimeZone: tenantTimeZone,
+  );
 
   void stub(Response<Map<String, dynamic>> response) {
     when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) async => response);
@@ -262,6 +271,110 @@ void main() {
 
       final cached = await repo.read();
       expect(cached!.clockInMethod, 'ButtonOnly');
+    });
+  });
+
+  group('tenantTimeZone from /auth/me', () {
+    late List<String?> seen;
+    String? session;
+
+    EntitlementService build({void Function(String?)? onZone, bool guarded = false}) =>
+        EntitlementService(
+          dio: dio,
+          repository: repo,
+          onTenantTimeZone: onZone ?? seen.add,
+          currentSessionId: guarded ? () => session : null,
+        );
+
+    setUp(() {
+      seen = [];
+      session = 'user-a';
+    });
+
+    test('a body with the key hands it to the callback', () async {
+      stub(ok(meBody(tenantTimeZone: 'Europe/Rome')));
+      expect(await build().refresh(), isTrue);
+      expect(seen, ['Europe/Rome']);
+    });
+
+    test('a body without the key calls the callback with null', () async {
+      stub(ok(meBody()));
+      expect(await build().refresh(), isTrue);
+      expect(seen, [null]);
+    });
+
+    test('an explicit null or a non-string value reaches the callback as null', () async {
+      stub(ok(meBody(tenantTimeZone: null)));
+      await build().refresh();
+      stub(ok(meBody(tenantTimeZone: 42)));
+      await build().refresh();
+      expect(seen, [null, null]);
+    });
+
+    test('an invalid id is passed through untouched (validation is the notifier job)', () async {
+      stub(ok(meBody(tenantTimeZone: 'W. Europe Standard Time')));
+      await build().refresh();
+      expect(seen, ['W. Europe Standard Time']);
+    });
+
+    test('a network error never calls the callback', () async {
+      when(
+        () => dio.get<Map<String, dynamic>>(any()),
+      ).thenThrow(DioException(requestOptions: RequestOptions(path: '/api/Auth/me')));
+      expect(await build().refresh(), isFalse);
+      expect(seen, isEmpty);
+    });
+
+    test('a 503 never calls the callback', () async {
+      stub(
+        Response(requestOptions: RequestOptions(path: '/api/Auth/me'), statusCode: 503, data: null),
+      );
+      expect(await build().refresh(), isFalse);
+      expect(seen, isEmpty);
+    });
+
+    test('a body missing features never calls the callback', () async {
+      stub(
+        ok({'tenantTimeZone': 'Europe/Berlin', 'capabilities': <String>[], 'seatType': 'field'}),
+      );
+      expect(await build().refresh(), isFalse);
+      expect(seen, isEmpty);
+    });
+
+    test('a throwing callback does not change the refresh result', () async {
+      stub(ok(meBody(tenantTimeZone: 'Europe/Rome')));
+      expect(await build(onZone: (_) => throw StateError('boom')).refresh(), isTrue);
+      expect(await repo.hasFeature('magazzino'), isTrue);
+    });
+
+    test('a session change while /me is in flight suppresses the callback', () async {
+      final gate = Completer<Response<Map<String, dynamic>>>();
+      when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) => gate.future);
+
+      final pending = build(guarded: true).refresh();
+      session = null; // signed out while the request is in flight
+      gate.complete(ok(meBody(tenantTimeZone: 'Europe/Berlin')));
+
+      expect(await pending, isTrue);
+      expect(seen, isEmpty);
+    });
+
+    test('a different user signing in during the flight also suppresses it', () async {
+      final gate = Completer<Response<Map<String, dynamic>>>();
+      when(() => dio.get<Map<String, dynamic>>(any())).thenAnswer((_) => gate.future);
+
+      final pending = build(guarded: true).refresh();
+      session = 'user-b';
+      gate.complete(ok(meBody(tenantTimeZone: 'Europe/Berlin')));
+
+      await pending;
+      expect(seen, isEmpty);
+    });
+
+    test('an unchanged session applies the callback', () async {
+      stub(ok(meBody(tenantTimeZone: 'Europe/Berlin')));
+      await build(guarded: true).refresh();
+      expect(seen, ['Europe/Berlin']);
     });
   });
 

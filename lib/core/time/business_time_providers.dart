@@ -80,6 +80,17 @@ class BusinessZoneIdNotifier extends Notifier<String> {
     await _store.write(zoneId);
   }
 
+  /// The zone reported by the latest `/auth/me`. A known IANA id is adopted; a missing, blank or
+  /// unknown one resets to Rome (and forgets the cache) instead of keeping a previous tenant's
+  /// value. The caller must have checked the response still belongs to the signed-in session.
+  Future<void> applyServerZone(String? zoneId) {
+    final valid =
+        zoneId != null &&
+        zoneId.trim().isNotEmpty &&
+        resolveBusinessZoneId(zoneId) == zoneId;
+    return valid ? set(zoneId) : reset();
+  }
+
   /// Back to Rome and forget the persisted value (sign-out).
   Future<void> reset() async {
     _epoch++;

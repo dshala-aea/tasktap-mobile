@@ -12,6 +12,8 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time_providers.dart';
+import '../../presentation/providers/auth_providers.dart';
 import '../api/dio_client.dart';
 import '../sync/connectivity_provider.dart';
 import '../sync/sync_service.dart';
@@ -26,6 +28,9 @@ final entitlementServiceProvider = Provider<EntitlementService>((ref) {
   return EntitlementService(
     dio: ref.watch(dioProvider),
     repository: ref.watch(entitlementRepositoryProvider),
+    // Every /me answer decides the zone: a missing or invalid one resets to Rome.
+    onTenantTimeZone: (zone) => ref.read(businessZoneIdProvider.notifier).applyServerZone(zone),
+    currentSessionId: () => ref.read(authRepositoryProvider).currentUser?.id,
   );
 });
 

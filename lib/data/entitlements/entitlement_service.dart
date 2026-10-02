@@ -19,12 +19,26 @@ const internalUserIdPrefsKey = 'internal_user_id';
 /// failure path here is a no-op on storage: the app keeps the last confirmed answer rather than
 /// downgrading to "nothing granted" because a request timed out on a building site.
 class EntitlementService {
-  EntitlementService({required Dio dio, required EntitlementRepository repository})
-    : _dio = dio,
-      _repository = repository;
+  EntitlementService({
+    required Dio dio,
+    required EntitlementRepository repository,
+    this.onTenantTimeZone,
+    this.currentSessionId,
+  }) : _dio = dio,
+       _repository = repository;
 
   final Dio _dio;
   final EntitlementRepository _repository;
+
+  /// Receives the raw `tenantTimeZone` of every successfully parsed `/auth/me` (null when the key
+  /// is absent or not a string) so the receiver can adopt it or fall back to the default. Called
+  /// only after the rest of the refresh succeeded; a throwing callback never fails the refresh.
+  final void Function(String? tenantTimeZone)? onTenantTimeZone;
+
+  /// Identity of the signed-in session. When given, a response whose session differs from the one
+  /// that issued the request (signed out, or another user signed in meanwhile) is not applied to
+  /// the zone: it belongs to the previous tenant.
+  final String? Function()? currentSessionId;
 
   /// Pulls `/api/Auth/me` and caches what it says.
   ///
@@ -34,6 +48,7 @@ class EntitlementService {
   /// `features: []` from a malformed response would silently strip every module the tenant has.
   Future<bool> refresh() async {
     Response<Map<String, dynamic>> response;
+    final sessionAtRequest = currentSessionId?.call();
 
     try {
       response = await _dio.get<Map<String, dynamic>>('/api/Auth/me');
@@ -89,7 +104,24 @@ class EntitlementService {
       await prefs.setString(internalUserIdPrefsKey, internalUserId);
     }
 
+    _applyTenantTimeZone(body['tenantTimeZone'], sessionAtRequest);
+
     return true;
+  }
+
+  void _applyTenantTimeZone(Object? raw, String? sessionAtRequest) {
+    final callback = onTenantTimeZone;
+    if (callback == null) return;
+    try {
+      final sessionNow = currentSessionId;
+      if (sessionNow != null) {
+        final now = sessionNow();
+        if (now == null || now != sessionAtRequest) return;
+      }
+      callback(raw is String ? raw : null);
+    } catch (_) {
+      // The zone is an enhancement of this refresh, never a reason to fail it.
+    }
   }
 
   /// Null rather than empty when the value is missing or the wrong shape — the caller treats null

@@ -13,6 +13,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/config/env.dart';
 import 'core/crash_reporting/crash_reporter.dart';
+import 'core/time/business_time.dart';
 import 'core/crash_reporting/sentry_crash_reporter.dart';
 import 'core/notifications/deep_link_drainer.dart';
 import 'core/notifications/notification_service.dart';
@@ -111,6 +112,7 @@ Future<void> runTaskTapApp() async {
   // Intl.defaultLocale is set alongside it so the handful of DateFormat calls that pass no locale
   // format the same way as the ones that do, instead of falling back to en_US.
   await initializeDateFormatting('it', null);
+  ensureTimeZonesInitialized();
   Intl.defaultLocale = 'it';
 
   // Auth is Zitadel OIDC (see ZitadelAuthRepository) — no SDK init needed here;
