@@ -78,7 +78,18 @@ jobs:
 
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
-      - run: flutter test --no-pub test/core/time test/data/timbratura test/features/timbra test/features/rapportino/steps
+      - run: >-
+          flutter test --no-pub
+          test/core/time
+          test/data/timbratura
+          test/data/worklog_date_parsing_test.dart
+          test/data/worklog_wire_shape_test.dart
+          test/features/timbra
+          test/features/rapportino/steps
+          test/features/ticket/worklog_row_date_test.dart
+          test/features/ticket/ticket_timer_elapsed_test.dart
+          test/features/ticket/ticket_detail_screen_test.dart
+          test/features/altro/notifiche_screen_test.dart
 
   build-android:
     name: Build Android

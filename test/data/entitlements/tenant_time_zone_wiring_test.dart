@@ -25,6 +25,13 @@ class _MockDio extends Mock implements Dio {}
 
 class _MockAuthRepository extends Mock implements IAuthRepository {}
 
+class _ThrowingWipeDb extends AppDatabase {
+  _ThrowingWipeDb(super.e);
+
+  @override
+  Future<void> wipeAllData() async => throw StateError('wipe failed');
+}
+
 /// The real wiring: `/auth/me` -> EntitlementService -> businessZoneIdProvider, with the
 /// signed-in-session guard and the "every response sets the zone" rule.
 void main() {
@@ -150,6 +157,26 @@ void main() {
     await pumpEventQueue();
 
     expect(container.read(businessZoneIdProvider), 'Europe/Rome');
+    expect(await prefsZone(), isNull);
+  });
+
+  test('sign-out resets the zone even when wiping local data throws', () async {
+    final throwingDb = _ThrowingWipeDb(NativeDatabase.memory());
+    addTearDown(throwingDb.close);
+    final c = ProviderContainer(
+      overrides: [
+        dioProvider.overrideWithValue(dio),
+        authRepositoryProvider.overrideWithValue(auth),
+        appDatabaseProvider.overrideWithValue(throwingDb),
+      ],
+    );
+    addTearDown(c.dispose);
+    await c.read(businessZoneIdProvider.notifier).set('Europe/Berlin');
+    expect(c.read(businessZoneIdProvider), 'Europe/Berlin');
+
+    await expectLater(c.read(loginProvider.notifier).signOut(), throwsA(isA<StateError>()));
+
+    expect(c.read(businessZoneIdProvider), 'Europe/Rome');
     expect(await prefsZone(), isNull);
   });
 

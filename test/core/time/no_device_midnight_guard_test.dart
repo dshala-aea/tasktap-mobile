@@ -59,6 +59,37 @@ void main() {
       expect(offenders, isEmpty, reason: offenders.join('\n'));
     });
 
+    // `workDate` is a UTC-flagged civil date and `startTime` a Rome wall-clock label: adding them
+    // yields a wrong instant. Convert with BusinessTime.instantOfLegacyLabel instead. Explicit,
+    // empty allow-list: no file is exempt.
+    const addAllowList = <String>[];
+    List<File> recursiveDartFiles(String dir) => Directory(dir)
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'))
+        .where((f) => !addAllowList.any(f.path.endsWith))
+        .toList();
+
+    test('no workDate.add( in ticket, rapportino or timbratura code', () {
+      final scanned = [
+        ...recursiveDartFiles('lib/features/ticket'),
+        ...recursiveDartFiles('lib/features/rapportino'),
+        ...recursiveDartFiles('lib/features/timbra'),
+        ...recursiveDartFiles('lib/data/timbratura'),
+      ];
+      expect(scanned, isNotEmpty);
+      final offenders = <String>[];
+      for (final f in scanned) {
+        final lines = f.readAsLinesSync();
+        for (var i = 0; i < lines.length; i++) {
+          if (lines[i].contains('workDate.add(')) {
+            offenders.add('${f.path}:${i + 1}: ${lines[i].trim()}');
+          }
+        }
+      }
+      expect(offenders, isEmpty, reason: offenders.join('\n'));
+    });
+
     test('business_time.dart never reads the device zone', () {
       final src = File('lib/core/time/business_time.dart').readAsStringSync();
       expect(src.contains('DateTime.now().timeZone'), isFalse);

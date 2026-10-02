@@ -137,11 +137,15 @@ class LoginNotifier extends StateNotifier<LoginState> {
     // leaving the local Drift DB and SharedPreferences populated after sign-out would let the
     // next person to sign in on this device (possibly a different tenant entirely) see the
     // previous account's full cached tickets/customers/cantieri/notifications and settings.
-    await _ref.read(appDatabaseProvider).wipeAllData();
-    await (await SharedPreferences.getInstance()).clear();
-    // Riverpod state outlives the prefs wipe: without this the next tenant would
-    // inherit this tenant's business zone until its own /me answers.
-    await _ref.read(businessZoneIdProvider.notifier).reset();
+    try {
+      await _ref.read(appDatabaseProvider).wipeAllData();
+      await (await SharedPreferences.getInstance()).clear();
+    } finally {
+      // Riverpod state outlives the prefs wipe: without this the next tenant would inherit this
+      // tenant's business zone until its own /me answers. In `finally` so a failing wipe cannot
+      // skip it.
+      await _ref.read(businessZoneIdProvider.notifier).reset();
+    }
 
     state = const LoginState();
   }

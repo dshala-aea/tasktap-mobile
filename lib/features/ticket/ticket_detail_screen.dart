@@ -10,7 +10,8 @@ import 'package:intl/intl.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
-import '../../core/time/business_time.dart' show formatWorkDate;
+import '../../core/time/business_time.dart' show BusinessTime, formatWorkDate;
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/widgets/app_compartment_tile.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
@@ -1625,6 +1626,16 @@ class _AssignSheetState extends State<_AssignSheet> {
 /// the dashboard's active-tracker strip uses, not the accent strap (that means selected/priority,
 /// not live; see LiveDot's own doc comment). A technician who has left a timer going overnight
 /// should see the same signal wherever they land.
+/// Elapsed time of a running ticket worklog at [now]. `workDate` + `startTime` is a Rome
+/// wall-clock label (legacy frame), not UTC, so it is converted with
+/// [BusinessTime.instantOfLegacyLabel]; clamped at zero against clock skew.
+@visibleForTesting
+Duration ticketTimerElapsed(TicketWorkLogDto running, DateTime now, BusinessTime businessTime) {
+  final start = businessTime.instantOfLegacyLabel(running.workDate, running.startTime);
+  final elapsed = now.toUtc().difference(start);
+  return elapsed.isNegative ? Duration.zero : elapsed;
+}
+
 class _TicketTimerBar extends ConsumerStatefulWidget {
   const _TicketTimerBar({required this.ticketId});
 
@@ -1683,8 +1694,11 @@ class _TicketTimerBarState extends ConsumerState<_TicketTimerBar> {
 
     // Only watched while a clock is actually going — an idle ticket detail screen ticks nothing.
     final elapsed = isRunning
-        ? (ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc())
-              .difference(running.workDate.add(running.startTime))
+        ? ticketTimerElapsed(
+            running,
+            ref.watch(nowProvider).valueOrNull ?? DateTime.now().toUtc(),
+            ref.watch(businessTimeProvider),
+          )
         : null;
 
     return AppCard(

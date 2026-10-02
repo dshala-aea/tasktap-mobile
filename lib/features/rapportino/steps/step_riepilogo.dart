@@ -13,6 +13,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/time/business_time.dart' show BusinessTime;
+import '../../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../../core/utils/error_message.dart';
 // Uses StepLabel — the padding-free sibling of SectionTitle, for headings inside a padded card.
 import '../../../data/local/app_database.dart';
@@ -719,9 +721,11 @@ class _SignatureBlockState extends ConsumerState<_SignatureBlock> {
     );
     if (mode == null || !context.mounted) return;
 
+    final businessTime = ref.read(businessTimeProvider);
     final bytes = await showDialog<Uint8List?>(
       context: context,
-      builder: (_) => mode == _SigMode.draw ? const _SigDialog() : const _TypedSigDialog(),
+      builder: (_) =>
+          mode == _SigMode.draw ? const _SigDialog() : _TypedSigDialog(businessTime: businessTime),
     );
     if (bytes == null || bytes.isEmpty) return;
 
@@ -882,7 +886,9 @@ class _SigModeDialog extends StatelessWidget {
 /// it back through the exact same `showDialog<Uint8List?>` contract `_SigDialog` uses, so
 /// `_SignatureBlock._captureSig`'s file-write-and-save tail needs zero changes for this mode.
 class _TypedSigDialog extends StatefulWidget {
-  const _TypedSigDialog();
+  const _TypedSigDialog({required this.businessTime});
+
+  final BusinessTime businessTime;
 
   @override
   State<_TypedSigDialog> createState() => _TypedSigDialogState();
@@ -903,7 +909,10 @@ class _TypedSigDialogState extends State<_TypedSigDialog> {
 
   Future<void> _onConfirm() async {
     setState(() => _rendering = true);
-    final bytes = await _renderTypedSignature(_nameCtrl.text.trim());
+    final bytes = await _renderTypedSignature(
+      _nameCtrl.text.trim(),
+      typedSignatureStamp(widget.businessTime),
+    );
     if (mounted) Navigator.pop(context, bytes);
   }
 
@@ -988,18 +997,19 @@ class _TypedSigDialogState extends State<_TypedSigDialog> {
 /// layout happens to be on a full-screen landscape dialog — there's no single fixed constant to
 /// replicate. 2:1 lands in the same ballpark as that landscape aspect ratio, and 800px wide is
 /// comfortably sharp for the ~120px-tall preview `_SignatureBlock` renders it at.
-Future<Uint8List> _renderTypedSignature(String name) async {
+/// The "dd/MM/yyyy HH:mm" stamp printed under a typed signature: business-zone time, never the
+/// phone's zone.
+@visibleForTesting
+String typedSignatureStamp(BusinessTime businessTime) =>
+    businessTime.formatInZone(businessTime.nowInstant(), 'dd/MM/yyyy HH:mm');
+
+Future<Uint8List> _renderTypedSignature(String name, String timestamp) async {
   const width = 800.0;
   const height = 400.0;
 
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width, height));
   canvas.drawRect(Rect.fromLTWH(0, 0, width, height), Paint()..color = Colors.white);
-
-  final now = DateTime.now();
-  final timestamp =
-      '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/'
-      '${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
   final painter = TextPainter(
     text: TextSpan(
