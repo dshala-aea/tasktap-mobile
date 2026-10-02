@@ -54,6 +54,32 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  # Business dates are Europe/Rome days regardless of the phone's zone. The default job runs in
+  # UTC; this one re-runs the time-sensitive subset under non-UTC device zones.
+  tz-matrix:
+    name: Device zone (${{ matrix.tz }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [Europe/Rome, America/Los_Angeles, Pacific/Auckland]
+    env:
+      TZ: ${{ matrix.tz }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter test --no-pub test/core/time test/data/timbratura test/features/timbra test/features/rapportino/steps
+
   build-android:
     name: Build Android
     runs-on: ubuntu-latest
