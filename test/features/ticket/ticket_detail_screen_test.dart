@@ -1528,6 +1528,31 @@ void main() {
       await resetAndDispose(tester);
     });
 
+    testWidgets('a worklog with an unparseable workDate shows the error state, not a thrown error', (
+      tester,
+    ) async {
+      await seedBase(db);
+      final dio = dioWithWorklogs([
+        {
+          'id': 'w1',
+          'ticketId': 'ticket-1',
+          'userId': 'u1',
+          'workDate': 'not-a-date',
+          'startTime': '08:00:00',
+          'endTime': '10:30:00',
+          'isManualEntry': false,
+        },
+      ]);
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapWideTab(tester, 'Ore');
+
+      expect(find.text('Impossibile caricare le ore'), findsOneWidget);
+      expect(find.text('Nessuna ora registrata'), findsNothing);
+      expect(tester.takeException(), null);
+      await resetAndDispose(tester);
+    });
+
     testWidgets('says plainly it is offline instead of showing an empty list', (tester) async {
       await seedBase(db);
       await pump(tester, isOnline: false);

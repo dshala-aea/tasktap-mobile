@@ -45,6 +45,11 @@ DateTime? parseDateOnly(Object? raw) {
   return date;
 }
 
+/// [parseDateOnly], but a missing or invalid value throws [FormatException]
+/// instead of returning null. For DTO fields that must not be invented.
+DateTime parseDateOnlyOrThrow(Object? raw) =>
+    parseDateOnly(raw) ?? (throw FormatException('Invalid date', raw));
+
 /// Frame of every legacy `WorkDate/StartTime/EndTime` label the backend
 /// writes. Independent of the tenant zone (plan Ruling 3).
 const kLegacyLabelZoneId = 'Europe/Rome';
@@ -128,7 +133,14 @@ class BusinessTime {
     // DateFormat reads fields only. A UTC carrier cannot hit a device-zone
     // DST gap (a local-zone constructor would shift e.g. 02:30 to 03:30).
     final carrier = DateTime.utc(
-        z.year, z.month, z.day, z.hour, z.minute, z.second, z.millisecond);
+      z.year,
+      z.month,
+      z.day,
+      z.hour,
+      z.minute,
+      z.second,
+      z.millisecond,
+    );
     return DateFormat(pattern, locale).format(carrier);
   }
 

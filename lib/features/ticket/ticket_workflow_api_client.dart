@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart';
 import '../../data/api/dio_client.dart';
 
 /// The writes a technician performs on a ticket from the field: take it, move its status, and
@@ -260,9 +261,7 @@ class TicketWorkLogDto {
         id: json['id'] as String? ?? '',
         ticketId: json['ticketId'] as String? ?? '',
         userId: json['userId'] as String? ?? '',
-        workDate:
-            DateTime.tryParse(json['workDate'] as String? ?? '')?.toUtc() ??
-            DateTime.now().toUtc(),
+        workDate: parseDateOnlyOrThrow(json['workDate']),
         startTime: _parseHms(json['startTime']),
         endTime: json['endTime'] == null ? null : _parseHms(json['endTime']),
         isManualEntry: json['isManualEntry'] as bool? ?? false,

@@ -27,6 +27,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart';
 import '../api/dio_client.dart';
 
 // ── Mobile batch upsert DTOs (offline-first) ────────────────────────────────
@@ -236,7 +237,7 @@ class CantiereWorkLogDto {
     customerId: json['customerId'] as String,
     ticketId: json['ticketId'] as String?,
     userId: json['userId'] as String? ?? '',
-    workDate: DateTime.parse(json['workDate'] as String),
+    workDate: parseDateOnlyOrThrow(json['workDate']),
     startTime: json['startTime'] as String,
     endTime: json['endTime'] as String?,
     description: json['description'] as String?,

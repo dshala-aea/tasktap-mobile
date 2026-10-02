@@ -12,6 +12,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart';
+import '../../core/time/work_time.dart';
 import '../api/dio_client.dart';
 
 // ── Request DTO ───────────────────────────────────────────────────────────────
@@ -105,7 +107,7 @@ class UserWorkLogDto {
   factory UserWorkLogDto.fromJson(Map<String, dynamic> json) => UserWorkLogDto(
     id: json['id'] as String,
     userId: json['userId'] as String? ?? '',
-    workDate: DateTime.parse(json['workDate'] as String),
+    workDate: parseDateOnlyOrThrow(json['workDate']),
     startTime: json['startTime'] as String,
     endTime: json['endTime'] as String?,
     duration: json['endTime'] == null || json['durationHours'] == null
@@ -137,32 +139,30 @@ class TodayWorkLogDto {
 
   /// `GET /worklog/mobile/today` serializes `startTime`/`endTime` as a .NET TimeSpan — a bare
   /// "HH:mm:ss" (Rome-local, NO date, NO zone) — which `DateTime.parse` throws on. A full ISO
-  /// instant is still accepted. A bare time is combined with TODAY's date in the device's local
-  /// zone: that is only an approximation (an entry from before midnight would land on the wrong
-  /// day, and the device zone is assumed to be the server's), so nothing that needs a real instant
-  /// may rely on it — the clock state comes from `GET /worklog/active`, which carries true UTC.
-  static DateTime parseTimeOrInstant(String raw, {DateTime? today}) {
-    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?').firstMatch(raw);
-    if (m == null || raw.contains('T')) return DateTime.parse(raw);
-    final d = today ?? DateTime.now();
-    return DateTime(
-      d.year,
-      d.month,
-      d.day,
-      int.parse(m.group(1)!),
-      int.parse(m.group(2)!),
-      int.parse(m.group(3) ?? '0'),
-    );
+  /// instant is still accepted. A bare time is combined with the Rome date of the business clock
+  /// ([BusinessTime.legacyToday]) and converted with [BusinessTime.instantOfLegacyLabel]. That is
+  /// still an approximation (an entry from before Rome midnight lands on the wrong day), so nothing
+  /// that needs a real instant may rely on it — the clock state comes from `GET /worklog/active`,
+  /// which carries true UTC.
+  static DateTime parseTimeOrInstant(String raw, {required BusinessTime businessTime}) {
+    final time = parseTimeSpan(raw);
+    if (time == null || raw.contains('T')) return DateTime.parse(raw);
+    return businessTime.instantOfLegacyLabel(businessTime.legacyToday(), time);
   }
 
-  factory TodayWorkLogDto.fromJson(Map<String, dynamic> json) => TodayWorkLogDto(
-    id: json['id'] as String,
-    clientId: json['clientId'] as String,
-    startTime: parseTimeOrInstant(json['startTime'] as String),
-    endTime: json['endTime'] != null ? parseTimeOrInstant(json['endTime'] as String) : null,
-    isActive: json['isActive'] as bool? ?? false,
-    tipoOra: json['tipoOra'] as String?,
-  );
+  factory TodayWorkLogDto.fromJson(Map<String, dynamic> json, {BusinessTime? businessTime}) {
+    final bt = businessTime ?? BusinessTime.fallback();
+    return TodayWorkLogDto(
+      id: json['id'] as String,
+      clientId: json['clientId'] as String,
+      startTime: parseTimeOrInstant(json['startTime'] as String, businessTime: bt),
+      endTime: json['endTime'] != null
+          ? parseTimeOrInstant(json['endTime'] as String, businessTime: bt)
+          : null,
+      isActive: json['isActive'] as bool? ?? false,
+      tipoOra: json['tipoOra'] as String?,
+    );
+  }
 }
 
 // ── Kiosk scan (POST /api/worklog/kiosk/scan) ─────────────────────────────────
