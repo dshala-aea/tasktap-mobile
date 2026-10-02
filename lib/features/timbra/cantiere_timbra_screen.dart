@@ -46,6 +46,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/time/business_time.dart';
 import '../../core/time/business_time_providers.dart';
+import '../../core/time/work_time.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -380,11 +381,22 @@ final cantiereActiveSessionProvider = Provider.autoDispose<CantiereActiveSession
 
   final serverLog = ref.watch(activeCantiereLogProvider).valueOrNull;
   if (serverLog == null) return null;
+  final DateTime start;
+  try {
+    start = cantiereActiveStartInstant(
+      serverLog.workDate,
+      serverLog.startTime,
+      ref.watch(businessTimeProvider),
+    );
+  } on FormatException {
+    // A start we cannot read is "no server session", never a session that began at midnight.
+    return null;
+  }
   return CantiereActiveSession(
     cantiereId: serverLog.cantiereId,
     customerId: serverLog.customerId,
     ticketId: serverLog.ticketId,
-    startTime: _combineWorkDateAndStartTime(serverLog.workDate, serverLog.startTime),
+    startTime: start,
   );
 });
 
@@ -420,18 +432,21 @@ final isLeadForCantiereProvider = Provider.autoDispose.family<bool, String>((ref
 /// Combines a server work log's date-only `workDate` with its `startTime` ("HH:mm:ss") into the
 /// actual clock-in instant.
 ///
-/// The fallback used to hand `workDate` itself (midnight) straight to [CantiereActiveSession] as
-/// `startTime`, silently dropping the actual time-of-day the backend sent — every displayed
-/// ingresso time for a server-only session (no local Drift row) was midnight shifted by the
-/// device's UTC offset, not the real check-in time. `.utc(...)`, not the plain constructor: the
-/// backend stores/transmits these as UTC, so building a local-naive `DateTime` here would double
-/// the offset once the caller's own `.toLocal()` runs.
-DateTime _combineWorkDateAndStartTime(DateTime workDate, String startTime) {
-  final parts = startTime.split(':');
-  final h = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 0;
-  final m = int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0;
-  final s = int.tryParse(parts.elementAtOrNull(2) ?? '') ?? 0;
-  return DateTime.utc(workDate.year, workDate.month, workDate.day, h, m, s);
+/// The legacy `WorkDate`/`StartTime` pair is Rome wall-clock, not UTC: the server writes the
+/// Rome-local date and time of day (`CantiereWorkLogController` start path), whatever the tenant's
+/// business zone. So the label is converted to a real instant with
+/// [BusinessTime.instantOfLegacyLabel] (DST-aware); the device zone never enters into it. Interim
+/// until the DTO carries a `startUtc` instant of its own.
+///
+/// An unreadable [startTime] throws [FormatException]: a missing time must never be shown as a
+/// session that began at midnight.
+DateTime cantiereActiveStartInstant(
+  DateTime workDate,
+  String startTime,
+  BusinessTime businessTime,
+) {
+  final time = parseTimeSpan(startTime) ?? (throw FormatException('Invalid start time', startTime));
+  return businessTime.instantOfLegacyLabel(workDate, time);
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────

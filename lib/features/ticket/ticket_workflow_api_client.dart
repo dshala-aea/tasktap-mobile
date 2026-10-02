@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/time/business_time.dart';
+import '../../core/time/work_time.dart';
 import '../../data/api/dio_client.dart';
 
 /// The writes a technician performs on a ticket from the field: take it, move its status, and
@@ -108,8 +109,8 @@ class TicketWorkflowApiClient {
         '/api/tickets/$ticketId/worklogs/manual',
         data: {
           'workDate': _dateOnly(workDate),
-          'startTime': _hms(start),
-          'endTime': ?(end == null ? null : _hms(end)),
+          'startTime': formatTimeSpan(start),
+          'endTime': ?(end == null ? null : formatTimeSpan(end)),
           'description': ?description,
         },
       ),
@@ -184,12 +185,6 @@ class TicketWorkflowApiClient {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  static String _hms(Duration d) {
-    final h = d.inHours.toString().padLeft(2, '0');
-    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
-    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-    return '$h:$m:$s';
-  }
 }
 
 /// A workflow write that did not happen, with a reason worth showing.
@@ -262,8 +257,10 @@ class TicketWorkLogDto {
         ticketId: json['ticketId'] as String? ?? '',
         userId: json['userId'] as String? ?? '',
         workDate: parseDateOnlyOrThrow(json['workDate']),
-        startTime: _parseHms(json['startTime']),
-        endTime: json['endTime'] == null ? null : _parseHms(json['endTime']),
+        startTime: parseTimeSpan(json['startTime']) ?? Duration.zero,
+        endTime: json['endTime'] == null
+            ? null
+            : (parseTimeSpan(json['endTime']) ?? Duration.zero),
         isManualEntry: json['isManualEntry'] as bool? ?? false,
         description: json['description'] as String?,
         approvalStatus: json['approvalStatus']?.toString(),
@@ -314,30 +311,6 @@ class TicketHistoryEntryDto {
         oldValue: json['oldValue'] as String?,
         newValue: json['newValue'] as String?,
       );
-}
-
-/// `TimeSpan` arrives as `HH:MM:SS`, and as `D.HH:MM:SS` once it passes 24 hours.
-///
-/// The day component is not hypothetical here: a timer left running overnight — the exact failure
-/// the dashboard's multi-tracker section exists to make visible — comes back with one.
-Duration _parseHms(Object? value) {
-  if (value is! String || value.isEmpty) return Duration.zero;
-
-  var rest = value;
-  var days = 0;
-  final dot = rest.indexOf('.');
-  final colon = rest.indexOf(':');
-  if (dot > 0 && (colon < 0 || dot < colon)) {
-    days = int.tryParse(rest.substring(0, dot)) ?? 0;
-    rest = rest.substring(dot + 1);
-  }
-
-  final parts = rest.split(':');
-  if (parts.length < 2) return Duration.zero;
-  final h = int.tryParse(parts[0]) ?? 0;
-  final m = int.tryParse(parts[1]) ?? 0;
-  final s = parts.length > 2 ? double.tryParse(parts[2])?.floor() ?? 0 : 0;
-  return Duration(days: days, hours: h, minutes: m, seconds: s);
 }
 
 final ticketWorkflowApiClientProvider = Provider<TicketWorkflowApiClient>((

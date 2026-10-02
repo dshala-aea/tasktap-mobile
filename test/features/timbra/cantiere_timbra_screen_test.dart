@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart';
 import 'package:tasktap_mobile/core/widgets/app_button.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -1829,6 +1830,99 @@ void main() {
       final result = container.read(cantiereTodayHoursProvider('cant-1'));
 
       expect(result, Duration.zero);
+    });
+  });
+
+  group('server-only active session start (Rome label as an instant)', () {
+    DateTime start(String zone, DateTime workDate, String startTime) =>
+        cantiereActiveStartInstant(
+          workDate,
+          startTime,
+          BusinessTime(zone, clock: () => DateTime.utc(2026, 7, 10, 12)),
+        );
+
+    for (final zone in ['Europe/Rome', 'America/New_York']) {
+      test('2026-07-10 08:00:00 is 06:00Z for business zone $zone', () {
+        expect(
+          start(zone, DateTime.utc(2026, 7, 10), '08:00:00'),
+          DateTime.utc(2026, 7, 10, 6),
+        );
+      });
+    }
+
+    test('winter label uses the Rome winter offset', () {
+      expect(
+        start('Europe/Rome', DateTime.utc(2026, 1, 15), '08:00:00'),
+        DateTime.utc(2026, 1, 15, 7),
+      );
+    });
+
+    test('spring-forward gap label 02:30 resolves forward (00:30Z)', () {
+      expect(
+        start('Europe/Rome', DateTime.utc(2026, 3, 29), '02:30:00'),
+        DateTime.utc(2026, 3, 29, 1, 30),
+      );
+    });
+
+    test('autumn fold label 02:30 resolves to a single instant', () {
+      expect(
+        start('Europe/Rome', DateTime.utc(2026, 10, 25), '02:30:00'),
+        anyOf(
+          DateTime.utc(2026, 10, 25, 0, 30),
+          DateTime.utc(2026, 10, 25, 1, 30),
+        ),
+      );
+    });
+
+    test('a local-flagged workDate gives the same result', () {
+      expect(
+        start('Europe/Rome', DateTime(2026, 7, 10), '08:00:00'),
+        DateTime.utc(2026, 7, 10, 6),
+      );
+    });
+
+    for (final bad in ['', 'garbage', '25:00:00', '08:60:00']) {
+      test('unparseable start "$bad" throws instead of becoming midnight', () {
+        expect(
+          () => start('Europe/Rome', DateTime.utc(2026, 7, 10), bad),
+          throwsFormatException,
+        );
+      });
+    }
+
+    test('cantiereActiveSessionProvider exposes the instant for a server-only log', () async {
+      final container = ProviderContainer(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          activeCantiereLogProvider.overrideWith(
+            () => _FakeActiveNotifier(
+              CantiereWorkLogDto(
+                id: 'log-1',
+                cantiereId: 'cant-1',
+                customerId: 'cust-1',
+                workDate: DateTime.utc(2026, 7, 10),
+                startTime: '08:00:00',
+              ),
+            ),
+          ),
+          businessTimeProvider.overrideWithValue(
+            BusinessTime(
+              'America/New_York',
+              clock: () => DateTime.utc(2026, 7, 10, 12),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(cantiereActiveSessionProvider, (_, _) {});
+      container.listen(activeCantiereLogProvider, (_, _) {});
+      await container.read(activeCantiereLogProvider.future);
+      await container.read(todayCantiereEventsProvider.future);
+
+      expect(
+        container.read(cantiereActiveSessionProvider)?.startTime,
+        DateTime.utc(2026, 7, 10, 6),
+      );
     });
   });
 }
