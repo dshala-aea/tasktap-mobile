@@ -11,7 +11,11 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
+import 'package:tasktap_mobile/core/time/business_time_providers.dart';
+import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart' show nowProvider;
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
@@ -19,7 +23,7 @@ import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
-import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show giornataProvider;
+import 'package:tasktap_mobile/features/timbra/timbra_providers.dart' show giornataProvider, todaySessionsProvider;
 import 'package:tasktap_mobile/features/timbra/timbra_screen.dart';
 
 // ── No-op stubs (prevent Dio from being constructed by providers) ─────────────
@@ -112,6 +116,7 @@ Future<void> _teardownTimer(WidgetTester tester) async {
 void main() {
   late AppDatabase db;
 
+  setUpAll(() async => initializeDateFormatting('it'));
   setUp(() => db = _makeDb());
   tearDown(() async => db.close());
 
@@ -473,6 +478,59 @@ void main() {
       expect(find.text('INIZIA TURNO'), findsOneWidget);
       expect(find.bySemanticsLabel('Timbra con QR'), findsOneWidget);
 
+      await _teardownTimer(tester);
+    });
+  });
+
+  group('business-zone time (device zone irrelevant)', () {
+    List<Override> zoneOverrides(DateTime clockInstant, {List<WorkSession>? sessions}) => [
+      businessTimeProvider.overrideWithValue(BusinessTime('Europe/Rome', clock: () => clockInstant)),
+      nowProvider.overrideWith((ref) => Stream.value(clockInstant)),
+      if (sessions != null)
+        todaySessionsProvider.overrideWith((ref) => Stream.value(sessions)),
+    ];
+
+    testWidgets('punch row shows Rome wall-clock time', (tester) async {
+      final clock = DateTime.utc(2026, 7, 10, 7);
+      await tester.pumpWidget(
+        _buildApp(
+          db,
+          extraOverrides: zoneOverrides(
+            clock,
+            sessions: [
+              WorkSession(
+                id: 's1',
+                eventTime: DateTime.utc(2026, 7, 10, 6),
+                eventType: 'ingresso',
+                isPendingSync: false,
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('08:00'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('small clock shows Rome time with seconds', (tester) async {
+      await tester.pumpWidget(
+        _buildApp(db, extraOverrides: zoneOverrides(DateTime.utc(2026, 7, 10, 20, 15, 30))),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('22:15:30'), findsOneWidget);
+      await _teardownTimer(tester);
+    });
+
+    testWidgets('date subtitle uses the Rome calendar date', (tester) async {
+      await tester.pumpWidget(
+        _buildApp(db, extraOverrides: zoneOverrides(DateTime.utc(2026, 7, 10, 22, 30))),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('SAB 11 LUG 2026'), findsOneWidget);
       await _teardownTimer(tester);
     });
   });

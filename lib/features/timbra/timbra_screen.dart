@@ -2,11 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/time/business_time.dart' show BusinessTime;
+import '../../core/time/business_time_providers.dart' show businessTimeProvider;
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
 import '../../core/widgets/app_button.dart';
@@ -145,7 +146,7 @@ class _TimbraScreenState extends ConsumerState<TimbraScreen> with TickerProvider
           children: [
             ScreenHeader(
               title: 'Timbra',
-              subtitle: _formatDateLabel(),
+              subtitle: _formatDateLabel(ref.watch(businessTimeProvider)),
               // ButtonOnly: no server endpoint would accept a kiosk-QR punch anyway (backend
               // Task 4's EnsureClockInMethodAllowedAsync), so the entry point is hidden rather
               // than shown-but-doomed.
@@ -273,14 +274,14 @@ const double _kFixedLayoutMinHeight = 640;
 // Date label
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// The calendar date, not the clock — this never needs the per-second tick `_SmallClock` does, so
-/// it reads `DateTime.now()` once per build rather than watching `nowProvider`. Feeds
-/// `ScreenHeader`'s `subtitle`.
+/// The business-zone calendar date, not the clock — this never needs the per-second tick
+/// `_SmallClock` does, so it reads the clock once per build rather than watching `nowProvider`.
+/// Feeds `ScreenHeader`'s `subtitle`.
 ///
 /// Locale-neutral format to avoid requiring `initializeDateFormatting`. Renders as e.g.
 /// "LUN 22 GIU 2026".
-String _formatDateLabel() {
-  final now = DateTime.now();
+String _formatDateLabel(BusinessTime businessTime) {
+  final now = businessTime.businessToday();
   const dayNames = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
   const monthNames = [
     'GEN',
@@ -431,8 +432,9 @@ class _SmallClock extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final now = ref.watch(nowProvider).valueOrNull?.toLocal() ?? DateTime.now();
-    final timeStr = DateFormat('HH:mm:ss').format(now);
+    final businessTime = ref.watch(businessTimeProvider);
+    final now = ref.watch(nowProvider).valueOrNull ?? businessTime.nowInstant();
+    final timeStr = businessTime.formatInZone(now, 'HH:mm:ss');
     return Semantics(
       label: 'Ora corrente $timeStr',
       liveRegion: true,
@@ -889,7 +891,7 @@ class _NoSessionsYet extends StatelessWidget {
 
 // ── _SessionRow ───────────────────────────────────────────────────────────────
 
-class _SessionRow extends StatelessWidget {
+class _SessionRow extends ConsumerWidget {
   const _SessionRow({required this.session});
   final WorkSession session;
 
@@ -939,8 +941,8 @@ class _SessionRow extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final timeStr = DateFormat('HH:mm').format(session.eventTime.toLocal());
+  Widget build(BuildContext context, WidgetRef ref) {
+    final timeStr = ref.watch(businessTimeProvider).formatInZone(session.eventTime, 'HH:mm');
     final color = _color(context, session.eventType);
 
     return Padding(
