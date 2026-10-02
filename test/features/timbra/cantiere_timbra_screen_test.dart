@@ -1145,31 +1145,48 @@ void main() {
   });
 
   group('clampedElapsedSinceMidnight', () {
-    test('returns the full elapsed time when startTime is already today', () {
-      final today = DateTime.now();
-      final start = DateTime(today.year, today.month, today.day, 8).toUtc();
-      final now = start.add(const Duration(hours: 1, minutes: 18));
+    Duration clamp(String start, String now, [String zone = 'Europe/Rome']) =>
+        clampedElapsedSinceMidnight(
+          DateTime.parse(start),
+          DateTime.parse(now),
+          businessTime: BusinessTime(zone),
+        );
 
+    test('returns the full elapsed time when startTime is after the midnight', () {
       expect(
-        clampedElapsedSinceMidnight(start, now),
+        clamp('2026-07-10T06:00:00Z', '2026-07-10T07:18:00Z'),
         const Duration(hours: 1, minutes: 18),
       );
     });
 
-    test('clamps to since-midnight when startTime was yesterday', () {
-      final today = DateTime.now();
-      final todayMidnightUtc = DateTime(
-        today.year,
-        today.month,
-        today.day,
-      ).toUtc();
-      final start = todayMidnightUtc.subtract(
-        const Duration(hours: 5),
-      ); // started yesterday
-      final now = todayMidnightUtc.add(const Duration(hours: 2));
+    test('clamps to the Rome midnight when startTime was the day before', () {
+      // Rome midnight is 2026-07-09T22:00Z: 10 h, not 12.
+      expect(
+        clamp('2026-07-09T20:00:00Z', '2026-07-10T08:00:00Z'),
+        const Duration(hours: 10),
+      );
+    });
 
-      // Only the 2h since midnight counts, not the 5h before it.
-      expect(clampedElapsedSinceMidnight(start, now), const Duration(hours: 2));
+    test('25 h day: counts since 2026-10-24T22:00Z', () {
+      expect(
+        clamp('2026-10-24T20:00:00Z', '2026-10-25T10:00:00Z'),
+        const Duration(hours: 12),
+      );
+    });
+
+    test('23 h day: counts since 2027-03-27T23:00Z', () {
+      expect(
+        clamp('2027-03-27T20:00:00Z', '2027-03-28T10:00:00Z'),
+        const Duration(hours: 11),
+      );
+    });
+
+    test('business zone differing from the device zone uses its own midnight', () {
+      // LA midnight of 2026-07-10 is 07:00Z.
+      expect(
+        clamp('2026-07-10T02:00:00Z', '2026-07-10T10:00:00Z', 'America/Los_Angeles'),
+        const Duration(hours: 3),
+      );
     });
   });
 

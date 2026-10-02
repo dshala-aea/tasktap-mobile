@@ -45,6 +45,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../features/timbra/timbra_providers.dart'
     show deriveShiftState, workSessionRepositoryProvider;
+import '../../core/time/business_time.dart';
+import '../../core/time/business_time_providers.dart';
 import '../api/dio_client.dart';
 import '../local/app_database.dart' show WorkSession;
 import '../worklogs/active_tracker_api_client.dart';
@@ -100,15 +102,17 @@ class WorkLogReconciler {
     required IWorkSessionRepository repo,
     required Future<List<ActiveTracker>> Function() fetchActive,
     DateTime Function() clock = DateTime.now,
+    BusinessTime? businessTime,
   }) : _repo = repo,
        _fetchActive = fetchActive,
-       _clock = clock;
+       _businessTime = businessTime ?? BusinessTime(kDefaultBusinessZoneId, clock: clock);
 
   final IWorkSessionRepository _repo;
   final Future<List<ActiveTracker>> Function() _fetchActive;
 
-  /// Wall clock; injectable so the "today" boundary used by the backfill is testable.
-  final DateTime Function() _clock;
+  /// Source of the business-day boundary used by the backfill (same one the session repositories
+  /// window on); its clock is injectable so the boundary is testable.
+  final BusinessTime _businessTime;
 
   // Reentrancy guard: resume, reconnect, a push and the poll can all fire close together. Without
   // it two overlapping reads of local state could both see the same stale "open" shift and each
@@ -220,7 +224,7 @@ class WorkLogReconciler {
   /// - pausa / ripresa / fine are clamped to `max(desired, lastLocalEvent + 1s)` — strictly the
   ///   newest event, hence always effective (this also absorbs a phone clock that is behind or
   ///   ahead of the server, and a Ripresa the server refused and the app retired);
-  /// - an ingresso is anchored at local midnight when the server start is earlier (overnight
+  /// - an ingresso is anchored at the business-day midnight when the server start is earlier (overnight
   ///   shift; else it falls outside `getTodaySessions`). If it would still sort before the last
   ///   local event it is skipped — that is a stale server view of a stop this device just made
   ///   (writing a ghost shift would be wrong) — EXCEPT after a Fine that the server refused on a
@@ -232,8 +236,7 @@ class WorkLogReconciler {
     var start = server.activeStartTime;
     if (start == null) return;
 
-    final now = _clock();
-    final midnight = DateTime(now.year, now.month, now.day).toUtc();
+    final midnight = _businessTime.todayRangeUtc().$1;
     if (start.isBefore(midnight)) start = midnight;
 
     final last = sessions.isEmpty ? null : sessions.last.eventTime;
@@ -308,5 +311,6 @@ final workLogReconcilerProvider = Provider<WorkLogReconciler>((ref) {
   return WorkLogReconciler(
     repo: ref.watch(workSessionRepositoryProvider),
     fetchActive: client.getActive,
+    businessTime: ref.watch(businessTimeProvider),
   );
 });

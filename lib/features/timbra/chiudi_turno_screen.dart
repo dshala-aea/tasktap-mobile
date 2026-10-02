@@ -30,6 +30,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_palette.dart';
+import '../../core/time/business_time_providers.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/timbratura/cantiere_timbra_sync_service.dart';
@@ -333,13 +334,17 @@ class _ChiudiTurnoScreenState extends ConsumerState<ChiudiTurnoScreen> {
 /// confirming, and every ticking widget in this app (see that same file's own test-suite comments
 /// on `pumpAndSettle`) trades a widget test's ability to ever reach "settled" for a live-updating
 /// number — not worth paying twice over for a value nobody watches climb.
-class _ElapsedSummary extends StatelessWidget {
+class _ElapsedSummary extends ConsumerWidget {
   const _ElapsedSummary({required this.startTime});
   final DateTime startTime;
 
   @override
-  Widget build(BuildContext context) {
-    final elapsed = clampedElapsedSinceMidnight(startTime, DateTime.now());
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elapsed = clampedElapsedSinceMidnight(
+      startTime,
+      DateTime.now(),
+      businessTime: ref.watch(businessTimeProvider),
+    );
     return Text(
       formatHoursMinutes(elapsed),
       style: TextStyle(

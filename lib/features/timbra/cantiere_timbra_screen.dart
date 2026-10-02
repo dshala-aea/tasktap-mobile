@@ -44,6 +44,8 @@ import 'package:uuid/uuid.dart';
 import '../../core/location/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_vetro_palette.dart';
+import '../../core/time/business_time.dart';
+import '../../core/time/business_time_providers.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -164,14 +166,18 @@ String _cantiereNameFor(WidgetRef ref, String cantiereId) {
   return ref.watch(cantiereByIdProvider(cantiereId)).valueOrNull?.name ?? cantiereId;
 }
 
-/// Elapsed time since [startTime], clamped so it never counts time before local midnight — a
-/// session that started yesterday and is still open must only contribute its since-midnight
-/// portion to a "today" reading. Uses the exact same midnight expression as
-/// `CantiereSessionRepository._todayBounds()`.
-Duration clampedElapsedSinceMidnight(DateTime startTime, DateTime now) {
-  final localNow = now.toLocal();
-  final todayStartUtc = DateTime(localNow.year, localNow.month, localNow.day).toUtc();
-  final effectiveStart = startTime.isAfter(todayStartUtc) ? startTime : todayStartUtc;
+/// Elapsed time since [startTime], clamped so it never counts time before the start of the
+/// business-zone day containing [now] — a session that started yesterday and is still open must
+/// only contribute its since-midnight portion to a "today" reading. The same business-day start
+/// the session repositories window on (`BusinessTime.todayRangeUtc`); 23 h / 25 h days are exact.
+/// [now] is read as an instant.
+Duration clampedElapsedSinceMidnight(
+  DateTime startTime,
+  DateTime now, {
+  required BusinessTime businessTime,
+}) {
+  final dayStart = businessTime.utcRangeForBusinessDate(businessTime.businessDateOf(now)).$1;
+  final effectiveStart = startTime.isAfter(dayStart) ? startTime : dayStart;
   return now.difference(effectiveStart);
 }
 
@@ -181,11 +187,13 @@ class _CantiereElapsedTicker extends StatefulWidget {
   const _CantiereElapsedTicker({
     required this.startTime,
     required this.style,
+    required this.businessTime,
     this.clock = DateTime.now,
   });
 
   final DateTime startTime;
   final TextStyle style;
+  final BusinessTime businessTime;
 
   /// Injectable so tests can control "now" instead of depending on the real wall clock.
   final DateTime Function() clock;
@@ -212,7 +220,11 @@ class _CantiereElapsedTickerState extends State<_CantiereElapsedTicker>
 
   @override
   Widget build(BuildContext context) {
-    final elapsed = clampedElapsedSinceMidnight(widget.startTime, widget.clock());
+    final elapsed = clampedElapsedSinceMidnight(
+      widget.startTime,
+      widget.clock(),
+      businessTime: widget.businessTime,
+    );
     final label = formatHoursMinutes(elapsed);
     // liveRegion: true — a screen reader gets no other signal that this text changes every
     // second; PRODUCT.md commits to "live regions on running clocks" explicitly.
@@ -233,7 +245,13 @@ Widget cantiereElapsedTickerForTest({
   required DateTime startTime,
   required TextStyle style,
   required DateTime Function() clock,
-}) => _CantiereElapsedTicker(startTime: startTime, style: style, clock: clock);
+  BusinessTime? businessTime,
+}) => _CantiereElapsedTicker(
+  startTime: startTime,
+  style: style,
+  clock: clock,
+  businessTime: businessTime ?? BusinessTime.fallback(clock: clock),
+);
 
 /// The "OGGI" total on the active-session card: closed-interval hours (recomputed only when the
 /// event list changes) plus the live-ticking current session — added together and re-rendered
@@ -242,11 +260,13 @@ class _CantiereTodayTotal extends StatefulWidget {
   const _CantiereTodayTotal({
     required this.closedHours,
     required this.sessionStart,
+    required this.businessTime,
     this.clock = DateTime.now,
   });
 
   final Duration closedHours;
   final DateTime sessionStart;
+  final BusinessTime businessTime;
 
   /// Injectable so tests can control "now" instead of depending on the real wall clock.
   final DateTime Function() clock;
@@ -273,7 +293,11 @@ class _CantiereTodayTotalState extends State<_CantiereTodayTotal>
 
   @override
   Widget build(BuildContext context) {
-    final liveElapsed = clampedElapsedSinceMidnight(widget.sessionStart, widget.clock());
+    final liveElapsed = clampedElapsedSinceMidnight(
+      widget.sessionStart,
+      widget.clock(),
+      businessTime: widget.businessTime,
+    );
     return Text(
       formatHoursMinutes(widget.closedHours + liveElapsed),
       style: TextStyle(
@@ -296,7 +320,13 @@ Widget cantiereTodayTotalForTest({
   required Duration closedHours,
   required DateTime sessionStart,
   required DateTime Function() clock,
-}) => _CantiereTodayTotal(closedHours: closedHours, sessionStart: sessionStart, clock: clock);
+  BusinessTime? businessTime,
+}) => _CantiereTodayTotal(
+  closedHours: closedHours,
+  sessionStart: sessionStart,
+  clock: clock,
+  businessTime: businessTime ?? BusinessTime.fallback(clock: clock),
+);
 
 /// The minimal "am I on site" signal the screen needs — offline-durable, derived from the local
 /// event log the same way `timbraStateProvider` derives shift state for personal Timbra.
@@ -1474,7 +1504,11 @@ class _ActiveSessionBody extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 4),
-          _CantiereTodayTotal(closedHours: closedTodayHours, sessionStart: local.startTime),
+          _CantiereTodayTotal(
+            closedHours: closedTodayHours,
+            sessionStart: local.startTime,
+            businessTime: ref.watch(businessTimeProvider),
+          ),
           const SizedBox(height: 16),
           Divider(color: context.colors.borderLight, height: 1),
           const SizedBox(height: 16),
@@ -1522,6 +1556,7 @@ class _ActiveSessionBody extends ConsumerWidget {
           Center(
             child: _CantiereElapsedTicker(
               startTime: local.startTime,
+              businessTime: ref.watch(businessTimeProvider),
               // IBM Plex Mono, not Inter — Il Documento's "mono marks identity" rule names
               // timestamps explicitly (frontend DESIGN.md); tabularFigures was already here.
               style: TextStyle(

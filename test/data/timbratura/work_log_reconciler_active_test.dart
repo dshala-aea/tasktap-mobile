@@ -8,6 +8,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/timbratura/work_log_reconciler.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
@@ -81,7 +82,7 @@ final _shift = DateTime.utc(2026, 9, 30, 8, 23, 45);
 // The fixtures are anchored on 2026-09-30; the reconciler clamps a start earlier than local
 // midnight "today", so tests using them must pin the clock (see [pinToFixtureDay]) or they rot
 // the day after the fixture. Tests built on DateTime.now() keep the real clock.
-final _fixtureNow = DateTime(2026, 9, 30, 15);
+final _fixtureNow = DateTime.utc(2026, 9, 30, 13);
 final _break = DateTime.utc(2026, 9, 30, 11, 2, 10);
 
 void main() {
@@ -269,8 +270,9 @@ void main() {
 
   group('backfill placement', () {
     test('an overnight shift (server start before local midnight) is anchored at local midnight', () async {
-      final now = DateTime.now();
-      final midnight = DateTime(now.year, now.month, now.day).toUtc();
+      // Rome midnight of 2026-09-30 is 2026-09-29T22:00Z, whatever the device zone.
+      pinToFixtureDay();
+      final midnight = DateTime.utc(2026, 9, 29, 22);
       final started = midnight.subtract(const Duration(hours: 3));
       server = [
         ActiveTracker(
@@ -285,6 +287,43 @@ void main() {
       await make(repo).reconcile();
 
       expect(repo.sessions.single.eventTime, midnight);
+    });
+
+    ActiveTracker overnight(DateTime started) => ActiveTracker(
+      kind: ActiveTrackerKind.attendance,
+      id: 'wl',
+      startedAtUtc: started,
+      state: ActiveTrackerState.working,
+      shiftStartedAtUtc: started,
+    );
+
+    test('start 22:00 Rome the evening before, clock 08:00 Rome: anchored at Rome midnight', () async {
+      server = [overnight(DateTime.utc(2026, 9, 29, 20))];
+      clock = () => DateTime.utc(2026, 9, 30, 6);
+      final repo = _Repo([]);
+      await make(repo).reconcile();
+      expect(repo.sessions.single.eventTime, DateTime.utc(2026, 9, 29, 22));
+    });
+
+    test('business zone Los Angeles anchors at the Los Angeles midnight', () async {
+      // 05:00 in LA on 2026-09-30; the shift started 19:00 LA the evening before.
+      server = [overnight(DateTime.utc(2026, 9, 30, 2))];
+      final repo = _Repo([]);
+      final r = WorkLogReconciler(
+        repo: repo,
+        businessTime: BusinessTime('America/Los_Angeles', clock: () => DateTime.utc(2026, 9, 30, 12)),
+        fetchActive: () async => server,
+      );
+      await r.reconcile();
+      expect(repo.sessions.single.eventTime, DateTime.utc(2026, 9, 30, 7));
+    });
+
+    test('a server start after the business midnight is untouched', () async {
+      server = [overnight(DateTime.utc(2026, 9, 29, 23))];
+      clock = () => DateTime.utc(2026, 9, 30, 6);
+      final repo = _Repo([]);
+      await make(repo).reconcile();
+      expect(repo.sessions.single.eventTime, DateTime.utc(2026, 9, 29, 23));
     });
 
     test('a Fine the server refused (shift still open) re-opens the shift AFTER that stop', () async {

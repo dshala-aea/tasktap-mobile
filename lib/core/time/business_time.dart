@@ -111,6 +111,12 @@ class BusinessTime {
     return DateTime.utc(n.year, n.month, n.day);
   }
 
+  /// Civil date (`DateTime.utc(y, m, d)`) of [instant] in the business zone.
+  DateTime businessDateOf(DateTime instant) {
+    final n = tz.TZDateTime.from(instant.toUtc(), location);
+    return DateTime.utc(n.year, n.month, n.day);
+  }
+
   (DateTime, DateTime) todayRangeUtc() =>
       utcRangeForBusinessDate(businessToday());
 
