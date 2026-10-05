@@ -39,7 +39,7 @@
         android:name="android.hardware.camera.autofocus"
         android:required="false"/>
     <application
-        android:label="tasktap_mobile"
+        android:label="TaskTap"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!--
