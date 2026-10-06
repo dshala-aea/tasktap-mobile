@@ -19,8 +19,6 @@ import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/main.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
-import 'support/kiosk_test_overrides.dart';
-
 class _MockAuthRepository extends Mock implements IAuthRepository {}
 
 class _MockDio extends Mock implements Dio {}
@@ -69,7 +67,6 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(repo),
-          noKioskCredentialsOverride,
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
         ],

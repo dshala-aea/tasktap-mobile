@@ -16,8 +16,6 @@ import 'package:tasktap_mobile/data/sync/pending_sync_count_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart' show appDatabaseProvider;
 import 'package:tasktap_mobile/presentation/screens/home/home_shell.dart';
 
-import '../../../support/kiosk_test_overrides.dart';
-
 class MockDio extends Mock implements Dio {}
 
 /// Same fake as offline_sync_banner_test.dart's own — [OfflineSyncBanner] reads this provider
@@ -85,7 +83,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          signedOutAuthOverride(),
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(dio),
           connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
@@ -141,7 +138,6 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          signedOutAuthOverride(),
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(dio),
           connectivityProvider.overrideWith(() => _FakeConnectivity(false)),
