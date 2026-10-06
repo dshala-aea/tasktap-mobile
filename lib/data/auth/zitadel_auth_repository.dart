@@ -7,6 +7,7 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/config/env.dart';
+import '../../core/startup/startup_report.dart';
 import '../../domain/auth/auth_failure.dart';
 import '../../domain/auth/auth_user.dart';
 import '../../domain/auth/i_auth_repository.dart';
@@ -373,14 +374,45 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// code, i.e. the refresh token really is revoked/expired/dead — means the
   /// session is actually gone, and only then do we wipe the token and sign
   /// out.
+  ///
+  /// HARDENING (App Store rejection of build 1.0 (50): stuck on the splash screen): this runs
+  /// unawaited from the constructor and `authStateProvider` stays `AsyncLoading` until it emits,
+  /// so it MUST always emit something. The whole body is therefore guarded: keychain reads are
+  /// bounded by [_storageTimeout], the native refresh by [_refreshTimeout]. A refresh timeout is
+  /// treated exactly like a [NetworkError] (cached-identity fallback, else signed out). A
+  /// keychain read failure/timeout emits null (login) and deletes NOTHING — an unreadable
+  /// keychain says nothing about the token's validity.
+  ///
+  /// A refresh that finishes after its timeout is not cancelled: `_doRefreshSession` emits the
+  /// fresh user itself, so the stream may carry the cached/offline user (or null) first and the
+  /// fresh user later. Listeners already handle that sequence (it is what the offline path +
+  /// [AuthReconnectWatcher] produces), and there is no double-emit of the same state.
   Future<void> _restore() async {
-    final refreshToken = await _storage.read(key: _refreshTokenKey);
+    try {
+      await _restoreUnguarded();
+    } catch (e, st) {
+      reportStartupFailure('Auth session restore failed (signing out locally)', e, st);
+      // Nothing was emitted yet (every emit below returns right after) -> unblock the router.
+      if (_current == null) _emit(null);
+    }
+  }
+
+  static const _storageTimeout = Duration(seconds: 5);
+  static const _refreshTimeout = Duration(seconds: 12);
+
+  Future<void> _restoreUnguarded() async {
+    final refreshToken = await _storage
+        .read(key: _refreshTokenKey)
+        .timeout(_storageTimeout);
     if (refreshToken == null || refreshToken.isEmpty) {
       _emit(null);
       return;
     }
 
-    final result = await refreshSession();
+    final result = await refreshSession().timeout(
+      _refreshTimeout,
+      onTimeout: () => (user: null, failure: const NetworkError()),
+    );
     if (result.user != null) {
       // refreshSession() already persisted + emitted the fresh session.
       return;
@@ -421,7 +453,9 @@ class ZitadelAuthRepository implements IAuthRepository {
   }
 
   Future<Map<String, dynamic>?> _readCachedIdentity() async {
-    final raw = await _storage.read(key: _cachedIdentityKey);
+    final raw = await _storage
+        .read(key: _cachedIdentityKey)
+        .timeout(_storageTimeout);
     if (raw == null || raw.isEmpty) return null;
     try {
       final map = jsonDecode(raw);

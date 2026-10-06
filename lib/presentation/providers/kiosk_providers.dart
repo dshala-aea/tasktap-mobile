@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/kiosk/kiosk_lock_service.dart';
+import '../../core/startup/startup_report.dart';
 import '../../data/kiosk/kiosk_api_client.dart';
 import '../../data/kiosk/kiosk_credentials_store.dart';
 
@@ -71,8 +72,26 @@ class KioskModeNotifier extends StateNotifier<KioskModeState> {
   final KioskApiClient _api;
   final IKioskLockService _lock;
 
+  /// Upper bound on each cold-start await (secure-storage read, lock-channel call). `loading`
+  /// gates the router's redirect, so an await that throws or never returns would pin the app on
+  /// its first screen forever (App Store rejection of build 1.0 (50)).
+  static const _startupTimeout = Duration(seconds: 5);
+
+  void _report(String what, Object error, StackTrace stackTrace) =>
+      reportStartupFailure(what, error, stackTrace);
+
   Future<void> _init() async {
-    final creds = await _store.read();
+    final KioskCredentials? creds;
+    try {
+      creds = await _store.read().timeout(_startupTimeout);
+    } catch (e, st) {
+      // Unreadable storage is treated as "not a kiosk" (nothing is deleted, so a later retry or
+      // restart can still find the credentials). The normal login flow takes over.
+      _report('Kiosk credentials read failed (continuing as non-kiosk)', e, st);
+      if (mounted) state = const KioskModeState(loading: false, active: false);
+      return;
+    }
+    if (!mounted) return;
     if (creds == null) {
       state = const KioskModeState(loading: false, active: false);
       return;
@@ -80,7 +99,18 @@ class KioskModeNotifier extends StateNotifier<KioskModeState> {
     // A device that was already active before the app restarted (kiosk tablets stay powered on
     // for weeks, but crashes/OS updates happen) re-locks itself immediately rather than sitting
     // unpinned on whatever screen it happened to land on.
-    final outcome = await _lock.start();
+    //
+    // If the lock call throws or hangs, the device STAYS an active kiosk (credentials exist) but
+    // reports `failed` — the same outcome the display screen already uses to warn that the
+    // tablet is NOT actually locked down — instead of silently looking locked.
+    KioskLockOutcome outcome;
+    try {
+      outcome = await _lock.start().timeout(_startupTimeout);
+    } catch (e, st) {
+      _report('Kiosk lock start failed (device stays active, unlocked)', e, st);
+      outcome = KioskLockOutcome.failed;
+    }
+    if (!mounted) return;
     state = KioskModeState(
       loading: false,
       active: true,

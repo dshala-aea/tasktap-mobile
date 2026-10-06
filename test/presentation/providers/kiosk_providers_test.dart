@@ -4,6 +4,8 @@
 // KioskCredentialsStore, KioskApiClient and IKioskLockService are all mocked (mocktail); nothing
 // here touches real secure storage, network, or platform channels.
 
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/core/kiosk/kiosk_lock_service.dart';
@@ -55,6 +57,66 @@ void main() {
       expect(notifier.state.deviceLabel, 'Totem A');
       expect(notifier.state.lockOutcome, KioskLockOutcome.locked);
       verify(() => lock.start()).called(1);
+    });
+  });
+
+  // Cold-start hardening (App Store rejection: stuck on splash). `loading` gates the router's
+  // redirect, so _init must ALWAYS settle it, whatever secure storage / the lock channel do.
+  group('_init hardening — never leaves loading true', () {
+    const creds = KioskCredentials(rawKey: 'sp_x', deviceLabel: 'Totem A');
+
+    testWidgets('store.read throws -> loading false, inactive', (tester) async {
+      when(() => store.read()).thenThrow(Exception('keychain unavailable'));
+
+      final notifier = build();
+      await tester.pump(Duration.zero);
+
+      expect(notifier.state.loading, isFalse);
+      expect(notifier.state.active, isFalse);
+      verifyNever(() => lock.start());
+    });
+
+    testWidgets('store.read never completes -> settles inactive after 5s', (tester) async {
+      when(() => store.read()).thenAnswer((_) => Completer<KioskCredentials?>().future);
+
+      final notifier = build();
+      await tester.pump(const Duration(seconds: 4));
+      expect(notifier.state.loading, isTrue);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(notifier.state.loading, isFalse);
+      expect(notifier.state.active, isFalse);
+    });
+
+    testWidgets('credentials exist but lock.start throws -> active, outcome failed', (
+      tester,
+    ) async {
+      when(() => store.read()).thenAnswer((_) async => creds);
+      when(() => lock.start()).thenThrow(Exception('channel exploded'));
+
+      final notifier = build();
+      await tester.pump(Duration.zero);
+
+      expect(notifier.state.loading, isFalse);
+      expect(notifier.state.active, isTrue);
+      expect(notifier.state.deviceLabel, 'Totem A');
+      expect(notifier.state.lockOutcome, KioskLockOutcome.failed);
+    });
+
+    testWidgets('credentials exist but lock.start never completes -> active, failed after 5s', (
+      tester,
+    ) async {
+      when(() => store.read()).thenAnswer((_) async => creds);
+      when(() => lock.start()).thenAnswer((_) => Completer<KioskLockOutcome>().future);
+
+      final notifier = build();
+      await tester.pump(const Duration(seconds: 4));
+      expect(notifier.state.loading, isTrue);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(notifier.state.loading, isFalse);
+      expect(notifier.state.active, isTrue);
+      expect(notifier.state.lockOutcome, KioskLockOutcome.failed);
     });
   });
 

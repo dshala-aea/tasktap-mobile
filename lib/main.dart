@@ -21,6 +21,7 @@ import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/account_deactivated_screen.dart';
+import 'core/widgets/startup_watchdog.dart';
 import 'core/widgets/suspended_banner.dart';
 import 'data/entitlements/entitlement_providers.dart';
 import 'presentation/providers/auth_providers.dart';
@@ -62,6 +63,28 @@ Future<void> main() async {
   }
 }
 
+/// Bounded push bootstrap. Both awaits run BEFORE `runApp`, so a Firebase/APNs call that never
+/// returns would mean the first frame is never drawn (App Store rejection of build 1.0 (50):
+/// stuck on the splash screen). Each step gets [timeout]; any failure or timeout just leaves
+/// push disabled ([NotificationService.isAvailable] stays false). A step that finishes after its
+/// timeout is not cancelled and can only touch Firebase's own state — [isAvailable] is not set
+/// for it.
+@visibleForTesting
+Future<void> initializePush({
+  required Future<void> Function() initFirebase,
+  required Future<void> Function() initNotifications,
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  try {
+    await initFirebase().timeout(timeout);
+    await initNotifications().timeout(timeout);
+    NotificationService.isAvailable = true;
+  } catch (e) {
+    // Firebase is optional — app still works without push notifications.
+    debugPrint('Firebase init failed (push disabled): $e');
+  }
+}
+
 /// Initialise Supabase and launch the Flutter widget tree.
 ///
 /// Extracted so it can be called both from inside the Sentry [appRunner]
@@ -79,23 +102,21 @@ Future<void> runTaskTapApp() async {
     defaultValue: 'true',
   );
   if (firebaseEnabled == 'true') {
-    try {
-      // Explicit options, not native-config auto-discovery: DefaultFirebaseOptions is what
-      // `flutterfire configure` actually generated and keeps in sync going forward; relying on
-      // google-services.json/GoogleService-Info.plist alone works on Android today but silently
-      // has nothing to find on a platform whose native config file isn't present.
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-      // Must be registered here, before runApp, and with a top-level/static function — the OS
-      // can spawn a fresh isolate to run this handler while the app is backgrounded/terminated,
-      // which has no access to anything set up after this point. It was defined but never
-      // actually wired to FirebaseMessaging, so background/terminated pushes never reached it.
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-      await NotificationService.instance.initialize();
-      NotificationService.isAvailable = true;
-    } catch (e) {
-      // Firebase is optional — app still works without push notifications.
-      debugPrint('Firebase init failed (push disabled): $e');
-    }
+    await initializePush(
+      initFirebase: () async {
+        // Explicit options, not native-config auto-discovery: DefaultFirebaseOptions is what
+        // `flutterfire configure` actually generated and keeps in sync going forward; relying on
+        // google-services.json/GoogleService-Info.plist alone works on Android today but
+        // silently has nothing to find on a platform whose native config file isn't present.
+        await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        // Must be registered here, before runApp, and with a top-level/static function — the OS
+        // can spawn a fresh isolate to run this handler while the app is backgrounded/terminated,
+        // which has no access to anything set up after this point. It was defined but never
+        // actually wired to FirebaseMessaging, so background/terminated pushes never reached it.
+        FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      },
+      initNotifications: () => NotificationService.instance.initialize(),
+    );
   }
 
   // ── Date formatting ─────────────────────────────────────────────────────────
@@ -262,7 +283,10 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
           cachedEntitlementProvider.select((e) => e.valueOrNull?.isAccountDeactivated ?? false),
         );
 
-        return BiometricLock(
+        // Outermost: if kiosk/auth loading never finishes, the router never leaves its initial
+        // route, so this has to sit above the lock and the router's navigator.
+        return StartupWatchdog(
+          child: BiometricLock(
           enabled: biometricLock,
           // Themed backdrop, not transparent: SuspendedBanner now paints its own safe area (see
           // its own doc comment) and returns SizedBox.shrink() when the tenant isn't suspended —
@@ -278,6 +302,7 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
                       Expanded(child: child ?? const SizedBox.shrink()),
                     ],
                   ),
+          ),
           ),
         );
       },
