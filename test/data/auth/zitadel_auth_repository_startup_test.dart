@@ -16,6 +16,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/auth/zitadel_auth_repository.dart';
+import 'package:tasktap_mobile/domain/auth/auth_failure.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 
 class MockAppAuth extends Mock implements FlutterAppAuth {}
@@ -93,6 +94,64 @@ void main() {
     verifyNever(() => storage.delete(key: any(named: 'key')));
   });
 
+  group('refreshSession single-flight vs a hung native call', () {
+    setUp(() {
+      stubReadFromMap();
+      store[_refreshTokenKey] = 'rt-1';
+    });
+
+    ZitadelAuthRepository noRestore() =>
+        ZitadelAuthRepository(appAuth: appAuth, storage: storage, restore: false);
+
+    testWidgets('times out at 12s as NetworkError, clears the slot, next call is a fresh exchange', (
+      tester,
+    ) async {
+      var calls = 0;
+      when(() => appAuth.token(any())).thenAnswer((_) {
+        calls++;
+        return Completer<TokenResponse>().future;
+      });
+      final repo = noRestore();
+
+      final results = <({AuthUser? user, AuthFailure? failure})>[];
+      unawaited(repo.refreshSession().then(results.add));
+      await tester.pump(const Duration(seconds: 11));
+      expect(results, isEmpty);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(results.single.failure, isA<NetworkError>());
+      expect(store[_refreshTokenKey], 'rt-1');
+      expect(calls, 1);
+
+      // The slot is free: a second call must start a NEW exchange, not reuse the hung one.
+      unawaited(repo.refreshSession().then(results.add));
+      await tester.pump(Duration.zero);
+      expect(calls, 2);
+      await tester.pump(const Duration(seconds: 13));
+      expect(results, hasLength(2));
+    });
+
+    testWidgets('concurrent callers during the window still share ONE exchange', (tester) async {
+      var calls = 0;
+      when(() => appAuth.token(any())).thenAnswer((_) {
+        calls++;
+        return Completer<TokenResponse>().future;
+      });
+      final repo = noRestore();
+
+      final results = <({AuthUser? user, AuthFailure? failure})>[];
+      unawaited(repo.refreshSession().then(results.add));
+      unawaited(repo.refreshSession().then(results.add));
+      await tester.pump(const Duration(seconds: 5));
+      unawaited(repo.refreshSession().then(results.add));
+      await tester.pump(const Duration(seconds: 8));
+
+      expect(calls, 1);
+      expect(results, hasLength(3));
+      expect(results.every((r) => r.failure is NetworkError), isTrue);
+    });
+  });
+
   group('native refresh never completes', () {
     setUp(() {
       stubReadFromMap();
@@ -125,7 +184,7 @@ void main() {
       expect(emitted, [null]);
     });
 
-    testWidgets('a LATE successful refresh still emits the fresh user afterwards', (tester) async {
+    testWidgets('a LATE successful native result after the timeout is discarded', (tester) async {
       store[_cachedIdentityKey] = jsonEncode({'id': 'u1', 'email': 'e', 'displayName': 'T'});
       final late = Completer<TokenResponse>();
       when(() => appAuth.token(any())).thenAnswer((_) => late.future);
@@ -147,8 +206,10 @@ void main() {
       );
       await tester.pump(Duration.zero);
 
-      expect(emitted.map((u) => u?.id), ['u1', 'u-fresh']);
-      expect(store[_refreshTokenKey], 'rt-new');
+      // The native call is now abandoned at the timeout (single-flight slot freed), so its late
+      // result is discarded: no emit, no persist. The reconnect watcher / 401 path retries.
+      expect(emitted.map((u) => u?.id), ['u1']);
+      expect(store[_refreshTokenKey], 'rt-1');
     });
   });
 }

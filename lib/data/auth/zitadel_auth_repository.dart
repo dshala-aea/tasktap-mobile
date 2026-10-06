@@ -223,7 +223,7 @@ class ZitadelAuthRepository implements IAuthRepository {
           scopes: _scopes,
           grantType: 'refresh_token',
         ),
-      );
+      ).timeout(_refreshTimeout);
       final user = _fromTokens(
         accessToken: result.accessToken,
         // Zitadel may rotate the refresh token; fall back to the one we sent.
@@ -238,6 +238,12 @@ class ZitadelAuthRepository implements IAuthRepository {
       await _persistCachedIdentity(user);
       _emit(user);
       return (user: user, failure: null);
+    } on TimeoutException {
+      // The native call hung. NetworkError, never SessionExpired: a hang says nothing about the
+      // refresh token, so callers keep it. Returning here also completes the future behind
+      // `_inFlightRefresh`, which frees the single-flight slot — without this bound a hung
+      // native call kept every later refreshSession() caller coalesced onto a dead future.
+      return (user: null, failure: const NetworkError());
     } catch (e) {
       return (user: null, failure: _mapError(e));
     }
@@ -383,10 +389,18 @@ class ZitadelAuthRepository implements IAuthRepository {
   /// keychain read failure/timeout emits null (login) and deletes NOTHING — an unreadable
   /// keychain says nothing about the token's validity.
   ///
-  /// A refresh that finishes after its timeout is not cancelled: `_doRefreshSession` emits the
-  /// fresh user itself, so the stream may carry the cached/offline user (or null) first and the
-  /// fresh user later. Listeners already handle that sequence (it is what the offline path +
-  /// [AuthReconnectWatcher] produces), and there is no double-emit of the same state.
+  /// A native refresh that finishes after its timeout is discarded (the await is abandoned, the
+  /// single-flight slot is freed); the cached/offline user stays and [AuthReconnectWatcher] / the
+  /// 401 path perform the real refresh later. No double emit.
+  ///
+  /// Honest caveat to "only [SessionExpired] wipes the token": when this very first restore never
+  /// completes (timeout/NetworkError) AND there is no cached identity to fall back to (the first
+  /// restore after install never finished), the code below still falls through to the sign-out
+  /// path and deletes the stored token. That is pre-existing [NetworkError] behaviour, kept as is.
+  ///
+  /// The native call is itself bounded inside [_doRefreshSession] (which also frees the
+  /// single-flight slot); the [_refreshTimeout] wait below is kept only as a backstop for the
+  /// non-native steps of [refreshSession] (keychain read/writes).
   Future<void> _restore() async {
     try {
       await _restoreUnguarded();
@@ -398,6 +412,8 @@ class ZitadelAuthRepository implements IAuthRepository {
   }
 
   static const _storageTimeout = Duration(seconds: 5);
+  /// ONE bound for "a refresh must finish": used on the native `_appAuth.token` call and as the
+  /// restore backstop.
   static const _refreshTimeout = Duration(seconds: 12);
 
   Future<void> _restoreUnguarded() async {
