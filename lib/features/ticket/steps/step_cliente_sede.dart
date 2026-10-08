@@ -19,6 +19,7 @@ import '../new_ticket_form_state.dart';
 import '../reference_picker.dart';
 import '../reference_providers.dart';
 import 'blamed_field_notice.dart';
+import 'read_only_caption.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -34,6 +35,8 @@ class StepClienteSede extends ConsumerStatefulWidget {
     required this.state,
     required this.onChanged,
     this.blamedField,
+    this.contractEditable = true,
+    this.commessaClearable = true,
   });
 
   final NewTicketFormState state;
@@ -42,6 +45,21 @@ class StepClienteSede extends ConsumerStatefulWidget {
   /// The request field the server refused, when this wizard is a repair — see
   /// [BlamedFieldNotice]. Names one of the four references this step owns, or null.
   final String? blamedField;
+
+  /// Whether the Contratto field is a control. `false` in edit mode, where the PUT behind this
+  /// screen carries no `ContractId` at all (`TicketsController.UpdateTicketRequest`), so a pick here
+  /// would be dropped by the save without a word — "Ticket aggiornato" over a contract that never
+  /// moved. The field is still drawn, showing the record's real contract, with
+  /// [ReadOnlyFieldCaption] under it saying why it is not editable. Defaults to `true`: the create
+  /// wizard's own contract pick is real and must stay live.
+  final bool contractEditable;
+
+  /// Whether clearing the Commessa is offered. `false` in edit mode: the server applies a commessa
+  /// set-only (`TicketCommandService.ApplyFields`: `if (request.CommessaId.HasValue)`), so a null
+  /// sent from here is a removal the record never gets. *Picking* a commessa is real and does
+  /// persist, so the field stays enabled either way — only the release is refused, with a toast
+  /// rather than silence. Defaults to `true` for the create wizard.
+  final bool commessaClearable;
 
   @override
   ConsumerState<StepClienteSede> createState() => _StepClienteSedeState();
@@ -137,6 +155,11 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           selectedId: widget.state.contractId,
           hint: 'Cerca contratto…',
           emptyCacheHint: 'Nessun contratto in cache. Cerca per nome.',
+          // Drawn but not offered when the caller cannot persist a change — see
+          // [StepClienteSede.contractEditable]. `enabled: false` is what the widget already does
+          // with a read-only field (an AbsorbPointer, so it cannot be typed into either), and the
+          // caption below says why rather than leaving a dead field.
+          enabled: widget.contractEditable,
           onSelected: (option) {
             // The search wrote the row into the mirror *before* returning it, so refetching the
             // local list here is enough for the summary to resolve a label for a row this device
@@ -149,9 +172,22 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
             );
           },
         ),
+        if (!widget.contractEditable) const ReadOnlyFieldCaption(),
         const SizedBox(height: 20),
         BlamedFieldNotice(field: 'commessaId', blamedField: widget.blamedField),
         ReferencePickerField(
+          // Keyed by its own value, the way the plain dropdowns on this step are, so the field is
+          // rebuilt from the store whenever the *state* drops the commessa behind the field's back —
+          // which is the customer-change branch above (`clearCommessaId: true`). Without this the
+          // widget survives the change (`AppLookupField` keeps its own `_selectedId`/text and only
+          // ever *fills* text in, never clears it) and goes on showing the previous customer's
+          // commessa code over a null selection.
+          //
+          // Note what this key does NOT cover: a refused clear. The refusal below changes no state,
+          // so the value the key is built from does not change either and this widget is not
+          // rebuilt — the field keeps whatever the technician typed (or, after the X, an emptied
+          // box) while the stored commessa is still there and still what the save sends.
+          key: ValueKey('commessa-${widget.state.commessaId}'),
           label: 'Commessa',
           localItems: commesse,
           search: (q) => search.searchCommesse(customerId: customerId, query: q),
@@ -159,6 +195,17 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           hint: 'Cerca commessa…',
           emptyCacheHint: 'Nessuna commessa in cache. Cerca per codice.',
           onSelected: (option) {
+            // Only the *release* is refused, and only when the caller says so — see
+            // [StepClienteSede.commessaClearable]. Saying it out loud matters: a refusal with no
+            // toast is indistinguishable from the field being broken.
+            if (option == null && !widget.commessaClearable) {
+              showAppToast(
+                context,
+                message: 'La commessa non può essere rimossa da qui.',
+                tone: ToastTone.error,
+              );
+              return;
+            }
             ref.invalidate(localCommesseProvider(customerId));
             widget.onChanged(
               option == null
