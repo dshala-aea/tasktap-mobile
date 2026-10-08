@@ -3,6 +3,11 @@
 Date: 2026-10-08
 Status: **ARCHITECTURE DECIDED — Option E (§5), scope D-1 = (a) "own tickets only" (§10).
 Ready for implementation planning. D-2/D-3/D-4 remain open with stated defaults.**
+
+**2026-10-08 — RECON CORRECTIONS APPLIED (§2.6, §2.7, §6.4, §8, §9, §10).** Implementation recon
+against `master` falsified three facts this document originally asserted, and surfaced one new
+defect. **Option E and D-1(a) are unchanged**; the fact base and the resulting task list are not.
+Read §2.6–§2.7 before the plan.
 Scope: `tasktap_mobile` (Flutter/Drift) and the backend surface it talks to. Read-only analysis of the
 repository as it exists today (mobile branch `feat/mobile-asset-checklists`, backend
 `docs/api/openapi.snapshot.json` @ `master`).
@@ -183,9 +188,9 @@ offers. This is not a bug in the sync *mechanism*; it is a gap in the sync *cont
 
 (a) **Missing fields** on the create/edit path (`contractId`, `prodottoAssistenzaIds`,
 `commessaId`, `cantiereId`, `maintenanceTemplateId`, `internalNotes`, `materiali`) — the mobile API
-client does not send them. One of these is special: `prodottoAssistenzaIds` is `[NotMapped]` on the
-server `Ticket`, so the sync ships it empty and **no cache can ever repopulate it** — it needs a
-real relation (a join table or a mapped column), not a mirrored field (§8).
+client does not send them. For `prodottoAssistenzaIds` the original claim in this paragraph was
+**wrong** and is corrected in §2.6: the covered-asset path is already built end-to-end and needs
+nothing new.
 (b) **Missing reference data** to populate those fields — the sync does not deliver the entities,
 and there is no local table to hold them.
 Fixing (a) without (b) yields empty dropdowns; fixing (b) without (a) yields cached data no field
@@ -218,8 +223,10 @@ deactivated, or belongs to another tenant. This is precisely the failure mode §
 repair. The one thing only a runtime repro can add is the exact entity named in the 404 body; the
 code-level path is settled and is why the fix below is a *repair* flow, not a retry.
 
-**Secondary confirmed gap (parity, §2.3(a)):** `Ticket.ProdottoAssistenzaIds` is `[NotMapped]`, so
-the sync ships it as `[]` and even a fully-cached ticket cannot repopulate its covered-asset ids.
+**CORRECTED (see §2.6):** this paragraph originally read *"`Ticket.ProdottoAssistenzaIds` is
+`[NotMapped]`, so the sync ships it as `[]` and even a fully-cached ticket cannot repopulate its
+covered-asset ids."* That is false on `master`: the property is excluded by Fluent
+`entity.Ignore(...)`, **not** by an attribute, and the deployed sync fills it.
 
 ### 2.5 The premise to challenge — write safety was solved, read availability was not
 
@@ -228,6 +235,41 @@ The prior spec's "closed" ruling is true for writes and silent for reads. A tech
 which contract, which product, which commessa — is not on the device. This is the single
 correction this document is built on: **treat read availability as its own design axis, distinct
 from write safety, with its own scope, freshness and confidentiality rules.**
+
+### 2.6 CORRECTION — the covered-asset path already exists end-to-end
+
+Recon against `master` (deployed) falsifies §2.3(a)'s `[NotMapped]` claim.
+
+- `Ticket.ProdottoAssistenzaIds` (`Ticket.cs:198-205`) is excluded from persistence by Fluent
+  `entity.Ignore(e => e.ProdottoAssistenzaIds)` (`TicketConfiguration.cs:93`), **not** by a
+  `[NotMapped]` attribute. The join table `TicketProdottoAssistenza` is the source of truth.
+- The deployed sync **already fills it**: `MobileUserSyncService.cs:147-162` runs one set-based query
+  over `TicketProdottoAssistenza` for the synced tickets and assigns `ProdottoAssistenzaIds` per
+  ticket — additive on the wire, since the property is already part of the serialised ticket. Pinned
+  by `tests/.../Sync/MobileUserSyncTicketAssetsTests.cs` (a `master`-only test, including
+  `Wire_name_is_prodottoAssistenzaIds`).
+- The mobile branch already consumes it: `TicketAssets` / `ticket_assets` (plan 5b, Tasks 1–4).
+
+**Consequence: the ticket↔product relation needs no new server mapping, no new Drift join table,
+and no migration column.** §8 and §9 are amended accordingly, and the plan loses a task.
+
+### 2.7 NEW HIGH FINDING — "Riferimento" sends a User id into an Agent FK → deterministic 404
+
+Found while verifying §2.4. This is a *deterministic* failure, not a staleness one, and a stronger
+candidate for the reported "submitting a ticket returns an error" than §2.4's stale row.
+
+- `CreateTicketCommand.AgentId` is guarded by `EnsureExistsAsync<Agent>(request.AgentId)` and then
+  assigned to `Ticket.AgentId` (`TicketCommandService.cs:97,131`; same guard on update at `:300,326`).
+- **Both clients populate that field from the Users list, not from `Agent`.** Web:
+  `TicketCreatePanel.tsx:500-513` binds "Riferimento" to `loadUserOptions`, which calls `GET /users`
+  (`picker-loaders.ts:198-213`). Mobile: `step_dettagli_ticket.dart:236-272` binds it to
+  `techniciansProvider` (`GET /api/users?role=Technician…`).
+- A real `Agent` aggregate exists and is separately served (`AgentsController`, `GET /api/agents`,
+  `ClientiAgentRead`). The web app never calls it.
+
+A `User` id and an `Agent` id are independent `Guid`s, so the guard cannot pass: any ticket created
+**or edited** with "Riferimento" set is rejected **404** — on both clients. Not yet reproduced at
+runtime; the plan pins it with a test before changing anything.
 
 ---
 
@@ -374,15 +416,29 @@ server-side, so the device cannot tell "deleted" from "unchanged". For the exist
 this is mostly hidden by the short window, but for a *reference* cache it is a correctness bug —
 a picker would offer a deleted contract forever.
 
-Minimum fix, in this order of cheapness:
-1. **Soft-delete the gap entities** (`Contract`, `Commessa`, `ProdottoAssistenza`) the way
-   `Customer` already is (`DeletedAt` + the global filter), and have the sync's scope predicate
-   send the row with an `isActive=false`/`deleted` marker *instead of hiding it*, so the delta
-   carries the transition. Pickers filter on the flag; the row is dropped on the next full resync.
-2. For entities the server always sends completely (`colleagues`), keep the existing
-   wholesale-replace. Use it only where the set is genuinely small and complete per sync.
-3. Do **not** build a general tombstone table, a `DeletedAt` sweep service, or vector clocks.
-   The reference set is small and low-churn; per-entity soft-delete flags are enough.
+**CORRECTED — no new columns are needed, and the original proposal would have made things worse.**
+It suggested adopting `ISoftDeletable` on the gap entities. `DeletedAt` is honoured by a global query
+filter (`ApplicationDbContext.cs:533-538`), so a soft-deleted row would vanish from the delta and the
+device would still never learn — the same bug one migration later, plus an `IgnoreQueryFilters()` in
+the sync, which is a tenant-isolation-sensitive call this work does not need to make. The gap
+entities already carry a server-visible flag, and it is sufficient:
+
+1. **Carry `IsActive`, do not filter on it, in the sync scope.** `Contract.IsActive`,
+   `Commessa.IsActive`, `ProdottoAssistenza.IsActive` and `Agent.IsActive` all exist. The scope
+   predicate stops excluding inactive rows and sends them with their flag; the picker filters
+   `isActive == true`. A deactivation then reaches the device as an ordinary delta — the transition
+   that is missing today.
+2. **Prune on bootstrap.** On a payload with `since == null` (first login, or a
+   `syncCursorGeneration` bump) the client deletes reference rows the payload does not contain. The
+   bootstrap payload is the *complete* scoped set, so this is the honest answer for rows a hard
+   `DELETE` removed, which no flag can describe. One rule, no per-row tombstones, self-healing.
+   Known limitation, accepted: a row materialised by an online search pick (§7.4) but outside the
+   scope is dropped at the next bootstrap and must be re-found online. Bootstrap runs once per
+   cursor generation, i.e. roughly once per app upgrade.
+3. For entities the server always sends completely per sync (`colleagues`), keep the existing
+   wholesale-replace; it is the degenerate case of rule 2.
+4. Do **not** build a tombstone table, a `DeletedAt` sweep service, or vector clocks. The scoped
+   reference set is small, low-churn, and rebuildable from the server in one request.
 
 **6.5 Cursors.** Reuse `syncCursorGeneration`. Bumping it forces a full resync of the extended
 payload; do this **once** when the gap entities are added, so every device re-bootstraps the
@@ -446,17 +502,21 @@ without a deliberate search.
 
 ## 8. Data / schema changes (minimum — no migrations yet)
 
+**CORRECTED (see §2.6):** four tables, not five. `CustomerContact` is dropped — the create contract
+has no contact field (`CreateTicketCommand` carries `AgentId`, not `ContactId`) and contacts are only
+reachable per customer (`GET /api/customers/{id}/contacts`), so mirroring them buys nothing a ticket
+can use. YAGNI.
+
 New Drift tables (mirroring the existing `_upsert*` shape: id, tenantId, createdAt, updatedAt, the
 DTO fields, `isActive`):
-`Contracts`, `Commesse`, `ProdottiAssistenza`, `Contacts`, `Agents`.
+`Contracts`, `Commesse`, `ProdottiAssistenza`, `Agents`.
 
 Changed: `tickets` already has `contractId`, `prodottoAssistenzaId`, `commessaId`, `cantiereId`
 columns (written by `_upsertTickets`) — but the create path never sends them, so they are only
-populated when the *server* sets them. `contractId`/`commessaId`/`cantiereId` need the create form
-to send them; `prodottoAssistenzaId` is singular locally while the server's create contract takes
-`prodottoAssistenzaIds` (array) and the sync ships it empty (`[NotMapped]`) — so this one needs a
-**ticket↔product join table** on the device, fed by a new mapped server relation, not a single
-column.
+populated when the *server* sets them. The create form must send `contractId`/`commessaId`/
+`cantiereId`. **Covered assets are already solved** (§2.6): the deployed sync fills
+`Ticket.ProdottoAssistenzaIds` and the device mirrors it as `ticket_assets`. No join table is added
+here, and `tickets.prodottoAssistenzaId` is not the coverage relation.
 
 One `syncCursorGeneration` bump; one `from < N` migration step creating the five tables; indexes
 on the FK columns each picker filters by (`customerId`, `contractId`, `locationId`, `isActive`).
@@ -468,14 +528,19 @@ per-user snapshot table.
 
 ## 9. Backend / API changes (minimum — no implementation)
 
-1. Extend `MobileUserSyncResult` with `contracts`, `commesse`, `prodottiAssistenza`, `contacts`,
-   `agents`(or a scoped user list), each delta-keyed on `UpdatedAt` and scoped by the §6.8
-   predicate. Add soft-delete flags so the delta can carry deletions (§6.4). Note `TicketStatus`
-   and `TicketType` are the only synced entities with **no** `UpdatedAt`; the gap entities are all
-   `BaseEntity`-derived and do carry it.
-2. Map `Ticket.ProdottoAssistenzaIds` (currently `[NotMapped]`, always `[]`) so a ticket's
-   covered-asset ids can actually reach the device — a join table or a mapped column (§8).
-3. No new search API — reuse the existing `Q` endpoints for the on-demand path.
+1. Extend `MobileUserSyncResult` with `contracts`, `commesse`, `prodottiAssistenza`, `agents` —
+   **four, not five** (§8) — each delta-keyed on `UpdatedAt` and scoped by the §6.8 predicate. **No
+   new soft-delete flags**: send `IsActive` as a carried field (§6.4). `TicketStatus` and
+   `TicketType` are the only synced entities with **no** `UpdatedAt`; the gap entities are all
+   `BaseEntity`-derived and do carry it, so the existing `COALESCE(UpdatedAt, CreatedAt)` delta
+   applies unchanged.
+2. **Already done on `master` — no work** (§2.6). The sync fills `Ticket.ProdottoAssistenzaIds` from
+   `TicketProdottoAssistenza`; the client mirrors it as `ticket_assets`.
+3. No new search API; reuse the existing list endpoints. **But two of the four silently ignore `q`
+   today** — verified: `ContractsController.GetAll` and `ProdottoAssistenzaController.GetAll` bind
+   `ListQuery` and never read `query.Q` (whereas `CommesseController.cs:69-70` does). Search-on-demand
+   would be a lie for contracts and products, so wiring `q` into those two is part of this work, not
+   optional polish.
 4. Turn the create/update FK guards' 404 into a **structured, field-identifying error**
    (`{ field: "customerId", code: "not_found" }`) so the mobile repair step (§6.6) can name the
    offending FK instead of parsing an Italian message string. Keep the 404 status (it is
@@ -487,8 +552,8 @@ per-user snapshot table.
 ## 10. Open decisions (genuine product input required)
 
 - **D-1 — RESOLVED (2026-10-08): (a) Own tickets only.** The mobile reference cache mirrors only the
-  customers, locations, contracts, products/services, contacts, agents and related reference data
-  reachable through the technician's own ticket/work scope. This makes the current sync boundary
+  customers, locations, contracts, products/services, agents and related reference data (four gap
+  entities — see §8) reachable through the technician's own ticket/work scope. This makes the current sync boundary
   **explicit** rather than expanding mobile visibility. Online `Q`/search remains the mechanism for
   references outside the local cache. No tenant-wide or cantiere/commesse-wide mirroring is
   introduced by this feature.
