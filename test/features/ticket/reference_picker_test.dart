@@ -264,4 +264,57 @@ void main() {
 
     expect(searched, isFalse);
   });
+
+  /// Both releases arrive at `onSelected` as the same null, and a caller that has to *refuse* the
+  /// clear has to tell them apart: [ReferencePickerField.onCleared] is that signal, and it has to
+  /// arrive before the null so the caller it was written for can re-key the field as the refusal
+  /// lands on it (`step_cliente_sede`'s Commessa field).
+  testWidgets('emptying the box reports the clear, and reports it before the release', (tester) async {
+    final order = <String>[];
+    await tester.pumpWidget(
+      _wrap(
+        ReferencePickerField(
+          label: 'Contratto',
+          selectedId: 'c1',
+          localItems: const [ReferenceOption(id: 'c1', label: 'Manutenzione caldaie')],
+          search: (q) async => const [],
+          onSelected: (o) => order.add('selected:${o?.id}'),
+          onCleared: () => order.add('cleared'),
+        ),
+      ),
+    );
+
+    // The X on the resolved field.
+    await tester.tap(
+      find.descendant(of: find.byKey(_contrattoKey), matching: find.byType(IconButton)),
+    );
+    await tester.pump();
+
+    expect(order, ['cleared', 'selected:null']);
+  });
+
+  /// The other half of that contract, and the half a refused clear stands on: typing releases the
+  /// pick too, and it is *not* a clear. A caller that undid the field on this signal would wipe the
+  /// search the technician is part-way through typing — which is the only way back to the suggestion
+  /// list once a field already holds a pick.
+  testWidgets('editing the text releases the pick without reporting a clear', (tester) async {
+    var cleared = false;
+    await tester.pumpWidget(
+      _wrap(
+        ReferencePickerField(
+          label: 'Contratto',
+          selectedId: 'c1',
+          localItems: const [ReferenceOption(id: 'c1', label: 'Manutenzione caldaie')],
+          search: (q) async => const [],
+          onSelected: (_) {},
+          onCleared: () => cleared = true,
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), 'Manutenzione porte');
+    await tester.pump();
+
+    expect(cleared, isFalse);
+  });
 }

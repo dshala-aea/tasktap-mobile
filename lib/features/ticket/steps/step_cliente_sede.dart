@@ -79,6 +79,15 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
   // until the sync above actually lands — and would show blank text despite a real selection.
   String? _pendingSedeName;
 
+  /// Bumped by a *refused* commessa clear to force the field to rebuild. A refusal deliberately
+  /// changes no state, so the value half of that field's key does not change either and nothing
+  /// would rebuild it — see the comment on the Commessa key in [_buildReferences], and its
+  /// `onCleared` for why only the clearing gesture bumps this and a release by typing does not.
+  /// The same re-key-to-reset trick as `_prodottoPickerEpoch` in `step_dettagli_ticket.dart`, for
+  /// the same reason: the field has to be rebuilt from the store because it cannot be told to
+  /// reload itself.
+  int _commessaPickerEpoch = 0;
+
   @override
   void dispose() {
     _createLocationDebounce?.cancel();
@@ -149,6 +158,15 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         const SizedBox(height: 24),
         BlamedFieldNotice(field: 'contractId', blamedField: widget.blamedField),
         ReferencePickerField(
+          // Keyed by its own value, like Cliente and Tipo. The customer-change branch above sets
+          // `clearContractId: true` (and so does emptying the Cliente field), which takes the
+          // contract out of *state* — but this widget would survive that, because `AppLookupField`
+          // holds its own `_selectedId`/text and only ever *fills* text in, never clears it. Without
+          // this key the previous customer's contract name stayed on screen over a null selection, on
+          // a field that edit mode draws read-only and therefore cannot be corrected by typing: a
+          // read-only field displaying a contract the record no longer points at. With it, a cleared
+          // contract rebuilds the field into an empty one.
+          key: ValueKey('contratto-${widget.state.contractId}'),
           label: 'Contratto',
           localItems: contracts,
           search: (q) => search.searchContracts(customerId: customerId, query: q),
@@ -176,18 +194,24 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         const SizedBox(height: 20),
         BlamedFieldNotice(field: 'commessaId', blamedField: widget.blamedField),
         ReferencePickerField(
-          // Keyed by its own value, the way the plain dropdowns on this step are, so the field is
-          // rebuilt from the store whenever the *state* drops the commessa behind the field's back —
-          // which is the customer-change branch above (`clearCommessaId: true`). Without this the
+          // Keyed by its own value *and* by the epoch a refused clear bumps — two halves, two
+          // different jobs.
+          //
+          // The value half rebuilds the field when the *state* drops the commessa behind the field's
+          // back, which is the customer-change branch above (`clearCommessaId: true`). Without it the
           // widget survives the change (`AppLookupField` keeps its own `_selectedId`/text and only
           // ever *fills* text in, never clears it) and goes on showing the previous customer's
           // commessa code over a null selection.
           //
-          // Note what this key does NOT cover: a refused clear. The refusal below changes no state,
-          // so the value the key is built from does not change either and this widget is not
-          // rebuilt — the field keeps whatever the technician typed (or, after the X, an emptied
-          // box) while the stored commessa is still there and still what the save sends.
-          key: ValueKey('commessa-${widget.state.commessaId}'),
+          // The value half cannot cover the opposite case, which is what the epoch is for: a clear
+          // that is *refused*. The refusal below deliberately changes no state, so the value the key
+          // is built from does not change either and nothing rebuilds — the box would sit empty (the
+          // technician pressed the X and `_clear()` emptied it) while `state.commessaId` still held
+          // the commessa, and the save still sent it: a field whose text does not match the record.
+          // Bumping `_commessaPickerEpoch` on that one gesture (`onCleared` below, which is what
+          // tells it apart from a pick released by typing) forces the rebuild the state cannot, and
+          // the box comes back showing the commessa that is really still there.
+          key: ValueKey('commessa-${widget.state.commessaId}-$_commessaPickerEpoch'),
           label: 'Commessa',
           localItems: commesse,
           search: (q) => search.searchCommesse(customerId: customerId, query: q),
@@ -212,6 +236,20 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
                   ? widget.state.copyWith(clearCommessaId: true)
                   : widget.state.copyWith(commessaId: option.id),
             );
+          },
+          // The re-key that makes the refusal visible. A refusal changes no state, so the value half
+          // of the key above cannot rebuild the field by itself and the box would keep sitting empty
+          // over the commessa the record still holds — see the key's own comment.
+          //
+          // Only an *emptied* box bumps it, which is why this is here and not in the refusal above:
+          // that refusal is reached by two different gestures, and the other one — releasing the
+          // pick by editing the text (the picker reports both the same way, see
+          // [ReferencePickerField.onCleared]) — is the technician searching for the next commessa.
+          // Rebuilding the field under them would wipe what they are typing, and typing is the only
+          // way in to a suggestion list once a field already holds a pick. A refused clear gets
+          // undone; a search gets left alone.
+          onCleared: () {
+            if (!widget.commessaClearable) setState(() => _commessaPickerEpoch++);
           },
         ),
       ],
