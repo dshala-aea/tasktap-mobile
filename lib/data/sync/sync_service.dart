@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 import '../local/app_database.dart';
+import '../reference/reference_cache_repository.dart';
 import 'checklist_reconciler.dart';
 import 'checklist_refetch_service.dart';
 import 'sync_dto.dart';
@@ -69,6 +70,7 @@ class SyncService {
       await _upsertMaterialeBarcodes(payload.materialiBarcodes);
       await _upsertCantieri(payload.cantieri);
       await _replaceColleagues(payload.colleagues);
+      await _applyReferenceCache(payload);
       await _applyChecklist(payload);
     });
 
@@ -107,6 +109,39 @@ class SyncService {
         reportIdsInPayload: [...payload.draftReports, ...payload.submittedReports].map((r) => r.id),
         rows: payload.reportStrumenti,
       );
+    }
+  }
+
+  /// The reference mirror. Each entity is skipped wholesale when the payload does not carry it —
+  /// an older backend must not look like "every reference row was deleted" — and pruned only for
+  /// the customers this payload actually carries. See [ReferenceCacheRepository].
+  Future<void> _applyReferenceCache(SyncResultDto payload) async {
+    final cache = ReferenceCacheRepository(db);
+
+    if (payload.carriesContracts) {
+      await cache.upsertContracts(payload.contracts);
+      await cache.pruneContracts(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepContractIds: payload.contracts.map((c) => c.id).toSet(),
+      );
+    }
+    if (payload.carriesCommesse) {
+      await cache.upsertCommesse(payload.commesse);
+      await cache.pruneCommesse(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepCommessaIds: payload.commesse.map((c) => c.id).toSet(),
+      );
+    }
+    if (payload.carriesProdottiAssistenza) {
+      await cache.upsertProdottiAssistenza(payload.prodottiAssistenza);
+      await cache.pruneProdottiAssistenza(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepProdottiIds: payload.prodottiAssistenza.map((p) => p.id).toSet(),
+      );
+    }
+    if (payload.carriesAgents) {
+      // No prune: see ReferenceCacheRepository.
+      await cache.upsertAgents(payload.agents);
     }
   }
 
