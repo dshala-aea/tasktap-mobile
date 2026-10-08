@@ -143,6 +143,10 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       dueDate: _formState.dueDate,
       technicianNotes: _formState.technicianNotes,
       agentId: _formState.agentId,
+      contractId: _formState.contractId,
+      commessaId: _formState.commessaId,
+      cantiereId: _formState.cantiereId,
+      prodottoAssistenzaIds: _formState.prodottoAssistenzaIds,
       tags: _formState.tags,
       isOnline: isOnline,
     );

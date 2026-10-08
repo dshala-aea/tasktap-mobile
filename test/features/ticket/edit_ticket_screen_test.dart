@@ -74,7 +74,11 @@ void main() {
     await db
         .into(db.ticketTypes)
         .insert(
-          TicketTypesCompanion.insert(id: const Value(2), tenantId: 'tenant-1', name: 'Manutenzione'),
+          TicketTypesCompanion.insert(
+            id: const Value(2),
+            tenantId: 'tenant-1',
+            name: 'Manutenzione',
+          ),
         );
     await db
         .into(db.ticketStatuses)
@@ -98,20 +102,21 @@ void main() {
           ),
         );
 
-    // Field-parity gap fixture: a technician list for the Riferimento picker's techniciansProvider.
-    when(
-      () => mockDio.get<Map<String, dynamic>>('/api/users', queryParameters: any(named: 'queryParameters')),
-    ).thenAnswer(
-      (_) async => Response<Map<String, dynamic>>(
-        statusCode: 200,
-        requestOptions: RequestOptions(path: '/api/users'),
-        data: {
-          'items': [
-            {'id': 'usr-agent-1', 'firstName': 'Luca', 'lastName': 'Bianchi'},
-          ],
-        },
-      ),
-    );
+    // Field-parity gap fixture: the Riferimento picker reads the *agents* mirror
+    // (`localAgentsProvider('')` → `ReferenceCacheRepository.activeAgents`), not the technicians
+    // list. "Riferimento" is the legacy Agente entity, which the server validates with
+    // `EnsureExistsAsync<Agent>` — a User id there 404s. Mirrors what a sync of this tenant's
+    // agents would have written.
+    await db
+        .into(db.agents)
+        .insert(
+          AgentsCompanion.insert(
+            id: 'usr-agent-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            nome: 'Luca Bianchi',
+          ),
+        );
   });
 
   tearDown(() async {
@@ -174,6 +179,13 @@ void main() {
       // Priority pre-fills from the ticket's real value (schema 20 already syncs it down) rather
       // than defaulting to "Media" and silently resetting it on the next save. AppFieldLabel
       // upper-cases its text, so the rendered label is "PRIORITÀ", not "Priorità".
+      //
+      // Below the fold: the step now also carries the Prodotti assistenza picker between Tipo and
+      // Priorità, so Priorità is no longer inside the test viewport. Same fixed-drag approach as
+      // the field-parity tests below ("a fixed drag here, not scrollUntilVisible").
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pumpAndSettle();
+
       expect(find.text('PRIORITÀ'), findsOneWidget);
       expect(find.text('Alta'), findsOneWidget);
 
@@ -435,9 +447,7 @@ void main() {
 
   group('EditTicketScreen — error handling', () {
     testWidgets('a failed save surfaces the error and keeps the edit in place', (tester) async {
-      when(
-        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data')),
-      ).thenThrow(
+      when(() => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data'))).thenThrow(
         DioException(
           requestOptions: RequestOptions(path: '/api/tickets/ticket-1'),
           type: DioExceptionType.connectionError,
@@ -480,9 +490,7 @@ void main() {
     testWidgets('a 409 conflict names the conflict and reseeds from a resync, not a stale retry', (
       tester,
     ) async {
-      when(
-        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data')),
-      ).thenThrow(
+      when(() => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data'))).thenThrow(
         DioException(
           requestOptions: RequestOptions(path: '/api/tickets/ticket-1'),
           type: DioExceptionType.badResponse,

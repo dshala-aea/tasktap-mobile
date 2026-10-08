@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -6,10 +8,12 @@ import 'package:intl/intl.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_tappable.dart';
 import '../../../core/widgets/extension_fields_section.dart';
+import '../../../data/reference/reference_option.dart';
 import '../../admin/admin_widgets.dart';
 import '../new_ticket_form_state.dart';
+import '../reference_picker.dart';
+import '../reference_providers.dart';
 import '../ticket_providers.dart';
-import 'step_assegnazione.dart' show techniciansProvider;
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -20,6 +24,11 @@ import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 //
 // Title (required), description (optional), type (required).
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// "Nessuno" pops `''` (never a real agent id) so it is distinguishable from dismissing the sheet
+/// without picking anything (pops `null`, which must leave the field untouched, not clear it —
+/// backing out of a picker is not the same gesture as explicitly clearing a field).
+const String _kNoneSentinel = '';
 
 class StepDettagliTicket extends ConsumerStatefulWidget {
   const StepDettagliTicket({
@@ -87,6 +96,20 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     super.dispose();
   }
 
+  /// Labels for the prodotti this step itself picked, kept only for the chips below the picker.
+  ///
+  /// A chip needs a label, but [NewTicketFormState] holds ids — deliberately, since that is what
+  /// the wire wants. The mirror resolves most of them (`localProdottiProvider`), but a row reached
+  /// by an online search is materialised into the mirror asynchronously and the provider that
+  /// already resolved for this customer will not re-run on its own. Remembering the label at the
+  /// moment of the pick is what keeps the chip from showing a raw GUID in that window.
+  final Map<String, String> _prodottoLabels = {};
+
+  /// Re-keying the "add a product" picker after each pick resets its text, so the next product can
+  /// be typed for without first clearing the previous one — the field holds a *pick*, not the
+  /// selection list, and the chips below are where the selection lives.
+  int _prodottoPickerEpoch = 0;
+
   Future<void> _pickDueDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -98,32 +121,14 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     if (picked != null) widget.onChanged(widget.state.copyWith(dueDate: picked));
   }
 
-  /// "Nessuno" pops `''` (never a real agent id) so it's distinguishable from dismissing the
-  /// sheet without picking anything (pops `null`, which must leave the field untouched, not clear
-  /// it — backing out of a picker is not the same gesture as explicitly clearing a field).
-  static const _kNoneSentinel = '';
-
-  Future<void> _pickAgent(List<Map<String, dynamic>> technicians) async {
+  Future<void> _pickAgent(List<ReferenceOption> agents) async {
     final pickedId = await showModalBottomSheet<String?>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              key: const ValueKey('agent-picker-none'),
-              title: const Text('Nessuno'),
-              onTap: () => Navigator.of(sheetContext).pop(_kNoneSentinel),
-            ),
-            for (final tech in technicians)
-              if ('${tech['firstName'] ?? ''} ${tech['lastName'] ?? ''}'.trim().isNotEmpty)
-                ListTile(
-                  key: ValueKey('agent-picker-${tech['id']}'),
-                  title: Text('${tech['firstName'] ?? ''} ${tech['lastName'] ?? ''}'.trim()),
-                  onTap: () => Navigator.of(sheetContext).pop(tech['id'] as String),
-                ),
-          ],
-        ),
+      // The sheet carries its own search field, so it has to make room for the keyboard.
+      isScrollControlled: true,
+      builder: (sheetContext) => _AgentPickerSheet(
+        localItems: agents,
+        search: (q) => ref.read(referenceSearchClientProvider).searchAgents(query: q),
       ),
     );
     if (pickedId == null) return; // Dismissed without picking — leave the field as it was.
@@ -131,6 +136,71 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
       pickedId == _kNoneSentinel
           ? widget.state.copyWith(clearAgentId: true)
           : widget.state.copyWith(agentId: pickedId),
+    );
+  }
+
+  /// Prodotti assistenza — the customer's assets this ticket covers. A multi-select drawn as
+  /// chips (the selection) plus one "[ReferencePickerField]" that adds to it, because the field
+  /// picks exactly one row and the request carries a list.
+  ///
+  /// The customer is required by step 1, so the disabled branch is a guard rather than a state a
+  /// technician reaches: with no customer there is nothing to scope the mirror or the search to.
+  Widget _buildProdotti() {
+    final customerId = widget.state.customerId;
+    final prodotti = customerId == null
+        ? const <ReferenceOption>[]
+        : ref.watch(localProdottiProvider(customerId)).valueOrNull ?? const <ReferenceOption>[];
+    final byId = {for (final p in prodotti) p.id: p};
+    final ids = widget.state.prodottoAssistenzaIds;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (ids.isNotEmpty) ...[
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: [
+              for (final id in ids)
+                Chip(
+                  key: ValueKey('prodotto-chip-$id'),
+                  label: Text(_prodottoLabels[id] ?? byId[id]?.label ?? id),
+                  onDeleted: () => widget.onChanged(
+                    widget.state.copyWith(prodottoAssistenzaIds: [...ids]..remove(id)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        ReferencePickerField(
+          // Re-keyed after every pick (see _prodottoPickerEpoch) so the field empties itself and
+          // the next product can be typed for immediately.
+          key: ValueKey('prodotto-adder-$_prodottoPickerEpoch'),
+          label: 'Prodotti assistenza',
+          localItems: prodotti,
+          search: (q) async => customerId == null
+              ? const <ReferenceOption>[]
+              : ref
+                    .read(referenceSearchClientProvider)
+                    .searchProdottiAssistenza(customerId: customerId, query: q),
+          hint: 'Cerca prodotto…',
+          emptyCacheHint: customerId == null
+              ? 'Seleziona prima un cliente.'
+              : 'Nessun prodotto in cache. Cerca per nome.',
+          enabled: customerId != null,
+          onSelected: (option) {
+            // A pick released by editing the text (null) is not a product to add.
+            if (option == null || ids.contains(option.id)) return;
+            ref.invalidate(localProdottiProvider(customerId!));
+            setState(() {
+              _prodottoLabels[option.id] = option.label;
+              _prodottoPickerEpoch++;
+            });
+            widget.onChanged(widget.state.copyWith(prodottoAssistenzaIds: [...ids, option.id]));
+          },
+        ),
+      ],
     );
   }
 
@@ -190,6 +260,13 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
 
         const SizedBox(height: 24),
 
+        // ── Prodotti assistenza ────────────────────────────────────────────
+        // Multi-select, scoped to the same customer as Contratto/Commessa. The chips are the
+        // selection; the picker below them only adds to it.
+        _buildProdotti(),
+
+        const SizedBox(height: 24),
+
         // ── Priority ───────────────────────────────────────────────────────
         AppFieldShell(
           label: 'Priorità',
@@ -231,21 +308,24 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         const SizedBox(height: 24),
 
         // ── Riferimento ────────────────────────────────────────────────────
-        // A contact-reference field, not the assignee (Tecnico, step_assegnazione.dart) — same
-        // Users list, same reasoning as web's TicketCreatePanel.
+        // NOT the assignee (Tecnico, step_assegnazione.dart) and NOT a User. "Riferimento" is the
+        // legacy Agente (`Core/Entities/Agent.cs`) — a different entity the server validates with
+        // `EnsureExistsAsync<Agent>`. Filling it from `/api/users?role=Technician` meant every
+        // ticket created with a reference was rejected 404 and, quietly, through the queue, never
+        // arrived. It reads the agents mirror, and searches `/api/agents`.
         Consumer(
           builder: (context, ref, _) {
-            final techsAsync = ref.watch(techniciansProvider);
-            final techs = techsAsync.valueOrNull ?? const <Map<String, dynamic>>[];
-            final selected = techs
-                .where((t) => t['id'] == widget.state.agentId)
-                .map((t) => '${t['firstName'] ?? ''} ${t['lastName'] ?? ''}'.trim())
+            final agentsAsync = ref.watch(localAgentsProvider(''));
+            final agents = agentsAsync.valueOrNull ?? const <ReferenceOption>[];
+            final selected = agents
+                .where((a) => a.id == widget.state.agentId)
+                .map((a) => a.label)
                 .firstOrNull;
             return AppFieldShell(
               label: 'Riferimento',
               child: AppTappable(
                 key: const ValueKey('agent-field'),
-                onTap: () => _pickAgent(techs),
+                onTap: () => _pickAgent(agents),
                 color: context.colors.bg3,
                 border: Border.all(color: context.colors.borderLight),
                 borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
@@ -290,6 +370,120 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         if (widget.ticketId != null)
           ExtensionFieldsSection(entityType: 'ticket', entityId: widget.ticketId!),
       ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Riferimento picker sheet
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// The Riferimento picker's sheet: the mirrored agents, plus a search that reaches the server.
+///
+/// A sheet rather than [ReferencePickerField] because this field's keys (`agent-field`,
+/// `agent-picker-<id>`) are an existing surface this change must not move. The behaviour is the
+/// same two-source merge that field uses: local first — the only source offline — and the search's
+/// results joined to it, never replacing it, because the mirror is what a ticket can be written
+/// from (see [ReferencePickerField]'s own doc comment for the full reasoning).
+class _AgentPickerSheet extends StatefulWidget {
+  const _AgentPickerSheet({required this.localItems, required this.search});
+
+  final List<ReferenceOption> localItems;
+  final Future<List<ReferenceOption>> Function(String query) search;
+
+  @override
+  State<_AgentPickerSheet> createState() => _AgentPickerSheetState();
+}
+
+class _AgentPickerSheetState extends State<_AgentPickerSheet> {
+  static const _debounceDelay = Duration(milliseconds: 300);
+
+  final _queryCtrl = TextEditingController();
+  Timer? _debounce;
+  List<ReferenceOption> _results = const [];
+
+  /// Monotonic per search — a slow answer must not land on top of a faster later one, same rule as
+  /// [ReferencePickerField].
+  int _seq = 0;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _queryCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Local first, then the search's, deduped by id with the local row winning.
+  List<ReferenceOption> get _merged {
+    final byId = <String, ReferenceOption>{for (final o in widget.localItems) o.id: o};
+    for (final o in _results) {
+      byId.putIfAbsent(o.id, () => o);
+    }
+    // An agent with no name is not pickable — the same guard the old user-map sheet applied to
+    // "first + last name".
+    return byId.values.where((o) => o.label.trim().isNotEmpty).toList(growable: false);
+  }
+
+  void _onQueryChanged(String text) {
+    _debounce?.cancel();
+    final query = text.trim();
+    final seq = ++_seq;
+    if (query.isEmpty) {
+      if (_results.isNotEmpty) setState(() => _results = const []);
+      return;
+    }
+    _debounce = Timer(_debounceDelay, () async {
+      final found = await widget.search(query);
+      if (!mounted || seq != _seq) return;
+      setState(() => _results = found);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.base,
+                AppSpacing.base,
+                AppSpacing.base,
+                AppSpacing.sm,
+              ),
+              child: AppTextField(
+                key: const ValueKey('agent-search-field'),
+                controller: _queryCtrl,
+                label: 'Cerca agente',
+                hint: 'Nome, telefono o email…',
+                onChanged: _onQueryChanged,
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  ListTile(
+                    key: const ValueKey('agent-picker-none'),
+                    title: const Text('Nessuno'),
+                    onTap: () => Navigator.of(context).pop(_kNoneSentinel),
+                  ),
+                  for (final agent in _merged)
+                    ListTile(
+                      key: ValueKey('agent-picker-${agent.id}'),
+                      title: Text(agent.label),
+                      subtitle: agent.subtitle != null ? Text(agent.subtitle!) : null,
+                      onTap: () => Navigator.of(context).pop(agent.id),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

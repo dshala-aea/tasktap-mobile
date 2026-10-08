@@ -26,6 +26,10 @@ class NewTicketFormState {
     this.dueDate,
     this.technicianNotes,
     this.agentId,
+    this.contractId,
+    this.commessaId,
+    this.cantiereId,
+    this.prodottoAssistenzaIds = const [],
     this.tags = const [],
   });
 
@@ -49,10 +53,30 @@ class NewTicketFormState {
   /// only, deliberately not exposed on mobile) and from `description` (what the job is).
   final String? technicianNotes;
 
-  /// Riferimento — a contact-reference field, not a sales agent and not the assignee
-  /// ([assignedUserId]/Tecnico). Reuses the same Users list as Tecnico, same as web's own
-  /// TicketCreatePanel.
+  /// Riferimento — the legacy "Agente" (`Core/Entities/Agent.cs`), a *different entity* from the
+  /// technician in [assignedUserId]. The server validates this field with
+  /// `EnsureExistsAsync<Agent>` (`TicketCommandService`), so it must carry an Agent id — a User id
+  /// (what `/api/users?role=Technician` returns) 404s and, through the queue, silently drops the
+  /// ticket. Sourced from the agents mirror, never from the technicians list.
   final String? agentId;
+
+  /// Contratto — a customer's contract (`/api/contracts`, scoped by `customerId`). Optional
+  /// enrichment; validated as `EnsureExistsAsync<Contract>`.
+  final String? contractId;
+
+  /// Commessa — a job order (`/api/commesse`, scoped by `customerId`). Optional; validated as
+  /// `EnsureExistsAsync<Commessa>`.
+  final String? commessaId;
+
+  /// Cantiere — the worksite (`Core/Entities/Cantiere.cs`). Optional; validated as
+  /// `EnsureExistsAsync<Cantiere>`.
+  final String? cantiereId;
+
+  /// Prodotti assistenza — the customer's assets this ticket covers. A list, defaults to empty
+  /// and is never null: "no products" and "never opened the picker" are the same thing here, and a
+  /// nullable list would only add a second empty to reason about. An empty list is sent as an
+  /// absent member, never `[]` — see [TicketApiClient.createTicket].
+  final List<String> prodottoAssistenzaIds;
 
   /// Free-form labels, no catalogue behind them — same reasoning as web's comma-separated input.
   final List<String> tags;
@@ -69,6 +93,10 @@ class NewTicketFormState {
     DateTime? dueDate,
     String? technicianNotes,
     String? agentId,
+    String? contractId,
+    String? commessaId,
+    String? cantiereId,
+    List<String>? prodottoAssistenzaIds,
     List<String>? tags,
     bool clearCustomerId = false,
     bool clearLocationId = false,
@@ -80,6 +108,10 @@ class NewTicketFormState {
     bool clearDueDate = false,
     bool clearTechnicianNotes = false,
     bool clearAgentId = false,
+    bool clearContractId = false,
+    bool clearCommessaId = false,
+    bool clearCantiereId = false,
+    bool clearProdottoAssistenzaIds = false,
   }) {
     return NewTicketFormState(
       customerId: clearCustomerId ? null : (customerId ?? this.customerId),
@@ -93,6 +125,12 @@ class NewTicketFormState {
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       technicianNotes: clearTechnicianNotes ? null : (technicianNotes ?? this.technicianNotes),
       agentId: clearAgentId ? null : (agentId ?? this.agentId),
+      contractId: clearContractId ? null : (contractId ?? this.contractId),
+      commessaId: clearCommessaId ? null : (commessaId ?? this.commessaId),
+      cantiereId: clearCantiereId ? null : (cantiereId ?? this.cantiereId),
+      prodottoAssistenzaIds: clearProdottoAssistenzaIds
+          ? const []
+          : (prodottoAssistenzaIds ?? this.prodottoAssistenzaIds),
       tags: tags ?? this.tags,
     );
   }

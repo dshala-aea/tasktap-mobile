@@ -16,6 +16,8 @@ import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../admin/admin_api_client.dart';
 import '../new_ticket_form_state.dart';
+import '../reference_picker.dart';
+import '../reference_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -101,6 +103,62 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
     widget.onChanged(widget.state.copyWith(locationId: id));
   }
 
+  /// Contratto and Commessa, both scoped to the selected customer — the same scope the mirror and
+  /// the search enforce (`ReferenceSearchClient.searchContracts` sends `customerId` on every
+  /// query). Before a customer is chosen there is nothing to scope either to, so neither field is
+  /// drawn: an empty picker with no customer reads as a broken field, not as "pick a customer
+  /// first" — which is what the Sede field's own hint already says in words.
+  Widget _buildReferences() {
+    final customerId = widget.state.customerId;
+    if (customerId == null) return const SizedBox.shrink();
+    final search = ref.read(referenceSearchClientProvider);
+    final contracts = ref.watch(localContractsProvider(customerId)).valueOrNull ?? const [];
+    final commesse = ref.watch(localCommesseProvider(customerId)).valueOrNull ?? const [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        ReferencePickerField(
+          label: 'Contratto',
+          localItems: contracts,
+          search: (q) => search.searchContracts(customerId: customerId, query: q),
+          selectedId: widget.state.contractId,
+          hint: 'Cerca contratto…',
+          emptyCacheHint: 'Nessun contratto in cache. Cerca per nome.',
+          onSelected: (option) {
+            // The search wrote the row into the mirror *before* returning it, so refetching the
+            // local list here is enough for the summary to resolve a label for a row this device
+            // only just learned about.
+            ref.invalidate(localContractsProvider(customerId));
+            widget.onChanged(
+              option == null
+                  ? widget.state.copyWith(clearContractId: true)
+                  : widget.state.copyWith(contractId: option.id),
+            );
+          },
+        ),
+        const SizedBox(height: 20),
+        ReferencePickerField(
+          label: 'Commessa',
+          localItems: commesse,
+          search: (q) => search.searchCommesse(customerId: customerId, query: q),
+          selectedId: widget.state.commessaId,
+          hint: 'Cerca commessa…',
+          emptyCacheHint: 'Nessuna commessa in cache. Cerca per codice.',
+          onSelected: (option) {
+            ref.invalidate(localCommesseProvider(customerId));
+            widget.onChanged(
+              option == null
+                  ? widget.state.copyWith(clearCommessaId: true)
+                  : widget.state.copyWith(commessaId: option.id),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
@@ -141,6 +199,13 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
             widget.state.copyWith(
               customerId: id,
               locationId: null, // reset location when customer changes
+              // A contract, a commessa and a cantiere belong to the customer that owned them —
+              // keeping one across a customer change would point the new ticket at a row the
+              // server will refuse with a 404, and through the queue that is a ticket that never
+              // arrives. Clearing here is the fix, not a detail.
+              clearContractId: true,
+              clearCommessaId: true,
+              clearCantiereId: true,
             ),
           ),
           // The customer here must resolve to a real cached record — unlike the rapportino's
@@ -152,7 +217,17 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           // and making it impossible to type over an already-resolved value at all.
           onFreeText: (text) {
             if (text.isEmpty) {
-              widget.onChanged(widget.state.copyWith(clearCustomerId: true, clearLocationId: true));
+              // Same reasoning as onSelected above: the references are scoped to the customer
+              // that is being dropped, so they go with it.
+              widget.onChanged(
+                widget.state.copyWith(
+                  clearCustomerId: true,
+                  clearLocationId: true,
+                  clearContractId: true,
+                  clearCommessaId: true,
+                  clearCantiereId: true,
+                ),
+              );
             }
           },
         ),
@@ -241,6 +316,10 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
             icon: LucideIcons.mapPin,
             height: 72,
           ),
+
+        // ── Contratto / Commessa ───────────────────────────────────────────
+        // Below the sede: these hang off the customer, and the customer is above.
+        _buildReferences(),
       ],
     );
   }
