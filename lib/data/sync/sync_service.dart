@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 import '../local/app_database.dart';
+import 'checklist_reconciler.dart';
 import 'sync_dto.dart';
 
 /// Calls GET /api/sync/mobile?since=[lastSync], upserts every entity into
@@ -62,10 +63,36 @@ class SyncService {
       await _upsertMaterialeBarcodes(payload.materialiBarcodes);
       await _upsertCantieri(payload.cantieri);
       await _replaceColleagues(payload.colleagues);
+      await _applyChecklist(payload);
     });
 
     await db.setLastSync(payload.syncedAt);
     return payload.syncedAt;
+  }
+
+  /// The per-asset checklist mirror and the instrument catalogue. Skipped member by member when the
+  /// payload does not carry it: an older backend must never look like "everything is empty".
+  Future<void> _applyChecklist(SyncResultDto payload) async {
+    if (payload.carriesChecklist) {
+      final withLocal = await ticketIdsWithLocalChecklist(db);
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch.fromSync(
+          payload,
+          payloadTicketIds: payload.tickets.map((t) => t.id).toSet(),
+          ticketsWithLocalChecklist: withLocal,
+        ),
+      );
+      await pruneOmittedWithoutTicket(db);
+    }
+    if (payload.carriesStrumenti) {
+      await replaceStrumenti(db, payload.strumenti);
+      await replaceServerReportStrumenti(
+        db,
+        reportIdsInPayload: [...payload.draftReports, ...payload.submittedReports].map((r) => r.id),
+        rows: payload.reportStrumenti,
+      );
+    }
   }
 
   // ── Upsert helpers ─────────────────────────────────────────────────────────

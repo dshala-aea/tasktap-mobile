@@ -1310,7 +1310,11 @@ class AppDatabase extends _$AppDatabase {
   ///      `materiale_barcodes`).
   /// v8 — 2026-09-24, schema 32 added `tickets.tagsJson`. Same reasoning as v4/v6: already on the
   ///      wire, a delta sync would never refill it for tickets that haven't otherwise changed.
-  static const String syncCursorGeneration = 'v8';
+  /// v9 — 2026-10-07, schema 36 added the per-asset checklist tables. A technician's checklist is
+  ///      resent on every sync, but a fullScope caller's ticket list is since-filtered, so a device
+  ///      whose cursor is already past a ticket would never receive its asset rows. Same reasoning
+  ///      as v3-v8.
+  static const String syncCursorGeneration = 'v9';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 
