@@ -85,6 +85,10 @@ void main() {
     'SyncAssetDto': SyncAssetDto.wireKeys,
     'SyncStrumentoDto': SyncStrumentoDto.wireKeys,
     'SyncReportStrumentoDto': SyncReportStrumentoDto.wireKeys,
+    'SyncContractDto': ContractSyncDto.wireKeys,
+    'SyncCommessaDto': CommessaSyncDto.wireKeys,
+    'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
+    'SyncAgentDto': AgentSyncDto.wireKeys,
   };
 
   for (final entry in readKeys.entries) {
@@ -112,6 +116,7 @@ void main() {
     () {
       final declared = props('MobileUserSyncResult');
       expect(SyncResultDto.checklistWireKeys.difference(declared), isEmpty);
+      expect(SyncResultDto.referenceWireKeys.difference(declared), isEmpty);
     },
   );
 
@@ -139,6 +144,20 @@ void main() {
     expect(rs.calibrationExpiry, DateTime.utc(2026, 10, 7));
 
     SyncTicketAssetDto.fromJson(instance('SyncTicketAssetDto'));
+
+    final ct = ContractSyncDto.fromJson(instance('SyncContractDto'));
+    expect(ct.tipo, 1);
+
+    final cm = CommessaSyncDto.fromJson(instance('SyncCommessaDto'));
+    expect(cm.codice, isNotEmpty);
+
+    final pa = ProdottoAssistenzaSyncDto.fromJson(
+      instance('SyncProdottoAssistenzaDto'),
+    );
+    expect(pa.locationId, isNotEmpty);
+
+    final ag = AgentSyncDto.fromJson(instance('SyncAgentDto'));
+    expect(ag.nome, isNotEmpty);
   });
 
   test(
@@ -157,9 +176,17 @@ void main() {
         'reportStrumenti': [instance('SyncReportStrumentoDto')],
         'checklistTruncated': true,
         'checklistOmittedTicketIds': ['00000000-0000-0000-0000-000000000001'],
+        'contracts': [instance('SyncContractDto')],
+        'commesse': [instance('SyncCommessaDto')],
+        'prodottiAssistenza': [instance('SyncProdottoAssistenzaDto')],
+        'agents': [instance('SyncAgentDto')],
       });
       expect(full.carriesChecklist, isTrue);
       expect(full.carriesStrumenti, isTrue);
+      expect(full.carriesContracts, isTrue);
+      expect(full.carriesCommesse, isTrue);
+      expect(full.carriesProdottiAssistenza, isTrue);
+      expect(full.carriesAgents, isTrue);
       expect(full.ticketControls, hasLength(1));
       expect(full.checklistTruncated, isTrue);
       expect(full.checklistOmittedTicketIds, [
@@ -178,6 +205,15 @@ void main() {
       expect(older.carriesStrumenti, isFalse);
       expect(older.checklistTruncated, isFalse);
       expect(older.checklistOmittedTicketIds, isEmpty);
+      expect(
+        older.carriesContracts,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "every contract was deleted"',
+      );
+      expect(older.carriesCommesse, isFalse);
+      expect(older.carriesProdottiAssistenza, isFalse);
+      expect(older.carriesAgents, isFalse);
     },
   );
 

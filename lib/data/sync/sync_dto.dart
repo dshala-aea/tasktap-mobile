@@ -25,6 +25,15 @@ class SyncResultDto {
   final List<TicketTypeDto> ticketTypes;
   final List<ColleagueDto> colleagues;
 
+  /// The reference entities a ticket is made of, mirrored so the create wizard can be filled from
+  /// the local cache while offline (spec 6.2, 7.4). Scoped, never tenant-wide: contracts, commesse
+  /// and products cover the customers this payload already carries, and agents cover the agents
+  /// its tickets already reference.
+  final List<ContractSyncDto> contracts;
+  final List<CommessaSyncDto> commesse;
+  final List<ProdottoAssistenzaSyncDto> prodottiAssistenza;
+  final List<AgentSyncDto> agents;
+
   final List<SyncControlGroupDto> controlGroups;
   final List<SyncTicketControlDto> ticketControls;
   final List<SyncTicketAssetDto> ticketAssets;
@@ -46,6 +55,15 @@ class SyncResultDto {
   final bool carriesChecklist;
   final bool carriesStrumenti;
 
+  /// False when the payload came from a backend that predates the reference members. Without these
+  /// an older backend would look like "every contract, commessa and product was deleted" and the
+  /// scoped prune would wipe the mirror. One flag per entity rather than one for the group: each is
+  /// pruned independently, and a partial rollout must not be read as a deletion.
+  final bool carriesContracts;
+  final bool carriesCommesse;
+  final bool carriesProdottiAssistenza;
+  final bool carriesAgents;
+
   static const Set<String> checklistWireKeys = {
     'controlGroups',
     'ticketControls',
@@ -55,6 +73,15 @@ class SyncResultDto {
     'reportStrumenti',
     'checklistTruncated',
     'checklistOmittedTicketIds',
+  };
+
+  /// The reference members, kept apart from [checklistWireKeys]: they carry the mirror the create
+  /// wizard reads, not a ticket's checklist state.
+  static const Set<String> referenceWireKeys = {
+    'contracts',
+    'commesse',
+    'prodottiAssistenza',
+    'agents',
   };
 
   const SyncResultDto({
@@ -73,6 +100,10 @@ class SyncResultDto {
     required this.ticketStatuses,
     required this.ticketTypes,
     required this.colleagues,
+    this.contracts = const [],
+    this.commesse = const [],
+    this.prodottiAssistenza = const [],
+    this.agents = const [],
     this.controlGroups = const [],
     this.ticketControls = const [],
     this.ticketAssets = const [],
@@ -83,6 +114,10 @@ class SyncResultDto {
     this.checklistOmittedTicketIds = const [],
     this.carriesChecklist = false,
     this.carriesStrumenti = false,
+    this.carriesContracts = false,
+    this.carriesCommesse = false,
+    this.carriesProdottiAssistenza = false,
+    this.carriesAgents = false,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -108,6 +143,13 @@ class SyncResultDto {
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
       colleagues: _list(j['colleagues'], ColleagueDto.fromJson),
+      contracts: _list(j['contracts'], ContractSyncDto.fromJson),
+      commesse: _list(j['commesse'], CommessaSyncDto.fromJson),
+      prodottiAssistenza: _list(
+        j['prodottiAssistenza'],
+        ProdottoAssistenzaSyncDto.fromJson,
+      ),
+      agents: _list(j['agents'], AgentSyncDto.fromJson),
       controlGroups: _list(j['controlGroups'], SyncControlGroupDto.fromJson),
       ticketControls: _list(j['ticketControls'], SyncTicketControlDto.fromJson),
       ticketAssets: _list(j['ticketAssets'], SyncTicketAssetDto.fromJson),
@@ -123,6 +165,10 @@ class SyncResultDto {
               .cast<String>(),
       carriesChecklist: j.containsKey('ticketControls'),
       carriesStrumenti: j.containsKey('strumenti'),
+      carriesContracts: j.containsKey('contracts'),
+      carriesCommesse: j.containsKey('commesse'),
+      carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
+      carriesAgents: j.containsKey('agents'),
     );
   }
 }
@@ -840,9 +886,261 @@ class ReportDto {
   );
 }
 
+// ── Reference entities ──────────────────────────────────────────────────────────
+//
+// The four mirrors the create wizard fills from while offline (spec 6.2, 7.4). Each one publishes
+// `wireKeys` — the exact keys its `fromJson` reads — because the inbound contract test compares
+// them with the OpenAPI snapshot in both directions.
+
+/// A contract of a customer in this technician's payload. Mirrored for the Cliente→Contratto picker
+/// (spec 7.4). [isActive] is stored, never filtered here — the picker is what hides a deactivated
+/// contract.
+class ContractSyncDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String name;
+  final String customerId;
+  final String? locationId;
+  final DateTime startDate;
+  final DateTime? endDate;
+  final bool isActive;
+  final String? numero;
+  final String? codice;
+  final int? tipo;
+  final String? externalId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'name',
+    'customerId',
+    'locationId',
+    'startDate',
+    'endDate',
+    'isActive',
+    'numero',
+    'codice',
+    'tipo',
+    'externalId',
+  };
+
+  const ContractSyncDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.name,
+    required this.customerId,
+    this.locationId,
+    required this.startDate,
+    this.endDate,
+    this.isActive = true,
+    this.numero,
+    this.codice,
+    this.tipo,
+    this.externalId,
+  });
+
+  factory ContractSyncDto.fromJson(Map<String, dynamic> j) => ContractSyncDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    name: j['name'] as String,
+    customerId: j['customerId'] as String,
+    locationId: j['locationId'] as String?,
+    startDate: DateTime.parse(j['startDate'] as String),
+    endDate: _dt(j['endDate']),
+    isActive: j['isActive'] as bool? ?? true,
+    numero: j['numero'] as String?,
+    codice: j['codice'] as String?,
+    tipo: _intOrNull(j['tipo']),
+    externalId: j['externalId'] as String?,
+  );
+}
+
+/// A commessa (job order) of a customer in this payload. [customerId] is nullable on the wire —
+/// the server's `SyncCommessaDto` declares `Guid? CustomerId`.
+class CommessaSyncDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String codice;
+  final String? descrizione;
+  final String? customerId;
+  final bool isActive;
+  final String? stato;
+  final String? externalId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'codice',
+    'descrizione',
+    'customerId',
+    'isActive',
+    'stato',
+    'externalId',
+  };
+
+  const CommessaSyncDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.codice,
+    this.descrizione,
+    this.customerId,
+    this.isActive = true,
+    this.stato,
+    this.externalId,
+  });
+
+  factory CommessaSyncDto.fromJson(Map<String, dynamic> j) => CommessaSyncDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    codice: j['codice'] as String,
+    descrizione: j['descrizione'] as String?,
+    customerId: j['customerId'] as String?,
+    isActive: j['isActive'] as bool? ?? true,
+    stato: j['stato'] as String?,
+    externalId: j['externalId'] as String?,
+  );
+}
+
+/// A product under assistance (an asset) of a customer in this payload. [locationId] is NOT
+/// nullable — the server's `SyncProdottoAssistenzaDto` declares `Guid LocationId`.
+class ProdottoAssistenzaSyncDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String name;
+  final String customerId;
+  final String locationId;
+  final bool isActive;
+  final String? codice;
+  final String? serialNumber;
+  final String? categoria;
+  final String? marchio;
+  final String? externalId;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'name',
+    'customerId',
+    'locationId',
+    'isActive',
+    'codice',
+    'serialNumber',
+    'categoria',
+    'marchio',
+    'externalId',
+  };
+
+  const ProdottoAssistenzaSyncDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.name,
+    required this.customerId,
+    required this.locationId,
+    this.isActive = true,
+    this.codice,
+    this.serialNumber,
+    this.categoria,
+    this.marchio,
+    this.externalId,
+  });
+
+  factory ProdottoAssistenzaSyncDto.fromJson(Map<String, dynamic> j) =>
+      ProdottoAssistenzaSyncDto(
+        id: j['id'] as String,
+        tenantId: j['tenantId'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: _dt(j['updatedAt']),
+        name: j['name'] as String,
+        customerId: j['customerId'] as String,
+        locationId: j['locationId'] as String,
+        isActive: j['isActive'] as bool? ?? true,
+        codice: j['codice'] as String?,
+        serialNumber: j['serialNumber'] as String?,
+        categoria: j['categoria'] as String?,
+        marchio: j['marchio'] as String?,
+        externalId: j['externalId'] as String?,
+      );
+}
+
+/// An agent the payload's tickets reference — the manufacturer's or dealer's own service agent,
+/// named on a ticket. Mirrored so the create wizard can offer one offline.
+class AgentSyncDto {
+  final String id;
+  final String tenantId;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final String nome;
+  final String? email;
+  final String? cellulare;
+  final bool isActive;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'tenantId',
+    'createdAt',
+    'updatedAt',
+    'nome',
+    'email',
+    'cellulare',
+    'isActive',
+  };
+
+  const AgentSyncDto({
+    required this.id,
+    required this.tenantId,
+    required this.createdAt,
+    this.updatedAt,
+    required this.nome,
+    this.email,
+    this.cellulare,
+    this.isActive = true,
+  });
+
+  factory AgentSyncDto.fromJson(Map<String, dynamic> j) => AgentSyncDto(
+    id: j['id'] as String,
+    tenantId: j['tenantId'] as String,
+    createdAt: DateTime.parse(j['createdAt'] as String),
+    updatedAt: _dt(j['updatedAt']),
+    nome: j['nome'] as String,
+    email: j['email'] as String?,
+    cellulare: j['cellulare'] as String?,
+    isActive: j['isActive'] as bool? ?? true,
+  );
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
+
+/// `int32` may arrive as a JSON number or a numeric string (see checklist_sync_dto.dart). Unlike
+/// `_int`, an unparseable value here returns null rather than 0: 0 is a real contract type.
+int? _intOrNull(Object? v) {
+  if (v == null) return null;
+  if (v is num) return v.toInt();
+  return int.tryParse('$v');
+}
 
 double? _dbl(dynamic v) {
   if (v == null) return null;

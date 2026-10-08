@@ -24687,6 +24687,34 @@
             },
             "description": "The tenant\u0027s ticket type lookup list (TipologiaIntervento).\nReturned in full on every sync (no UpdatedAt column \u2014 no delta filter).\nUsed by the mobile app to map a ticket\u0027s \u0060TypeId\u0060 int to a human name."
           },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncContractDto"
+            },
+            "description": "Contracts of the customers this payload carries."
+          },
+          "commesse": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncCommessaDto"
+            },
+            "description": "Commesse of the customers this payload carries."
+          },
+          "prodottiAssistenza": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncProdottoAssistenzaDto"
+            },
+            "description": "Products of the customers this payload carries."
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncAgentDto"
+            },
+            "description": "Agents referenced by this payload\u0027s tickets."
+          },
           "controlGroups": {
             "type": "array",
             "items": {
@@ -30121,6 +30149,58 @@
         },
         "description": "The tenant\u0027s subscription as it stands."
       },
+      "SyncAgentDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "nome",
+          "email",
+          "cellulare",
+          "isActive"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cellulare": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
       "SyncAssetDto": {
         "required": [
           "id",
@@ -30179,6 +30259,169 @@
         },
         "description": "A colleague the technician can name on a rapportino \u2014 just enough to pick them from a list\nand send back the right id."
       },
+      "SyncCommessaDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "codice",
+          "descrizione",
+          "customerId",
+          "isActive",
+          "stato",
+          "externalId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "codice": {
+            "type": "string"
+          },
+          "descrizione": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SyncContractDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "name",
+          "customerId",
+          "locationId",
+          "startDate",
+          "endDate",
+          "isActive",
+          "numero",
+          "codice",
+          "tipo",
+          "externalId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "numero": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The reference entities a ticket is made of, shipped to the phone so the create wizard can be\nfilled from the local mirror while offline (spec \u00A76.2, \u00A77.4).\n\nScoped, never tenant-wide: contracts, commesse and products are limited to the customers the\ncaller\u0027s own payload already carries, and agents to the agents that payload\u0027s tickets already\nreference. Widening any of these is a confidentiality decision, not a sync change (spec \u00A710).\n\n\u0060isActive\u0060 travels as data and the picker filters on it. A predicate that hides inactive\nrows makes a deactivation invisible to a device that has already cached the row \u2014 the failure\nspec \u00A76.4 exists to fix. Hard deletes, which no flag can describe, are handled on the client by\npruning the customers a payload does carry."
+      },
       "SyncControlGroupDto": {
         "required": [
           "id",
@@ -30217,6 +30460,89 @@
           }
         },
         "description": "A node of the template group tree used by the synced rows (the groups of every version referenced, plus their ancestors)."
+      },
+      "SyncProdottoAssistenzaDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "name",
+          "customerId",
+          "locationId",
+          "isActive",
+          "codice",
+          "serialNumber",
+          "categoria",
+          "marchio",
+          "externalId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "serialNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "marchio": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       },
       "SyncReportStrumentoDto": {
         "required": [
