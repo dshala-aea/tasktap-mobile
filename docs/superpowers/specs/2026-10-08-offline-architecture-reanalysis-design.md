@@ -1,7 +1,8 @@
 # Offline architecture re-analysis — mobile, from first principles
 
 Date: 2026-10-08
-Status: **DRAFT FOR REVIEW — no implementation until the architectural decisions below are explicit and approved.**
+Status: **ARCHITECTURE DECIDED — Option E (§5), scope D-1 = (a) "own tickets only" (§10).
+Ready for implementation planning. D-2/D-3/D-4 remain open with stated defaults.**
 Scope: `tasktap_mobile` (Flutter/Drift) and the backend surface it talks to. Read-only analysis of the
 repository as it exists today (mobile branch `feat/mobile-asset-checklists`, backend
 `docs/api/openapi.snapshot.json` @ `master`).
@@ -330,10 +331,12 @@ Why this is the smallest adequate option:
 2. **It reuses every existing mechanism.** Drift tables, the one `/api/sync/mobile` delta, the
    `syncCursorGeneration` cursor, `ensureOnlineOrWarn`, and the five `Q` search endpoints that
    already exist. No CRDTs, no event sourcing, no per-user snapshot service.
-3. **It keeps confidentiality by construction.** The local scope is a *named predicate* on the
-   server, so widening the mirror is a deliberate, reviewable act, not a side effect of a sync
-   change. A technician's device holds their tickets' customers and their contracts/products, not
-   the customer book.
+3. **It keeps confidentiality by construction, and D-1 (§10) has fixed the scope to (a).** The
+   local scope is a *named predicate* on the server — the technician's own work scope — so widening
+   the mirror is a deliberate, reviewable act, not a side effect of a sync change. A technician's
+   device holds their tickets' customers and their contracts/products, not the customer book.
+   Online search may still reach anything the server authorizes and materialize the pick locally
+   (§7.4), which is why (a) does not limit what a technician can *create*, only what they *mirror*.
 4. **It respects the two axes.** Write safety is untouched (admin/magazzino stay online-only;
    ticket create stays local-first + idempotent). Only *read availability* changes: pickers gain
    a local mirror for the scoped set and a live search path for everything else.
@@ -397,8 +400,10 @@ both `pendingSync` and `failed`; `SubmissionQueue` keeps its 5-attempt transient
 rule is 6.6's repair-on-FK-rejection.
 
 **6.8 Permissions.** Every gap entity's scope predicate runs under the same authority rules as the
-ticket list (role + tenant + assignment). This is where D-1 (§10) must be answered, because it is
-the one product input the code cannot supply.
+ticket list (role + tenant + assignment). D-1 is now answered (§10): the predicate is **(a) the
+technician's own work scope** — the entities reachable through their own tickets, exactly the
+traversal `MobileUserSyncService` already performs for customers/locations, extended to
+contracts/commesse/prodotti/contacts/agents. Nothing tenant-wide enters the mirror.
 
 ---
 
@@ -428,6 +433,14 @@ path does not. Bringing the ticket path to the rapportino's standard is the conc
 **7.3 Degradation is labelled, never silent.** Every locally-mirrored picker shows a
 "dati offline, aggiornati alle HH:MM" hint and offers pull-to-refresh when online; every
 search-on-demand picker is disabled with an explicit offline note. No control is silently empty.
+
+**7.4 Online search discovers, the pick materializes (D-1).** A picker shows the local scope first;
+when online, typing also runs the `Q` search and can return anything the server authorizes. The
+row the technician **selects** is written into the local cache immediately, so the customer/location
+they just chose is present offline next time and the ticket they create from it validates. This is
+what keeps D-1 a mirror boundary rather than a create boundary: the technician is never limited to
+what they had cached at the moment they opened the wizard, and never sees the whole customer book
+without a deliberate search.
 
 ---
 
@@ -473,10 +486,19 @@ per-user snapshot table.
 
 ## 10. Open decisions (genuine product input required)
 
-- **D-1 (blocking).** *Confidentiality scope.* May a technician's device mirror (a) only the
-  customers on their own tickets, (b) all customers of their cantieri/commesse, or (c) the whole
-  tenant book? The repo's recorded decision says (a) plus on-demand search, and forbids browsing.
-  §6.8 cannot be implemented until this is restated as an explicit rule. **Default assumed: (a).**
+- **D-1 — RESOLVED (2026-10-08): (a) Own tickets only.** The mobile reference cache mirrors only the
+  customers, locations, contracts, products/services, contacts, agents and related reference data
+  reachable through the technician's own ticket/work scope. This makes the current sync boundary
+  **explicit** rather than expanding mobile visibility. Online `Q`/search remains the mechanism for
+  references outside the local cache. No tenant-wide or cantiere/commesse-wide mirroring is
+  introduced by this feature.
+
+  **Critical reading of (a) — it is a *mirror* boundary, not a *create* boundary.** It does not mean
+  "a technician can only create tickets for customers already in the local cache". It means:
+  **offline**, pickers use the technician's locally-mirrored work scope; **online**, `Q`/search can
+  discover anything the server authorizes, and the selected result is **materialized into the local
+  cache as needed** (so the next time it is offline). Option E is exactly this shape, so the
+  decision preserves the recommendation rather than narrowing it.
 - **D-2.** *Offline assignment.* May a ticket created offline be assigned to another technician,
   or default to self? Default assumed: self-or-unset, no roster needed offline.
 - **D-3.** *Reference freshness.* How stale may a mirrored customer/contract be before the UI must
