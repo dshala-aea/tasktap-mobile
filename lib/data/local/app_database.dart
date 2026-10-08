@@ -464,6 +464,18 @@ class DraftReports extends Table {
   /// the flag before ever reaching the submit button.
   BoolColumn get richiedeSecondoIntervento => boolean().withDefault(const Constant(false))();
 
+  /// True once the Strumenti step has pre-filled this draft from the technician's kit
+  /// (`strumenti.isMine`). Persisted so a technician who deselects an instrument is never
+  /// re-filled on the next open; set true on import of a server draft (the server's selection wins).
+  /// Client-authored only, never synced.
+  BoolColumn get strumentiPrefilled => boolean().withDefault(const Constant(false))();
+
+  /// The structured reason of the last PERMANENT submit failure (JSON of `SubmitProblem`): which
+  /// required controls / instruments / assets the server rejected, so Riepilogo can reopen the
+  /// right place instead of showing one opaque sentence. Null when the last failure had no
+  /// structured shape or there was none. Client-authored only, never synced.
+  TextColumn get submissionProblemJson => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -528,6 +540,10 @@ class ReportControlli extends Table {
 
   /// The answer for a Number-type control (backend's ControlTypeEnum.Number, migration 27).
   RealColumn get numberValue => real().nullable()();
+
+  /// Per-answer remark (backend `ReportControlObservation.Note`, max 2000). A note never counts as
+  /// an answer; a blank/omitted note never erases a stored one server-side.
+  TextColumn get note => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -813,6 +829,146 @@ class PendingTicketAttachments extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── control_groups ──────────────────────────────────────────────────────────
+/// Section tree of the synced checklists (`SyncControlGroupDto`). Shared by every ticket that uses
+/// the same template version, so rows are upserted and garbage-collected (see
+/// `applyChecklistBatch`), not replaced per ticket.
+@DataClassName('ControlGroupRow')
+class ControlGroups extends Table {
+  TextColumn get id => text()();
+  TextColumn get parentGroupId => text().nullable()();
+  TextColumn get maintenanceTemplateVersionId => text()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── ticket_controls ─────────────────────────────────────────────────────────
+/// The materialised checklist rows of a ticket, ticket-level (`prodottoAssistenzaId` null) and
+/// per-asset. The ids are the `ticketControlId` a rapportino's answers reference. Replaced
+/// wholesale per ticket by `applyChecklistBatch`; a row the server stopped sending but a local
+/// Bozza already answered is kept with [isRetained] (the server still accepts the observation).
+@DataClassName('TicketControlRow')
+class TicketControls extends Table {
+  TextColumn get id => text()();
+  TextColumn get ticketId => text()();
+  TextColumn get prodottoAssistenzaId => text().nullable()();
+  TextColumn get templateControlId => text()();
+
+  /// Version-independent control identity: the key for bulk actions across assets pinned to
+  /// different template versions.
+  TextColumn get controlLineageId => text()();
+  TextColumn get groupId => text()();
+  TextColumn get label => text()();
+  TextColumn get description => text().nullable()();
+
+  /// Wire name of `ControlTypeEnum` ('Text', 'Number', ...), parsed with `controlTypeFromWire`.
+  TextColumn get type => text()();
+  BoolColumn get isRequired => boolean().withDefault(const Constant(false))();
+
+  /// JSON array string of choices for Options controls.
+  TextColumn get options => text().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// 'Pending' | 'Completed' | 'NotApplicable' (the ticket already holds an answer: multi-visit).
+  TextColumn get status => text().withDefault(const Constant('Pending'))();
+  TextColumn get stringValue => text().nullable()();
+  BoolColumn get boolValue => boolean().nullable()();
+  DateTimeColumn get dateValue => dateTime().nullable()();
+  RealColumn get numberValue => real().nullable()();
+  TextColumn get note => text().nullable()();
+  BoolColumn get isRetained => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── ticket_assets ───────────────────────────────────────────────────────────
+/// Assets (libretti and children) a ticket covers. `maintenanceTemplateVersionId != null` means
+/// the asset is templated and its answers are `ticket_controls` rows; null means legacy
+/// Controllato/Note (read-only here: `PUT .../asset-progress` is online-only and out of scope).
+@DataClassName('TicketAssetRow')
+class TicketAssets extends Table {
+  TextColumn get ticketId => text()();
+  TextColumn get prodottoAssistenzaId => text()();
+  BoolColumn get controllato => boolean().withDefault(const Constant(false))();
+  TextColumn get note => text().nullable()();
+  TextColumn get maintenanceTemplateVersionId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {ticketId, prodottoAssistenzaId};
+}
+
+// ── assets ──────────────────────────────────────────────────────────────────
+/// Identity of covered assets (`SyncAssetDto`). `librettoIdsJson` is a JSON array of the librettos
+/// (among the synced covered assets) this asset belongs to; an asset can sit under two.
+@DataClassName('AssetRow')
+class Assets extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get serialNumber => text().nullable()();
+  TextColumn get matricola => text().nullable()();
+  TextColumn get librettoIdsJson => text().withDefault(const Constant('[]'))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── strumenti ───────────────────────────────────────────────────────────────
+/// Active tenant instruments (`SyncStrumentoDto`), replaced wholesale on every sync that carries
+/// the member (a user who loses `team.strumento.read` loses the cache). The expiry is a CIVIL date
+/// stored as 'yyyy-MM-dd' TEXT: a Drift DateTimeColumn would come back local and show the previous
+/// day west of UTC (see the dueDate bug in MORNING.md).
+@DataClassName('StrumentoRow')
+class Strumenti extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get matricola => text()();
+  TextColumn get calibrationExpiry => text().nullable()();
+  TextColumn get certificateReference => text().nullable()();
+  BoolColumn get isMine => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── report_strumenti ────────────────────────────────────────────────────────
+/// The instruments selected on a rapportino. Two origins in one table, like `draft_reports`:
+/// server rows (isLocal false; synced down for drafts this device does not own locally) and the
+/// selection authored on this device (isLocal true; never touched by sync). `expiredAtUse` is the
+/// SERVER's last computed value, display only: it is never sent.
+@DataClassName('ReportStrumentoRow')
+class ReportStrumenti extends Table {
+  TextColumn get id => text()();
+  TextColumn get reportId => text()();
+  TextColumn get strumentoId => text().nullable()();
+  TextColumn get name => text()();
+  TextColumn get matricola => text()();
+  TextColumn get calibrationExpiry => text().nullable()();
+  TextColumn get certificateReference => text().nullable()();
+  BoolColumn get expiredAtUse => boolean().withDefault(const Constant(false))();
+  BoolColumn get expiredAcknowledged => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLocal => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+// ── checklist_omitted_tickets ───────────────────────────────────────────────
+/// Tickets whose checklist the server left out of a sync (5000-row cap). The phone keeps what it
+/// holds for them and re-requests them (see `refetchOmittedChecklists`); [attempts] bounds that.
+@DataClassName('ChecklistOmittedTicketRow')
+class ChecklistOmittedTickets extends Table {
+  TextColumn get ticketId => text()();
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {ticketId};
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Database class
 // ══════════════════════════════════════════════════════════════════════════════
@@ -844,19 +1000,27 @@ class PendingTicketAttachments extends Table {
     Entitlements,
     PendingTicketAttachments,
     CachedTicketControls,
+    ControlGroups,
+    TicketControls,
+    TicketAssets,
+    Assets,
+    Strumenti,
+    ReportStrumenti,
+    ChecklistOmittedTickets,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (m) async {
         await m.createAll();
+        await _createChecklistIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -1095,6 +1259,23 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(draftReports, draftReports.diagnosi);
           await m.addColumn(draftReports, draftReports.soluzione);
         }
+        if (from < 36) {
+          // Per-asset checklists, strumenti and structured submit problems — see the table docs
+          // above. New tables and client-authored columns only: nothing here is backfilled from the
+          // existing rows, and the delta cursor is bumped to v9 in SyncService's task so a device
+          // that was already synced receives the checklist members once.
+          await m.createTable(controlGroups);
+          await m.createTable(ticketControls);
+          await m.createTable(ticketAssets);
+          await m.createTable(assets);
+          await m.createTable(strumenti);
+          await m.createTable(reportStrumenti);
+          await m.createTable(checklistOmittedTickets);
+          await m.addColumn(reportControlli, reportControlli.note);
+          await m.addColumn(draftReports, draftReports.strumentiPrefilled);
+          await m.addColumn(draftReports, draftReports.submissionProblemJson);
+          await _createChecklistIndexes();
+        }
       },
     );
   }
@@ -1132,6 +1313,22 @@ class AppDatabase extends _$AppDatabase {
   static const String syncCursorGeneration = 'v8';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
+
+  /// Indexes the checklist read paths need (a ticket's rows, one asset's rows, a report's
+  /// instruments). Plain statements: Drift's `createTable` does not create indexes, and
+  /// `IF NOT EXISTS` keeps `onCreate` and `onUpgrade` idempotent.
+  Future<void> _createChecklistIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS ticket_controls_ticket ON ticket_controls (ticket_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS ticket_controls_asset '
+      'ON ticket_controls (ticket_id, prodotto_assistenza_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS report_strumenti_report ON report_strumenti (report_id)',
+    );
+  }
 
   Future<DateTime?> getLastSync() async {
     final row = await (select(syncMeta)..where((t) => t.id.equals(_cursorId))).getSingleOrNull();

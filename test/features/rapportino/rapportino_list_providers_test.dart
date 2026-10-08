@@ -56,6 +56,7 @@ DraftReport _draft({
   submissionAttempts: 0,
   submissionErrorTransient: false,
   technicianSignaturePrefillSuppressed: false,
+  strumentiPrefilled: false,
 );
 
 void main() {

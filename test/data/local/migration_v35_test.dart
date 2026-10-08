@@ -47,6 +47,21 @@ void main() {
         setup: (raw) {
           raw.execute('ALTER TABLE draft_reports DROP COLUMN diagnosi');
           raw.execute('ALTER TABLE draft_reports DROP COLUMN soluzione');
+          // The upgrade now continues 35 -> 36, so the objects that step adds must be absent too.
+          for (final t in [
+            'control_groups',
+            'ticket_controls',
+            'ticket_assets',
+            'assets',
+            'strumenti',
+            'report_strumenti',
+            'checklist_omitted_tickets',
+          ]) {
+            raw.execute('DROP TABLE IF EXISTS $t');
+          }
+          raw.execute('ALTER TABLE report_controlli DROP COLUMN note');
+          raw.execute('ALTER TABLE draft_reports DROP COLUMN strumenti_prefilled');
+          raw.execute('ALTER TABLE draft_reports DROP COLUMN submission_problem_json');
           raw.execute('PRAGMA user_version = 34');
         },
       ),
@@ -78,9 +93,9 @@ void main() {
     await v34.close();
   });
 
-  test('schemaVersion is 35', () async {
+  test('schemaVersion has not gone backwards', () async {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 35);
+    expect(db.schemaVersion, greaterThanOrEqualTo(35));
     await db.close();
   });
 }

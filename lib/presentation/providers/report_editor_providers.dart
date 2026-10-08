@@ -362,6 +362,8 @@ class ReportEditorState {
     customerSignatureAllegatoId: customerSignatureAllegatoId,
     technicianSignatureAllegatoId: technicianSignatureAllegatoId,
     technicianSignaturePrefillSuppressed: technicianSignaturePrefillSuppressed,
+    strumentiPrefilled: false,
+    submissionProblemJson: null,
     technicianNotes: null,
     closedAt: null,
     stato: 'Bozza',

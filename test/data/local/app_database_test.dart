@@ -137,6 +137,7 @@ void main() {
               'CREATE TABLE draft_reports (id TEXT NOT NULL PRIMARY KEY, '
               "submission_state TEXT NOT NULL DEFAULT 'draft');",
             );
+            raw.execute('CREATE TABLE report_controlli (id TEXT NOT NULL PRIMARY KEY);');
             raw.execute("INSERT INTO draft_reports (id, submission_state) VALUES ('old', 'failed');");
             raw.execute(
               "INSERT INTO draft_reports (id, submission_state) VALUES ('ok', 'readyToSubmit');",
