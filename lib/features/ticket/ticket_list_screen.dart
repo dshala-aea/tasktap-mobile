@@ -1,3 +1,4 @@
+// dart format width=100
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,7 @@ import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import '../../presentation/providers/schedule_providers.dart'
     show allLocationsProvider, allCustomersProvider;
+import 'new_ticket_form_screen.dart';
 import 'ticket_label.dart';
 import 'ticket_providers.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -110,6 +112,15 @@ class _TicketListBody extends ConsumerWidget {
     final statusMapAsync = ref.watch(ticketStatusMapProvider);
     final pendingTickets = ref.watch(pendingTicketsProvider).valueOrNull ?? [];
 
+    // Which of those rows the server has refused over a reference this client can repair. The list
+    // observes that fact through its own provider rather than deciding it — the queue owns the
+    // column, and a row leaves this set the moment a repair clears it. The blamed field's *name*
+    // still travels on the row itself, which is what the wizard is seeded from.
+    final repairableIds = {
+      for (final t in ref.watch(repairablePendingTicketsProvider).valueOrNull ?? <PendingTicket>[])
+        t.id,
+    };
+
     final statusMap = statusMapAsync.valueOrNull ?? {};
     final allTickets = ticketsAsync.valueOrNull ?? [];
 
@@ -154,7 +165,12 @@ class _TicketListBody extends ConsumerWidget {
             ),
           ),
           if (pendingTickets.isNotEmpty)
-            SliverToBoxAdapter(child: _PendingTicketsSection(pendingTickets: pendingTickets)),
+            SliverToBoxAdapter(
+              child: _PendingTicketsSection(
+                pendingTickets: pendingTickets,
+                repairableIds: repairableIds,
+              ),
+            ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.only(top: AppSpacing.pagePadding),
@@ -251,9 +267,13 @@ class _TicketListBody extends ConsumerWidget {
 // ── Pending (locally-created, not-yet-confirmed) tickets ───────────────────────
 
 class _PendingTicketsSection extends StatelessWidget {
-  const _PendingTicketsSection({required this.pendingTickets});
+  const _PendingTicketsSection({required this.pendingTickets, required this.repairableIds});
 
   final List<PendingTicket> pendingTickets;
+
+  /// Ids of the rows above the server refused for a repairable reference —
+  /// [repairablePendingTicketsProvider], watched by the list body. See [_PendingTicketRow].
+  final Set<String> repairableIds;
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +298,11 @@ class _PendingTicketsSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           for (final t in pendingTickets) ...[
-            _PendingTicketRow(key: ValueKey(t.id), ticket: t),
+            _PendingTicketRow(
+              key: ValueKey(t.id),
+              ticket: t,
+              isRepairable: repairableIds.contains(t.id),
+            ),
             const SizedBox(height: 8),
           ],
         ],
@@ -288,9 +312,13 @@ class _PendingTicketsSection extends StatelessWidget {
 }
 
 class _PendingTicketRow extends ConsumerWidget {
-  const _PendingTicketRow({super.key, required this.ticket});
+  const _PendingTicketRow({super.key, required this.ticket, required this.isRepairable});
 
   final PendingTicket ticket;
+
+  /// The server refused this row over a reference that no longer resolves, so no resend will ever
+  /// be accepted: it is offered for repair instead of for retry (see [TicketCreationQueue]).
+  final bool isRepairable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -301,7 +329,12 @@ class _PendingTicketRow extends ConsumerWidget {
     final String subtitle = switch (state) {
       PendingTicketState.pendingSync => 'In attesa di connessione — verrà inviato automaticamente',
       PendingTicketState.submitting => 'Invio in corso…',
-      PendingTicketState.failed => 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
+      // A repairable row's stored message is the 404's own prose ("Non trovato sul server…"), which
+      // says what went wrong but not what to do about it — and the action beside it says that.
+      PendingTicketState.failed =>
+        isRepairable
+            ? 'Un riferimento non è più valido: correggi il ticket per inviarlo'
+            : 'Invio non riuscito: ${ticket.error ?? 'errore sconosciuto'}',
       PendingTicketState.submitted => 'Inviato',
     };
 
@@ -335,16 +368,31 @@ class _PendingTicketRow extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  ticket.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.ink,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        ticket.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Archivo',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.ink,
+                        ),
+                      ),
+                    ),
+                    if (isRepairable) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      AppBadge(
+                        label: 'Da correggere',
+                        small: true,
+                        outlined: true,
+                        fgColor: context.colors.red,
+                      ),
+                    ],
+                  ],
                 ),
                 Text(
                   subtitle,
@@ -359,7 +407,25 @@ class _PendingTicketRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (isFailed) ...[
+          if (isRepairable) ...[
+            const SizedBox(width: 8),
+            // "Correggi", NOT "Riprova". A resend would carry the very id the server just refused,
+            // so this button could only fail again — the queue has already taken the row out of the
+            // automatic sweeps for that same reason. Nothing is lost by dropping it: repairing puts
+            // the row back on the ordinary retry path, which then does exactly what Riprova did,
+            // with a reference that resolves.
+            AppButton(
+              label: 'Correggi',
+              size: AppButtonSize.sm,
+              fullWidth: false,
+              // A plain push, not `context.push('/ticket/new')`: the wizard needs the row itself, and
+              // the route carries no place to put it. Same call `ticket_detail_screen.dart` makes for
+              // `EditTicketScreen`.
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<bool>(builder: (_) => NewTicketFormScreen(repairRow: ticket)),
+              ),
+            ),
+          ] else if (isFailed) ...[
             const SizedBox(width: 8),
             // fullWidth: false — AppButton defaults to full-width (wraps itself in
             // SizedBox(width: double.infinity)) for every variant but ghost, and this sits

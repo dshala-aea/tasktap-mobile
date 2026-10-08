@@ -25,11 +25,17 @@ class StepRiepilogoTicket extends ConsumerWidget {
     required this.state,
     required this.onSubmit,
     this.isSubmitting = false,
+    this.submitLabel = 'Crea ticket',
   });
 
   final NewTicketFormState state;
   final VoidCallback onSubmit;
   final bool isSubmitting;
+
+  /// The button's own words. The repair wizard saves a correction onto a ticket that already exists
+  /// locally — a second "Crea ticket" there would promise a second ticket, which is exactly what
+  /// `TicketCreationQueue.repair` must never do.
+  final String submitLabel;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -114,7 +120,7 @@ class StepRiepilogoTicket extends ConsumerWidget {
         // ── Submit ─────────────────────────────────────────────────────────
         const SizedBox(height: 32),
         AppButton(
-          label: 'Crea ticket',
+          label: submitLabel,
           onPressed: isSubmitting ? null : onSubmit,
           isLoading: isSubmitting,
         ),

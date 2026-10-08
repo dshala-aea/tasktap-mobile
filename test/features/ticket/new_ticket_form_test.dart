@@ -48,9 +48,16 @@ void main() {
     });
 
     test('copyWith with clear flags sets fields to null', () {
-      const initial = NewTicketFormState(customerId: 'c1', locationId: 'l1', title: 'Test');
+      const initial = NewTicketFormState(
+        customerId: 'c1',
+        locationId: 'l1',
+        title: 'Test',
+      );
 
-      final updated = initial.copyWith(clearCustomerId: true, clearLocationId: true);
+      final updated = initial.copyWith(
+        clearCustomerId: true,
+        clearLocationId: true,
+      );
       expect(updated.customerId, isNull);
       expect(updated.locationId, isNull);
       expect(updated.title, 'Test');
@@ -252,51 +259,62 @@ void main() {
     AppButton avantiButton(WidgetTester tester) =>
         tester.widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'));
 
-    testWidgets('blocks submit until cliente, sede, titolo and tipo are chosen', (tester) async {
-      await tester.pumpWidget(buildScreen());
-      await tester.pumpAndSettle();
+    testWidgets(
+      'blocks submit until cliente, sede, titolo and tipo are chosen',
+      (tester) async {
+        await tester.pumpWidget(buildScreen());
+        await tester.pumpAndSettle();
 
-      // ── Step 1 (Cliente/Sede): neither field chosen → Avanti disabled ──
-      expect(avantiButton(tester).onPressed, isNull);
+        // ── Step 1 (Cliente/Sede): neither field chosen → Avanti disabled ──
+        expect(avantiButton(tester).onPressed, isNull);
 
-      // Choose cliente only — sede still missing, still blocked.
-      await tester.tap(find.byKey(const ValueKey('cliente-null')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Acme Srl').last);
-      await tester.pumpAndSettle();
-      expect(avantiButton(tester).onPressed, isNull);
+        // Choose cliente only — sede still missing, still blocked.
+        await tester.tap(find.byKey(const ValueKey('cliente-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Acme Srl').last);
+        await tester.pumpAndSettle();
+        expect(avantiButton(tester).onPressed, isNull);
 
-      // Choose sede too — step 1's requirements are now satisfied.
-      await tester.tap(find.byKey(const ValueKey('sede-null')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sede Milano').last);
-      await tester.pumpAndSettle();
-      expect(avantiButton(tester).onPressed, isNotNull);
+        // Choose sede too — step 1's requirements are now satisfied.
+        await tester.tap(find.byKey(const ValueKey('sede-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sede Milano').last);
+        await tester.pumpAndSettle();
+        expect(avantiButton(tester).onPressed, isNotNull);
 
-      await tester.tap(find.text('Avanti'));
-      await tester.pumpAndSettle();
+        await tester.tap(find.text('Avanti'));
+        await tester.pumpAndSettle();
 
-      // ── Step 2 (Dettagli): titolo + tipo required ───────────────────────
-      expect(avantiButton(tester).onPressed, isNull);
+        // ── Step 2 (Dettagli): titolo + tipo required ───────────────────────
+        expect(avantiButton(tester).onPressed, isNull);
 
-      await tester.enterText(find.byType(TextFormField).first, 'Perdita idrica');
-      await tester.pump();
-      // Titolo alone isn't enough — tipo is still missing.
-      expect(avantiButton(tester).onPressed, isNull);
+        await tester.enterText(
+          find.byType(TextFormField).first,
+          'Perdita idrica',
+        );
+        await tester.pump();
+        // Titolo alone isn't enough — tipo is still missing.
+        expect(avantiButton(tester).onPressed, isNull);
 
-      await tester.tap(find.byKey(const ValueKey('tipo-null')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Manutenzione').last);
-      await tester.pumpAndSettle();
-      expect(avantiButton(tester).onPressed, isNotNull);
+        await tester.tap(find.byKey(const ValueKey('tipo-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Manutenzione').last);
+        await tester.pumpAndSettle();
+        expect(avantiButton(tester).onPressed, isNotNull);
 
-      // Never reached Riepilogo, and the mock Dio was never asked to POST —
-      // proof that nothing got submitted while fields were missing.
-      verifyNever(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data')));
+        // Never reached Riepilogo, and the mock Dio was never asked to POST —
+        // proof that nothing got submitted while fields were missing.
+        verifyNever(
+          () => mockDio.post<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-    });
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
 
     // Item 11 of the admin-form audit: onFreeText on the Sede field used to only clear the field
     // on empty text and otherwise do nothing — typing a genuinely new address silently went
@@ -306,7 +324,10 @@ void main() {
       tester,
     ) async {
       when(
-        () => mockDio.post<Map<String, dynamic>>('/api/locations', data: any(named: 'data')),
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/locations',
+          data: any(named: 'data'),
+        ),
       ).thenAnswer(
         (_) async => Response<Map<String, dynamic>>(
           data: {'id': 'loc-new'},
@@ -346,12 +367,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 950));
       await tester.pumpAndSettle();
 
-      final captured = verify(
-        () => mockDio.post<Map<String, dynamic>>(
-          '/api/locations',
-          data: captureAny(named: 'data'),
-        ),
-      ).captured.single as Map;
+      final captured =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/locations',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
       expect(captured['customerId'], 'cust-1');
       expect(captured['name'], 'Via Nuova 5');
 
@@ -443,9 +466,11 @@ void main() {
             builder: (context) => Scaffold(
               body: Center(
                 child: TextButton(
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).push<bool>(MaterialPageRoute(builder: (_) => const NewTicketFormScreen())),
+                  onPressed: () => Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => const NewTicketFormScreen(),
+                    ),
+                  ),
                   child: const Text('Apri form'),
                 ),
               ),
@@ -478,7 +503,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Step 2: Dettagli
-      await tester.enterText(find.byType(TextFormField).first, 'Perdita idrica');
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'Perdita idrica',
+      );
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tipo-null')));
       await tester.pumpAndSettle();
@@ -507,8 +535,13 @@ void main() {
       // (standard Sliver behaviour, not test-specific) — the priority row (item 7 of the
       // feature audit) added enough height that "Crea ticket" no longer falls inside that
       // window on the test surface without scrolling to it first.
-      await tester.scrollUntilVisible(find.widgetWithText(AppButton, 'Crea ticket'), 300);
-      final button = tester.widget<AppButton>(find.widgetWithText(AppButton, 'Crea ticket'));
+      await tester.scrollUntilVisible(
+        find.widgetWithText(AppButton, 'Crea ticket'),
+        300,
+      );
+      final button = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, 'Crea ticket'),
+      );
       button.onPressed!();
       await tester.pumpAndSettle();
     }
@@ -522,106 +555,229 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('a ticket created offline is persisted locally and never touches the network', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildLauncher(isOnline: false));
-      await tester.pumpAndSettle();
-      await fillWizardAndReachRiepilogo(tester);
+    testWidgets(
+      'a ticket created offline is persisted locally and never touches the network',
+      (tester) async {
+        await tester.pumpWidget(buildLauncher(isOnline: false));
+        await tester.pumpAndSettle();
+        await fillWizardAndReachRiepilogo(tester);
 
-      await tapCreaTicket(tester);
+        await tapCreaTicket(tester);
 
-      // The create request was never sent — nothing to duplicate later.
-      verifyNever(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data')));
+        // The create request was never sent — nothing to duplicate later.
+        verifyNever(
+          () => mockDio.post<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
 
-      // The typed ticket is safe in the local outbox, not discarded.
-      final rows = await db.select(db.pendingTickets).get();
-      expect(rows.length, 1);
-      expect(rows.first.title, 'Perdita idrica');
-      expect(rows.first.customerId, 'cust-1');
-      expect(rows.first.locationId, 'loc-1');
-      expect(rows.first.typeId, 1);
-      expect(rows.first.state, 'pendingSync');
+        // The typed ticket is safe in the local outbox, not discarded.
+        final rows = await db.select(db.pendingTickets).get();
+        expect(rows.length, 1);
+        expect(rows.first.title, 'Perdita idrica');
+        expect(rows.first.customerId, 'cust-1');
+        expect(rows.first.locationId, 'loc-1');
+        expect(rows.first.typeId, 1);
+        expect(rows.first.state, 'pendingSync');
 
-      // Honest, plain-language offline message — not a generic Dio error.
-      expect(find.textContaining('offline'), findsOneWidget);
+        // Honest, plain-language offline message — not a generic Dio error.
+        expect(find.textContaining('offline'), findsOneWidget);
 
-      // Popped back to the caller — the screen didn't get stuck.
-      expect(find.text('Apri form'), findsOneWidget);
+        // Popped back to the caller — the screen didn't get stuck.
+        expect(find.text('Apri form'), findsOneWidget);
 
-      await flushSnackBarTimer(tester);
-    });
+        await flushSnackBarTimer(tester);
+      },
+    );
 
     // Field-parity gap: dueDate/technicianNotes/agentId/tags — added to StepDettagliTicket
     // (shared with EditTicketScreen) but the CREATE path threads them through a different route:
     // NewTicketFormScreen → TicketCreationQueue.create → PendingTicketRepository.insert →
     // pendingTickets row. Proves the whole chain, not just the widget or the API client in
     // isolation (both already covered by their own unit tests).
-    testWidgets('technicianNotes and tags reach the pendingTickets row on offline submit', (
-      tester,
-    ) async {
-      await tester.pumpWidget(buildLauncher(isOnline: false));
-      await tester.pumpAndSettle();
-      await fillWizardAndReachRiepilogo(
-        tester,
-        onDettagli: (tester) async {
-          await tester.drag(find.byType(ListView), const Offset(0, -500));
-          await tester.pumpAndSettle();
-          final notesField = find.descendant(
-            of: find.byKey(const ValueKey('technician-notes-field')),
-            matching: find.byType(TextFormField),
-          );
-          final tagsField = find.descendant(
-            of: find.byKey(const ValueKey('tags-field')),
-            matching: find.byType(TextFormField),
-          );
-          await tester.enterText(notesField, 'Verificare guarnizione');
-          await tester.enterText(tagsField, 'urgente, garanzia');
-          await tester.pump();
-        },
-      );
-
-      await tapCreaTicket(tester);
-
-      final rows = await db.select(db.pendingTickets).get();
-      expect(rows.single.technicianNotes, 'Verificare guarnizione');
-      expect(rows.single.tagsJson, '["urgente","garanzia"]');
-
-      await flushSnackBarTimer(tester);
-    });
-
     testWidgets(
-      'the default status is the one flagged isDefault, not the first row SQLite happens to '
-      'return',
+      'technicianNotes and tags reach the pendingTickets row on offline submit',
       (tester) async {
-        // setUp already inserted status id 1 ("Aperto") with isDefault: false (the schema's own
-        // column default). Insert a second status, flagged isDefault, with a HIGHER id — so it is
-        // NOT the first row a no-ORDER-BY query returns. Before the fix, `_applyDefaultStatus`
-        // picked `statusMap.entries.firstOrNull`, which — for a freshly-inserted table with no
-        // deletes — is SQLite's rowid order, i.e. id 1 ("Aperto"), regardless of which status is
-        // actually flagged as the tenant's default. This proves the fix reads `isDefault` instead.
-        await db
-            .into(db.ticketStatuses)
-            .insert(
-              TicketStatusesCompanion.insert(
-                id: const Value(2),
-                tenantId: 'tenant-1',
-                name: 'Assegnato',
-                isDefault: const Value(true),
-              ),
-            );
-
         await tester.pumpWidget(buildLauncher(isOnline: false));
         await tester.pumpAndSettle();
-        await fillWizardAndReachRiepilogo(tester);
+        await fillWizardAndReachRiepilogo(
+          tester,
+          onDettagli: (tester) async {
+            await tester.drag(find.byType(ListView), const Offset(0, -500));
+            await tester.pumpAndSettle();
+            final notesField = find.descendant(
+              of: find.byKey(const ValueKey('technician-notes-field')),
+              matching: find.byType(TextFormField),
+            );
+            final tagsField = find.descendant(
+              of: find.byKey(const ValueKey('tags-field')),
+              matching: find.byType(TextFormField),
+            );
+            await tester.enterText(notesField, 'Verificare guarnizione');
+            await tester.enterText(tagsField, 'urgente, garanzia');
+            await tester.pump();
+          },
+        );
+
         await tapCreaTicket(tester);
 
         final rows = await db.select(db.pendingTickets).get();
-        expect(rows.single.statusId, 2);
+        expect(rows.single.technicianNotes, 'Verificare guarnizione');
+        expect(rows.single.tagsJson, '["urgente","garanzia"]');
 
         await flushSnackBarTimer(tester);
       },
     );
+
+    // ── Repair mode (Task B6) ────────────────────────────────────────────────
+    //
+    // The queue refused a queued ticket over a reference that no longer resolves and held it out of
+    // the retry sweeps. The wizard is where it gets fixed — and the one thing it must never do is
+    // create anything: a second pending row beside the rejected one, or a PUT for a ticket the
+    // server has never heard of.
+    testWidgets(
+      'a repair writes back onto the rejected row — it never creates a second ticket',
+      (tester) async {
+        await db
+            .into(db.pendingTickets)
+            .insert(
+              PendingTicketsCompanion.insert(
+                id: 'pt-repair',
+                createdAt: DateTime.utc(2026, 6, 1),
+                title: 'Perdita idrica',
+                customerId: 'cust-gone',
+                locationId: 'loc-1',
+                statusId: 1,
+                typeId: 1,
+                state: const Value('failed'),
+                error: const Value(
+                  'Non trovato sul server. Potrebbe essere stato eliminato.',
+                ),
+                repairableField: const Value('customerId'),
+              ),
+            );
+        final rejected = await db.select(db.pendingTickets).getSingle();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              appDatabaseProvider.overrideWithValue(db),
+              dioProvider.overrideWithValue(mockDio),
+              // Online on purpose: if the save took the create path it would POST, and `verifyNever`
+              // below is what says it did not.
+              isOnlineProvider.overrideWithValue(true),
+            ],
+            child: MaterialApp(home: NewTicketFormScreen(repairRow: rejected)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Step 1: the Cliente field is empty — that is the field the server refused — and the notice
+        // above it says as much.
+        expect(find.text('Correggi ticket'), findsOneWidget);
+        expect(
+          find.text('Il riferimento non è più valido: scegline un altro'),
+          findsOneWidget,
+        );
+
+        // Re-pick a live customer. The sede the row carried survives the seeding, so step 1 is valid
+        // again the moment the customer is (the wizard clears the references scoped to the old one).
+        await tester.tap(find.byKey(const ValueKey('cliente-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Acme Srl').last);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
+              .onPressed,
+          isNotNull,
+          reason:
+              'only the blamed reference was dropped — step 1 is valid again',
+        );
+
+        await tester.tap(find.text('Avanti'));
+        await tester.pumpAndSettle();
+
+        // Step 2 arrived with the ticket's own title and type — nothing was retyped.
+        expect(find.text('Perdita idrica'), findsOneWidget);
+        await tester.tap(find.text('Avanti'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Avanti'));
+        await tester.pumpAndSettle();
+
+        await tester.scrollUntilVisible(
+          find.widgetWithText(AppButton, 'Salva correzione'),
+          300,
+        );
+        tester
+            .widget<AppButton>(
+              find.widgetWithText(AppButton, 'Salva correzione'),
+            )
+            .onPressed!();
+        await tester.pumpAndSettle();
+
+        // One row, the same row.
+        final rows = await db.select(db.pendingTickets).get();
+        expect(rows, hasLength(1), reason: 'a repair is not a second ticket');
+        expect(rows.single.id, 'pt-repair');
+        expect(
+          rows.single.customerId,
+          'cust-1',
+          reason: 'the corrected reference was written back',
+        );
+        expect(rows.single.repairableField, isNull);
+        // Still `failed` — the last send did fail, and nothing was sent from here to change that.
+        expect(rows.single.state, 'failed');
+
+        // No request of any kind left the device.
+        verifyNever(
+          () => mockDio.post<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
+        verifyNever(
+          () => mockDio.put<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
+
+        expect(find.textContaining('Correzione salvata'), findsOneWidget);
+        await flushSnackBarTimer(tester);
+      },
+    );
+
+    testWidgets('the default status is the one flagged isDefault, not the first row SQLite happens to '
+        'return', (tester) async {
+      // setUp already inserted status id 1 ("Aperto") with isDefault: false (the schema's own
+      // column default). Insert a second status, flagged isDefault, with a HIGHER id — so it is
+      // NOT the first row a no-ORDER-BY query returns. Before the fix, `_applyDefaultStatus`
+      // picked `statusMap.entries.firstOrNull`, which — for a freshly-inserted table with no
+      // deletes — is SQLite's rowid order, i.e. id 1 ("Aperto"), regardless of which status is
+      // actually flagged as the tenant's default. This proves the fix reads `isDefault` instead.
+      await db
+          .into(db.ticketStatuses)
+          .insert(
+            TicketStatusesCompanion.insert(
+              id: const Value(2),
+              tenantId: 'tenant-1',
+              name: 'Assegnato',
+              isDefault: const Value(true),
+            ),
+          );
+
+      await tester.pumpWidget(buildLauncher(isOnline: false));
+      await tester.pumpAndSettle();
+      await fillWizardAndReachRiepilogo(tester);
+      await tapCreaTicket(tester);
+
+      final rows = await db.select(db.pendingTickets).get();
+      expect(rows.single.statusId, 2);
+
+      await flushSnackBarTimer(tester);
+    });
 
     testWidgets(
       'a ticket created offline survives and is sent once the queue is flushed on reconnect',
@@ -637,7 +793,12 @@ void main() {
 
         // Reconnect: the server now accepts the create. The backend returns the shared
         // BasicPkResponse — {"id": ...} — not {"ticketId": ...}; see ticket_api_client_test.dart.
-        when(() => mockDio.post<Map<String, dynamic>>(any(), data: any(named: 'data'))).thenAnswer(
+        when(
+          () => mockDio.post<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        ).thenAnswer(
           (_) async => Response(
             requestOptions: RequestOptions(path: '/api/tickets'),
             data: {'id': 'server-ticket-1'},

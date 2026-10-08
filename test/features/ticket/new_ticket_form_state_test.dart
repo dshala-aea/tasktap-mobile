@@ -8,6 +8,7 @@
 // copyWith must carry it like every other field.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/features/ticket/new_ticket_form_state.dart';
 
 void main() {
@@ -157,6 +158,142 @@ void main() {
         ).isValid,
         isTrue,
       );
+    });
+  });
+
+  // ── Repair-mode seeding (Task B6) ───────────────────────────────────────────
+  //
+  // The wizard opened on an outbox row the server refused. It is seeded from that row — every field
+  // but the one the server would reject again if it were sent unchanged.
+  group('NewTicketFormState.fromPendingRow (repair)', () {
+    /// A queued row as `PendingTickets` holds it. The defaults here are the column defaults; the
+    /// fields under test are the arguments.
+    PendingTicket row({
+      String? repairableField,
+      String? agentId = 'agent-gone',
+      String? contractId = 'con-1',
+      String? commessaId = 'com-1',
+      String? cantiereId = 'can-1',
+      String? prodottoAssistenzaIdsJson = '["prod-1","prod-2"]',
+      String? tagsJson = '["urgente"]',
+    }) => PendingTicket(
+      id: 'pt-1',
+      createdAt: DateTime.utc(2026, 6, 1),
+      title: 'Perdita idrica',
+      description: 'Dal bagno',
+      customerId: 'cust-1',
+      locationId: 'loc-1',
+      assignedUserId: 'tech-1',
+      statusId: 1,
+      typeId: 2,
+      priorita: 'Alta',
+      state: 'failed',
+      error: 'Non trovato sul server.',
+      dueDate: DateTime.utc(2026, 7, 1),
+      technicianNotes: 'Portare guarnizione',
+      agentId: agentId,
+      contractId: contractId,
+      commessaId: commessaId,
+      cantiereId: cantiereId,
+      prodottoAssistenzaIdsJson: prodottoAssistenzaIdsJson,
+      repairableField: repairableField,
+      tagsJson: tagsJson,
+    );
+
+    test('drops the blamed field and keeps every other value', () {
+      final seed = NewTicketFormState.fromPendingRow(row(repairableField: 'agentId'));
+
+      expect(seed.agentId, isNull, reason: 'preloading the rejected id makes Salva a no-op');
+      expect(seed.customerId, 'cust-1');
+      expect(seed.locationId, 'loc-1');
+      expect(seed.title, 'Perdita idrica');
+      expect(seed.description, 'Dal bagno');
+      expect(seed.typeId, 2);
+      expect(seed.statusId, 1);
+      expect(seed.assignedUserId, 'tech-1');
+      expect(seed.priority, 'Alta');
+      expect(seed.dueDate, DateTime.utc(2026, 7, 1));
+      expect(seed.technicianNotes, 'Portare guarnizione');
+      expect(seed.contractId, 'con-1');
+      expect(seed.commessaId, 'com-1');
+      expect(seed.cantiereId, 'can-1');
+      expect(seed.prodottoAssistenzaIds, ['prod-1', 'prod-2']);
+      expect(seed.tags, ['urgente']);
+      // Dropping the Riferimento does not make the ticket unsaveable — it was never required.
+      expect(seed.isValid, isTrue);
+    });
+
+    test('an ordinary row (no blamed field) seeds every value, unchanged', () {
+      final seed = NewTicketFormState.fromPendingRow(row());
+
+      expect(seed.agentId, 'agent-gone');
+      expect(seed.customerId, 'cust-1');
+      expect(seed.prodottoAssistenzaIds, ['prod-1', 'prod-2']);
+      expect(seed.isValid, isTrue);
+    });
+
+    test('a blamed required field leaves the seed invalid, so the save stays blocked', () {
+      // customerId is required and is what the server refused. Seeding it back would re-send the
+      // same rejected id; dropping it is what makes the wizard's own validation the thing that
+      // forces a real replacement to be picked.
+      final seed = NewTicketFormState.fromPendingRow(row(repairableField: 'customerId'));
+
+      expect(seed.customerId, isNull);
+      expect(
+        seed.isValid,
+        isFalse,
+        reason: 'Salva must not be reachable until a customer is picked',
+      );
+      // The rest of the ticket survives the trip — the technician re-picks one field, not fifteen.
+      expect(seed.title, 'Perdita idrica');
+      expect(seed.typeId, 2);
+      expect(seed.agentId, 'agent-gone');
+    });
+
+    test('each of the eight repairable fields is the one dropped, and only it', () {
+      // Spelled out one by one rather than looped over the state's getters: `customerId` and
+      // `locationId` are non-nullable on the ROW, so their drop can only be observed as a null on
+      // the SEED — an asymmetry a loop over field names would paper straight over.
+      final customerId = NewTicketFormState.fromPendingRow(row(repairableField: 'customerId'));
+      expect(customerId.customerId, isNull);
+      expect(customerId.locationId, 'loc-1');
+
+      final locationId = NewTicketFormState.fromPendingRow(row(repairableField: 'locationId'));
+      expect(locationId.locationId, isNull);
+      expect(locationId.customerId, 'cust-1');
+
+      final typeId = NewTicketFormState.fromPendingRow(row(repairableField: 'typeId'));
+      expect(typeId.typeId, isNull);
+      expect(typeId.title, 'Perdita idrica');
+
+      final assignedUserId = NewTicketFormState.fromPendingRow(
+        row(repairableField: 'assignedUserId'),
+      );
+      expect(assignedUserId.assignedUserId, isNull);
+
+      final contractId = NewTicketFormState.fromPendingRow(row(repairableField: 'contractId'));
+      expect(contractId.contractId, isNull);
+      expect(contractId.commessaId, 'com-1', reason: 'only the blamed reference goes');
+
+      final commessaId = NewTicketFormState.fromPendingRow(row(repairableField: 'commessaId'));
+      expect(commessaId.commessaId, isNull);
+      expect(commessaId.contractId, 'con-1');
+
+      final prodotti = NewTicketFormState.fromPendingRow(
+        row(repairableField: 'prodottoAssistenzaIds'),
+      );
+      expect(prodotti.prodottoAssistenzaIds, isEmpty);
+      expect(prodotti.agentId, 'agent-gone');
+    });
+
+    test('a row with no products or tags at all seeds empties, not nulls', () {
+      final seed = NewTicketFormState.fromPendingRow(
+        row(prodottoAssistenzaIdsJson: null, tagsJson: null, agentId: null),
+      );
+
+      expect(seed.prodottoAssistenzaIds, isEmpty);
+      expect(seed.tags, isEmpty);
+      expect(seed.agentId, isNull);
     });
   });
 }

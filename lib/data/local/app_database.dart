@@ -889,10 +889,14 @@ class PendingTickets extends Table {
   /// carried to the server verbatim and never queried by id.
   TextColumn get prodottoAssistenzaIdsJson => text().nullable()();
 
-  /// The request field a rejected foreign key referred to ("customerId"), set when the server
-  /// answered 404 with `extensions.field` and the row is now repairable by picking a replacement
-  /// (see [TicketCreationQueue]). Null when the row is not waiting on a repair — the honest answer
-  /// for every row written before this column existed.
+  /// The request field a rejected reference referred to ("customerId"), set when the server answered
+  /// 404 with that field in the problem body's ROOT — `ErrorResponse : ProblemDetails` serializes
+  /// `Extensions` flat, so it is `{"code":"not_found","field":"customerId"}`, not nested under an
+  /// `extensions` key (see [ProblemDetails]). Non-null means the row is waiting on a human: it is
+  /// offered for repair and left out of BOTH automatic retry sweeps (see
+  /// [PendingTicketRepository.getByState]), because the id the server refused would be sent again
+  /// unchanged. Cleared by a repair write. Null is the honest answer for every row written before
+  /// this column existed.
   TextColumn get repairableField => text().nullable()();
 
   /// Free-form labels — same JSON-text storage as `Tickets.tagsJson` (its own doc comment has
