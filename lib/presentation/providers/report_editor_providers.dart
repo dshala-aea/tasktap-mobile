@@ -908,6 +908,27 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     await _repo.deleteControllo(rowId);
   }
 
+  /// Writes many answers with ONE state update and ONE Drift batch (a bulk action over 200 assets
+  /// must not be 2000 notifications and 2000 awaited inserts).
+  Future<void> applyControlloRows(List<ControlloRow> rows) async {
+    if (rows.isEmpty) return;
+    final byId = {for (final r in state.controlloRows) r.id: r};
+    for (final r in rows) {
+      byId[r.id] = r;
+    }
+    state = state.copyWith(controlloRows: byId.values.toList());
+    await _repo.upsertControlli([for (final r in rows) _controlloToCompanion(r, state.tenantId)]);
+  }
+
+  Future<void> removeControlloRows(List<String> rowIds) async {
+    if (rowIds.isEmpty) return;
+    final drop = rowIds.toSet();
+    state = state.copyWith(
+      controlloRows: state.controlloRows.where((c) => !drop.contains(c.id)).toList(),
+    );
+    await _repo.deleteControlli(rowIds);
+  }
+
   // ── Step 5: Firme ──────────────────────────────────────────────────────────
 
   /// Best-effort GPS capture for a signature. Mirrors `PunchNotifier._captureGpsSilently`:

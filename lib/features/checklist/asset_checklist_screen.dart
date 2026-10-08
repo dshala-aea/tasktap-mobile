@@ -11,6 +11,7 @@ import '../../domain/checklist/checklist_items.dart';
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_answer_rules.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import 'bulk_action_sheet.dart';
 import 'checklist_providers.dart';
 import 'editable_control_tile.dart';
 
@@ -80,6 +81,16 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
     setState(() => _query = _query.copyWith(expandedAssetIds: next));
   }
 
+  TicketChecklist? _lastTree;
+  Set<String> _lastShown = const {};
+
+  void _openBulk() {
+    final tree = _lastTree;
+    final reportId = widget.reportId;
+    if (tree == null || reportId == null || _lastShown.isEmpty) return;
+    showBulkActionSheet(context, reportId: reportId, tree: tree, scopeAssetIds: _lastShown);
+  }
+
   @override
   Widget build(BuildContext context) {
     final reportId = widget.reportId;
@@ -87,7 +98,17 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
         widget.ticketId ?? ref.watch(reportEditorProvider(reportId!).select((s) => s.ticketId));
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      appBar: const ScreenHeaderBar(title: 'Controlli per asset'),
+      appBar: ScreenHeaderBar(
+        title: 'Controlli per asset',
+        actions: [
+          if (widget.reportId != null)
+            HeaderIconBtn(
+              icon: LucideIcons.checkCircle2,
+              label: 'Azioni in blocco',
+              onTap: _openBulk,
+            ),
+        ],
+      ),
       body: (ticketId == null || ticketId.isEmpty)
           ? const EmptyState(
               icon: LucideIcons.clipboardCheck,
@@ -117,6 +138,11 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
       (id) => _frozen[id],
       liveProgress: (id) => live[id],
     );
+    _lastTree = tree;
+    _lastShown = {
+      for (final i in items)
+        if (i is AssetHeaderItem) i.asset.assetId else if (i is ControlItem) i.asset.assetId,
+    };
     return Column(
       children: [
         if (tree.omitted) _OmittedBanner(ticketId: ticketId),

@@ -119,6 +119,14 @@ class DraftReportRepository {
     await _db.into(_db.reportControlli).insertOnConflictUpdate(companion);
   }
 
+  Future<void> upsertControlli(List<ReportControlliCompanion> companions) async {
+    await _db.batch((b) => b.insertAllOnConflictUpdate(_db.reportControlli, companions));
+  }
+
+  Future<void> deleteControlli(List<String> rowIds) async {
+    await (_db.delete(_db.reportControlli)..where((c) => c.id.isIn(rowIds))).go();
+  }
+
   Future<List<ReportControlliData>> getControlli(String reportId) async {
     return (_db.select(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).get();
   }
