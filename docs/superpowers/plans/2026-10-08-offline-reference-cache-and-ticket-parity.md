@@ -166,19 +166,32 @@ Assert by **id**, not by count or name — a count of one is also what a broken 
 Run: `dotnet test tests/TaskTapAPI.Tests --filter FullyQualifiedName~ReferenceListSearchTests`
 Expected: FAIL — `Contracts_list_filters_by_q` receives both contracts.
 
-- [ ] **Step 4: Add the filter to both controllers**
+- [ ] **Step 4: Add the filter to all three controllers**
 
-In each `GetAll`, in the same position as `CommesseController`'s — after the existing `if` filters, before the sort:
+In each `GetAll`, in exactly `CommesseController`'s position — after the existing `if` filters, before
+the sort guard — and in its exact shape (`CommesseController.cs:69-70`, verified on `origin/master`):
 
 ```csharp
-        // Free-text search. The mobile picker's on-demand path sends this; without it the
-        // endpoint accepts ListQuery and silently drops the term.
         if (!string.IsNullOrWhiteSpace(query.Q))
-            q = q.Where(c => c.Name.Contains(query.Q));   // p.Name in ProdottoAssistenzaController
+            q = q.Where(c => c.Name.Contains(query.Q));
 ```
 
-Match the case convention of the neighbouring filters in the file you are editing. If they lowercase
-the term, lowercase here too and make the test's term match.
+Per controller, with the entity's own text columns:
+
+- `ContractsController` → `c.Name` (add `|| (c.Numero != null && c.Numero.Contains(query.Q))` only if the
+  file already treats `Numero` as display text; otherwise leave it to `Name` alone).
+- `ProdottoAssistenzaController` → `p.Name`.
+- `AgentsController` → `a.Nome`.
+
+Three facts to keep in mind, all verified:
+
+- **`Contains` is case-sensitive on Postgres** (`LIKE`), which is what commesse already does. Do not
+  reach for `ILike`/`ToLower` here: matching the neighbour is the requirement, and the mobile search
+  box sends what the technician typed.
+- **In-memory provider is case-sensitive too**, so the test's term must match the fixture's casing
+  exactly. `"caldaie"` matches "Manutenzione caldaie"; `"Caldaie"` would not.
+- The filter goes **before** the sort guard, not after: `ApplySort` and `ToPaginatedResultAsync` both
+  consume the queryable, and a filter applied after pagination would filter one page instead of the set.
 
 - [ ] **Step 5: Run the tests**
 
@@ -187,7 +200,7 @@ Expected: PASS, 3/3.
 
 - [ ] **Step 6: Run the neighbouring list suites**
 
-Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~ProdottoAssistenzaController|FullyQualifiedName~Pagination|FullyQualifiedName~ContractsController"`
+Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~ProdottoAssistenzaController|FullyQualifiedName~Pagination|FullyQualifiedName~ContractsController|FullyQualifiedName~AgentsController"`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -195,12 +208,16 @@ Expected: PASS.
 ```bash
 git add src/TaskTapAPI.Api/Controllers/ContractsController.cs \
         src/TaskTapAPI.Api/Controllers/ProdottoAssistenzaController.cs \
+        src/TaskTapAPI.Api/Controllers/AgentsController.cs \
         tests/TaskTapAPI.Tests/Controllers/ReferenceListSearchTests.cs
-git commit -m "fix(api): honour q on the contracts and products list endpoints
+git commit -m "fix(api): honour q on the contracts, products and agents list endpoints
 
-Both bound ListQuery and dropped query.Q, so the mobile picker's on-demand search
-would have returned unfiltered pages for two of the four reference entities.
-Mirrors the CommesseController filter.
+All three bound ListQuery and dropped query.Q, so the mobile picker's on-demand search
+would have returned unfiltered pages for three of the four reference entities. Mirrors
+the CommesseController filter, which already reads it.
+
+The ClientiAgentRead gate on the agents endpoint is unchanged: a technician without it
+falls back to the agents mirrored from their own tickets.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
