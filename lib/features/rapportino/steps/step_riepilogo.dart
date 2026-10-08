@@ -25,6 +25,10 @@ import '../../../data/users/user_signature_api_client.dart';
 import '../../../domain/reports/draft_validation.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../../core/router/app_router.dart';
+import '../../../domain/checklist/checklist_items.dart' show ChecklistFilter;
+import '../../checklist/checklist_warning_panel.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -256,6 +260,16 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             _ValidationPanel(validation: validation),
             const SizedBox(height: 16),
           ],
+
+          ChecklistWarningPanel(
+            reportId: widget.reportId,
+            onOpen: () => context.push(
+              AppRoutes.reportAssetChecklistPath(
+                widget.reportId,
+                filter: ChecklistFilter.requiredMissing,
+              ),
+            ),
+          ),
 
           // ── Summary ────────────────────────────────────────────────────────
           //

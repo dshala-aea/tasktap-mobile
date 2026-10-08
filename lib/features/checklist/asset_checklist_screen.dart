@@ -10,7 +10,9 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../domain/checklist/checklist_items.dart';
 import '../../domain/checklist/checklist_models.dart';
 import '../../domain/checklist/control_answer_rules.dart';
+import '../../presentation/providers/report_editor_providers.dart';
 import 'checklist_providers.dart';
+import 'editable_control_tile.dart';
 
 /// Full-screen asset checklist: libretti, their children, and each asset's rows.
 ///
@@ -23,14 +25,21 @@ import 'checklist_providers.dart';
 /// filter: lazy slivers have no known offsets to scroll to, and that filter reduces the list to the
 /// offenders.
 class AssetChecklistScreen extends ConsumerStatefulWidget {
+  /// Exactly one of [ticketId] (read-only, from the ticket detail) or [reportId] (editable, from a
+  /// rapportino; the ticket is the report's).
   const AssetChecklistScreen({
     super.key,
-    required this.ticketId,
+    this.ticketId,
+    this.reportId,
     this.focusAssetId,
     this.initialFilter = ChecklistFilter.all,
-  });
+  }) : assert(
+         (ticketId != null) != (reportId != null),
+         'pass either a ticket (read-only) or a report (editable)',
+       );
 
-  final String ticketId;
+  final String? ticketId;
+  final String? reportId;
   final String? focusAssetId;
   final ChecklistFilter initialFilter;
 
@@ -45,14 +54,25 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
   );
   final _search = TextEditingController();
 
+  /// The answers as they were when the filter/search/layout was last applied. Filters decide
+  /// membership from THIS, so a row answered under "Da compilare" stays under the thumb instead of
+  /// vanishing after the first keystroke; header progress reads the live answers.
+  late Map<String, ChecklistAnswer> _frozen = Map.of(_readLive());
+
+  Map<String, ChecklistAnswer> _readLive() => widget.reportId == null
+      ? const <String, ChecklistAnswer>{}
+      : ref.read(controlAnswersProvider(widget.reportId!));
+
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
   }
 
-  /// Task 6 replaces this with the editor's rows; read-only here, so the stored value decides.
-  ChecklistAnswer? _local(String controlId) => null;
+  void _apply(ChecklistQuery q) => setState(() {
+    _query = q;
+    _frozen = Map.of(_readLive());
+  });
 
   void _toggle(String assetId) {
     final next = {..._query.expandedAssetIds};
@@ -62,37 +82,52 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(ticketChecklistProvider(widget.ticketId));
+    final reportId = widget.reportId;
+    final ticketId =
+        widget.ticketId ?? ref.watch(reportEditorProvider(reportId!).select((s) => s.ticketId));
     return Scaffold(
       backgroundColor: context.colors.bg2,
       appBar: const ScreenHeaderBar(title: 'Controlli per asset'),
-      body: async.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => const UnavailableState(
-          titolo: 'Checklist non leggibile',
-          motivo: 'I dati salvati sul telefono non si aprono. Torna indietro e riprova.',
-        ),
-        data: _body,
-      ),
+      body: (ticketId == null || ticketId.isEmpty)
+          ? const EmptyState(
+              icon: LucideIcons.clipboardCheck,
+              title: 'Nessun ticket',
+              body: 'Questo rapportino non è collegato a un ticket: non ci sono controlli per asset.',
+            )
+          : ref
+                .watch(ticketChecklistProvider(ticketId))
+                .when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (_, _) => const UnavailableState(
+                    titolo: 'Checklist non leggibile',
+                    motivo: 'I dati salvati sul telefono non si aprono. Torna indietro e riprova.',
+                  ),
+                  data: (tree) => _body(tree, ticketId),
+                ),
     );
   }
 
-  Widget _body(TicketChecklist tree) {
-    final items = buildChecklistItems(tree, _query, _local);
+  Widget _body(TicketChecklist tree, String ticketId) {
+    final live = widget.reportId == null
+        ? const <String, ChecklistAnswer>{}
+        : ref.watch(controlAnswersProvider(widget.reportId!));
+    final items = buildChecklistItems(
+      tree,
+      _query,
+      (id) => _frozen[id],
+      liveProgress: (id) => live[id],
+    );
     return Column(
       children: [
-        if (tree.omitted) _OmittedBanner(ticketId: widget.ticketId),
+        if (tree.omitted) _OmittedBanner(ticketId: ticketId),
         AppSearchBar(
           controller: _search,
           hint: _query.layout == ChecklistLayout.byAsset
               ? 'Cerca asset o matricola…'
               : 'Cerca controllo o asset…',
-          onChanged: (t) => setState(() => _query = _query.copyWith(text: t)),
+          onChanged: (t) => _apply(_query.copyWith(text: t)),
         ),
-        _FilterBar(
-          query: _query,
-          onChanged: (q) => setState(() => _query = q),
-        ),
+        _FilterBar(query: _query, onChanged: _apply),
         Expanded(
           child: items.isEmpty
               ? EmptyState(
@@ -112,7 +147,8 @@ class _AssetChecklistScreenState extends ConsumerState<AssetChecklistScreen> {
                           key: ValueKey(item.key),
                           child: _ItemView(
                             item: item,
-                            local: _local,
+                            reportId: widget.reportId,
+                            live: live,
                             onToggle: _toggle,
                             showAssetName: _query.layout == ChecklistLayout.byControl,
                           ),
@@ -238,13 +274,15 @@ class _OmittedBannerState extends ConsumerState<_OmittedBanner> {
 class _ItemView extends StatelessWidget {
   const _ItemView({
     required this.item,
-    required this.local,
+    required this.reportId,
+    required this.live,
     required this.onToggle,
     required this.showAssetName,
   });
 
   final ChecklistListItem item;
-  final AnswerLookup local;
+  final String? reportId;
+  final Map<String, ChecklistAnswer> live;
   final ValueChanged<String> onToggle;
   final bool showAssetName;
 
@@ -277,7 +315,10 @@ class _ItemView extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding + 8, AppSpacing.sm, AppSpacing.pagePadding, 2),
         child: Text(i.path, style: TextStyle(fontSize: 11, color: context.colors.inkMuted)),
       ),
-      ControlItem i => ControlItemTile(item: i, answer: local(i.control.id), showAssetName: showAssetName),
+      ControlItem i =>
+        reportId != null && !i.control.isRetained
+            ? EditableControlTile(reportId: reportId!, item: i, showAssetName: showAssetName)
+            : ControlItemTile(item: i, answer: live[i.control.id], showAssetName: showAssetName),
       ControlHeaderItem i => Padding(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.pagePadding,

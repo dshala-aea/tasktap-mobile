@@ -127,6 +127,10 @@ class DraftReportRepository {
     return (_db.select(_db.reportControlli)..where((c) => c.reportId.equals(reportId))).watch();
   }
 
+  Future<void> deleteControllo(String rowId) async {
+    await (_db.delete(_db.reportControlli)..where((c) => c.id.equals(rowId))).go();
+  }
+
   // ── Allegati ───────────────────────────────────────────────────────────────
 
   Future<void> insertAllegato(ReportAllegatiCompanion companion) async {

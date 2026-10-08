@@ -165,6 +165,7 @@ class ControlloRow {
     this.boolValue,
     this.dateValue,
     this.numberValue,
+    this.note,
   });
 
   final String id;
@@ -175,11 +176,17 @@ class ControlloRow {
   final DateTime? dateValue;
   final double? numberValue;
 
+  /// Per-answer remark (backend `ReportControlObservation.Note`, max 2000). A note is not itself an
+  /// answer; a blank/omitted note never erases a stored one server-side.
+  final String? note;
+
   ControlloRow copyWith({
     String? stringValue,
     bool? boolValue,
     DateTime? dateValue,
     double? numberValue,
+    String? note,
+    bool clearNote = false,
   }) {
     return ControlloRow(
       id: id,
@@ -189,6 +196,7 @@ class ControlloRow {
       boolValue: boolValue ?? this.boolValue,
       dateValue: dateValue ?? this.dateValue,
       numberValue: numberValue ?? this.numberValue,
+      note: clearNote ? null : (note ?? this.note),
     );
   }
 }
@@ -630,6 +638,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
             boolValue: c.boolValue,
             dateValue: c.dateValue,
             numberValue: c.numberValue,
+            note: c.note,
           ),
       ],
       allegatoRows: [
@@ -888,6 +897,15 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
     }
     state = state.copyWith(controlloRows: updated);
     await _repo.upsertControllo(_controlloToCompanion(row, state.tenantId));
+  }
+
+  /// Drops a local answer (the technician cleared it): nothing is sent for that control, and a
+  /// blank never wipes what the server already holds.
+  Future<void> removeControllo(String rowId) async {
+    state = state.copyWith(
+      controlloRows: state.controlloRows.where((c) => c.id != rowId).toList(),
+    );
+    await _repo.deleteControllo(rowId);
   }
 
   // ── Step 5: Firme ──────────────────────────────────────────────────────────
@@ -1201,6 +1219,7 @@ class ReportEditorNotifier extends StateNotifier<ReportEditorState> {
       boolValue: Value(row.boolValue),
       dateValue: Value(row.dateValue),
       numberValue: Value(row.numberValue),
+      note: Value(row.note),
     );
   }
 }
