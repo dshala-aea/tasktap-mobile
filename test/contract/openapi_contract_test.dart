@@ -32,10 +32,13 @@ void main() {
     expect(
       file.existsSync(),
       isTrue,
-      reason: 'run from the mobile/ root; see the refresh command in this file’s header',
+      reason:
+          'run from the mobile/ root; see the refresh command in this file’s header',
     );
     final doc = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-    schemas = (doc['components'] as Map<String, dynamic>)['schemas'] as Map<String, dynamic>;
+    schemas =
+        (doc['components'] as Map<String, dynamic>)['schemas']
+            as Map<String, dynamic>;
   });
 
   Set<String> propertiesOf(String schemaName) {
@@ -46,13 +49,15 @@ void main() {
       reason:
           'no schema "$schemaName" in the snapshot — renamed on the server, or the snapshot is stale',
     );
-    return ((schema!['properties'] as Map<String, dynamic>?) ?? {}).keys.toSet();
+    return ((schema!['properties'] as Map<String, dynamic>?) ?? {}).keys
+        .toSet();
   }
 
   /// Every key the app sends must exist on the server's schema.
   void expectNoUnknownKeys(String schemaName, Map<String, dynamic> payload) {
     final known = propertiesOf(schemaName);
-    final unknown = payload.keys.where((k) => !known.contains(k)).toList()..sort();
+    final unknown = payload.keys.where((k) => !known.contains(k)).toList()
+      ..sort();
     expect(
       unknown,
       isEmpty,
@@ -65,7 +70,9 @@ void main() {
 
   /// Not a failure — a ledger of fields the app never sends, so a gap is visible rather than assumed.
   void reportUnsentFields(String schemaName, Map<String, dynamic> payload) {
-    final unsent = propertiesOf(schemaName).where((k) => !payload.containsKey(k)).toList()..sort();
+    final unsent = propertiesOf(
+      schemaName,
+    ).where((k) => !payload.containsKey(k)).toList()..sort();
     if (unsent.isNotEmpty) {
       printOnFailure('$schemaName: app never sends ${unsent.join(', ')}');
     }
@@ -89,9 +96,23 @@ void main() {
       customerSignoffText: 'accettato',
       materialiNotRequired: false,
       photoAllegatoIds: const ['00000000-0000-0000-0000-000000000007'],
-      staff: const [SubmitReportStaffDto(userId: '00000000-0000-0000-0000-000000000008')],
+      staff: const [
+        SubmitReportStaffDto(userId: '00000000-0000-0000-0000-000000000008'),
+      ],
       materiali: const [SubmitReportMaterialeDto(quantity: 2)],
-      controlli: const [SubmitReportControlloDto(ticketControlId: 'ctrl-1', boolValue: true)],
+      controlli: const [
+        SubmitReportControlloDto(
+          ticketControlId: 'ctrl-1',
+          boolValue: true,
+          note: 'ok',
+        ),
+      ],
+      strumenti: const [
+        SubmitReportStrumentoDto(
+          strumentoId: '00000000-0000-0000-0000-000000000009',
+          expiredAcknowledged: true,
+        ),
+      ],
     );
 
     test('SubmitReportRequest sends no field the server does not have', () {
@@ -100,26 +121,65 @@ void main() {
       reportUnsentFields('SubmitReportRequest', json);
     });
 
-    test('SubmitReportControlloDto sends no field the server does not have', () {
-      final json = (fullRequest.toJson()['controlli'] as List).first as Map<String, dynamic>;
-      expectNoUnknownKeys('SubmitReportControlloDto', json);
-    });
+    test(
+      'SubmitReportControlloDto sends no field the server does not have',
+      () {
+        final json =
+            (fullRequest.toJson()['controlli'] as List).first
+                as Map<String, dynamic>;
+        expectNoUnknownKeys('SubmitReportControlloDto', json);
+      },
+    );
 
-    test('SubmitReportMaterialeDto sends no field the server does not have', () {
-      final json = (fullRequest.toJson()['materiali'] as List).first as Map<String, dynamic>;
-      expectNoUnknownKeys('SubmitReportMaterialeDto', json);
-    });
+    test(
+      'SubmitReportMaterialeDto sends no field the server does not have',
+      () {
+        final json =
+            (fullRequest.toJson()['materiali'] as List).first
+                as Map<String, dynamic>;
+        expectNoUnknownKeys('SubmitReportMaterialeDto', json);
+      },
+    );
 
     test('SubmitReportStaffDto sends no field the server does not have', () {
-      final json = (fullRequest.toJson()['staff'] as List).first as Map<String, dynamic>;
+      final json =
+          (fullRequest.toJson()['staff'] as List).first as Map<String, dynamic>;
       expectNoUnknownKeys('SubmitReportStaffDto', json);
     });
 
     /// The regression itself, stated against the server's schema rather than against our own class.
     test('the control answer names the ticket control the server reads', () {
-      expect(propertiesOf('SubmitReportControlloDto'), contains('ticketControlId'));
-      final json = (fullRequest.toJson()['controlli'] as List).first as Map<String, dynamic>;
+      expect(
+        propertiesOf('SubmitReportControlloDto'),
+        contains('ticketControlId'),
+      );
+      final json =
+          (fullRequest.toJson()['controlli'] as List).first
+              as Map<String, dynamic>;
       expect(json.keys, contains('ticketControlId'));
+    });
+
+    test(
+      'SubmitReportStrumentoDto sends no field the server does not have',
+      () {
+        final json =
+            (fullRequest.toJson()['strumenti'] as List).first
+                as Map<String, dynamic>;
+        expectNoUnknownKeys('SubmitReportStrumentoDto', json);
+      },
+    );
+
+    /// The server recomputes expiry from the report's work date and rejects anything else; a
+    /// client-supplied `expiredAtUse` would be ignored at best and is never part of the contract.
+    test('the instrument selection never carries expiredAtUse', () {
+      final json =
+          (fullRequest.toJson()['strumenti'] as List).first
+              as Map<String, dynamic>;
+      expect(json.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
+      expect(
+        propertiesOf('SubmitReportStrumentoDto'),
+        isNot(contains('expiredAtUse')),
+      );
     });
   });
 }

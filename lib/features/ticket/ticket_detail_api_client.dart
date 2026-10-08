@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/api/dio_client.dart';
 import '../../data/api/json_parse.dart';
+import '../../domain/checklist/control_type.dart';
+export '../../domain/checklist/control_type.dart';
 
 /// `TicketsController.UploadAttachment`'s own cap. Checked client-side too — before a photo/file
 /// is even queued or sent — so an oversized file is rejected with a clear, actionable sentence
@@ -359,25 +361,6 @@ class TicketMaterialeDto {
   }
 }
 
-/// How a control renders its input and stores its value — mirrors the backend's
-/// ControlTypeEnum, now a string wire shape (JsonStringEnumConverter) instead of a plain int.
-/// Renamed from the old checkbox/freeText/radioOnOff/date/singleChoice set to
-/// checkbox/text/trueFalse/dateTime/singleChoice + a new [number] — by MEANING, not by the old
-/// int ordinal (which was fully reordered server-side, see backend's ControlTypeEnum.cs).
-enum ControlType { text, number, dateTime, checkbox, trueFalse, options, unknown }
-
-ControlType _controlTypeFromWire(String? value) {
-  return switch (value) {
-    'Text' => ControlType.text,
-    'Number' => ControlType.number,
-    'DateTime' => ControlType.dateTime,
-    'Checkbox' => ControlType.checkbox,
-    'TrueFalse' => ControlType.trueFalse,
-    'Options' => ControlType.options,
-    _ => ControlType.unknown,
-  };
-}
-
 /// A section of the ticket's checklist (Controllo tab / rapportino checklist).
 class TicketControlGroupDto {
   const TicketControlGroupDto({
@@ -477,7 +460,7 @@ class TicketControlDto {
       templateControlId: json['templateControlId'] as String? ?? '',
       label: json['label'] as String? ?? '',
       description: json['description'] as String?,
-      type: _controlTypeFromWire(json['type'] as String?),
+      type: controlTypeFromWire(json['type'] as String?),
       isRequired: json['isRequired'] as bool? ?? false,
       options: json['options'] as String?,
       valoreLimite: _asDouble(json['valoreLimite']),
