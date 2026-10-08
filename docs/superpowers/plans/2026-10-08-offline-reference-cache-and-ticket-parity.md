@@ -20,6 +20,50 @@ Five corrections from plan review, each verified against `master` and the mobile
 4. **`internalNotes` is dropped from the plan entirely.** `new_ticket_form_state.dart` records that it is office-only and *deliberately* not exposed on mobile. And the picker widget no longer runs the materialise step itself — see Task B4.
 5. **Riferimento is confirmed broken, not merely questionable — and it is fixed here.** `step_dettagli_ticket.dart:233-245` fills `agentId` from `TicketApiClient.fetchTechnicians()`, i.e. from **Users** (`/api/users?role=Technician`). `TicketCommandService.cs:100` validates that same field with `EnsureExistsAsync<Agent>(request.AgentId, ct)`, and `Agent` is a separate entity (`Core/Entities/Agent.cs`, restored in W6a from the legacy "Agente") whose ids are not User ids. So any ticket created with a Riferimento **404s with `not_found`** — the same failure class the spec's §2.7 identified. Task B5 re-sources the field from the Agents mirror. The web client has the same defect ("same as web's own TicketCreatePanel", per that file's own comment) and is deliberately left to its own release — see Global Constraints.
 
+## Revision note (2026-10-08, third pass — after B5 landed)
+
+Written after verifying B5 against the code, because B6 as first drafted would have shipped a repair
+screen that repairs nothing. Each point is a fact read out of the tree, not a preference.
+
+1. **The repairable set must equal the fields the wizard can actually re-pick *and* write back.**
+   B5 built the pickers, so the inventory is now a fact rather than a guess. Present:
+   `customerId` and `locationId` (`step_cliente_sede.dart`), `contractId` and `commessaId` (same
+   step, added by B5), `assignedUserId` (`step_assegnazione.dart`), `typeId` and `agentId` and
+   `prodottoAssistenzaIds` (`step_dettagli_ticket.dart`). **Absent: `cantiereId`** — no wizard step
+   contains a cantiere field at all (B5 recorded this; `grep -i cantiere lib/features/ticket/steps/`
+   finds none) — and **absent: `statusId`**, which the technician never picks: it is defaulted from
+   the default `TicketStatus` at `new_ticket_form_screen.dart:79-92`, so a repair would faithfully
+   re-send the very id that was rejected, forever. Both leave `_repairableFields`. The table below
+   is corrected accordingly.
+2. **A repair is an UPDATE of the existing queue row — not a create, not a PUT.** The plan's Step 7
+   said "in the same shape `edit_ticket_screen.dart` already preloads from a server ticket", and
+   that shape is the wrong one twice over. `NewTicketFormScreen._onSubmit` calls `queue.create(...)`,
+   which *inserts* a second pending row rather than fixing the first; and `EditTicketScreen._save`
+   (`edit_ticket_screen.dart:150-166`) sends `title/description/customerId/locationId/typeId/
+   priority/dueDate/technicianNotes/agentId/tags` — it carries **none** of `contractId`,
+   `commessaId`, `cantiereId`, `prodottoAssistenzaIds`, and `admin_api_client.dart:631-658`
+   `updateTicket` has no such parameters to carry them in. Repair therefore needs its own path:
+   `TicketCreationQueue.repair(id, …)` writing all columns back to the same row — including
+   `contractId`, `commessaId`, `cantiereId` and `prodottoAssistenzaIdsJson`, which B1 added and B5
+   now writes — then clearing `repairableField`. No server call is made at repair time.
+3. **The repair screen must not preload the blamed field's stale value.** Prefill the offending
+   `agentId` and let the technician tap Salva, and the row is written back byte-identical: the flag
+   clears, the row rejoins auto-retry, the same 404 lands, the flag is set again. A loop that
+   repairs nothing and lies about it. Repair mode drops the blamed field and says why in place
+   ("Il riferimento non è più valido: scegline un altro"); every other field preloads unchanged.
+   Where the field is required (`customerId`, `locationId`, `typeId`) the wizard's own validation
+   then blocks the save until it is re-picked, which is the desired behaviour, not a bug.
+4. **Recorded, not fixed here: edit mode discards reference picks (B5 regression).** The same
+   `edit_ticket_screen.dart` renders `StepClienteSede` (`:262`) and `StepDettagliTicket` (`:267`),
+   which now draw Contratto, Commessa and Prodotti, while `_save` persists none of them — so a
+   technician can pick, read "Ticket aggiornato", and have every pick dropped. The server is only
+   partly to blame: `UpdateTicketRequest` (`TicketsController.cs:735`) *does* accept `CommessaId`
+   (`:746`), `CantiereId` (`:749`) and `ProdottoAssistenzaIds` (`:766`); it does **not** accept
+   `ContractId` (its only three occurrences are `:130`, `:227`, `:666`). Wiring the three the server
+   takes is a task of its own — `TicketProdottiAssistenza` (`app_database.dart:1006`) is referenced
+   nowhere in `lib/`, so there is no provider to seed coverage from, and sending `[]` would wipe a
+   ticket's coverage rather than leave it. Sequence after B6; do not bolt it onto B6.
+
 ## Global Constraints
 
 - **Two working trees, two branches.** Backend work runs in `/mnt/d/AEA/Sviluppi/TaskTap` (the API repo); mobile work runs in `/mnt/d/AEA/Sviluppi/TaskTap/mobile` (a **nested git repo**, separate history).
@@ -2247,9 +2291,13 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
   comment needs the new state — no schema change, the column landed in B1)
 - Modify: `lib/features/ticket/ticket_providers.dart`
 - Modify: `lib/features/ticket/ticket_list_screen.dart`
+- Modify: `lib/features/ticket/new_ticket_form_screen.dart` and `new_ticket_form_state.dart` — repair
+  mode: the seed that drops the blamed field, and a save that routes to `queue.repair` instead of
+  `queue.create` (revision note, items 2 and 3)
 - Test: `test/data/api/problem_details_test.dart`
 - Test: `test/data/tickets/ticket_creation_queue_test.dart`
 - Test: `test/features/ticket/ticket_list_screen_test.dart`
+- Test: `test/features/ticket/new_ticket_form_state_test.dart` (the two repair-mode tests in Step 7)
 
 **Interfaces:**
 - Consumes: the flat `field` member on a `not_found` problem (Task A3); `PendingTickets.repairableField` (B1).
@@ -2274,16 +2322,21 @@ merely waiting.
 
 | Request field | Entity | Shape | Repairable by | Cleared by |
 |---|---|---|---|---|
-| `customerId` | Customer | scalar | picker | picking a different customer |
-| `locationId` | Location | scalar | picker | picking a different sede |
-| `assignedUserId` | User | scalar | picker | picking a different technician, or Nessuno |
-| `statusId` | TicketStatus | scalar | picker | picking a different status |
-| `typeId` | TicketType | scalar | picker | picking a different type |
-| `agentId` | Agent | scalar | picker | picking a different Riferimento, or Nessuno |
-| `contractId` | Contract | scalar | picker | picking a different contract, or removing it |
-| `commessaId` | Commessa | scalar | picker | picking a different commessa |
-| `cantiereId` | Cantiere | scalar | picker | picking a different cantiere |
-| `prodottoAssistenzaIds` | ProdottoAssistenza | list | multi picker | dropping the ids that no longer exist |
+| `customerId` | Customer | scalar | picker (step 1) | picking a different customer |
+| `locationId` | Location | scalar | picker (step 1) | picking a different sede |
+| `contractId` | Contract | scalar | picker (step 1) | picking a different contract, or removing it |
+| `commessaId` | Commessa | scalar | picker (step 1) | picking a different commessa |
+| `assignedUserId` | User | scalar | picker (step 3) | picking a different technician, or Nessuno |
+| `typeId` | TicketType | scalar | picker (step 2) | picking a different type |
+| `agentId` | Agent | scalar | picker (step 2) | picking a different Riferimento, or Nessuno |
+| `prodottoAssistenzaIds` | ProdottoAssistenza | list | multi picker (step 2) | dropping the ids that no longer exist |
+
+Two fields the first draft listed are **not** repairable and must not be in `_repairableFields` —
+see the third-pass revision note, item 1:
+
+- `cantiereId` — no wizard step holds a cantiere field, so there is no picker to repair it with.
+- `statusId` — the technician never picks it; `new_ticket_form_screen.dart:79-92` defaults it from
+  the default `TicketStatus`, so a "repair" would re-send the id the server just refused.
 
 Any field not in this table — including a field name from a backend that has moved on — leaves
 `repairableField` **null**, and the row keeps today's behaviour: shown as failed, retried, with its
@@ -2318,6 +2371,14 @@ show a repair screen that cannot fix the problem.
   test('a field the client cannot repair is left null, not guessed at', () async {
     // extensions.field = 'sourceId' — not in the table
     expect(row.repairableField, isNull);
+  });
+
+  test('a field with no picker to repair it is left null too', () async {
+    // 'cantiereId' and 'statusId' are in the server's vocabulary but not in the wizard's: no step
+    // holds a cantiere, and the status is defaulted rather than picked — so a "repair" would
+    // re-send the very id the server refused. See the third-pass revision note, item 1.
+    expect(TicketCreationQueue.repairableFieldOf(notFound({'field': 'cantiereId'})), isNull);
+    expect(TicketCreationQueue.repairableFieldOf(notFound({'field': 'statusId'})), isNull);
   });
 
   test('repairing a row clears the flag and returns it to auto-retry', () async {
@@ -2374,13 +2435,18 @@ class ProblemDetails {
 Then, in the queue:
 
 ```dart
-  /// The request fields whose rejection this client can actually repair. Not in this set means the
-  /// row waits for nothing: it is shown as failed and retried as before, because guessing at a
-  /// repair for a field we cannot render would only produce a screen that cannot fix the problem.
-  /// Mirrors the plan's table and Task A3's flat `field` member.
+  /// The request fields whose rejection this client can actually repair — both re-pickable in the
+  /// wizard and writable back to the queue row. Not in this set means the row waits for nothing: it
+  /// is shown as failed and retried as before, because guessing at a repair for a field we cannot
+  /// render would only produce a screen that cannot fix the problem. Mirrors the plan's table and
+  /// Task A3's flat `field` member.
+  ///
+  /// `cantiereId` is absent because no wizard step has a cantiere field, and `statusId` because the
+  /// wizard never asks for it — it defaults from the default TicketStatus, so a repair would re-send
+  /// the rejected id. See the third-pass revision note, item 1.
   static const _repairableFields = {
-    'customerId', 'locationId', 'assignedUserId', 'statusId', 'typeId', 'agentId',
-    'contractId', 'commessaId', 'cantiereId', 'prodottoAssistenzaIds',
+    'customerId', 'locationId', 'contractId', 'commessaId',
+    'assignedUserId', 'typeId', 'agentId', 'prodottoAssistenzaIds',
   };
 
   /// The field a `not_found` blamed, when this client can repair it. Null otherwise — including for
@@ -2476,9 +2542,46 @@ final repairablePendingTicketsProvider = StreamProvider<List<PendingTicket>>((re
 - [ ] **Step 7: Render the row and route into the wizard**
 
 Wherever `ticket_list_screen.dart` renders the pending-failed rows, a row with a `repairableField`
-gets a "Da correggere" badge and routes into the create wizard preloaded from the queue row, in the
-same shape `edit_ticket_screen.dart` already preloads from a server ticket. On save it updates the
-queue row (not the server) and clears `repairableField`.
+gets a "Da correggere" badge and routes into the create wizard, seeded from the queue row.
+
+The seed is **not** the shape `edit_ticket_screen.dart` preloads from a server ticket — that shape
+carries none of the reference fields (revision note, item 2). Seed `NewTicketFormState` from the
+`PendingTickets` row: `customerId`, `locationId`, `contractId`, `commessaId`, `cantiereId`,
+`assignedUserId`, `statusId`, `typeId`, `agentId`, `prodottoAssistenzaIds` (through
+`_decodeStringList` on `prodottoAssistenzaIdsJson`), `priorita`, `dueDate`, `technicianNotes`, `tags`.
+
+Then **drop the blamed field** — `repairableField` names it — and surface why in that field's place:
+"Il riferimento non è più valido: scegline un altro". Preloading the rejected value is the loop the
+revision note's item 3 describes; a repair that writes back what already failed clears the flag and
+changes nothing.
+
+On save, repair mode calls a new `TicketCreationQueue.repair(id, …)` — an `UPDATE` of that same row
+with every field above, then `repairableField: null` — and **never** `queue.create` (which would
+insert a second pending row) and **never** a `PUT /api/tickets`. The repaired row returns to the
+ordinary retry path on the next pass. `repair` and `create` should share their row-writing body; a
+second hand-maintained copy of the column list is how a repair quietly stops carrying a field.
+
+Two tests pin the parts that are easy to get wrong:
+
+```dart
+  test('repair mode drops the blamed field and keeps every other value', () async {
+    // seed a pending row: repairableField 'agentId', a bad agentId, a good customerId/typeId/title
+    final seed = NewTicketFormState.fromPendingRow(row);
+    expect(seed.agentId, isNull, reason: 'preloading the rejected id makes Salva a no-op');
+    expect(seed.customerId, 'cust-1');
+    expect(seed.title, 'Perdita idrica');
+  });
+
+  test('repairing updates the row in place and clears the flag', () async {
+    await queue.repair(row.id, customerId: 'cust-2', /* … every other field … */);
+    final rows = await db.select(db.pendingTickets).get();
+    expect(rows, hasLength(1), reason: 'a repair is not a second ticket');
+    expect(rows.single.id, row.id);
+    expect(rows.single.customerId, 'cust-2');
+    expect(rows.single.repairableField, isNull);
+    await queue.retryAll(); // and it is back on the ordinary path
+  });
+```
 
 - [ ] **Step 8: Run the queue and list suites**
 
@@ -2488,15 +2591,22 @@ Expected: PASS.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add lib/data/tickets/ticket_creation_queue.dart lib/features/ticket/ticket_providers.dart \
+git add lib/data/api/problem_details.dart \
+        lib/data/tickets/ticket_creation_queue.dart lib/features/ticket/ticket_providers.dart \
         lib/features/ticket/ticket_list_screen.dart \
+        lib/features/ticket/new_ticket_form_screen.dart \
+        lib/features/ticket/new_ticket_form_state.dart \
+        test/data/api/problem_details_test.dart \
         test/data/tickets/ticket_creation_queue_test.dart \
-        test/features/ticket/ticket_list_screen_test.dart
+        test/features/ticket/ticket_list_screen_test.dart \
+        test/features/ticket/new_ticket_form_state_test.dart
 git commit -m "feat(mobile): repair a queued ticket the server rejected for one bad reference
 
 The queue detects and persists the blamed field and stops retrying that row; the list
-screen observes it and routes into the wizard. A field this client cannot repair stays
-null and keeps the old failure path, so the UI never offers a repair it cannot perform.
+screen observes it and routes into the wizard, which drops the rejected value so the
+technician must re-pick it and writes the result back to the same row. A field this
+client cannot render stays null and keeps the old failure path, so the UI never offers
+a repair it cannot perform.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
