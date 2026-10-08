@@ -139,6 +139,11 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
       ),
     );
     if (pickedId == null) return; // Dismissed without picking — leave the field as it was.
+    // The search wrote the picked agent into the mirror *before* returning it, but the provider this
+    // field renders from (`localAgentsProvider('')`) already resolved and will not re-run on its own
+    // — so a row the device only just learned about would leave the field showing "Nessuno" despite a
+    // real pick. Same failure mode as the prodotti picker's `ref.invalidate` above, same fix.
+    ref.invalidate(localAgentsProvider(''));
     widget.onChanged(
       pickedId == _kNoneSentinel
           ? widget.state.copyWith(clearAgentId: true)
