@@ -144,21 +144,30 @@ class TicketCreationQueue {
     return _attempt(id);
   }
 
-  /// Write a corrected ticket back onto the row the server rejected, in place, and clear the flag
-  /// that was holding it out of the retry sweeps.
+  /// Write a corrected ticket back onto the row the server rejected, in place, then send it the way
+  /// every other create is sent.
   ///
   /// An UPDATE of that same row, for two reasons that are the whole point of the repair path: a
   /// [create] would insert a SECOND pending ticket and leave the rejected one sitting beside it,
   /// and a `PUT /api/tickets` would reach the server for a ticket the server does not have yet —
-  /// this row has never been created. Nothing is sent from here at all.
+  /// this row has never been created.
   ///
   /// Takes the same field set [create] does and hands it to the same row writer
   /// (`PendingTicketRepository.updateFields`, itself built on the companion [create]'s insert uses),
   /// so a column added to one cannot be silently missing from the other.
   ///
-  /// The next automatic sweep picks the row up: `repairableField` is null again, so nothing excludes
-  /// it. See [repairableFieldOf] for what made it repairable in the first place.
-  Future<void> repair(
+  /// Sending is this method's own job, not the next sweep's. Relying on the sweep was the bug: it
+  /// runs only on reconnect and at app start (`ticket_creation_queue_watcher.dart`), so on a device
+  /// that simply stayed online a repaired row was never sent — the toast promised an automatic send
+  /// and the ticket list showed an ordinary failure instead. Offline the row goes back to
+  /// `pendingSync` — the state whose own list text is "In attesa di connessione — verrà inviato
+  /// automaticamente", exactly what the wizard's toast says, and one that drops the stale 404 prose
+  /// the row still carried. Online, [_attempt] sends it now through the same create-with-`clientId`
+  /// path [retry] and [processAll] use: one `POST /api/tickets` carrying this row's own id as the
+  /// dedup key, never a `PUT`.
+  ///
+  /// See [repairableFieldOf] for what made the row repairable in the first place.
+  Future<TicketCreationOutcome> repair(
     String id, {
     required String title,
     String? description,
@@ -176,6 +185,7 @@ class TicketCreationQueue {
     String? cantiereId,
     List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
+    required bool isOnline,
   }) async {
     await _repo.updateFields(
       id: id,
@@ -196,6 +206,19 @@ class TicketCreationQueue {
       prodottoAssistenzaIds: prodottoAssistenzaIds,
       tags: tags,
     );
+
+    if (!isOnline) {
+      // The corrected payload has never been sent, so the row is a genuinely unsent one — not a
+      // failed send. `pendingSync` says that in the state's own words and clears the 404 sentence
+      // `updateFields` deliberately left untouched.
+      await _repo.updateState(
+        id: id,
+        state: PendingTicketState.pendingSync,
+        clearError: true,
+      );
+      return TicketCreationOutcome.queuedOffline(id);
+    }
+    return _attempt(id);
   }
 
   /// Auto-retry every ticket that has not reached the server yet — both the

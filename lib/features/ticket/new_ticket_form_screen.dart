@@ -155,8 +155,9 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   ///   user-initiated retry from the ticket list. It is never auto-retried.
   /// - Repair ([repairRow] set): the corrected values are written back onto
   ///   the row the server refused and the flag holding it out of the retry
-  ///   sweeps is cleared. **No request is made from here** — the row returns
-  ///   to the ordinary auto-retry path, which is what actually sends it.
+  ///   sweeps is cleared, then the row is sent. It takes the create's own
+  ///   outcome branches, because `repair` now sends exactly like `create`
+  ///   does — offline it re-queues, online it POSTs the corrected ticket.
   Future<void> _onSubmit() async {
     if (!_formState.isValid || _isSubmitting) return;
 
@@ -170,7 +171,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       // `repair`, never `create`: an UPDATE of that same row. A create would leave the rejected
       // ticket sitting beside a second pending one, and a `PUT /api/tickets` would reach for a
       // server ticket that does not exist yet — this row has never been created.
-      await queue.repair(
+      final outcome = await queue.repair(
         repairRow.id,
         title: _formState.title!,
         description: _formState.description,
@@ -188,15 +189,37 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
         cantiereId: _formState.cantiereId,
         prodottoAssistenzaIds: _formState.prodottoAssistenzaIds,
         tags: _formState.tags,
+        isOnline: isOnline,
       );
 
       if (!mounted) return;
-      showAppToast(
-        context,
-        message: 'Correzione salvata: il ticket verrà inviato automaticamente.',
-        tone: ToastTone.success,
-      );
-      Navigator.of(context).pop(true);
+
+      // Mirrors the create branch below, one tone and one word apart: the same three outcomes, the
+      // same promises.
+      if (outcome.isQueuedOffline) {
+        showAppToast(
+          context,
+          message:
+              'Correzione salvata: il ticket verrà inviato automaticamente '
+              'alla riconnessione.',
+          tone: ToastTone.warning,
+        );
+        Navigator.of(context).pop(true);
+      } else if (outcome.isSubmitted) {
+        showAppToast(context, message: 'Ticket creato con successo', tone: ToastTone.success);
+        Navigator.of(context).pop(true);
+      } else {
+        // Every send carries the row's own `clientId`, so a resend from here cannot create a second
+        // ticket — the copy is about the failure itself, not about a risk of duplicating.
+        setState(() => _isSubmitting = false);
+        showAppToast(
+          context,
+          message:
+              'La correzione è salvata, ma l\'invio non è riuscito '
+              '(${outcome.error}). Puoi riprovare dalla sezione "In sospeso".',
+          tone: ToastTone.error,
+        );
+      }
       return;
     }
 

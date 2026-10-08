@@ -969,83 +969,182 @@ void main() {
     /// The row count and the id are the point: a repair is an UPDATE of the row the server refused,
     /// never a second ticket. `create` here would leave the rejected one sitting beside a new pending
     /// row, and `PUT /api/tickets` would reach for a server ticket that has never existed.
-    test('repairing updates the row in place, clears the flag and returns it to auto-retry', () async {
+    ///
+    /// Rewritten when the repair path was found to be a dead end. It used to leave the row `failed`
+    /// with the flag cleared and hand it to "the next sweep" — which runs only on reconnect and at
+    /// app start, so on a device that stayed online the corrected ticket was never sent at all. The
+    /// old test's `expect(rows.single.state, 'failed')` and its re-stub of `_stubCreateTicket` after
+    /// the repair were the two lines that encoded that; both are gone. `repair` now sends the row
+    /// itself, so this is the ONLINE branch and the assertions below are the send's outcome.
+    test(
+      'repairing updates the row in place, clears the flag and sends the corrected ticket',
+      () async {
+        _stubCreateTicket(mockApiClient, (inv) async => throw _notFound({'field': 'agentId'}));
+
+        final outcome = await queue.create(
+          title: 'Perdita idrica',
+          description: 'Dal bagno',
+          customerId: 'cust-1',
+          locationId: 'loc-1',
+          assignedUserId: 'tech-1',
+          statusId: 1,
+          typeId: 2,
+          priorita: 'Alta',
+          technicianNotes: 'Portare guarnizione',
+          agentId: 'agent-gone',
+          contractId: 'con-1',
+          commessaId: 'com-1',
+          cantiereId: 'can-1',
+          prodottoAssistenzaIds: const ['prod-1', 'prod-2'],
+          tags: const ['urgente'],
+          isOnline: true,
+        );
+        final before = (await repo.getById(outcome.localId))!;
+        expect(before.repairableField, 'agentId');
+
+        // The technician repaired the row, so the send lands this time.
+        _stubCreateTicket(mockApiClient, (inv) async => 'server-ticket-7');
+
+        final repaired = await queue.repair(
+          outcome.localId,
+          title: 'Perdita idrica',
+          description: 'Dal bagno',
+          customerId: 'cust-1',
+          locationId: 'loc-1',
+          assignedUserId: 'tech-1',
+          statusId: 1,
+          typeId: 2,
+          priorita: 'Alta',
+          technicianNotes: 'Portare guarnizione',
+          agentId: 'agent-2',
+          contractId: 'con-1',
+          commessaId: 'com-1',
+          cantiereId: 'can-1',
+          prodottoAssistenzaIds: const ['prod-1', 'prod-2'],
+          tags: const ['urgente'],
+          isOnline: true,
+        );
+
+        // `repair` sent the corrected ticket itself — same create-with-clientId path, same outcome.
+        expect(repaired.isSubmitted, isTrue);
+        expect(repaired.serverTicketId, 'server-ticket-7');
+        expect(onSubmittedCalls, 1);
+
+        final rows = await db.select(db.pendingTickets).get();
+        expect(rows, hasLength(1), reason: 'a repair is not a second ticket');
+        expect(rows.single.id, outcome.localId, reason: 'the same row, so the same clientId');
+        expect(rows.single.agentId, 'agent-2');
+        expect(rows.single.repairableField, isNull);
+        expect(rows.single.state, 'submitted');
+        expect(rows.single.serverTicketId, 'server-ticket-7');
+
+        // Every other column the create carried is still there: the repair writes the whole row, not
+        // only the field it corrected, which is why `repair` and `create` share one row writer.
+        expect(rows.single.title, 'Perdita idrica');
+        expect(rows.single.description, 'Dal bagno');
+        expect(rows.single.customerId, 'cust-1');
+        expect(rows.single.locationId, 'loc-1');
+        expect(rows.single.assignedUserId, 'tech-1');
+        expect(rows.single.statusId, 1);
+        expect(rows.single.typeId, 2);
+        expect(rows.single.priorita, 'Alta');
+        expect(rows.single.technicianNotes, 'Portare guarnizione');
+        expect(rows.single.contractId, 'con-1');
+        expect(rows.single.commessaId, 'com-1');
+        expect(rows.single.cantiereId, 'can-1');
+        expect(rows.single.prodottoAssistenzaIdsJson, '["prod-1","prod-2"]');
+        expect(rows.single.tagsJson, '["urgente"]');
+        expect(rows.single.createdAt, before.createdAt);
+      },
+    );
+
+    /// Offline is the other half of the contract: the row is corrected and re-queued in
+    /// `pendingSync` — the state whose own list text promises automatic delivery — and nothing
+    /// leaves the device until the next sweep.
+    test('repairing offline queues the correction and the next sweep sends it', () async {
       _stubCreateTicket(mockApiClient, (inv) async => throw _notFound({'field': 'agentId'}));
 
       final outcome = await queue.create(
         title: 'Perdita idrica',
-        description: 'Dal bagno',
         customerId: 'cust-1',
         locationId: 'loc-1',
-        assignedUserId: 'tech-1',
         statusId: 1,
         typeId: 2,
-        priorita: 'Alta',
-        technicianNotes: 'Portare guarnizione',
         agentId: 'agent-gone',
-        contractId: 'con-1',
-        commessaId: 'com-1',
-        cantiereId: 'can-1',
-        prodottoAssistenzaIds: const ['prod-1', 'prod-2'],
-        tags: const ['urgente'],
         isOnline: true,
       );
-      final before = (await repo.getById(outcome.localId))!;
-      expect(before.repairableField, 'agentId');
+      expect((await repo.getById(outcome.localId))!.repairableField, 'agentId');
 
-      await queue.repair(
+      var sendCalls = 0;
+      _stubCreateTicket(mockApiClient, (inv) async {
+        sendCalls++;
+        return 'server-ticket-8';
+      });
+
+      final repaired = await queue.repair(
         outcome.localId,
         title: 'Perdita idrica',
-        description: 'Dal bagno',
         customerId: 'cust-1',
         locationId: 'loc-1',
-        assignedUserId: 'tech-1',
         statusId: 1,
         typeId: 2,
-        priorita: 'Alta',
-        technicianNotes: 'Portare guarnizione',
         agentId: 'agent-2',
-        contractId: 'con-1',
-        commessaId: 'com-1',
-        cantiereId: 'can-1',
-        prodottoAssistenzaIds: const ['prod-1', 'prod-2'],
-        tags: const ['urgente'],
+        isOnline: false,
       );
 
-      final rows = await db.select(db.pendingTickets).get();
-      expect(rows, hasLength(1), reason: 'a repair is not a second ticket');
-      expect(rows.single.id, outcome.localId, reason: 'the same row, so the same clientId');
-      expect(rows.single.agentId, 'agent-2');
-      expect(rows.single.repairableField, isNull);
+      expect(repaired.isQueuedOffline, isTrue);
+      expect(sendCalls, 0, reason: 'offline, nothing left the device');
 
-      // Every other column the create carried is still there: the repair writes the whole row, not
-      // only the field it corrected, which is why `repair` and `create` share one row writer.
-      expect(rows.single.title, 'Perdita idrica');
-      expect(rows.single.description, 'Dal bagno');
-      expect(rows.single.customerId, 'cust-1');
-      expect(rows.single.locationId, 'loc-1');
-      expect(rows.single.assignedUserId, 'tech-1');
-      expect(rows.single.statusId, 1);
-      expect(rows.single.typeId, 2);
-      expect(rows.single.priorita, 'Alta');
-      expect(rows.single.technicianNotes, 'Portare guarnizione');
-      expect(rows.single.contractId, 'con-1');
-      expect(rows.single.commessaId, 'com-1');
-      expect(rows.single.cantiereId, 'can-1');
-      expect(rows.single.prodottoAssistenzaIdsJson, '["prod-1","prod-2"]');
-      expect(rows.single.tagsJson, '["urgente"]');
-      // The row's own bookkeeping is left as it was: the last send did fail, and that is still true.
-      expect(rows.single.state, 'failed');
-      expect(rows.single.createdAt, before.createdAt);
+      final queued = (await repo.getById(outcome.localId))!;
+      expect(queued.state, 'pendingSync');
+      expect(queued.error, isNull, reason: 'the stale 404 sentence goes with the repair');
+      expect(queued.repairableField, isNull);
+      expect(queued.agentId, 'agent-2', reason: 'the correction was written for the next send');
 
-      // And it is back on the ordinary path — which is what actually sends it. Nothing was sent by
-      // `repair` itself.
-      _stubCreateTicket(mockApiClient, (inv) async => 'server-ticket-7');
+      // The reconnect watcher calls exactly this.
       await queue.processAll();
-      final after = (await repo.getById(outcome.localId))!;
-      expect(after.state, 'submitted');
-      expect(after.serverTicketId, 'server-ticket-7');
-      expect(onSubmittedCalls, 1);
+
+      final sent = (await repo.getById(outcome.localId))!;
+      expect(sent.state, 'submitted');
+      expect(sent.serverTicketId, 'server-ticket-8');
+      expect(sendCalls, 1);
+    });
+
+    /// A repair the server refuses again for the SAME field must put the flag back, so the row
+    /// returns to the "Correggi" affordance and the technician is told — rather than being looped
+    /// silently. Still one row: a refusal of a repair is not a create.
+    test('a repair refused again for the same field is repairable again, still one row', () async {
+      _stubCreateTicket(mockApiClient, (inv) async => throw _notFound({'field': 'agentId'}));
+
+      final outcome = await queue.create(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        agentId: 'agent-gone',
+        isOnline: true,
+      );
+
+      // The replacement is no better — the server names the same field again.
+      _stubCreateTicket(mockApiClient, (inv) async => throw _notFound({'field': 'agentId'}));
+
+      final repaired = await queue.repair(
+        outcome.localId,
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        agentId: 'agent-still-gone',
+        isOnline: true,
+      );
+
+      expect(repaired.isFailed, isTrue);
+      final rows = await db.select(db.pendingTickets).get();
+      expect(rows, hasLength(1), reason: 'a refusal on a repair is still not a second ticket');
+      expect(rows.single.repairableField, 'agentId');
+      expect(rows.single.state, 'failed');
     });
 
     test(
@@ -1071,6 +1170,10 @@ void main() {
           locationId: 'loc-1',
           statusId: 1,
           typeId: 2,
+          // Offline on purpose: this test is about what `updateFields` writes and nothing else, and
+          // an online repair would send the empty Riferimento straight back into the same 404 —
+          // re-setting the flag the assertions below check is cleared.
+          isOnline: false,
         );
 
         final row = (await repo.getById(outcome.localId))!;
