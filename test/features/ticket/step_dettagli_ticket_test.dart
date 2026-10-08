@@ -11,6 +11,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/ticket/new_ticket_form_state.dart';
 import 'package:tasktap_mobile/features/ticket/steps/blamed_field_notice.dart';
+import 'package:tasktap_mobile/features/ticket/steps/read_only_caption.dart';
 import 'package:tasktap_mobile/features/ticket/steps/step_dettagli_ticket.dart';
 
 class MockDio extends Mock implements Dio {}
@@ -19,12 +20,19 @@ class MockDio extends Mock implements Dio {}
 /// so a test needs a small owner that feeds the new [NewTicketFormState] back in, exactly the way
 /// `NewTicketFormScreen._onFormChanged` does.
 class _DettagliHarness extends StatefulWidget {
-  const _DettagliHarness({required this.initialState, this.blamedField});
+  const _DettagliHarness({
+    required this.initialState,
+    this.blamedField,
+    this.prodottiEditable = true,
+  });
 
   final NewTicketFormState initialState;
 
   /// The field a repair is waiting on, or null for an ordinary wizard.
   final String? blamedField;
+
+  /// Edit mode's flag — false when the screen behind this step cannot persist a coverage change.
+  final bool prodottiEditable;
 
   @override
   State<_DettagliHarness> createState() => _DettagliHarnessState();
@@ -40,6 +48,7 @@ class _DettagliHarnessState extends State<_DettagliHarness> {
         body: StepDettagliTicket(
           state: _state,
           blamedField: widget.blamedField,
+          prodottiEditable: widget.prodottiEditable,
           onChanged: (s) => setState(() => _state = s),
         ),
       ),
@@ -95,6 +104,7 @@ void main() {
     WidgetTester tester, {
     NewTicketFormState state = const NewTicketFormState(customerId: 'cust-1'),
     String? blamedField,
+    bool prodottiEditable = true,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -102,7 +112,11 @@ void main() {
           appDatabaseProvider.overrideWithValue(db),
           dioProvider.overrideWithValue(mockDio),
         ],
-        child: _DettagliHarness(initialState: state, blamedField: blamedField),
+        child: _DettagliHarness(
+          initialState: state,
+          blamedField: blamedField,
+          prodottiEditable: prodottiEditable,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -261,6 +275,82 @@ void main() {
     // read as a product's name.
     expect(find.text('Prodotto non disponibile'), findsOneWidget);
     expect(find.text('ghost-1'), findsNothing);
+
+    await unmount(tester);
+  });
+
+  // ── F1: the coverage list a caller cannot persist ───────────────────────────
+
+  /// One mirror row so a chip has a real label to show.
+  Future<void> seedProdotto() async {
+    await db
+        .into(db.prodottiAssistenza)
+        .insert(
+          ProdottiAssistenzaCompanion.insert(
+            id: 'prod-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Caldaia X20',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
+          ),
+        );
+  }
+
+  const chipKey = ValueKey('prodotto-chip-prod-1');
+
+  testWidgets('prodottiEditable: false draws the chip with no X, draws no adder, and says why', (
+    tester,
+  ) async {
+    await seedProdotto();
+    await pumpStep(
+      tester,
+      state: const NewTicketFormState(customerId: 'cust-1', prodottoAssistenzaIds: ['prod-1']),
+      prodottiEditable: false,
+    );
+    await scrollTo(tester, find.byKey(chipKey));
+
+    // Still drawn: this is what the ticket covers, and hiding it would hide the record itself.
+    expect(find.text('Caldaia X20'), findsOneWidget);
+
+    // No X at all, rather than an X that refuses. A live-looking control that does nothing is the
+    // same lie as a value written into the form that the save silently drops.
+    expect(tester.widget<Chip>(find.byKey(chipKey)).onDeleted, isNull);
+    expect(
+      find.descendant(of: find.byKey(chipKey), matching: find.byIcon(Icons.cancel)),
+      findsNothing,
+    );
+
+    // No adder either: a product picked here would have nowhere to go.
+    expect(find.byKey(const ValueKey('prodotto-adder-0')), findsNothing);
+
+    // ...and the field says why it is not a control, instead of just being inert.
+    expect(find.text(kReadOnlyFieldCaption), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  testWidgets('prodottiEditable (the default) keeps the X and the adder live', (tester) async {
+    await seedProdotto();
+    await pumpStep(
+      tester,
+      state: const NewTicketFormState(customerId: 'cust-1', prodottoAssistenzaIds: ['prod-1']),
+    );
+    await scrollTo(tester, find.byKey(chipKey));
+
+    // Guards the default: the flag must not have quietly made the create wizard read-only too.
+    expect(tester.widget<Chip>(find.byKey(chipKey)).onDeleted, isNotNull);
+    expect(
+      find.descendant(of: find.byKey(chipKey), matching: find.byIcon(Icons.cancel)),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('prodotto-adder-0')), findsOneWidget);
+    expect(find.text(kReadOnlyFieldCaption), findsNothing);
+
+    // And the X still removes the coverage it is on.
+    await tester.tap(find.descendant(of: find.byKey(chipKey), matching: find.byIcon(Icons.cancel)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(chipKey), findsNothing);
 
     await unmount(tester);
   });

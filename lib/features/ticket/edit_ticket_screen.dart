@@ -91,6 +91,15 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
       _formState = NewTicketFormState(
         customerId: ticket.customerId,
         locationId: ticket.locationId,
+        // Seeded, so the two reference pickers describe the record instead of denying it: the sync
+        // writes `contractId`/`commessaId` onto the local row (`sync_service.dart`), so what the
+        // ticket really holds is already here — free, no fetch and no new provider. They used to be
+        // seeded as nothing, which drew both fields blank on a ticket that had one and made
+        // "Nessuno" a claim about the record that was simply false.
+        contractId: ticket.contractId,
+        commessaId: ticket.commessaId,
+        // `cantiereId` is deliberately NOT seeded: neither step in this mini-wizard draws a
+        // cantiere control, so it would be state nothing reads.
         title: ticket.title,
         description: ticket.description,
         typeId: ticket.typeId,
@@ -161,6 +170,10 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
             technicianNotes: s.technicianNotes,
             agentId: s.agentId,
             tags: s.tags,
+            // The one reference this PUT can move. `UpdateTicketRequest` has no `ContractId` and no
+            // way to clear a commessa, which is why step 1 draws Contratto read-only and refuses to
+            // clear Commessa — see `StepClienteSede.contractEditable`/`commessaClearable`.
+            commessaId: s.commessaId,
           );
 
       // Safe to mirror locally: these are the exact values the server just accepted, not values
@@ -179,6 +192,12 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
           technicianNotes: Value(s.technicianNotes),
           agentId: Value(s.agentId),
           tagsJson: Value(jsonEncode(s.tags)),
+          // Written only when the form holds one. The server applies a commessa set-only
+          // (`ApplyFields`: `if (request.CommessaId.HasValue)`), so a null in the form does not mean
+          // "the record now has no commessa" — it means "this request said nothing about it".
+          // `Value(null)` here would make the local mirror claim a removal the server never made,
+          // and the ticket would read as unlinked until the next sync silently put it back.
+          commessaId: s.commessaId != null ? Value(s.commessaId) : const Value.absent(),
           updatedAt: Value(DateTime.now().toUtc()),
         ),
       );
@@ -263,12 +282,20 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                         key: const ValueKey(_EditStep.clienteSede),
                         state: s,
                         onChanged: _onFormChanged,
+                        // A contract edit is not persistable from here at all
+                        // (`UpdateTicketRequest` carries no `ContractId`), and a commessa clear is
+                        // not either (the server is set-only). Both are drawn, neither is offered.
+                        contractEditable: false,
+                        commessaClearable: false,
                       ),
                       _EditStep.dettagli => StepDettagliTicket(
                         key: const ValueKey(_EditStep.dettagli),
                         state: s,
                         onChanged: _onFormChanged,
                         ticketId: widget.ticketId,
+                        // Coverage is replaced wholesale by this PUT, and mobile holds no
+                        // authoritative list of it to replace with — see `prodottiEditable`.
+                        prodottiEditable: false,
                       ),
                     },
                   ),
