@@ -62,6 +62,14 @@ void main() {
           raw.execute('ALTER TABLE report_controlli DROP COLUMN note');
           raw.execute('ALTER TABLE draft_reports DROP COLUMN strumenti_prefilled');
           raw.execute('ALTER TABLE draft_reports DROP COLUMN submission_problem_json');
+          // The upgrade now continues 36 -> 37, so the objects that step adds must be absent too.
+          for (final t in ['contracts', 'commesse', 'prodotti_assistenza', 'agents']) {
+            raw.execute('DROP TABLE IF EXISTS $t');
+          }
+          for (final c in ['contract_id', 'commessa_id', 'cantiere_id',
+                           'prodotto_assistenza_ids_json', 'repairable_field']) {
+            raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
+          }
           raw.execute('PRAGMA user_version = 34');
         },
       ),
