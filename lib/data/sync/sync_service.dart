@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
 import '../local/app_database.dart';
 import 'checklist_reconciler.dart';
+import 'checklist_refetch_service.dart';
 import 'sync_dto.dart';
 
 /// Calls GET /api/sync/mobile?since=[lastSync], upserts every entity into
@@ -23,6 +25,10 @@ class SyncService {
   final Dio dio;
 
   static const _path = '/api/sync/mobile';
+
+  /// Owns the re-request of checklists the server omitted from a sync (bounded, batched, and
+  /// self-disabling — see that class's own doc comment).
+  late final ChecklistRefetchService checklistRefetch = ChecklistRefetchService(db: db, dio: dio);
 
   /// Perform a delta sync.
   ///
@@ -67,6 +73,15 @@ class SyncService {
     });
 
     await db.setLastSync(payload.syncedAt);
+
+    // Best effort and bounded: a failed re-request must never fail (or delay the result of) the
+    // sync that already succeeded. The omitted ids stay remembered for the next one.
+    try {
+      await checklistRefetch.refetchOmitted();
+    } catch (e) {
+      debugPrint('sync: omitted checklist re-request failed ($e)');
+    }
+
     return payload.syncedAt;
   }
 

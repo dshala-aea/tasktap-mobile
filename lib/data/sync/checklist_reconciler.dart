@@ -246,6 +246,20 @@ Future<void> _pruneAssets(AppDatabase db) async {
       .get();
   final refs = {...fromCoverage.map((r) => r.read<String>('a')), ...fromRows.map((r) => r.read<String>('a'))};
   final all = await db.select(db.assets).get();
+  // A libretto is an asset too, but it has no coverage row of its own (only templated/legacy
+  // assets do) — it is only visible as another asset's `librettoIdsJson` member. Keep every id
+  // named there, or a backfill that writes a child + its libretto in one batch would prune the
+  // libretto it just wrote.
+  for (final a in all) {
+    final raw = a.librettoIdsJson;
+    if (raw.isEmpty) continue;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) refs.addAll(decoded.map((e) => e.toString()));
+    } catch (_) {
+      // Not valid JSON — nothing to keep from it.
+    }
+  }
   final drop = all.where((a) => !refs.contains(a.id)).map((a) => a.id).toList();
   if (drop.isNotEmpty) {
     await (db.delete(db.assets)..where((a) => a.id.isIn(drop))).go();

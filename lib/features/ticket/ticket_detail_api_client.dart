@@ -51,21 +51,23 @@ class TicketDetailApiClient {
         .toList();
   }
 
-  /// The ticket's checklist, resolved from the maintenance-template version it
+  /// The ticket's full checklist response: ticket-level `groups`, legacy `assetProgress` and the
+  /// templated `assetChecklists` (hand-off section 2). [fetchControls] below keeps the old
+  /// groups-only contract for the screens that only know the ticket level.
+  Future<TicketControlResponseDto> fetchControlsResponse(String ticketId) async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/tickets/$ticketId/controls');
+    return TicketControlResponseDto.fromJson(response.data ?? const {});
+  }
+
+  /// The ticket's checklist groups, resolved from the maintenance-template version it
   /// materialised at creation (ADR-0012). An empty list means no version
   /// resolved — a legitimate state, not a loading failure.
   ///
-  /// The endpoint's response is `{groups, assetProgress}` (backend commit
-  /// 001be48) — this only reads `groups`; `assetProgress` (per-asset
-  /// Controllato/Note) has no UI here yet, tracked as separate follow-up work.
-  Future<List<TicketControlGroupDto>> fetchControls(String ticketId) async {
-    final response = await _dio.get<Map<String, dynamic>>('/api/tickets/$ticketId/controls');
-    final groups = response.data?['groups'] as List<dynamic>?;
-    return (groups ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(TicketControlGroupDto.fromJson)
-        .toList();
-  }
+  /// The groups-only read of [fetchControlsResponse], kept for the screens that only know the
+  /// ticket level (`assetProgress`/`assetChecklists` are dropped here; use
+  /// [fetchControlsResponse] to get them).
+  Future<List<TicketControlGroupDto>> fetchControls(String ticketId) async =>
+      (await fetchControlsResponse(ticketId)).groups;
 
   /// Materials planned for the ticket (fabbisogno) — catalogue-backed or free-text.
   Future<List<TicketMaterialeDto>> fetchMateriali(String ticketId) async {
@@ -416,6 +418,9 @@ class TicketControlDto {
     this.boolValue,
     this.dateValue,
     this.numberValue,
+    this.controlLineageId = '',
+    this.note,
+    this.prodottoAssistenzaId,
   });
 
   final String id;
@@ -438,6 +443,16 @@ class TicketControlDto {
   final bool? boolValue;
   final DateTime? dateValue;
   final double? numberValue;
+
+  /// Version-independent control identity (bulk selector, cross-asset matching). Empty only for a
+  /// payload from a server that predates it.
+  final String controlLineageId;
+
+  /// Remark stored with the answer; a note never counts as an answer.
+  final String? note;
+
+  /// Null for a ticket-level row.
+  final String? prodottoAssistenzaId;
 
   /// [options] parsed as a choice list, or empty when absent/unparseable.
   List<String> get choiceOptions {
@@ -470,6 +485,9 @@ class TicketControlDto {
       boolValue: json['boolValue'] as bool?,
       dateValue: json['dateValue'] != null ? DateTime.tryParse(json['dateValue'] as String) : null,
       numberValue: _asDouble(json['numberValue']),
+      controlLineageId: json['controlLineageId'] as String? ?? '',
+      note: json['note'] as String?,
+      prodottoAssistenzaId: json['prodottoAssistenzaId'] as String?,
     );
   }
 }
@@ -499,4 +517,92 @@ List<FlatTicketControl> flattenTicketControls(
     result.addAll(flattenTicketControls(group.subgroups, path));
   }
   return result;
+}
+
+/// The legacy per-asset Controllato/Note of `GET /api/tickets/{id}/controls` — an asset that is not
+/// templated. Read-only here: updating it is `PUT .../asset-progress`, which is online-only.
+class TicketAssetProgressDto {
+  const TicketAssetProgressDto({
+    required this.prodottoAssistenzaId,
+    required this.prodottoAssistenzaName,
+    required this.controllato,
+    this.note,
+  });
+
+  final String prodottoAssistenzaId;
+  final String prodottoAssistenzaName;
+  final bool controllato;
+  final String? note;
+
+  factory TicketAssetProgressDto.fromJson(Map<String, dynamic> j) => TicketAssetProgressDto(
+    prodottoAssistenzaId: j['prodottoAssistenzaId'] as String,
+    prodottoAssistenzaName: j['prodottoAssistenzaName'] as String? ?? '',
+    controllato: j['controllato'] as bool? ?? false,
+    note: j['note'] as String?,
+  );
+}
+
+/// One covered asset's own templated checklist, as `GET /api/tickets/{id}/controls` returns it
+/// under `assetChecklists`. Carries the asset identity (matricola, its single libretto) alongside
+/// the checklist groups, which the ticket-level `groups` do not.
+class TicketAssetChecklistDto {
+  const TicketAssetChecklistDto({
+    required this.prodottoAssistenzaId,
+    required this.name,
+    this.matricola,
+    this.librettoId,
+    this.librettoName,
+    required this.maintenanceTemplateVersionId,
+    this.groups = const [],
+  });
+
+  final String prodottoAssistenzaId;
+  final String name;
+  final String? matricola;
+  final String? librettoId;
+  final String? librettoName;
+  final String maintenanceTemplateVersionId;
+  final List<TicketControlGroupDto> groups;
+
+  factory TicketAssetChecklistDto.fromJson(Map<String, dynamic> j) => TicketAssetChecklistDto(
+    prodottoAssistenzaId: j['prodottoAssistenzaId'] as String,
+    name: j['name'] as String? ?? '',
+    matricola: j['matricola'] as String?,
+    librettoId: j['librettoId'] as String?,
+    librettoName: j['librettoName'] as String?,
+    maintenanceTemplateVersionId: j['maintenanceTemplateVersionId'] as String? ?? '',
+    groups: ((j['groups'] as List<dynamic>?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(TicketControlGroupDto.fromJson)
+        .toList(),
+  );
+}
+
+/// The whole `GET /api/tickets/{id}/controls` response: ticket-level `groups`, the legacy
+/// `assetProgress` and the templated `assetChecklists`.
+class TicketControlResponseDto {
+  const TicketControlResponseDto({
+    this.groups = const [],
+    this.assetProgress = const [],
+    this.assetChecklists = const [],
+  });
+
+  final List<TicketControlGroupDto> groups;
+  final List<TicketAssetProgressDto> assetProgress;
+  final List<TicketAssetChecklistDto> assetChecklists;
+
+  factory TicketControlResponseDto.fromJson(Map<String, dynamic> j) => TicketControlResponseDto(
+    groups: ((j['groups'] as List<dynamic>?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(TicketControlGroupDto.fromJson)
+        .toList(),
+    assetProgress: ((j['assetProgress'] as List<dynamic>?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(TicketAssetProgressDto.fromJson)
+        .toList(),
+    assetChecklists: ((j['assetChecklists'] as List<dynamic>?) ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(TicketAssetChecklistDto.fromJson)
+        .toList(),
+  );
 }
