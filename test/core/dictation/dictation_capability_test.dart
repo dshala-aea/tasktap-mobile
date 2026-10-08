@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/core/dictation/dictate_button.dart';
 import 'package:tasktap_mobile/core/dictation/dictation_capability.dart';
+import 'package:tasktap_mobile/core/dictation/dictation_outcome.dart';
 import 'package:tasktap_mobile/core/dictation/dictation_service.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
@@ -31,11 +32,11 @@ class _FakeDictation implements IDictationService {
   @override
   Future<void> start({
     required ValueChanged<String> onTranscript,
-    required VoidCallback onDone,
+    required ValueChanged<DictationOutcome> onDone,
   }) async {
     starts++;
     onTranscript('sostituita la pompa di circolazione');
-    onDone();
+    onDone(DictationOutcome.transcribed);
   }
 
   @override

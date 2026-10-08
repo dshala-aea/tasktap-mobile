@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../theme/app_palette.dart';
+import '../widgets/app_toast.dart';
 import '../widgets/widgets.dart';
 import 'dictation_capability.dart';
 import 'dictation_service.dart';
@@ -72,8 +73,11 @@ class _DictateButtonState extends ConsumerState<DictateButton> {
         );
         widget.onChanged(text);
       },
-      onDone: () {
-        if (mounted) setState(() => _listening = false);
+      onDone: (outcome) {
+        if (!mounted) return;
+        setState(() => _listening = false);
+        final notice = outcome.notice;
+        if (notice != null) showAppToast(context, message: notice.message, tone: notice.tone);
       },
     );
   }

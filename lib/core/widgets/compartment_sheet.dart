@@ -12,69 +12,101 @@ import 'screen_header.dart';
 /// grid of tiles that each open a sheet, so the page itself never grows or shrinks around whatever
 /// is open. Scrollable and height-capped: the content widgets this wraps were built to sit inside
 /// an ambient scroll view, not to bound their own height, so this supplies both.
-void openCompartmentSheet(BuildContext context, {required String label, required Widget content}) {
+///
+/// [footer] pins a control below the scrollable content, outside it, so it stays put while the
+/// form scrolls behind it — the place for a step's single action that must never scroll away.
+/// Null by default, so every existing caller is unaffected.
+void openCompartmentSheet(
+  BuildContext context, {
+  required String label,
+  required Widget content,
+  Widget? footer,
+}) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (ctx) => DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.92,
-      expand: false,
-      builder: (ctx, scrollController) => Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 10, bottom: AppSpacing.xs),
-            child: SheetHandle(),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
-              AppSpacing.pagePadding,
-              AppSpacing.sm,
+    builder: (ctx) {
+      // Keyboard inset (viewInsets) plus the bottom safe-area/home-indicator inset (padding). The
+      // scroll view otherwise sat flush against the home indicator on notched devices whenever the
+      // keyboard was closed, since viewInsets.bottom is 0 in that state and carries none of the
+      // safe-area reservation on its own. Applied once, below: when a footer owns the bottom edge it
+      // takes the inset, and the scroll view keeps only a small gap.
+      final bottomInset =
+          MediaQuery.of(ctx).viewInsets.bottom +
+          MediaQuery.of(ctx).padding.bottom;
+      return DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (ctx, scrollController) => Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 10, bottom: AppSpacing.xs),
+              child: SheetHandle(),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: 'Archivo Narrow',
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: ctx.colors.ink,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+                AppSpacing.pagePadding,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontFamily: 'Archivo Narrow',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: ctx.colors.ink,
+                      ),
                     ),
                   ),
-                ),
-                HeaderIconBtn(
-                  icon: LucideIcons.x,
-                  label: 'Chiudi',
-                  onTap: () => Navigator.of(ctx).pop(),
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, thickness: 1, color: ctx.colors.borderLight),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: scrollController,
-              padding: EdgeInsets.only(
-                // Keyboard inset (viewInsets) plus the bottom safe-area/home-indicator inset
-                // (padding) — the sheet's content otherwise sat flush against the home indicator
-                // on notched devices whenever the keyboard was closed, since viewInsets.bottom is
-                // 0 in that state and carries none of the safe-area reservation on its own.
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + MediaQuery.of(ctx).padding.bottom,
+                  HeaderIconBtn(
+                    icon: LucideIcons.x,
+                    label: 'Chiudi',
+                    onTap: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
               ),
-              child: content,
             ),
-          ),
-        ],
-      ),
-    ),
+            Divider(height: 1, thickness: 1, color: ctx.colors.borderLight),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: EdgeInsets.only(
+                  bottom: footer == null ? bottomInset : AppSpacing.sm,
+                ),
+                child: content,
+              ),
+            ),
+            if (footer != null)
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: ctx.colors.borderLight, width: 1),
+                  ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.pagePadding,
+                    AppSpacing.sm,
+                    AppSpacing.pagePadding,
+                    bottomInset + AppSpacing.sm,
+                  ),
+                  child: footer,
+                ),
+              ),
+          ],
+        ),
+      );
+    },
   );
 }
 

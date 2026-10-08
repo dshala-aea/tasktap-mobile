@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/dictation/dictate_button.dart';
+import '../../../core/dictation/dictation_target.dart';
 import '../../../core/location/location_service.dart';
 import '../../../core/widgets/geo_map_card.dart';
 import '../../../core/widgets/widgets.dart';
@@ -25,9 +25,13 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class StepDettagli extends ConsumerStatefulWidget {
-  const StepDettagli({super.key, required this.reportId});
+  const StepDettagli({super.key, required this.reportId, this.dictation});
 
   final String reportId;
+
+  /// The step's microphone registry, owned by the caller that renders [DictationBar] as the sheet
+  /// footer. Null in tests and any standalone use — the step then owns one of its own.
+  final DictationTargetRegistry? dictation;
 
   @override
   ConsumerState<StepDettagli> createState() => _StepDettagliState();
@@ -39,6 +43,16 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
   late final TextEditingController _diagnosiCtrl;
   late final TextEditingController _soluzioneCtrl;
   late final TextEditingController _workAddressCtrl;
+
+  /// Which field the one microphone below the form writes into. The caller owns the instance it
+  /// passes in because the bar it renders needs the same one; otherwise this step owns it.
+  late final DictationTargetRegistry _dictation = widget.dictation ?? DictationTargetRegistry();
+
+  // Focus tells the registry where the microphone should write. Typing selects the field too, so a
+  // technician who is mid-edit but has dismissed the keyboard is still aimed correctly.
+  late final FocusNode _detailsFocus;
+  late final FocusNode _diagnosiFocus;
+  late final FocusNode _soluzioneFocus;
 
   /// Whether the optional ticket/cantiere link is expanded.
   ///
@@ -59,6 +73,48 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     _showCollegamento =
         (s.ticketFreeText?.isNotEmpty ?? false) || (s.cantiereFreeText?.isNotEmpty ?? false);
 
+    _detailsFocus = FocusNode();
+    _diagnosiFocus = FocusNode();
+    _soluzioneFocus = FocusNode();
+    _detailsFocus.addListener(() {
+      if (_detailsFocus.hasFocus) _dictation.select('details');
+    });
+    _diagnosiFocus.addListener(() {
+      if (_diagnosiFocus.hasFocus) _dictation.select('diagnosi');
+    });
+    _soluzioneFocus.addListener(() {
+      if (_soluzioneFocus.hasFocus) _dictation.select('soluzione');
+    });
+
+    // All three registered unconditionally, even though Diagnosi/Soluzione render conditionally:
+    // a hidden field can never become the active target, because only focus or typing selects one,
+    // and neither can happen while it is not in the tree.
+    final notifier = ref.read(reportEditorProvider(widget.reportId).notifier);
+    _dictation.register(
+      DictationTarget(
+        id: 'details',
+        label: 'Descrizione',
+        controller: _detailsCtrl,
+        onChanged: notifier.setDetails,
+      ),
+    );
+    _dictation.register(
+      DictationTarget(
+        id: 'diagnosi',
+        label: 'Diagnosi',
+        controller: _diagnosiCtrl,
+        onChanged: notifier.setDiagnosi,
+      ),
+    );
+    _dictation.register(
+      DictationTarget(
+        id: 'soluzione',
+        label: 'Soluzione',
+        controller: _soluzioneCtrl,
+        onChanged: notifier.setSoluzione,
+      ),
+    );
+
     // GPS auto-capture used to fire from here on first entry, but that made it reachable only when
     // this step actually mounted — which the auto-open on RapportinoFormScreen gates on the draft's
     // title being empty, something no real draft-creation entry point leaves true. It now fires
@@ -70,6 +126,12 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
 
   @override
   void dispose() {
+    _detailsFocus.dispose();
+    _diagnosiFocus.dispose();
+    _soluzioneFocus.dispose();
+    // Only when this step created it — a registry passed in belongs to the caller that also renders
+    // the bar listening to it.
+    if (widget.dictation == null) _dictation.dispose();
     _titleCtrl.dispose();
     _detailsCtrl.dispose();
     _diagnosiCtrl.dispose();
@@ -99,10 +161,11 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
     // Cantiere.CustomerId is nullable, so there isn't always a value to derive from.
     final lockedCliente = linkedTicket != null
         ? (_findName(customers.map((c) => (c.id, c.companyName)), state.customerId) ??
-            state.customerFreeText)
+              state.customerFreeText)
         : null;
     final lockedSede = linkedTicket != null
-        ? (_findName(locations.map((l) => (l.id, l.name)), state.locationId) ?? state.locationFreeText)
+        ? (_findName(locations.map((l) => (l.id, l.name)), state.locationId) ??
+              state.locationFreeText)
         : null;
 
     return SingleChildScrollView(
@@ -145,7 +208,8 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
               selectedId: state.customerId,
               initialText: state.customerFreeText,
-              emptyCacheHint: 'Nessun cliente sincronizzato — scrivi il nome, verrà collegato dopo.',
+              emptyCacheHint:
+                  'Nessun cliente sincronizzato — scrivi il nome, verrà collegato dopo.',
               onSelected: notifier.setCustomerFromCache,
               onFreeText: notifier.setCustomerFreeText,
             ),
@@ -176,19 +240,20 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
           ),
           const SizedBox(height: 12),
 
-          // The one field worth dictating: several sentences of prose, typed with gloves on, in a
-          // plant room. The other fields on this step are a name or an address, where the
-          // keyboard and the lookup list are already faster than speaking.
+          // The fields worth dictating: several sentences of prose, typed with gloves on, in a plant
+          // room. The other fields on this step are a name or an address, where the keyboard and the
+          // lookup list are already faster than speaking. The microphone is now one control below
+          // the form rather than a suffix on each of these fields.
           AppTextField(
             controller: _detailsCtrl,
             label: 'Descrizione',
             hint: 'Cosa hai trovato, cosa hai fatto...',
             maxLines: 3,
-            onChanged: (v) => notifier.setDetails(v),
-            suffixIcon: DictateButton(
-              controller: _detailsCtrl,
-              onChanged: (v) => notifier.setDetails(v),
-            ),
+            focusNode: _detailsFocus,
+            onChanged: (v) {
+              notifier.setDetails(v);
+              _dictation.select('details');
+            },
           ),
 
           // Diagnosi / Soluzione belong to an intervention on a ticket, so they appear for a
@@ -202,11 +267,11 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               label: 'Diagnosi',
               hint: 'Cosa hai riscontrato...',
               maxLines: 3,
-              onChanged: (v) => notifier.setDiagnosi(v),
-              suffixIcon: DictateButton(
-                controller: _diagnosiCtrl,
-                onChanged: (v) => notifier.setDiagnosi(v),
-              ),
+              focusNode: _diagnosiFocus,
+              onChanged: (v) {
+                notifier.setDiagnosi(v);
+                _dictation.select('diagnosi');
+              },
             ),
             const SizedBox(height: 12),
             AppTextField(
@@ -214,11 +279,11 @@ class _StepDettagliState extends ConsumerState<StepDettagli> {
               label: 'Soluzione',
               hint: 'Come hai risolto...',
               maxLines: 3,
-              onChanged: (v) => notifier.setSoluzione(v),
-              suffixIcon: DictateButton(
-                controller: _soluzioneCtrl,
-                onChanged: (v) => notifier.setSoluzione(v),
-              ),
+              focusNode: _soluzioneFocus,
+              onChanged: (v) {
+                notifier.setSoluzione(v);
+                _dictation.select('soluzione');
+              },
             ),
           ],
 
@@ -337,7 +402,8 @@ class _GpsCapture extends ConsumerWidget {
           const SizedBox(height: 8),
           GeoMapCard(
             pointAsync: AsyncValue.data((lat: state.gpsLatitude!, lng: state.gpsLongitude!)),
-            address: '${state.gpsLatitude!.toStringAsFixed(6)}, ${state.gpsLongitude!.toStringAsFixed(6)}',
+            address:
+                '${state.gpsLatitude!.toStringAsFixed(6)}, ${state.gpsLongitude!.toStringAsFixed(6)}',
           ),
         ],
       ],
