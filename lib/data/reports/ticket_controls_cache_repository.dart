@@ -90,6 +90,12 @@ class TicketControlsCacheRepository {
     'boolValue': c.boolValue,
     'dateValue': c.dateValue?.toIso8601String(),
     'numberValue': c.numberValue,
+    // A cached-then-reloaded control must keep these too: `controlLineageId` is its
+    // version-independent identity (bulk selector), `note` the remark, `prodottoAssistenzaId` the
+    // asset it belongs to (null = ticket-level).
+    'controlLineageId': c.controlLineageId,
+    'note': c.note,
+    'prodottoAssistenzaId': c.prodottoAssistenzaId,
   };
 
   static String _controlTypeToWire(ControlType type) => switch (type) {

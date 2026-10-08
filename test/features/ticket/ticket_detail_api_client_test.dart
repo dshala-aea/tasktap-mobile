@@ -392,4 +392,39 @@ void main() {
       expect(params['pageSize'], 20);
     });
   });
+
+  group('TicketDetailApiClient.fetchControlsResponse', () {
+    late MockDio mockDio;
+    late TicketDetailApiClient client;
+
+    setUpAll(() {
+      registerFallbackValue(RequestOptions(path: '/'));
+    });
+
+    setUp(() {
+      mockDio = MockDio();
+      client = TicketDetailApiClient(mockDio);
+    });
+
+    test('fetchControlsResponse keeps assetChecklists and assetProgress that fetchControls drops', () async {
+      when(() => mockDio.get<Map<String, dynamic>>('/api/tickets/t1/controls')).thenAnswer(
+        (_) async => _okResponse<Map<String, dynamic>>({
+          'groups': <Object>[],
+          'assetProgress': [
+            {'prodottoAssistenzaId': 'a', 'prodottoAssistenzaName': 'Vecchio', 'controllato': false, 'note': null},
+          ],
+          'assetChecklists': [
+            {
+              'prodottoAssistenzaId': 'b', 'name': 'Caldaia', 'matricola': null, 'librettoId': null,
+              'librettoName': null, 'maintenanceTemplateVersionId': 'v1', 'groups': <Object>[],
+            },
+          ],
+        }, '/api/tickets/t1/controls'),
+      );
+      final r = await client.fetchControlsResponse('t1');
+      expect(r.assetProgress.single.prodottoAssistenzaName, 'Vecchio');
+      expect(r.assetChecklists.single.maintenanceTemplateVersionId, 'v1');
+      expect((await client.fetchControls('t1')), isEmpty);
+    });
+  });
 }
