@@ -165,6 +165,23 @@ void main() {
     expect(await db.select(db.agents).get(), hasLength(1));
   });
 
+  /// The rule the plan singles out: there is no `pruneAgents`, because an agent absent from one
+  /// payload may still be referenced by a ticket already on this device. A carried-but-empty
+  /// `agents` list is the sharpest form of the question — the payload is explicit about the
+  /// entity, and the row must still survive.
+  test(
+    'a payload that stops listing an agent leaves it, because tickets may reference it',
+    () async {
+      respondWith({...base(), ...reference()});
+      await SyncService(db: db, dio: dio).sync();
+
+      respondWith({...base(), 'agents': <Object>[]});
+      await SyncService(db: db, dio: dio).sync();
+
+      expect((await db.select(db.agents).get()).single.id, 'a1');
+    },
+  );
+
   test(
     "a payload that no longer lists a carried customer's contract removes it",
     () async {
