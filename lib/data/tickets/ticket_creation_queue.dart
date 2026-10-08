@@ -72,6 +72,10 @@ class TicketCreationQueue {
     DateTime? dueDate,
     String? technicianNotes,
     String? agentId,
+    String? contractId,
+    String? commessaId,
+    String? cantiereId,
+    List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
     required bool isOnline,
   }) async {
@@ -89,6 +93,10 @@ class TicketCreationQueue {
       dueDate: dueDate,
       technicianNotes: technicianNotes,
       agentId: agentId,
+      contractId: contractId,
+      commessaId: commessaId,
+      cantiereId: cantiereId,
+      prodottoAssistenzaIds: prodottoAssistenzaIds,
       tags: tags,
       state: isOnline ? PendingTicketState.submitting : PendingTicketState.pendingSync,
     );
@@ -150,7 +158,11 @@ class TicketCreationQueue {
         dueDate: t.dueDate,
         technicianNotes: t.technicianNotes,
         agentId: t.agentId,
-        tags: _decodeTags(t.tagsJson),
+        contractId: t.contractId,
+        commessaId: t.commessaId,
+        cantiereId: t.cantiereId,
+        prodottoAssistenzaIds: _decodeStringList(t.prodottoAssistenzaIdsJson),
+        tags: _decodeStringList(t.tagsJson),
         // The local row id, unchanged across every attempt — that is the whole
         // point. A new one per attempt would deduplicate nothing.
         clientId: t.id,
@@ -169,8 +181,10 @@ class TicketCreationQueue {
     }
   }
 
-  /// `PendingTickets.tagsJson`'s own JSON-text storage — see its doc comment for why.
-  static List<String> _decodeTags(String? json) {
+  /// The JSON-text list storage `PendingTickets.tagsJson` and `.prodottoAssistenzaIdsJson` share —
+  /// see their doc comments for why. `null`/`""` is "never set", not a parse error: a row written
+  /// before the column existed, or by a technician who never opened the picker.
+  static List<String> _decodeStringList(String? json) {
     if (json == null || json.isEmpty) return const [];
     final decoded = jsonDecode(json);
     return decoded is List ? decoded.cast<String>() : const [];

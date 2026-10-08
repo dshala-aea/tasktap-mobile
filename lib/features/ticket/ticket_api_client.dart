@@ -31,6 +31,10 @@ class TicketApiClient {
     DateTime? dueDate,
     String? technicianNotes,
     String? agentId,
+    String? contractId,
+    String? commessaId,
+    String? cantiereId,
+    List<String>? prodottoAssistenzaIds,
     List<String>? tags,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
@@ -49,6 +53,16 @@ class TicketApiClient {
         'dueDate': ?dueDate?.toIso8601String(),
         'technicianNotes': ?technicianNotes,
         'agentId': ?agentId,
+        'contractId': ?contractId,
+        'commessaId': ?commessaId,
+        'cantiereId': ?cantiereId,
+        // `CreateTicketRequest.ProdottoAssistenzaIds` is a `List<Guid>?`. An empty list is sent as
+        // an absent member, never `[]`: the server reads null as "no coverage" and a non-null list
+        // (even empty) as "replace coverage with this set", so sending `[]` would assert something
+        // the technician who never opened the picker never said.
+        'prodottoAssistenzaIds': ?(prodottoAssistenzaIds?.isEmpty ?? true
+            ? null
+            : prodottoAssistenzaIds),
         'tags': ?tags,
       },
     );

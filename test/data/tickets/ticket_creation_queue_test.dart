@@ -93,6 +93,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -122,6 +126,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -168,6 +176,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -205,6 +217,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -240,6 +256,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -279,6 +299,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -324,10 +348,14 @@ void main() {
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
             priorita: any(named: 'priorita'),
-          dueDate: any(named: 'dueDate'),
-          technicianNotes: any(named: 'technicianNotes'),
-          agentId: any(named: 'agentId'),
-          tags: any(named: 'tags'),
+            dueDate: any(named: 'dueDate'),
+            technicianNotes: any(named: 'technicianNotes'),
+            agentId: any(named: 'agentId'),
+            contractId: any(named: 'contractId'),
+            commessaId: any(named: 'commessaId'),
+            cantiereId: any(named: 'cantiereId'),
+            prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
+            tags: any(named: 'tags'),
             clientId: any(named: 'clientId'),
           ),
         ).thenThrow(Exception('Timeout'));
@@ -354,10 +382,14 @@ void main() {
             statusId: any(named: 'statusId'),
             typeId: any(named: 'typeId'),
             priorita: any(named: 'priorita'),
-          dueDate: any(named: 'dueDate'),
-          technicianNotes: any(named: 'technicianNotes'),
-          agentId: any(named: 'agentId'),
-          tags: any(named: 'tags'),
+            dueDate: any(named: 'dueDate'),
+            technicianNotes: any(named: 'technicianNotes'),
+            agentId: any(named: 'agentId'),
+            contractId: any(named: 'contractId'),
+            commessaId: any(named: 'commessaId'),
+            cantiereId: any(named: 'cantiereId'),
+            prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
+            tags: any(named: 'tags'),
             clientId: any(named: 'clientId'),
           ),
         ).thenAnswer((_) async => 'server-ticket-9');
@@ -388,6 +420,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -426,6 +462,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -454,6 +494,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -500,6 +544,10 @@ void main() {
           dueDate: any(named: 'dueDate'),
           technicianNotes: any(named: 'technicianNotes'),
           agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
         ),
@@ -553,6 +601,135 @@ void main() {
       final ids = unresolved.map((t) => t.id).toSet();
       expect(ids, {'p1', 'p2'});
       expect(ids.contains('p3'), isFalse);
+    });
+  });
+
+  // Ticket parity with web's TicketCreatePanel: the wizard now asks for contract, commessa,
+  // cantiere and products, and CreateTicketRequest validates each of them. Without this chain the
+  // pickers would collect values the server never receives — the ticket would be created bare.
+  group('TicketCreationQueue — the wizard\'s reference fields', () {
+    test('survive the outbox as JSON and reach the API call on reconnect', () async {
+      final outcome = await queue.create(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        contractId: 'con-1',
+        commessaId: 'com-1',
+        cantiereId: 'can-1',
+        prodottoAssistenzaIds: const ['prod-1', 'prod-2'],
+        isOnline: false,
+      );
+
+      final row = await repo.getById(outcome.localId);
+      expect(row!.contractId, 'con-1');
+      expect(row.commessaId, 'com-1');
+      expect(row.cantiereId, 'can-1');
+      expect(row.prodottoAssistenzaIdsJson, '["prod-1","prod-2"]');
+
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          dueDate: any(named: 'dueDate'),
+          technicianNotes: any(named: 'technicianNotes'),
+          agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
+          tags: any(named: 'tags'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((_) async => 'server-ticket-1');
+
+      await queue.processAll();
+
+      verify(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          dueDate: any(named: 'dueDate'),
+          technicianNotes: any(named: 'technicianNotes'),
+          agentId: any(named: 'agentId'),
+          contractId: 'con-1',
+          commessaId: 'com-1',
+          cantiereId: 'can-1',
+          prodottoAssistenzaIds: ['prod-1', 'prod-2'],
+          tags: any(named: 'tags'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).called(1);
+    });
+
+    test('a ticket with no references sends them absent, not as empty values', () async {
+      when(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          dueDate: any(named: 'dueDate'),
+          technicianNotes: any(named: 'technicianNotes'),
+          agentId: any(named: 'agentId'),
+          contractId: any(named: 'contractId'),
+          commessaId: any(named: 'commessaId'),
+          cantiereId: any(named: 'cantiereId'),
+          prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
+          tags: any(named: 'tags'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).thenAnswer((_) async => 'server-ticket-2');
+
+      await queue.create(
+        title: 'Perdita idrica',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        isOnline: true,
+      );
+
+      final sentProdotti = verify(
+        () => mockApiClient.createTicket(
+          title: any(named: 'title'),
+          description: any(named: 'description'),
+          customerId: any(named: 'customerId'),
+          locationId: any(named: 'locationId'),
+          assignedUserId: any(named: 'assignedUserId'),
+          statusId: any(named: 'statusId'),
+          typeId: any(named: 'typeId'),
+          priorita: any(named: 'priorita'),
+          dueDate: any(named: 'dueDate'),
+          technicianNotes: any(named: 'technicianNotes'),
+          agentId: any(named: 'agentId'),
+          contractId: null,
+          commessaId: null,
+          cantiereId: null,
+          prodottoAssistenzaIds: captureAny(named: 'prodottoAssistenzaIds'),
+          tags: any(named: 'tags'),
+          clientId: any(named: 'clientId'),
+        ),
+      ).captured.single;
+
+      expect(sentProdotti, isEmpty, reason: 'no picker was opened, so nothing was claimed');
     });
   });
 }

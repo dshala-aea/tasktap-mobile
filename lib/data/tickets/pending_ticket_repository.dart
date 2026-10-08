@@ -32,6 +32,10 @@ class PendingTicketRepository {
     DateTime? dueDate,
     String? technicianNotes,
     String? agentId,
+    String? contractId,
+    String? commessaId,
+    String? cantiereId,
+    List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
     required PendingTicketState state,
   }) async {
@@ -52,6 +56,14 @@ class PendingTicketRepository {
             dueDate: Value(dueDate),
             technicianNotes: Value(technicianNotes),
             agentId: Value(agentId),
+            contractId: Value(contractId),
+            commessaId: Value(commessaId),
+            cantiereId: Value(cantiereId),
+            // JSON text, same convention as tagsJson: a list column has to survive the round trip
+            // through the outbox unchanged, and null is reserved for a row that never had one.
+            prodottoAssistenzaIdsJson: Value(
+              prodottoAssistenzaIds.isEmpty ? null : jsonEncode(prodottoAssistenzaIds),
+            ),
             tagsJson: Value(jsonEncode(tags)),
             state: Value(state.toPersistedString()),
           ),
