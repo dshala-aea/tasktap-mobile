@@ -1,5 +1,6 @@
 // Dart DTOs for the MobileUserSyncResult payload.
 // These mirror the C# entities serialised as JSON from GET /api/sync/mobile.
+import 'checklist_sync_dto.dart';
 
 class SyncResultDto {
   final DateTime syncedAt;
@@ -24,6 +25,38 @@ class SyncResultDto {
   final List<TicketTypeDto> ticketTypes;
   final List<ColleagueDto> colleagues;
 
+  final List<SyncControlGroupDto> controlGroups;
+  final List<SyncTicketControlDto> ticketControls;
+  final List<SyncTicketAssetDto> ticketAssets;
+  final List<SyncAssetDto> assets;
+  final List<SyncStrumentoDto> strumenti;
+  final List<SyncReportStrumentoDto> reportStrumenti;
+
+  /// True when the server stopped at its 5000-row cap. Informational: the authoritative list of
+  /// what was left out is [checklistOmittedTicketIds].
+  final bool checklistTruncated;
+
+  /// Tickets whose checklist was NOT sent this time. The phone keeps whatever it already holds for
+  /// them and asks again (see `refetchOmittedChecklists`).
+  final List<String> checklistOmittedTicketIds;
+
+  /// False when the payload came from a backend that predates the checklist members. Without this
+  /// an older backend would look like "every checklist is empty" and a reconcile would wipe the
+  /// cache.
+  final bool carriesChecklist;
+  final bool carriesStrumenti;
+
+  static const Set<String> checklistWireKeys = {
+    'controlGroups',
+    'ticketControls',
+    'ticketAssets',
+    'assets',
+    'strumenti',
+    'reportStrumenti',
+    'checklistTruncated',
+    'checklistOmittedTicketIds',
+  };
+
   const SyncResultDto({
     required this.syncedAt,
     required this.since,
@@ -40,6 +73,16 @@ class SyncResultDto {
     required this.ticketStatuses,
     required this.ticketTypes,
     required this.colleagues,
+    this.controlGroups = const [],
+    this.ticketControls = const [],
+    this.ticketAssets = const [],
+    this.assets = const [],
+    this.strumenti = const [],
+    this.reportStrumenti = const [],
+    this.checklistTruncated = false,
+    this.checklistOmittedTicketIds = const [],
+    this.carriesChecklist = false,
+    this.carriesStrumenti = false,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -65,6 +108,21 @@ class SyncResultDto {
       ticketStatuses: _list(j['ticketStatuses'], TicketStatusDto.fromJson),
       ticketTypes: _list(j['ticketTypes'], TicketTypeDto.fromJson),
       colleagues: _list(j['colleagues'], ColleagueDto.fromJson),
+      controlGroups: _list(j['controlGroups'], SyncControlGroupDto.fromJson),
+      ticketControls: _list(j['ticketControls'], SyncTicketControlDto.fromJson),
+      ticketAssets: _list(j['ticketAssets'], SyncTicketAssetDto.fromJson),
+      assets: _list(j['assets'], SyncAssetDto.fromJson),
+      strumenti: _list(j['strumenti'], SyncStrumentoDto.fromJson),
+      reportStrumenti: _list(
+        j['reportStrumenti'],
+        SyncReportStrumentoDto.fromJson,
+      ),
+      checklistTruncated: j['checklistTruncated'] as bool? ?? false,
+      checklistOmittedTicketIds:
+          ((j['checklistOmittedTicketIds'] as List<dynamic>?) ?? const [])
+              .cast<String>(),
+      carriesChecklist: j.containsKey('ticketControls'),
+      carriesStrumenti: j.containsKey('strumenti'),
     );
   }
 }

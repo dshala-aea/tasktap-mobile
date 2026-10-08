@@ -25,7 +25,8 @@ void main() {
       expect(
         json.containsKey('controlId'),
         isFalse,
-        reason: 'the server has no such field; it would deserialize to Guid.Empty',
+        reason:
+            'the server has no such field; it would deserialize to Guid.Empty',
       );
     });
 
@@ -94,5 +95,71 @@ void main() {
       expect(json['diagnosi'], '');
       expect(json['soluzione'], '');
     });
+  });
+
+  group('asset answers and instruments on the wire', () {
+    test(
+      'a note is sent when non-blank and omitted otherwise (a blank never wipes a stored note)',
+      () {
+        expect(
+          const SubmitReportControlloDto(
+            ticketControlId: 'c',
+            numberValue: 0,
+            note: 'manometro ok',
+          ).toJson()['note'],
+          'manometro ok',
+        );
+        expect(
+          const SubmitReportControlloDto(
+            ticketControlId: 'c',
+            numberValue: 0,
+          ).toJson().containsKey('note'),
+          isFalse,
+        );
+        expect(
+          const SubmitReportControlloDto(
+            ticketControlId: 'c',
+            note: '   ',
+          ).toJson().containsKey('note'),
+          isFalse,
+        );
+      },
+    );
+
+    test('0 is an answer: numberValue 0 reaches the wire', () {
+      expect(
+        const SubmitReportControlloDto(
+          ticketControlId: 'c',
+          numberValue: 0,
+        ).toJson()['numberValue'],
+        0,
+      );
+    });
+
+    test(
+      'strumenti are always serialised, as strumentoId + expiredAcknowledged only',
+      () {
+        const base = SubmitReportRequest(
+          id: 'r1',
+          locationId: 'l1',
+          title: 'T',
+        );
+        expect(base.toJson()['strumenti'], isEmpty);
+        final json = const SubmitReportRequest(
+          id: 'r1',
+          locationId: 'l1',
+          title: 'T',
+          strumenti: [
+            SubmitReportStrumentoDto(
+              strumentoId: 's1',
+              expiredAcknowledged: true,
+            ),
+          ],
+        ).toJson();
+        expect(json['strumenti'], [
+          {'strumentoId': 's1', 'expiredAcknowledged': true},
+        ]);
+      },
+    );
   });
 }

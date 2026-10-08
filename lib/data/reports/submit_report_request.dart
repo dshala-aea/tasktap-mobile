@@ -32,6 +32,7 @@ class SubmitReportRequest {
     this.staff = const [],
     this.materiali = const [],
     this.controlli = const [],
+    this.strumenti = const [],
   });
 
   /// Client-generated report GUID. Enables idempotent re-submit.
@@ -101,6 +102,10 @@ class SubmitReportRequest {
   /// Inspection control answers.
   final List<SubmitReportControlloDto> controlli;
 
+  /// Instruments used. `expiredAtUse` is NEVER sent: the server recomputes it from the report's
+  /// work date. An empty list keeps the server's rows (it cannot clear them).
+  final List<SubmitReportStrumentoDto> strumenti;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     if (scheduleId != null) 'scheduleId': scheduleId,
@@ -125,6 +130,7 @@ class SubmitReportRequest {
     'staff': staff.map((s) => s.toJson()).toList(),
     'materiali': materiali.map((m) => m.toJson()).toList(),
     'controlli': controlli.map((c) => c.toJson()).toList(),
+    'strumenti': strumenti.map((s) => s.toJson()).toList(),
   };
 }
 
@@ -209,6 +215,7 @@ class SubmitReportControlloDto {
     this.boolValue,
     this.dateValue,
     this.numberValue,
+    this.note,
   });
 
   final String ticketControlId;
@@ -216,6 +223,7 @@ class SubmitReportControlloDto {
   final bool? boolValue;
   final DateTime? dateValue;
   final double? numberValue;
+  final String? note;
 
   Map<String, dynamic> toJson() => {
     // 'ticketControlId', not 'controlId'. The server's field is a non-nullable Guid, so the
@@ -227,6 +235,22 @@ class SubmitReportControlloDto {
     if (boolValue != null) 'boolValue': boolValue,
     if (dateValue != null) 'dateValue': dateValue!.toUtc().toIso8601String(),
     if (numberValue != null) 'numberValue': numberValue,
+    if (note != null && note!.trim().isNotEmpty) 'note': note!.trim(),
+  };
+}
+
+/// One instrument used on the rapportino. Mirror of `SubmitReportStrumentoDto`: `strumentoId` +
+/// `expiredAcknowledged` only. An expired instrument REQUIRES `expiredAcknowledged = true`; a valid
+/// one forbids it (422 `strumenti_invalid` otherwise).
+class SubmitReportStrumentoDto {
+  const SubmitReportStrumentoDto({required this.strumentoId, this.expiredAcknowledged = false});
+
+  final String strumentoId;
+  final bool expiredAcknowledged;
+
+  Map<String, dynamic> toJson() => {
+    'strumentoId': strumentoId,
+    'expiredAcknowledged': expiredAcknowledged,
   };
 }
 

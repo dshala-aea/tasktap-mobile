@@ -6727,8 +6727,8 @@
         "tags": [
           "MaintenanceTemplates"
         ],
-        "summary": "Edits a control by its lineage id, in whatever draft is currently open for the template \u2014\nopening one first (from the latest published version) if none is open yet. A convenience\nover the plain Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControl(Guid controlId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken)) route, which requires the caller to have already\ncalled Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.CreateDraft(Guid templateId, CancellationToken ct = default(CancellationToken)) and to know the copy\u0027s new control id; this route accepts\nthe same identity \u2014 \u0060ControlLineageId\u0060 \u2014 the caller already has from the last time it\nread this control, published or not.",
-        "description": "**Service-principal callers publish atomically.** A \u0060ServicePrincipal\u0060 (API-key caller,\nADR-0011 \u00A7B.4) is an external system, not a human working the office UI \u2014 it cannot perform\nthe normal \u0022open a draft, review it, then separately publish\u0022 workflow, and has no reason to\nleave a draft open for anyone to review afterwards. So for that caller only, this route opens\na brand-new draft (never reusing one already open \u2014 see\n\u0060MaintenanceTemplateAuthoringService.RequireNoOpenDraft\u0060\u0027s remarks for why reuse would\nrisk auto-publishing a human\u0027s unrelated in-progress edit) and publishes it before returning,\nso the response already reflects the published state. A human/interactive caller (session or\nOIDC auth) is routed exactly as before \u2014 reusing an open draft if there is one, never\nauto-publishing \u2014 this branch changes nothing for that path. bool MaintenanceTemplatesController.IsSuperUser is\nnever true for a \u0060ServicePrincipal\u0060 token (it carries no \u0060is_superuser\u0060 claim), so\nthe System-origin branch below is unreachable for it and needs no counterpart.",
+        "summary": "Edits a control by its lineage id. A convenience over the plain Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControl(Guid controlId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken))\nroute, which requires the caller to have already called Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.CreateDraft(Guid templateId, CancellationToken ct = default(CancellationToken)) and to\nknow the copy\u0027s new control id; this route accepts the same identity \u2014\n\u0060ControlLineageId\u0060, the durable external key \u2014 the caller already has from the last time\nit read this control.",
+        "description": "**Every caller publishes atomically.** Published template controls are immutable, so this\nroute opens a brand-new draft from the latest published version (never reusing one already\nopen \u2014 if another draft is open it fails with 400, see\n\u0060MaintenanceTemplateAuthoringService.RequireNoOpenDraft\u0060), applies the edit and publishes\nit in one transaction, for a human, a service principal and a superuser on a System template\nalike. The response\u0027s \u0060draftVersionId\u0060 is the just-published version and\n\u0060publishedAt\u0060 is always set. Existing tickets and reports keep the version they pinned.\nThe deliberate multi-edit draft workflow remains available through the plain draft routes.",
         "parameters": [
           {
             "name": "templateId",
@@ -6779,7 +6779,7 @@
         "tags": [
           "MaintenanceTemplates"
         ],
-        "summary": "Removes a control by its lineage id, atomically publishing the draft it was removed from \u2014\nthe delete counterpart to Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControlByLineage(Guid templateId, Guid controlLineageId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken))\u0027s service-principal branch.\nService-principal callers only: a human deletes via the plain Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.DeleteControl(Guid controlId, CancellationToken ct = default(CancellationToken))\nroute on a draft it already opened and reviews before manually publishing, exactly as today;\nthis route exists because that two-step shape is not available to it. See\nTask\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControlByLineage(Guid templateId, Guid controlLineageId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken))\u0027s own remarks and\n\u0060MaintenanceTemplateAuthoringService.DeleteControlByLineageAsServicePrincipalAsync\u0060 for\nthe fresh-draft-only rule this follows.",
+        "summary": "Removes a control by its lineage id, atomically publishing a new version without it \u2014 the\ndelete counterpart to Task\u0026lt;IActionResult\u0026gt; MaintenanceTemplatesController.UpdateControlByLineage(Guid templateId, Guid controlLineageId, AddTemplateControlRequest request, CancellationToken ct = default(CancellationToken)), with the same rules for every\ncaller type (fresh draft only; 400 when another draft is open; one transaction).",
         "parameters": [
           {
             "name": "templateId",
@@ -8610,6 +8610,106 @@
         }
       }
     },
+    "/api/ProdottoAssistenza/{id}/maintenance-template": {
+      "put": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "summary": "Sets the maintenance template this asset is inspected against (a template id is required; use DELETE to clear). Affects only tickets created afterwards (spec \u00A73.2).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAssetTemplateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAssetTemplateRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAssetTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProdottoAssistenza"
+        ],
+        "summary": "Clears the asset\u0027s own maintenance template (it may still inherit one from a libretto). Idempotent. Affects only tickets created afterwards.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProdottoAssistenzaDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ProdottoAssistenza/{id}/matricole": {
       "get": {
         "tags": [
@@ -8860,7 +8960,24 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfReportObservationDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfReportObservationDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfReportObservationDto"
+                }
+              }
+            }
           }
         }
       },
@@ -8910,7 +9027,146 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{reportId}/observations/bulk": {
+      "post": {
+        "tags": [
+          "ReportControlObservations"
+        ],
+        "summary": "\u0022Apply to all selected\u0022: sets a boolean answer and/or appends a note on the materialised asset-level checklist\ninstances of the report\u0027s ticket. All-or-nothing: one pair that does not apply rejects the request (422\n\u0060bulk_validation_failed\u0060 with \u0060problems[]\u0060) and nothing is written.",
+        "parameters": [
+          {
+            "name": "reportId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkObservationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkObservationRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkObservationResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkObservationResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkObservationResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Reports/{id}/detail": {
+      "get": {
+        "tags": [
+          "ReportDetail"
+        ],
+        "summary": "The report as one typed projection: header, references, staff, materials, signatures, grouped checklists (ticket level and per asset) and strumenti.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetailDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetailDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -10577,6 +10833,151 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/reports/{reportId}/strumenti": {
+      "get": {
+        "tags": [
+          "ReportStrumenti"
+        ],
+        "parameters": [
+          {
+            "name": "reportId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportStrumentoDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportStrumentoDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportStrumentoDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ReportStrumenti"
+        ],
+        "parameters": [
+          {
+            "name": "reportId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StrumentoSelectionRequest"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StrumentoSelectionRequest"
+                }
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StrumentoSelectionRequest"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportStrumentoDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportStrumentoDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReportStrumentoDto"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -12680,6 +13081,624 @@
         }
       }
     },
+    "/api/Strumenti": {
+      "get": {
+        "tags": [
+          "Strumenti"
+        ],
+        "parameters": [
+          {
+            "name": "Page",
+            "in": "query",
+            "description": "1-based page number. Defaults to 1.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "PageSize",
+            "in": "query",
+            "description": "Items per page. Defaults to 20; clamped to 1\u2013100.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "Sort",
+            "in": "query",
+            "description": "Sort field. Prefix with \u0027-\u0027 for descending (e.g. \u0022-nome\u0022).\nAllowed fields are defined per-endpoint via a whitelist; unknown values are rejected.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Q",
+            "in": "query",
+            "description": "Free-text search term (applied per-endpoint).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "SafePage",
+            "in": "query",
+            "description": "Page clamped to [1, \u221E).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "SafePageSize",
+            "in": "query",
+            "description": "PageSize clamped to [1, 100].",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "isActive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "holderUserId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfStrumentoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfStrumentoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfStrumentoDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Strumenti"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStrumentoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStrumentoRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStrumentoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicPkResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicPkResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasicPkResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Strumenti/mine": {
+      "get": {
+        "tags": [
+          "Strumenti"
+        ],
+        "summary": "The calling technician\u0027s current ACTIVE instruments, by name (report pre-fill).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StrumentoDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StrumentoDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StrumentoDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Strumenti/selectable": {
+      "get": {
+        "tags": [
+          "Strumenti"
+        ],
+        "summary": "All ACTIVE instruments of the tenant, for borrowing on a report. Never alters a holder.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StrumentoDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StrumentoDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StrumentoDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Strumenti/{id}": {
+      "get": {
+        "tags": [
+          "Strumenti"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Strumenti"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStrumentoRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStrumentoRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStrumentoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Strumenti/{id}/holder": {
+      "put": {
+        "tags": [
+          "Strumenti"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignStrumentoHolderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignStrumentoHolderRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignStrumentoHolderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Strumenti/{id}/retire": {
+      "post": {
+        "tags": [
+          "Strumenti"
+        ],
+        "summary": "Retire: the instrument can no longer be selected for new reports. Keeps its holder and matricola.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Strumenti/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "Strumenti"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrumentoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/SuperUser/tenants": {
       "get": {
         "tags": [
@@ -13161,7 +14180,44 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketControlResponseDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketControlResponseDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketControlResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -13215,7 +14271,44 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -18336,6 +19429,22 @@
           }
         }
       },
+      "AssignStrumentoHolderRequest": {
+        "required": [
+          "holderUserId"
+        ],
+        "type": "object",
+        "properties": {
+          "holderUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "Null = unassign."
+      },
       "AssignTemplateRequest": {
         "type": "object",
         "properties": {
@@ -18689,6 +19798,77 @@
           }
         },
         "description": "Per-template branding overrides, as exposed over the wire."
+      },
+      "BulkObservationRequest": {
+        "required": [
+          "prodottoAssistenzaIds",
+          "templateControlIds",
+          "boolValue",
+          "appendNote"
+        ],
+        "type": "object",
+        "properties": {
+          "prodottoAssistenzaIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The covered assets the action targets."
+          },
+          "templateControlIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The (version-specific) template controls to act on, on every selected asset. Exactly one of this and ControlLineageIds must be non-empty."
+          },
+          "boolValue": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Sets the boolean answer. Boolean-type controls only (Checkbox, TrueFalse)."
+          },
+          "appendNote": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Appends to the note of each instance (any control type). Never an answer."
+          },
+          "controlLineageIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Optional, additive alternative to TemplateControlIds: the version-independent control lineage. For each selected asset the control is resolved through that asset\u0027s own pinned TicketControl row, so assets pinned to different versions of the same template can be selected together."
+          }
+        }
+      },
+      "BulkObservationResult": {
+        "required": [
+          "affected"
+        ],
+        "type": "object",
+        "properties": {
+          "affected": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
       },
       "Cantiere": {
         "type": "object",
@@ -21055,6 +22235,52 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "CreateStrumentoRequest": {
+        "required": [
+          "name",
+          "matricola",
+          "calibrationExpiry",
+          "certificateReference",
+          "materialeId",
+          "holderUserId"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": "string"
+          },
+          "calibrationExpiry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "certificateReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "holderUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -23460,9 +24686,63 @@
               "$ref": "#/components/schemas/TicketType"
             },
             "description": "The tenant\u0027s ticket type lookup list (TipologiaIntervento).\nReturned in full on every sync (no UpdatedAt column \u2014 no delta filter).\nUsed by the mobile app to map a ticket\u0027s \u0060TypeId\u0060 int to a human name."
+          },
+          "controlGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncControlGroupDto"
+            },
+            "description": "Template group tree (parents included) of every version referenced by IReadOnlyList\u0026lt;SyncTicketControlDto\u0026gt; MobileUserSyncResult.TicketControls."
+          },
+          "ticketControls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncTicketControlDto"
+            },
+            "description": "Ticket-level and asset-level checklist rows with their pinned definitions and current values."
+          },
+          "ticketAssets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncTicketAssetDto"
+            },
+            "description": "Covered assets per synced ticket: pinned template version and legacy progress."
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncAssetDto"
+            },
+            "description": "Identities of the covered assets (name, matricola, libretto membership)."
+          },
+          "strumenti": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncStrumentoDto"
+            },
+            "description": "Every active instrument of the tenant (no delta filter). Empty for a caller without team.strumento.read."
+          },
+          "reportStrumenti": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncReportStrumentoDto"
+            },
+            "description": "Instrument selection of the caller\u0027s draft reports. Empty for a caller without team.strumento.read."
+          },
+          "checklistTruncated": {
+            "type": "boolean",
+            "description": "True when the per-sync cap on asset-level checklist rows (int MobileUserSyncService.MaxAssetControlRowsPerSync)\nleft tickets out, or when the first ticket alone exceeds it (it is still sent whole)."
+          },
+          "checklistOmittedTicketIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Tickets whose checklist, assets and groups were NOT sent this time (whole tickets only). The phone keeps whatever it\nalready holds for them; nothing here implies a deletion."
           }
         },
-        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
+        "description": "Shape returned by Task\u0026lt;MobileUserSyncResult\u0026gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true).\nContains the technician\u0027s own schedules (today..today\u002B7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
       "ModelRole": {
         "type": "integer",
@@ -24346,6 +25626,55 @@
         },
         "description": "Paginated result wrapper."
       },
+      "PaginatedResultOfReportObservationDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportObservationDto"
+            },
+            "description": "Items for current page."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Current page number.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of items per page.",
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of items across all pages.",
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of pages.",
+            "format": "int32"
+          }
+        },
+        "description": "Paginated result wrapper."
+      },
       "PaginatedResultOfSquadra": {
         "type": "object",
         "properties": {
@@ -24353,6 +25682,55 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Squadra"
+            },
+            "description": "Items for current page."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Current page number.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of items per page.",
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of items across all pages.",
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of pages.",
+            "format": "int32"
+          }
+        },
+        "description": "Paginated result wrapper."
+      },
+      "PaginatedResultOfStrumentoDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StrumentoDto"
             },
             "description": "Items for current page."
           },
@@ -24744,6 +26122,13 @@
       "ProdottoAssistenzaDto": {
         "type": "object",
         "properties": {
+          "maintenanceTemplateId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -25054,7 +26439,9 @@
           "auditTrail",
           "materialiNonRichiesti",
           "testoAccettazioneCliente",
-          "isAiAssisted"
+          "isAiAssisted",
+          "checklist",
+          "strumenti"
         ],
         "type": "object",
         "properties": {
@@ -25203,6 +26590,17 @@
           "isAiAssisted": {
             "type": "boolean",
             "description": "Feature-parity audit item #1: \u0060Report.IsAiAssisted\u0060 is written on mobile submit and\nreturned once in the one-shot submit response, but no read endpoint returned it afterward \u2014\na re-fetch (this web review screen) could not tell whether a rapportino was AI-assisted."
+          },
+          "checklist": {
+            "description": "The typed, grouped checklist (ticket level and per asset) from the single report projection. Additive: the flat\n\u0060Controlli\u0060 list is unchanged this release.",
+            "$ref": "#/components/schemas/ReportChecklistDto"
+          },
+          "strumenti": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportStrumentoDto"
+            },
+            "description": "The instruments recorded on the report (snapshot values), from the same projection."
           }
         },
         "description": "Ready-to-render payload for the Rapportino detail/review screen\n(\u0060GET /api/app/rapportini/{id}\u0060). Application-tier contract\n(\u0060docs/patterns/application-api.md\u0060): Italian property names, no \u0060[JsonPropertyName]\u0060,\nowned by the web app, no external compatibility promise. Replaces the previous mocked detail\nwith a composed read: report header \u002B staff \u002B materiali \u002B control values \u002B signature state.\nWrites stay on canonical \u0060/api/reports/*\u0060 \u2014 the app tier is read-only."
@@ -25648,6 +27046,53 @@
         },
         "description": "Rapportino di lavoro generato dopo un intervento o da un cantiere.\nUn Intervento (Ticket) o Cantiere pu\u00F2 avere N rapportini.\nStato: Bozza \u2192 Inviato \u2192 Controllato \u2192 Fatturato"
       },
+      "ReportAnswerDto": {
+        "required": [
+          "text",
+          "flag",
+          "date",
+          "number",
+          "display"
+        ],
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "flag": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "number": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "display": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The stored observation columns, passed through as they are (the projection does not reinterpret them). Clients must read ONLY the\ncolumn that matches the control\u0027s \u0060Type\u0060 (Text/Options: Text; Checkbox/TrueFalse: Flag; DateTime: Date; Number: Number) and\nignore the others. \u0060Display\u0060 is the pre-formatted value (first non-null column, Italian formatting) for read-only printing;\nit is null when the observation holds no value, and 0 / false are answers."
+      },
       "ReportAttachmentResponse": {
         "type": "object",
         "properties": {
@@ -25668,6 +27113,191 @@
           }
         },
         "description": "Response returned by the attachment-staging endpoint."
+      },
+      "ReportChecklistAssetDto": {
+        "required": [
+          "prodottoAssistenzaId",
+          "name",
+          "matricola",
+          "librettoId",
+          "librettoName",
+          "controllato",
+          "note",
+          "groups"
+        ],
+        "type": "object",
+        "properties": {
+          "prodottoAssistenzaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "librettoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "librettoName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "controllato": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportChecklistGroupDto"
+            }
+          }
+        },
+        "description": "One placement of a covered asset. \u0060Controllato\u0060/\u0060Note\u0060 are the legacy per-asset progress and are set ONLY for an\nasset with no resolved template (read live from the coverage row, never snapshotted); null otherwise."
+      },
+      "ReportChecklistControlDto": {
+        "required": [
+          "ticketControlId",
+          "templateControlId",
+          "controlLineageId",
+          "label",
+          "type",
+          "required",
+          "sortOrder",
+          "answer",
+          "note",
+          "completedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "templateControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "controlLineageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ControlTypeEnum"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "answer": {
+            "$ref": "#/components/schemas/ReportAnswerDto"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ReportChecklistDto": {
+        "required": [
+          "ticketLevel",
+          "assets"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketLevel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportChecklistGroupDto"
+            }
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportChecklistAssetDto"
+            }
+          }
+        }
+      },
+      "ReportChecklistGroupDto": {
+        "required": [
+          "id",
+          "name",
+          "sortOrder",
+          "subgroups",
+          "controls"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "subgroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportChecklistGroupDto"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportChecklistControlDto"
+            }
+          }
+        }
       },
       "ReportControlObservation": {
         "type": "object",
@@ -25711,6 +27341,13 @@
             ],
             "format": "double"
           },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What the technician noted against this item on this visit. Never an answer: RequiredControlsGate ignores it."
+          },
           "tenantId": {
             "type": "string",
             "description": "Tenant identifier for schema-per-tenant isolation.",
@@ -25736,6 +27373,143 @@
           }
         },
         "description": "What one technician recorded, on one visit, against one item of the ticket\u0027s checklist\n(ADR-0012 \u00A7B.4)."
+      },
+      "ReportDetailDto": {
+        "required": [
+          "header",
+          "references",
+          "staff",
+          "materials",
+          "details",
+          "technicianNotes",
+          "diagnosi",
+          "soluzione",
+          "signatures",
+          "checklist",
+          "strumenti"
+        ],
+        "type": "object",
+        "properties": {
+          "header": {
+            "$ref": "#/components/schemas/ReportHeaderDto"
+          },
+          "references": {
+            "$ref": "#/components/schemas/ReportReferencesDto"
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportStaffLineDto"
+            }
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportMaterialLineDto"
+            }
+          },
+          "details": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "technicianNotes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "diagnosi": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "soluzione": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "signatures": {
+            "$ref": "#/components/schemas/ReportSignaturesDto"
+          },
+          "checklist": {
+            "$ref": "#/components/schemas/ReportChecklistDto"
+          },
+          "strumenti": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportStrumentoDto"
+            }
+          }
+        },
+        "description": "The typed report detail. It is a PROJECTION of the canonical rows (report, observations, ticket controls, template version,\nasset snapshots, strumenti), built only by IReportDetailProjector; it holds no state of its own and invents no\nfields. Property names are the wire names after camelCase serialisation."
+      },
+      "ReportHeaderDto": {
+        "required": [
+          "id",
+          "numero",
+          "title",
+          "stato",
+          "startedAt",
+          "endedAt",
+          "createdAt",
+          "inviatoAt",
+          "materialiNotRequired",
+          "isAiAssisted"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "numero": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "stato": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "inviatoAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "materialiNotRequired": {
+            "type": "boolean"
+          },
+          "isAiAssisted": {
+            "type": "boolean"
+          }
+        }
       },
       "ReportMateriale": {
         "type": "object",
@@ -25826,6 +27600,251 @@
           }
         },
         "description": "Actual materials consumed / installed during an intervention, recorded on a Report.\nCompare against the parent ticket\u0027s TicketMateriali (fabbisogno) to compute variance.\nFollows the same catalog \u002B free-text fallback pattern as TicketMateriale."
+      },
+      "ReportMaterialLineDto": {
+        "required": [
+          "id",
+          "materialeId",
+          "name",
+          "quantity",
+          "unitOfMeasure",
+          "unitPrice",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unitOfMeasure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unitPrice": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReportObservationDto": {
+        "required": [
+          "id",
+          "reportId",
+          "ticketControlId",
+          "stringValue",
+          "boolValue",
+          "dateValue",
+          "numberValue",
+          "note",
+          "tenantId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticketControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stringValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "boolValue": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "dateValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "One recorded observation as the list endpoint returns it. Replaces the raw entity: every property the entity serialised\n(including \u0060tenantId\u0060, \u0060createdAt\u0060, \u0060updatedAt\u0060) is still emitted under the same name, so existing readers are\nunaffected; the schema is now typed. A client reads only the value column that matches the control\u0027s type; 0 and false are answers."
+      },
+      "ReportReferencesDto": {
+        "required": [
+          "ticketId",
+          "scheduleId",
+          "cantiereId",
+          "customerId",
+          "customerName",
+          "locationId",
+          "locationName",
+          "insertedUserId",
+          "technicianName"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "scheduleId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "customerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "customerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "locationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "insertedUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "technicianName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReportSignaturesDto": {
+        "required": [
+          "customerSignatureAllegatoId",
+          "technicianSignatureAllegatoId",
+          "customerSignoffText",
+          "customerSignoffAt"
+        ],
+        "type": "object",
+        "properties": {
+          "customerSignatureAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "technicianSignatureAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "customerSignoffText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customerSignoffAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
       },
       "ReportStaff": {
         "type": "object",
@@ -25934,8 +27953,135 @@
         },
         "description": "Records time and distance contributed by a single technician to a report.\nOne row per (Report, User) pair \u2014 enforced by a unique index.\n\nLive workflow: tecnico hits \u0022start\u0022 \u2192 StartTime stamped; \u0022stop\u0022 \u2192 EndTime\nstamped; pauses logged in PauseMinutes. HoursWorked is either derived by\nITimeClassificationService (preferred) or stored manually for legacy rows."
       },
+      "ReportStaffLineDto": {
+        "required": [
+          "id",
+          "userId",
+          "userName",
+          "hoursWorked",
+          "kmTraveled",
+          "startTime",
+          "endTime",
+          "pauseMinutes",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hoursWorked": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "kmTraveled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "startTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "endTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "pauseMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ReportStatoEnum": {
         "type": "integer"
+      },
+      "ReportStrumentoDto": {
+        "required": [
+          "id",
+          "strumentoId",
+          "name",
+          "matricola",
+          "calibrationExpiry",
+          "certificateReference",
+          "expiredAtUse",
+          "expiredAcknowledged"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "strumentoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": "string"
+          },
+          "calibrationExpiry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "certificateReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expiredAtUse": {
+            "type": "boolean"
+          },
+          "expiredAcknowledged": {
+            "type": "boolean"
+          }
+        },
+        "description": "One instrument used on a report (live selection while Bozza, frozen snapshot once finalised)."
       },
       "ReverseScanRequest": {
         "required": [
@@ -26769,6 +28915,19 @@
         },
         "description": "Request model for sending report email."
       },
+      "SetAssetTemplateRequest": {
+        "required": [
+          "maintenanceTemplateId"
+        ],
+        "type": "object",
+        "properties": {
+          "maintenanceTemplateId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "Body of PUT maintenance-template: the template to inspect this asset against (required, non-empty)."
+      },
       "SetGrantsRequest": {
         "required": [
           "permissions"
@@ -27253,6 +29412,89 @@
           }
         }
       },
+      "StrumentoDto": {
+        "required": [
+          "id",
+          "name",
+          "matricola",
+          "calibrationExpiry",
+          "certificateReference",
+          "materialeId",
+          "holderUserId",
+          "holderName",
+          "isActive",
+          "isExpiredToday"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": "string"
+          },
+          "calibrationExpiry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "certificateReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "holderUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "holderName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "isExpiredToday": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StrumentoSelectionRequest": {
+        "required": [
+          "strumentoId",
+          "expiredAcknowledged"
+        ],
+        "type": "object",
+        "properties": {
+          "strumentoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiredAcknowledged": {
+            "type": "boolean"
+          }
+        },
+        "description": "What the client states per instrument. It never states \u0060expiredAtUse\u0060: the server recomputes it."
+      },
       "SubmitReportControlloDto": {
         "type": "object",
         "properties": {
@@ -27288,6 +29530,15 @@
               "string"
             ],
             "format": "double"
+          },
+          "note": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free note on the item for this visit. Never an answer (it does not satisfy a required item)."
           }
         },
         "description": "One inspection control answer."
@@ -27487,6 +29738,13 @@
               "$ref": "#/components/schemas/SubmitReportControlloDto"
             },
             "description": "Inspection control answers."
+          },
+          "strumenti": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SubmitReportStrumentoDto"
+            },
+            "description": "Instruments used. Empty keeps the server\u0027s selection (exactly like Staff/Materiali/Controlli), which is still\nre-validated at submit. Non-empty replaces it in full. The client never states whether an instrument was expired."
           }
         },
         "description": "Full rapportino payload submitted in a single atomic call by the mobile app.\nCarries the report header plus all child collections so an offline-drafted\nreport lands server-side in one transaction when connectivity returns.\n\nMedia (signatures, photos) must be uploaded first via the attachments endpoint;\nonly their Allegato ids are referenced here."
@@ -27759,6 +30017,19 @@
         },
         "description": "One technician\u0027s time \u002B travel contribution to the report."
       },
+      "SubmitReportStrumentoDto": {
+        "type": "object",
+        "properties": {
+          "strumentoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiredAcknowledged": {
+            "type": "boolean"
+          }
+        },
+        "description": "One instrument used on the intervention. Deliberately carries NO \u0060expiredAtUse\u0060: the server recomputes it from the\ninstrument\u0027s calibration expiry and the report\u0027s work date; the client only states the operator\u0027s acknowledgement."
+      },
       "SubscriptionStateDto": {
         "required": [
           "status",
@@ -27850,6 +30121,45 @@
         },
         "description": "The tenant\u0027s subscription as it stands."
       },
+      "SyncAssetDto": {
+        "required": [
+          "id",
+          "name",
+          "serialNumber",
+          "matricola",
+          "librettoIds"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "serialNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matricola": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "librettoIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "description": "An asset the phone must be able to name offline. string? SyncAssetDto.Matricola follows the report rule\n(\u0060AssetMatricolaResolver\u0060: active Matricole joined with \u0022, \u0022, else the legacy scalar); string? SyncAssetDto.SerialNumber is the raw\nlegacy scalar. IReadOnlyList\u0026lt;Guid\u0026gt; SyncAssetDto.LibrettoIds are the librettos (among the synced assets) the asset belongs to."
+      },
       "SyncColleagueDto": {
         "required": [
           "id",
@@ -27868,6 +30178,102 @@
           }
         },
         "description": "A colleague the technician can name on a rapportino \u2014 just enough to pick them from a list\nand send back the right id."
+      },
+      "SyncControlGroupDto": {
+        "required": [
+          "id",
+          "parentGroupId",
+          "maintenanceTemplateVersionId",
+          "name",
+          "sortOrder"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentGroupId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "maintenanceTemplateVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "A node of the template group tree used by the synced rows (the groups of every version referenced, plus their ancestors)."
+      },
+      "SyncReportStrumentoDto": {
+        "required": [
+          "id",
+          "reportId",
+          "strumentoId",
+          "name",
+          "matricola",
+          "calibrationExpiry",
+          "certificateReference",
+          "expiredAtUse",
+          "expiredAcknowledged"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "strumentoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": "string"
+          },
+          "calibrationExpiry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "certificateReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "expiredAtUse": {
+            "type": "boolean"
+          },
+          "expiredAcknowledged": {
+            "type": "boolean"
+          }
+        },
+        "description": "One instrument selected on a draft report of the caller (the snapshot columns; no tenant id)."
       },
       "SyncScheduleAssigneeDto": {
         "required": [
@@ -28018,6 +30424,202 @@
           }
         },
         "description": "A schedule as the device sees it.\n\nThe sync payload used to serialise Schedule entities directly, which is how an\ninternal schema change was able to break a client: dropping the assignment columns (ADR-0009)\nremoved \u0060userId\u0060 from the wire, and the Flutter client casts it non-nullably. An entity is\na storage shape and will keep changing; this DTO is the contract, and it changes only when the\ncontract is meant to.\n\nGuid SyncScheduleDto.UserId is preserved as the directly assigned technician \u2014 the same value the\ndropped column held \u2014 so the existing client keeps working unchanged.\nIReadOnlyList\u0026lt;SyncScheduleAssigneeDto\u0026gt; SyncScheduleDto.Assignees is what it should move to: it carries everyone on the schedule,\nincluding squadra-mediated members the old column could never express."
+      },
+      "SyncStrumentoDto": {
+        "required": [
+          "id",
+          "name",
+          "matricola",
+          "calibrationExpiry",
+          "certificateReference",
+          "isMine"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": "string"
+          },
+          "calibrationExpiry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "certificateReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isMine": {
+            "type": "boolean"
+          }
+        },
+        "description": "An active instrument of the tenant; bool SyncStrumentoDto.IsMine = the caller is its current holder (borrowing works offline)."
+      },
+      "SyncTicketAssetDto": {
+        "required": [
+          "ticketId",
+          "prodottoAssistenzaId",
+          "controllato",
+          "note",
+          "maintenanceTemplateVersionId"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "prodottoAssistenzaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "controllato": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maintenanceTemplateVersionId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "A covered asset of a ticket: the version pinned for it (null = untemplated, legacy progress applies) and its legacy\n\u0060Controllato\u0060/\u0060Note\u0060."
+      },
+      "SyncTicketControlDto": {
+        "required": [
+          "id",
+          "ticketId",
+          "prodottoAssistenzaId",
+          "templateControlId",
+          "controlLineageId",
+          "groupId",
+          "label",
+          "description",
+          "type",
+          "isRequired",
+          "options",
+          "sortOrder",
+          "status",
+          "stringValue",
+          "boolValue",
+          "dateValue",
+          "numberValue",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ticketId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "prodottoAssistenzaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "templateControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "controlLineageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "groupId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/ControlTypeEnum"
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TicketControlStatus"
+          },
+          "stringValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "boolValue": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "dateValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One materialised checklist row with its PINNED definition (label, type, options, required, group) and its current answer.\nGuid? SyncTicketControlDto.ProdottoAssistenzaId is null for a ticket-level row."
       },
       "TableOptionsDto": {
         "required": [
@@ -28412,6 +31014,308 @@
           }
         },
         "description": "Represents a work ticket/intervention (Intervento)."
+      },
+      "TicketAssetChecklistDto": {
+        "required": [
+          "prodottoAssistenzaId",
+          "name",
+          "matricola",
+          "librettoId",
+          "librettoName",
+          "maintenanceTemplateVersionId",
+          "groups"
+        ],
+        "type": "object",
+        "properties": {
+          "prodottoAssistenzaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "matricola": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "librettoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "librettoName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maintenanceTemplateVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketControlGroupDto"
+            }
+          }
+        },
+        "description": "One templated asset\u0027s own checklist on a ticket (its pinned template version\u0027s group tree and its rows)."
+      },
+      "TicketAssetProgressDto": {
+        "required": [
+          "prodottoAssistenzaId",
+          "prodottoAssistenzaName",
+          "controllato",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "prodottoAssistenzaId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "prodottoAssistenzaName": {
+            "type": "string"
+          },
+          "controllato": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One asset\u0027s tracked progress on a ticket."
+      },
+      "TicketControlDto": {
+        "required": [
+          "id",
+          "templateControlId",
+          "controlLineageId",
+          "label",
+          "description",
+          "type",
+          "isRequired",
+          "options",
+          "valoreLimite",
+          "sortOrder",
+          "status",
+          "stringValue",
+          "boolValue",
+          "dateValue",
+          "numberValue",
+          "completedByReportId",
+          "completedAt",
+          "note",
+          "prodottoAssistenzaId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The TicketControl id \u2014 the identity a rapportino records findings against.",
+            "format": "uuid"
+          },
+          "templateControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "controlLineageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/ControlTypeEnum"
+          },
+          "isRequired": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valoreLimite": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TicketControlStatus"
+          },
+          "stringValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "boolValue": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "dateValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "completedByReportId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prodottoAssistenzaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        },
+        "description": "One checklist item: what it asks (from the frozen template) and where it has got to (from the\nticket)."
+      },
+      "TicketControlGroupDto": {
+        "required": [
+          "id",
+          "name",
+          "description",
+          "sortOrder",
+          "subgroups",
+          "controls"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sortOrder": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "subgroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketControlGroupDto"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketControlDto"
+            }
+          }
+        },
+        "description": "A section of the ticket\u0027s checklist."
+      },
+      "TicketControlResponseDto": {
+        "required": [
+          "groups",
+          "assetProgress",
+          "assetChecklists"
+        ],
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketControlGroupDto"
+            },
+            "description": "The ticket-level checklist tree."
+          },
+          "assetProgress": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketAssetProgressDto"
+            },
+            "description": "Legacy Controllato/Note progress: ONLY assets with no resolved template."
+          },
+          "assetChecklists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketAssetChecklistDto"
+            },
+            "description": "Templated assets with their own checklist; active rows only."
+          }
+        },
+        "description": "The checklist, per-asset checklists and legacy per-asset progress for one ticket."
+      },
+      "TicketControlStatus": {
+        "enum": [
+          "Pending",
+          "Completed",
+          "NotApplicable"
+        ],
+        "description": "Where one inspection item on one ticket has got to."
       },
       "TicketMateriale": {
         "type": "object",
@@ -30245,6 +33149,59 @@
           }
         }
       },
+      "UpdateStrumentoRequest": {
+        "required": [
+          "name",
+          "matricola",
+          "calibrationExpiry",
+          "clearCalibrationExpiry",
+          "certificateReference",
+          "materialeId",
+          "clearMaterialeId"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matricola": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "calibrationExpiry": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "clearCalibrationExpiry": {
+            "type": "boolean"
+          },
+          "certificateReference": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "clearMaterialeId": {
+            "type": "boolean"
+          }
+        },
+        "description": "Null = leave as is; the Clear* flags remove a nullable value (same convention as UpdateProdottoAssistenzaRequest)."
+      },
       "UpdateTenantRequest": {
         "type": "object",
         "properties": {
@@ -30819,6 +33776,15 @@
               "string"
             ],
             "format": "double"
+          },
+          "note": {
+            "maxLength": 2000,
+            "minLength": 0,
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free note on the item. Never an answer. On update, omitting it (null) keeps the stored note; sending one replaces it."
           }
         },
         "description": "Request model for one control-value answer in a bulk upsert. Relocated from\n\u0060ReportControlValuesController\u0060 (W3 Task 3 thinning)."
@@ -32036,6 +35002,9 @@
       "name": "ReportControlObservations"
     },
     {
+      "name": "ReportDetail"
+    },
+    {
       "name": "ReportMateriale"
     },
     {
@@ -32043,6 +35012,9 @@
     },
     {
       "name": "ReportStaff"
+    },
+    {
+      "name": "ReportStrumenti"
     },
     {
       "name": "ReportTemplates"
@@ -32067,6 +35039,9 @@
     },
     {
       "name": "StripeWebhook"
+    },
+    {
+      "name": "Strumenti"
     },
     {
       "name": "SuperUser"
