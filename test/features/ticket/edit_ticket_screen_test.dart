@@ -576,9 +576,11 @@ void main() {
       await tester.drag(find.byType(ListView), const Offset(0, -300));
       await tester.pumpAndSettle();
 
-      // The X on the resolved Commessa field — the only gesture that releases a pick.
+      // The X on the resolved Commessa field — the only gesture that releases a pick. The field's
+      // key carries the epoch a refused clear bumps (`StepClienteSede._commessaPickerEpoch`) as well
+      // as the value it shows, so this is where it starts: value `com-1`, epoch 0.
       final clearCommessa = find.descendant(
-        of: find.byKey(const ValueKey('commessa-com-1')),
+        of: find.byKey(const ValueKey('commessa-com-1-0')),
         matching: find.byType(IconButton),
       );
       expect(find.text('COM-001'), findsOneWidget);
@@ -589,6 +591,9 @@ void main() {
       // Refused out loud: the field is still enabled (picking a commessa is real), so a gesture it
       // silently ignored would read as the app being broken.
       expect(find.text('La commessa non può essere rimossa da qui.'), findsOneWidget);
+      // And the refusal does not leave the field empty over the commessa the record still holds: the
+      // epoch re-keyed it, so it is rebuilt from the stored id and the code is back on it.
+      expect(find.text('COM-001'), findsOneWidget);
 
       // Let the toast expire so it cannot swallow the next tap.
       await tester.pump(const Duration(seconds: 4));
