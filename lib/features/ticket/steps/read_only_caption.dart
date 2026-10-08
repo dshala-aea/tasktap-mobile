@@ -14,8 +14,18 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // (applied set-only server-side) and the coverage list (replaced wholesale, with no authoritative
 // local copy to replace it from). Removing the controls would leave the technician wondering where
 // their contract went; leaving them silently live would let a pick be discarded without a word.
-// This is the third option: the field is still drawn, still shows the record's real value, and says
-// in words why it is not a control here.
+// This is the third option — and what stands above it differs by site, because the sites do:
+//
+//  - under the Contratto picker it is a real field. Edit mode seeds the record's own contract, so
+//    the field is drawn disabled showing the contract the ticket actually holds, and the caption
+//    says why it is not a control here;
+//  - under the Prodotti assistenza list it stands alone. Edit mode seeds no coverage at all
+//    (deliberately — see `StepDettagliTicket.prodottiEditable`), so no chip and no adder is drawn
+//    there either, and this sentence is the whole of what the section says.
+//
+// The commessa is the third reference edit mode will not move, and it carries no caption: its field
+// stays enabled because a pick there is real, so "not modifiable here" would be untrue of it. Its
+// one refused gesture says so itself, with a toast.
 //
 // A constant, not a literal at each site, for the same reason [kBlamedFieldNotice] is one: the two
 // steps must not drift into two ways of saying the same thing.

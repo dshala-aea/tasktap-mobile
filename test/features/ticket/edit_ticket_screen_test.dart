@@ -577,10 +577,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // The X on the resolved Commessa field — the only gesture that releases a pick. The field's
-      // key carries the epoch a refused clear bumps (`StepClienteSede._commessaPickerEpoch`) as well
-      // as the value it shows, so this is where it starts: value `com-1`, epoch 0.
+      // key carries the epoch a state change bumps (`StepClienteSede._commessaPickerEpoch`) and not
+      // the value it shows, so this is where it starts: epoch 0, with `com-1` on the field.
       final clearCommessa = find.descendant(
-        of: find.byKey(const ValueKey('commessa-com-1-0')),
+        of: find.byKey(const ValueKey('commessa-0')),
         matching: find.byType(IconButton),
       );
       expect(find.text('COM-001'), findsOneWidget);
