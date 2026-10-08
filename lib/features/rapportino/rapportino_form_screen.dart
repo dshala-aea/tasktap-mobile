@@ -13,6 +13,7 @@ import '../../core/widgets/app_compartment_tile.dart';
 import '../../data/reports/ticket_controls_cache_repository.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/providers/report_editor_providers.dart';
+import '../checklist/checklist_providers.dart';
 import '../ticket/ticket_detail_api_client.dart' show flattenTicketControls;
 import 'ai_draft_action.dart';
 import 'steps/step_dettagli.dart';
@@ -112,7 +113,7 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
     // control list loaded, the exact "flash of wrong information" this screen's own isLoading
     // gate (below) already guards against for the other three tiles.
     final ticketId = editorState.ticketId;
-    final controlliDone = ticketId == null
+    final ticketLevelDone = ticketId == null
         ? true
         : ref
               .watch(cachedTicketControlsProvider(ticketId))
@@ -125,6 +126,9 @@ class _RapportinoFormScreenState extends ConsumerState<RapportinoFormScreen> {
                 ),
                 orElse: () => false,
               );
+    // Asset level: done only when no required asset row is still empty (the server gate mirror).
+    final assetMissing = ref.watch(assetChecklistStatusProvider(reportId))?.missing.length ?? 0;
+    final controlliDone = ticketLevelDone && assetMissing == 0;
 
     // Once per screen lifetime, after the first frame (a BuildContext for showModalBottomSheet
     // isn't valid mid-build) — and only for a draft with nothing in Dettagli yet, so reopening an

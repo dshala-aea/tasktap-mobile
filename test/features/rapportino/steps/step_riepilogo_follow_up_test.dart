@@ -125,7 +125,12 @@ void main() {
         isFalse,
       );
 
+      // The warning panel watches the Drift-backed checklist stream here: dispose the container
+      // inside the test body so Drift's zero-duration close timer fires under the fake clock
+      // (the same idiom as `disposeScreen` in asset_checklist_screen_test.dart). ProviderContainer
+      // .dispose is idempotent, so the tearDown's dispose is still safe.
       await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
       await tester.pumpAndSettle();
     });
   });
@@ -153,6 +158,7 @@ void main() {
       expect(draft?.richiedeSecondoIntervento, isTrue, reason: 'autosaved to Drift');
 
       await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
       await tester.pumpAndSettle();
     });
   });

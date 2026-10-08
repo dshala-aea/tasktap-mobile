@@ -165,7 +165,6 @@ void main() {
       );
 
       final container = _buildContainer(db: db, dio: dio);
-      addTearDown(container.dispose);
       await tester.pumpWidget(_buildControlliStep(container));
       await tester.pumpAndSettle();
 
@@ -180,6 +179,13 @@ void main() {
       // sibling "Nessun materiale utilizzato" toggle to count alongside this checklist item's own.
       expect(find.byType(AppToggle), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
+
+      // StepControlli watches the Drift-backed checklist stream: cancel it inside the test body
+      // so its zero-duration close timer fires under the fake clock (see `disposeScreen` in
+      // asset_checklist_screen_test.dart).
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('ticking a checkbox control writes the answer to editor state', (tester) async {
@@ -235,6 +241,13 @@ void main() {
       // rapportino's finding is submitted against — not a typed-in string.
       expect(rows.single.controlId, 'tc-1');
       expect(rows.single.boolValue, isTrue);
+
+      // StepControlli watches the Drift-backed checklist stream: dispose the container inside the
+      // test body so Drift's zero-duration close timer fires under the fake clock (the same idiom
+      // as `disposeScreen` in asset_checklist_screen_test.dart).
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('typing into a free-text control writes the answer', (tester) async {
@@ -286,6 +299,10 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.single.controlId, 'tc-2');
       expect(rows.single.stringValue, 'Tutto regolare');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('typing into a Number control writes numberValue, not stringValue', (
@@ -341,6 +358,10 @@ void main() {
       expect(rows.single.controlId, 'tc-3');
       expect(rows.single.numberValue, 62.5);
       expect(rows.single.stringValue, isNull);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
   });
 
@@ -365,6 +386,10 @@ void main() {
       // Never falls back to the old free-text box.
       expect(find.text('Aggiungi controllo'), findsNothing);
       expect(find.byType(TextField), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('explains that controls require a linked ticket when there is none', (
@@ -391,6 +416,10 @@ void main() {
       expect(find.text('Nessun controllo previsto per questo intervento.'), findsNothing);
       // Offline must never degrade into the old typed-ID box either.
       expect(find.text('Aggiungi controllo'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
   });
 
@@ -452,6 +481,10 @@ void main() {
       )..where((t) => t.ticketId.equals(_ticketId))).getSingleOrNull();
       expect(cached, isNotNull);
       expect(cached!.controlsJson, contains('Pressione OK'));
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('a cached checklist is viewable and answerable while offline', (tester) async {
@@ -478,6 +511,10 @@ void main() {
       expect(rows, hasLength(1));
       expect(rows.single.controlId, 'tc-1');
       expect(rows.single.boolValue, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
 
     testWidgets('an answer recorded offline is persisted as a normal draft controllo row — '
@@ -500,6 +537,10 @@ void main() {
       expect(persisted, hasLength(1));
       expect(persisted.single.controlId, 'tc-1');
       expect(persisted.single.boolValue, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      await tester.pumpAndSettle();
     });
   });
 

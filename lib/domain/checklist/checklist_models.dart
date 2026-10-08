@@ -37,6 +37,18 @@ class ChecklistAnswer {
             dateValue != null;
     }
   }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChecklistAnswer &&
+      other.stringValue == stringValue &&
+      other.boolValue == boolValue &&
+      other.dateValue == dateValue &&
+      other.numberValue == numberValue &&
+      other.note == note;
+
+  @override
+  int get hashCode => Object.hash(stringValue, boolValue, dateValue, numberValue, note);
 }
 
 class ChecklistControl {

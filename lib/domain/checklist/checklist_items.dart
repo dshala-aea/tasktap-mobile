@@ -102,10 +102,12 @@ class ControlHeaderItem extends ChecklistListItem {
 List<ChecklistListItem> buildChecklistItems(
   TicketChecklist tree,
   ChecklistQuery q,
-  AnswerLookup local,
-) {
+  AnswerLookup local, {
+  AnswerLookup? liveProgress,
+}) {
   final text = q.text.trim().toLowerCase();
   final filtering = q.filter != ChecklistFilter.all;
+  final progress = liveProgress ?? local;
 
   bool controlMatches(ChecklistControl c) {
     if (c.isRetained) return !filtering;
@@ -123,7 +125,7 @@ List<ChecklistListItem> buildChecklistItems(
   }
 
   return q.layout == ChecklistLayout.byAsset
-      ? _byAsset(tree, q, text, filtering, local, controlMatches)
+      ? _byAsset(tree, q, text, filtering, local, progress, controlMatches)
       : _byControl(tree, text, local, controlMatches);
 }
 
@@ -133,6 +135,7 @@ List<ChecklistListItem> _byAsset(
   String text,
   bool filtering,
   AnswerLookup local,
+  AnswerLookup progress,
   bool Function(ChecklistControl) controlMatches,
 ) {
   bool assetMatchesText(AssetChecklist a) =>
@@ -149,7 +152,7 @@ List<ChecklistListItem> _byAsset(
     final expanded = filtering || q.expandedAssetIds.contains(a.assetId);
     final header = AssetHeaderItem(
       asset: a,
-      progress: progressOf(a.controls, local),
+      progress: progressOf(a.controls, progress),
       expanded: expanded,
       librettoId: librettoId,
     );

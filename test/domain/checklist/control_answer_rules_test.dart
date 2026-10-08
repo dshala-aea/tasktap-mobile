@@ -126,4 +126,16 @@ void main() {
     names.sort(naturalCompare);
     expect(names, ['Bruciatore 3', 'caldaia 1', 'Caldaia 2', 'Caldaia 10']);
   });
+
+  test('ChecklistAnswer has value equality (so a per-row select does not rebuild every tile)', () {
+    // Non-const instances: two `const` literals would be canonicalized to the same object, so the
+    // comparison would hold even with no operator== / hashCode — the runtime equality that
+    // controlAnswersProvider actually produces (and that a select compares) would go untested.
+    final a = ChecklistAnswer(boolValue: true, note: 'x');
+    final b = ChecklistAnswer(boolValue: true, note: 'x');
+    expect(a, b);
+    expect(identical(a, b), isFalse);
+    expect(a.hashCode, b.hashCode);
+    expect(ChecklistAnswer(boolValue: true), isNot(ChecklistAnswer(boolValue: false)));
+  });
 }

@@ -21,6 +21,8 @@ import '../../../data/reports/ticket_controls_cache_repository.dart';
 import '../../../presentation/providers/auth_providers.dart';
 import '../../../presentation/providers/report_editor_providers.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../checklist/asset_checklist_entry_card.dart';
+import '../../checklist/checklist_providers.dart';
 import '../../magazzino/magazzino_providers.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart' show ticketMaterialiProvider;
@@ -964,14 +966,19 @@ class _PhotoThumb extends StatelessWidget {
 /// "type an ID" box. Split out from [StepMaterialiFold] (see that class's own doc comment on
 /// this sheet's build method for why): a server-driven checklist with its own loading/error/
 /// empty states doesn't belong bundled into the materials-and-photos tile.
-class StepControlli extends StatelessWidget {
+class StepControlli extends ConsumerWidget {
   const StepControlli({super.key, required this.reportId, required this.ticketId});
 
   final String reportId;
   final String? ticketId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ticket = ticketId;
+    final hasAssets =
+        ticket != null &&
+        ticket.isNotEmpty &&
+        (ref.watch(ticketChecklistProvider(ticket)).valueOrNull?.hasAnything ?? false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
@@ -979,7 +986,17 @@ class StepControlli extends StatelessWidget {
         AppSpacing.pagePadding,
         AppSpacing.xl,
       ),
-      child: _ControlliChecklist(reportId: reportId, ticketId: ticketId),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (hasAssets) AssetChecklistEntryCard(reportId: reportId, ticketId: ticket),
+          _ControlliChecklist(
+            reportId: reportId,
+            ticketId: ticketId,
+            hasAssetChecklists: hasAssets,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -997,10 +1014,15 @@ bool controlliCompletionFor({
 }
 
 class _ControlliChecklist extends ConsumerWidget {
-  const _ControlliChecklist({required this.reportId, required this.ticketId});
+  const _ControlliChecklist({
+    required this.reportId,
+    required this.ticketId,
+    required this.hasAssetChecklists,
+  });
 
   final String reportId;
   final String? ticketId;
+  final bool hasAssetChecklists;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1035,6 +1057,7 @@ class _ControlliChecklist extends ConsumerWidget {
       data: (groups) {
         final flat = flattenTicketControls(groups);
         if (flat.isEmpty) {
+          if (hasAssetChecklists) return const SizedBox.shrink();
           return Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Text(

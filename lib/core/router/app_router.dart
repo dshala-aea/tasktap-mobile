@@ -12,6 +12,7 @@ import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
 import '../../features/ticket/new_ticket_form_screen.dart';
 import '../../features/checklist/asset_checklist_screen.dart';
+import '../../domain/checklist/checklist_items.dart' show ChecklistFilter;
 import '../../features/ticket/ticket_detail_screen.dart';
 import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
@@ -105,6 +106,21 @@ abstract final class AppRoutes {
 
   /// The per-asset checklist of a ticket (full screen; read-only entry from the ticket detail).
   static String ticketAssetChecklistPath(String ticketId) => '/ticket/$ticketId/assets';
+
+  /// The editable per-asset checklist of a rapportino. [focusAssetId] expands that asset and
+  /// [filter] opens the list on a filter (Riepilogo uses `requiredMissing`).
+  static String reportAssetChecklistPath(
+    String reportId, {
+    String? focusAssetId,
+    ChecklistFilter? filter,
+  }) {
+    final base = '/altro/rapportini/editor/$reportId/assets';
+    final q = [
+      if (focusAssetId != null) 'focus=${Uri.encodeQueryComponent(focusAssetId)}',
+      if (filter != null) 'filter=${filter.name}',
+    ];
+    return q.isEmpty ? base : '$base?${q.join('&')}';
+  }
 
   static const String timbra = '/timbra';
 
@@ -575,6 +591,20 @@ GoRouter buildRouter(WidgetRef ref) {
                         builder: (context, state) => RapportinoFormScreen(
                           reportId: state.pathParameters['reportId']!,
                         ),
+                        routes: [
+                          GoRoute(
+                            path: 'assets',
+                            parentNavigatorKey: rootNavigatorKey,
+                            builder: (context, state) => AssetChecklistScreen(
+                              reportId: state.pathParameters['reportId']!,
+                              focusAssetId: state.uri.queryParameters['focus'],
+                              initialFilter: ChecklistFilter.values.firstWhere(
+                                (f) => f.name == state.uri.queryParameters['filter'],
+                                orElse: () => ChecklistFilter.all,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       GoRoute(
                         path: 'copilot',
