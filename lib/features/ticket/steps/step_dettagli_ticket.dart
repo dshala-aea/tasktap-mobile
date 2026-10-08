@@ -31,6 +31,14 @@ import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 /// backing out of a picker is not the same gesture as explicitly clearing a field).
 const String _kNoneSentinel = '';
 
+/// What a prodotto chip says when neither the label remembered at the pick nor the mirror can
+/// resolve the id it carries. The riepilogo block drops an id it cannot label rather than print it,
+/// so nothing here may ever render as a GUID the technician would read as a product's name — but
+/// this chip is also the only way to remove a selection, so it cannot be dropped. It gets a name
+/// that reads as a state, in the "… non disponibile" shape the rest of the app uses for one, and
+/// never as a product.
+const String _kUnresolvedProdottoLabel = 'Prodotto non disponibile';
+
 class StepDettagliTicket extends ConsumerStatefulWidget {
   const StepDettagliTicket({
     super.key,
@@ -109,7 +117,8 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
   /// the wire wants. The mirror resolves most of them (`localProdottiProvider`), but a row reached
   /// by an online search is materialised into the mirror asynchronously and the provider that
   /// already resolved for this customer will not re-run on its own. Remembering the label at the
-  /// moment of the pick is what keeps the chip from showing a raw GUID in that window.
+  /// moment of the pick is what keeps the chip from showing a raw GUID in that window, and
+  /// [_kUnresolvedProdottoLabel] is what keeps it from showing one once the window has passed.
   final Map<String, String> _prodottoLabels = {};
 
   /// Re-keying the "add a product" picker after each pick resets its text, so the next product can
@@ -168,7 +177,15 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        BlamedFieldNotice(field: 'prodottoAssistenzaIds', blamedField: widget.blamedField),
+        // The one blamed field whose loss is more than the value: the server refused a prodotto, and
+        // fromPendingRow drops the whole list with it, so the coverage this ticket had is gone too
+        // and the technician has to build it again rather than swap one row. Saying only "scegline
+        // un altro" would leave them looking for a single missing product that is not there.
+        BlamedFieldNotice(
+          field: 'prodottoAssistenzaIds',
+          blamedField: widget.blamedField,
+          detail: 'La copertura è stata azzerata: i prodotti vanno scelti di nuovo.',
+        ),
         if (ids.isNotEmpty) ...[
           Wrap(
             spacing: AppSpacing.xs,
@@ -177,7 +194,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
               for (final id in ids)
                 Chip(
                   key: ValueKey('prodotto-chip-$id'),
-                  label: Text(_prodottoLabels[id] ?? byId[id]?.label ?? id),
+                  label: Text(_prodottoLabels[id] ?? byId[id]?.label ?? _kUnresolvedProdottoLabel),
                   onDeleted: () => widget.onChanged(
                     widget.state.copyWith(prodottoAssistenzaIds: [...ids]..remove(id)),
                   ),
@@ -407,6 +424,10 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
 /// same two-source merge that field uses: local first — the only source offline — and the search's
 /// results joined to it, never replacing it, because the mirror is what a ticket can be written
 /// from (see [ReferencePickerField]'s own doc comment for the full reasoning).
+///
+/// It carries the same one-line hint under the list that field draws under its own, for the same
+/// reason: an empty list has to say whether nothing is cached yet or nothing matched, or the
+/// technician reads either one as a broken picker.
 class _AgentPickerSheet extends StatefulWidget {
   const _AgentPickerSheet({required this.localItems, required this.search});
 
@@ -461,8 +482,21 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
     });
   }
 
+  /// The one line under the list, or null when the list has something to offer.
+  ///
+  /// An empty list means one of two things to a technician, and saying nothing leaves both of them
+  /// reading as a broken sheet: a cache that has not been filled yet, which is answered by typing a
+  /// name, and a search that came back with nothing, which is answered by typing a different one.
+  String? get _emptyHint {
+    if (_merged.isNotEmpty) return null;
+    return _queryCtrl.text.trim().isEmpty
+        ? 'Nessun agente in cache. Cerca per nome.'
+        : 'Nessun agente trovato.';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hint = _emptyHint;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -503,6 +537,19 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
                 ],
               ),
             ),
+            if (hint != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.base,
+                  0,
+                  AppSpacing.base,
+                  AppSpacing.base,
+                ),
+                child: Text(
+                  hint,
+                  style: TextStyle(fontSize: 12, color: context.colors.inkMuted),
+                ),
+              ),
           ],
         ),
       ),
