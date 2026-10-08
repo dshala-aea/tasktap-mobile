@@ -1,10 +1,9 @@
 // dart format width=100
-import 'dart:convert';
-
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart';
 import '../../features/ticket/ticket_api_client.dart';
+import '../api/problem_details.dart';
 import 'pending_ticket_repository.dart';
 import 'pending_ticket_state.dart';
 
@@ -32,6 +31,14 @@ import 'pending_ticket_state.dart';
 // something true about what happened, and it is what the UI shows; it no
 // longer decides whether a retry may happen.
 //
+// One exception, added later: a rejection the client can REPAIR. A 404 that
+// names one of the request's reference fields means the next attempt would
+// send the same rejected id and fail identically — no answer will ever differ,
+// so an automatic retry is not optimistic, it is pointless. The field is
+// persisted on the row, the row is held out of the sweeps (see
+// repairableFieldOf), and a human repairs it through the wizard. This layer
+// only detects and records that: it opens no UI and knows no field's label.
+//
 // Invariant, mirrored from SubmissionQueue: a pending ticket is NEVER deleted
 // on failure — only its state changes. Nothing typed by the technician is
 // ever lost, even if it can't be safely resent automatically.
@@ -56,6 +63,36 @@ class TicketCreationQueue {
   final void Function()? _onSubmitted;
 
   bool _running = false;
+
+  /// The request fields whose rejection this client can actually repair — both re-pickable in the
+  /// wizard and writable back to the queue row. Not in this set means the row waits for nothing: it
+  /// is shown as failed and retried as before, because guessing at a repair for a field we cannot
+  /// render would only produce a screen that cannot fix the problem.
+  ///
+  /// `cantiereId` is absent because no wizard step has a cantiere field — there is no picker to
+  /// repair it with. `statusId` is absent because the wizard never asks for it: it defaults from
+  /// the default `TicketStatus`, so a "repair" would re-send the very id the server just refused.
+  /// See the plan's third-pass revision note, item 1.
+  static const _repairableFields = {
+    'customerId',
+    'locationId',
+    'contractId',
+    'commessaId',
+    'assignedUserId',
+    'typeId',
+    'agentId',
+    'prodottoAssistenzaIds',
+  };
+
+  /// The field a `not_found` blamed, when this client can repair it. Null otherwise — including for
+  /// a field name from a backend that has moved on, and for every non-404.
+  ///
+  /// Static and pure (a caught error in, a `String?` out) so it is testable without a database or a
+  /// queue.
+  static String? repairableFieldOf(Object error) {
+    final field = ProblemDetails.fieldOf(error);
+    return field != null && _repairableFields.contains(field) ? field : null;
+  }
 
   /// Persist the ticket locally, then — only if [isOnline] — attempt to send
   /// it immediately. When offline, the row is left in `pendingSync` for
@@ -107,6 +144,60 @@ class TicketCreationQueue {
     return _attempt(id);
   }
 
+  /// Write a corrected ticket back onto the row the server rejected, in place, and clear the flag
+  /// that was holding it out of the retry sweeps.
+  ///
+  /// An UPDATE of that same row, for two reasons that are the whole point of the repair path: a
+  /// [create] would insert a SECOND pending ticket and leave the rejected one sitting beside it,
+  /// and a `PUT /api/tickets` would reach the server for a ticket the server does not have yet —
+  /// this row has never been created. Nothing is sent from here at all.
+  ///
+  /// Takes the same field set [create] does and hands it to the same row writer
+  /// (`PendingTicketRepository.updateFields`, itself built on the companion [create]'s insert uses),
+  /// so a column added to one cannot be silently missing from the other.
+  ///
+  /// The next automatic sweep picks the row up: `repairableField` is null again, so nothing excludes
+  /// it. See [repairableFieldOf] for what made it repairable in the first place.
+  Future<void> repair(
+    String id, {
+    required String title,
+    String? description,
+    required String customerId,
+    required String locationId,
+    String? assignedUserId,
+    required int statusId,
+    required int typeId,
+    String priorita = 'Media',
+    DateTime? dueDate,
+    String? technicianNotes,
+    String? agentId,
+    String? contractId,
+    String? commessaId,
+    String? cantiereId,
+    List<String> prodottoAssistenzaIds = const [],
+    List<String> tags = const [],
+  }) async {
+    await _repo.updateFields(
+      id: id,
+      title: title,
+      description: description,
+      customerId: customerId,
+      locationId: locationId,
+      assignedUserId: assignedUserId,
+      statusId: statusId,
+      typeId: typeId,
+      priorita: priorita,
+      dueDate: dueDate,
+      technicianNotes: technicianNotes,
+      agentId: agentId,
+      contractId: contractId,
+      commessaId: commessaId,
+      cantiereId: cantiereId,
+      prodottoAssistenzaIds: prodottoAssistenzaIds,
+      tags: tags,
+    );
+  }
+
   /// Auto-retry every ticket that has not reached the server yet — both the
   /// ones never sent (`pendingSync`) and the ones whose send failed part-way
   /// (`failed`). Called on reconnect and on app start.
@@ -116,13 +207,17 @@ class TicketCreationQueue {
   /// of creating another. Before the key existed this loop could only carry
   /// `pendingSync`, and a ticket that failed mid-send sat on the device until
   /// somebody noticed it.
+  ///
+  /// Rows waiting on a repair are excluded from both sweeps: the id the server
+  /// just refused would be sent again, unchanged, and refused again. A repaired
+  /// row has no flag left, so it comes back through here like any other.
   Future<void> processAll() async {
     if (_running) return;
     _running = true;
     try {
       final pending = [
-        ...await _repo.getByState(PendingTicketState.pendingSync),
-        ...await _repo.getByState(PendingTicketState.failed),
+        ...await _repo.getByState(PendingTicketState.pendingSync, autoRetryableOnly: true),
+        ...await _repo.getByState(PendingTicketState.failed, autoRetryableOnly: true),
       ];
       for (final t in pending) {
         await _attempt(t.id);
@@ -161,8 +256,8 @@ class TicketCreationQueue {
         contractId: t.contractId,
         commessaId: t.commessaId,
         cantiereId: t.cantiereId,
-        prodottoAssistenzaIds: _decodeStringList(t.prodottoAssistenzaIdsJson),
-        tags: _decodeStringList(t.tagsJson),
+        prodottoAssistenzaIds: decodePendingStringList(t.prodottoAssistenzaIdsJson),
+        tags: decodePendingStringList(t.tagsJson),
         // The local row id, unchanged across every attempt — that is the whole
         // point. A new one per attempt would deduplicate nothing.
         clientId: t.id,
@@ -176,18 +271,12 @@ class TicketCreationQueue {
       // The stored string is rendered verbatim on the ticket list ("Invio non riuscito: …"), so it
       // has to be a sentence rather than an exception.
       final reason = humanErrorMessage(e, azione: 'creare il ticket');
-      await _repo.updateState(id: id, state: PendingTicketState.failed, error: reason);
+      // The flag travels with this failure and nothing else: a later failure with no field in its
+      // body clears it (see `markFailed`), so a row is never held out of the retry sweeps on the
+      // strength of a rejection that has since been superseded.
+      await _repo.markFailed(id: id, error: reason, repairableField: repairableFieldOf(e));
       return TicketCreationOutcome.failed(id, reason);
     }
-  }
-
-  /// The JSON-text list storage `PendingTickets.tagsJson` and `.prodottoAssistenzaIdsJson` share —
-  /// see their doc comments for why. `null`/`""` is "never set", not a parse error: a row written
-  /// before the column existed, or by a technician who never opened the picker.
-  static List<String> _decodeStringList(String? json) {
-    if (json == null || json.isEmpty) return const [];
-    final decoded = jsonDecode(json);
-    return decoded is List ? decoded.cast<String>() : const [];
   }
 }
 

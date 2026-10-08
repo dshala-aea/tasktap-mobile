@@ -18,6 +18,7 @@ import '../../admin/admin_api_client.dart';
 import '../new_ticket_form_state.dart';
 import '../reference_picker.dart';
 import '../reference_providers.dart';
+import 'blamed_field_notice.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -28,10 +29,19 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 // ══════════════════════════════════════════════════════════════════════════════
 
 class StepClienteSede extends ConsumerStatefulWidget {
-  const StepClienteSede({super.key, required this.state, required this.onChanged});
+  const StepClienteSede({
+    super.key,
+    required this.state,
+    required this.onChanged,
+    this.blamedField,
+  });
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
+
+  /// The request field the server refused, when this wizard is a repair — see
+  /// [BlamedFieldNotice]. Names one of the four references this step owns, or null.
+  final String? blamedField;
 
   @override
   ConsumerState<StepClienteSede> createState() => _StepClienteSedeState();
@@ -119,6 +129,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 24),
+        BlamedFieldNotice(field: 'contractId', blamedField: widget.blamedField),
         ReferencePickerField(
           label: 'Contratto',
           localItems: contracts,
@@ -139,6 +150,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           },
         ),
         const SizedBox(height: 20),
+        BlamedFieldNotice(field: 'commessaId', blamedField: widget.blamedField),
         ReferencePickerField(
           label: 'Commessa',
           localItems: commesse,
@@ -186,6 +198,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         // ── Customer ──────────────────────────────────────────────────────
         _SectionLabel(text: 'Cliente *'),
         const SizedBox(height: 8),
+        BlamedFieldNotice(field: 'customerId', blamedField: widget.blamedField),
         AppLookupField(
           // Value can be reset externally (e.g. wizard back-navigation); key it by the value to
           // force a fresh widget — same reasoning the plain dropdown this replaces used to key
@@ -249,6 +262,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         const SizedBox(height: 24),
         _SectionLabel(text: 'Sede *'),
         const SizedBox(height: 8),
+        BlamedFieldNotice(field: 'locationId', blamedField: widget.blamedField),
         AppLookupField(
           // Same reasoning as the customer field above — the customer field's onSelected/
           // onFreeText reset locationId externally, so this must be rekeyed to pick up the reset.

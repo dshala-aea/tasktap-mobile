@@ -33,7 +33,15 @@ const _kSteps = [
 // ══════════════════════════════════════════════════════════════════════════════
 
 class NewTicketFormScreen extends ConsumerStatefulWidget {
-  const NewTicketFormScreen({super.key});
+  const NewTicketFormScreen({super.key, this.repairRow});
+
+  /// The outbox row this wizard is repairing, or null for an ordinary create.
+  ///
+  /// Set when the server refused a queued ticket over one of its references and the ticket list
+  /// routes it here (`ticket_list_screen.dart`): the form is seeded from this row — less the field
+  /// [PendingTicket.repairableField] names — and saving writes the correction back onto the SAME
+  /// row instead of creating a new one. See [TicketCreationQueue.repair].
+  final PendingTicket? repairRow;
 
   @override
   ConsumerState<NewTicketFormScreen> createState() => _NewTicketFormScreenState();
@@ -49,6 +57,20 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   int get _stepIndex => _FormStep.values.indexOf(_step);
   bool get _isFirst => _step == _FormStep.clienteSede;
   bool get _isLast => _step == _FormStep.riepilogo;
+  bool get _isRepair => widget.repairRow != null;
+
+  /// The request field the server refused, or null. Read from the row, never guessed: the queue
+  /// decided it, the wizard only has to render it.
+  String? get _blamedField => widget.repairRow?.repairableField;
+
+  /// The step that owns the refused field, so the repair opens where the work is. Fields this step
+  /// list does not name — `customerId`, `locationId`, `contractId`, `commessaId` — all live on step 1,
+  /// which is also the answer when the row carries no field at all.
+  static _FormStep _stepOwning(String? field) => switch (field) {
+    'agentId' || 'typeId' || 'prodottoAssistenzaIds' => _FormStep.dettagli,
+    'assignedUserId' => _FormStep.assegnazione,
+    _ => _FormStep.clienteSede,
+  };
 
   /// Auto-select the default status once the status list has loaded.
   ///
@@ -62,6 +84,14 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   @override
   void initState() {
     super.initState();
+    final row = widget.repairRow;
+    if (row != null) {
+      // Seeded here rather than lazily in build: the status listener below runs on the first frame
+      // and only fills statusId when it is still null, so the row's own status has to be in place
+      // before it can decide anything.
+      _formState = NewTicketFormState.fromPendingRow(row);
+      _step = _stepOwning(row.repairableField);
+    }
     _statusListener = ref.listenManual(
       ticketStatusesProvider,
       (previous, next) => next.whenData(_applyDefaultStatus),
@@ -123,6 +153,10 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
   ///   (unlike rapportini/worklogs), so the outcome on the server is
   ///   unknown — the ticket is kept locally as `failed` for a deliberate,
   ///   user-initiated retry from the ticket list. It is never auto-retried.
+  /// - Repair ([repairRow] set): the corrected values are written back onto
+  ///   the row the server refused and the flag holding it out of the retry
+  ///   sweeps is cleared. **No request is made from here** — the row returns
+  ///   to the ordinary auto-retry path, which is what actually sends it.
   Future<void> _onSubmit() async {
     if (!_formState.isValid || _isSubmitting) return;
 
@@ -130,6 +164,41 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
 
     final isOnline = ref.read(isOnlineProvider);
     final queue = ref.read(ticketCreationQueueProvider);
+
+    final repairRow = widget.repairRow;
+    if (repairRow != null) {
+      // `repair`, never `create`: an UPDATE of that same row. A create would leave the rejected
+      // ticket sitting beside a second pending one, and a `PUT /api/tickets` would reach for a
+      // server ticket that does not exist yet — this row has never been created.
+      await queue.repair(
+        repairRow.id,
+        title: _formState.title!,
+        description: _formState.description,
+        customerId: _formState.customerId!,
+        locationId: _formState.locationId!,
+        assignedUserId: _formState.assignedUserId,
+        statusId: _formState.statusId!,
+        typeId: _formState.typeId!,
+        priorita: _formState.priority,
+        dueDate: _formState.dueDate,
+        technicianNotes: _formState.technicianNotes,
+        agentId: _formState.agentId,
+        contractId: _formState.contractId,
+        commessaId: _formState.commessaId,
+        cantiereId: _formState.cantiereId,
+        prodottoAssistenzaIds: _formState.prodottoAssistenzaIds,
+        tags: _formState.tags,
+      );
+
+      if (!mounted) return;
+      showAppToast(
+        context,
+        message: 'Correzione salvata: il ticket verrà inviato automaticamente.',
+        tone: ToastTone.success,
+      );
+      Navigator.of(context).pop(true);
+      return;
+    }
 
     final outcome = await queue.create(
       title: _formState.title!,
@@ -194,7 +263,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
             bottom: false,
             child: Column(
               children: [
-                ScreenHeader(title: 'Nuovo ticket', showBack: true),
+                ScreenHeader(title: _isRepair ? 'Correggi ticket' : 'Nuovo ticket', showBack: true),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.pagePadding,
@@ -255,22 +324,26 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
         key: key,
         state: _formState,
         onChanged: _onFormChanged,
+        blamedField: _blamedField,
       ),
       _FormStep.dettagli => StepDettagliTicket(
         key: key,
         state: _formState,
         onChanged: _onFormChanged,
+        blamedField: _blamedField,
       ),
       _FormStep.assegnazione => StepAssegnazione(
         key: key,
         state: _formState,
         onChanged: _onFormChanged,
+        blamedField: _blamedField,
       ),
       _FormStep.riepilogo => StepRiepilogoTicket(
         key: key,
         state: _formState,
         onSubmit: _onSubmit,
         isSubmitting: _isSubmitting,
+        submitLabel: _isRepair ? 'Salva correzione' : 'Crea ticket',
       ),
     };
   }

@@ -14,6 +14,7 @@ import '../new_ticket_form_state.dart';
 import '../reference_picker.dart';
 import '../reference_providers.dart';
 import '../ticket_providers.dart';
+import 'blamed_field_notice.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -36,6 +37,7 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
     required this.state,
     required this.onChanged,
     this.ticketId,
+    this.blamedField,
   });
 
   final NewTicketFormState state;
@@ -46,6 +48,11 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
   /// needs a real ticket id — the create wizard has none until the ticket is actually submitted,
   /// so the section only appears once EditTicketScreen hands this in.
   final String? ticketId;
+
+  /// The request field the server refused, when this wizard is a repair — see
+  /// [BlamedFieldNotice]. Names `typeId`, `agentId` or `prodottoAssistenzaIds`, or null. Never set
+  /// from [ticketId]'s edit path: editing a ticket the server already has is not a repair.
+  final String? blamedField;
 
   @override
   ConsumerState<StepDettagliTicket> createState() => _StepDettagliTicketState();
@@ -156,6 +163,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        BlamedFieldNotice(field: 'prodottoAssistenzaIds', blamedField: widget.blamedField),
         if (ids.isNotEmpty) ...[
           Wrap(
             spacing: AppSpacing.xs,
@@ -239,6 +247,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         const SizedBox(height: 24),
 
         // ── Type ───────────────────────────────────────────────────────────
+        BlamedFieldNotice(field: 'typeId', blamedField: widget.blamedField),
         AppFieldShell(
           label: 'Tipo *',
           child: DropdownButtonFormField<int>(
@@ -321,32 +330,40 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
                 .where((a) => a.id == widget.state.agentId)
                 .map((a) => a.label)
                 .firstOrNull;
-            return AppFieldShell(
-              label: 'Riferimento',
-              child: AppTappable(
-                key: const ValueKey('agent-field'),
-                onTap: () => _pickAgent(agents),
-                color: context.colors.bg3,
-                border: Border.all(color: context.colors.borderLight),
-                borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.md,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        selected ?? 'Nessuno',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: selected != null ? context.colors.ink : context.colors.inkMuted,
-                        ),
-                      ),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                BlamedFieldNotice(field: 'agentId', blamedField: widget.blamedField),
+                AppFieldShell(
+                  label: 'Riferimento',
+                  child: AppTappable(
+                    key: const ValueKey('agent-field'),
+                    onTap: () => _pickAgent(agents),
+                    color: context.colors.bg3,
+                    border: Border.all(color: context.colors.borderLight),
+                    borderRadius: BorderRadius.circular(AppSpacing.inputRadius),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.md,
                     ),
-                    Icon(LucideIcons.chevronDown, size: 18, color: context.colors.inkMuted),
-                  ],
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            selected ?? 'Nessuno',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: selected != null
+                                  ? context.colors.ink
+                                  : context.colors.inkMuted,
+                            ),
+                          ),
+                        ),
+                        Icon(LucideIcons.chevronDown, size: 18, color: context.colors.inkMuted),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             );
           },
         ),

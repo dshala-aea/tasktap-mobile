@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../new_ticket_form_state.dart';
 import '../ticket_api_client.dart';
+import 'blamed_field_notice.dart';
 import 'package:tasktap_mobile/core/widgets/app_tappable.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -25,10 +26,19 @@ final techniciansProvider = FutureProvider<List<Map<String, dynamic>>>((ref) {
 });
 
 class StepAssegnazione extends ConsumerStatefulWidget {
-  const StepAssegnazione({super.key, required this.state, required this.onChanged});
+  const StepAssegnazione({
+    super.key,
+    required this.state,
+    required this.onChanged,
+    this.blamedField,
+  });
 
   final NewTicketFormState state;
   final ValueChanged<NewTicketFormState> onChanged;
+
+  /// The request field the server refused, when this wizard is a repair — see
+  /// [BlamedFieldNotice]. Names `assignedUserId`, or null.
+  final String? blamedField;
 
   @override
   ConsumerState<StepAssegnazione> createState() => _StepAssegnazioneState();
@@ -62,6 +72,12 @@ class _StepAssegnazioneState extends ConsumerState<StepAssegnazione> {
           style: AppTextStyles.bodySmall.copyWith(color: context.colors.inkMuted),
         ),
         const SizedBox(height: 16),
+
+        // ── Blamed technician ──────────────────────────────────────────────
+        // Above the list, including "Nessuna assegnazione": the refused technician is gone from the
+        // selection, and clearing the field entirely is a legitimate repair the notice must not
+        // look like a warning against.
+        BlamedFieldNotice(field: 'assignedUserId', blamedField: widget.blamedField),
 
         // ── No assignment button ───────────────────────────────────────────
         _AssignmentOption(

@@ -28,6 +28,22 @@ final pendingTicketsProvider = StreamProvider.autoDispose<List<PendingTicket>>((
   return ref.watch(pendingTicketRepositoryProvider).watchUnresolved();
 });
 
+/// Queued tickets the server rejected for a reference this client can repair: their
+/// `repairableField` names the request field that would fail identically on any resend, so the
+/// queue has taken them out of both automatic retry sweeps and they are waiting on a human.
+///
+/// Read-only, and deliberately so — the UI observes that a row is repairable; it never decides it.
+/// What qualifies, and the repair that clears it, belong to `TicketCreationQueue`
+/// (`repairableFieldOf` / `repair`). A repair nulls the column, the row leaves this stream and
+/// re-enters the ordinary retry path by the same route every other row uses.
+final repairablePendingTicketsProvider =
+    StreamProvider.autoDispose<List<PendingTicket>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.pendingTickets,
+      )..where((t) => t.repairableField.isNotNull())).watch();
+    });
+
 /// Map of statusId → Italian status name from cached TicketStatuses table.
 final ticketStatusMapProvider = StreamProvider.autoDispose<Map<int, String>>((
   ref,

@@ -8,6 +8,9 @@
 // widget dependencies (LucideIcons etc.).
 // ══════════════════════════════════════════════════════════════════════════════
 
+import '../../data/local/app_database.dart';
+import '../../data/tickets/pending_ticket_repository.dart';
+
 /// TicketPriorityEnum values (TicketPriorityEnum.cs) — sent on the wire as `priorita`, a
 /// string, not an int. "Media" is the backend's own default.
 const List<String> kTicketPriorities = ['Bassa', 'Media', 'Alta', 'Urgente'];
@@ -80,6 +83,48 @@ class NewTicketFormState {
 
   /// Free-form labels, no catalogue behind them — same reasoning as web's comma-separated input.
   final List<String> tags;
+
+  /// The form state a REPAIR starts from: the fields of the outbox row the server refused, minus the
+  /// one it refused *for*.
+  ///
+  /// That omission is the whole reason this constructor exists rather than a plain copy. The row's
+  /// `repairableField` names the reference the server could not resolve; seeding it back would
+  /// preload the rejected id, so "Salva" would re-send exactly what failed a moment ago — clearing
+  /// the flag and changing nothing. The field is left empty instead, and `BlamedFieldNotice`
+  /// (`steps/blamed_field_notice.dart`) says why in its place.
+  /// Where the dropped field is required (`customerId`, `locationId`, `typeId`) the wizard's own
+  /// [isValid] therefore keeps the save blocked until a real replacement is picked, which is the
+  /// point of routing here at all.
+  ///
+  /// Not the shape `edit_ticket_screen.dart` preloads from a server ticket: that one carries none of
+  /// the reference fields, because `PUT /api/tickets` has no parameters for them.
+  ///
+  /// The row's own bookkeeping (`state`, `error`, `serverTicketId`, `repairableField`) is deliberately
+  /// not read — it describes the row, not the ticket.
+  factory NewTicketFormState.fromPendingRow(PendingTicket row) {
+    final blamed = row.repairableField;
+    return NewTicketFormState(
+      customerId: blamed == 'customerId' ? null : row.customerId,
+      locationId: blamed == 'locationId' ? null : row.locationId,
+      title: row.title,
+      description: row.description,
+      typeId: blamed == 'typeId' ? null : row.typeId,
+      statusId: row.statusId,
+      assignedUserId: blamed == 'assignedUserId' ? null : row.assignedUserId,
+      priority: row.priorita,
+      dueDate: row.dueDate,
+      technicianNotes: row.technicianNotes,
+      agentId: blamed == 'agentId' ? null : row.agentId,
+      contractId: blamed == 'contractId' ? null : row.contractId,
+      commessaId: blamed == 'commessaId' ? null : row.commessaId,
+      // Never dropped: no wizard step holds a cantiere, so `TicketCreationQueue` never blames it.
+      cantiereId: row.cantiereId,
+      prodottoAssistenzaIds: blamed == 'prodottoAssistenzaIds'
+          ? const []
+          : decodePendingStringList(row.prodottoAssistenzaIdsJson),
+      tags: decodePendingStringList(row.tagsJson),
+    );
+  }
 
   NewTicketFormState copyWith({
     String? customerId,
