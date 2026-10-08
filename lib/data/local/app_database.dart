@@ -47,6 +47,99 @@ class Customers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── reference mirror (schema 37) ────────────────────────────────────────────────
+// Contracts of the customers this technician's payload carries. Mirrored so the ticket wizard's
+// Cliente→Contratto picker is filled offline (spec 7.4).
+//
+// `isActive` is carried, not filtered: a contract deactivated on the server must arrive here as a
+// row with a false flag, or a device that cached it would offer it forever (spec 6.4).
+class Contracts extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get name => text()();
+  TextColumn get customerId => text()();
+  TextColumn get locationId => text().nullable()();
+  DateTimeColumn get startDate => dateTime()();
+  DateTimeColumn get endDate => dateTime().nullable()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  /// `numero` and `codice` are both human references a technician may read off the paper contract;
+  /// the picker shows whichever is present.
+  TextColumn get numero => text().nullable()();
+  TextColumn get codice => text().nullable()();
+  IntColumn get tipo => integer().nullable()();
+  TextColumn get externalId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Commesse (`codice`, `descrizione`) of the customers this technician's payload carries.
+class Commesse extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get codice => text()();
+  TextColumn get descrizione => text().nullable()();
+  TextColumn get customerId => text().nullable()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  TextColumn get stato => text().nullable()();
+  TextColumn get externalId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Products / services (`ProdottoAssistenza`) of the customers this technician's payload carries.
+///
+/// Deliberately separate from [Assets], which mirrors the *covered* assets of this technician's
+/// tickets for the checklist feature and is pruned by `checklist_reconciler`. Two scopes, two
+/// lifecycles: this table answers "what can I pick for this customer", that one answers "what did
+/// this ticket cover". Merging them would put the ticket form in the hands of the checklist pruner.
+class ProdottiAssistenza extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get name => text()();
+  TextColumn get customerId => text()();
+  TextColumn get locationId => text()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  /// Wire names follow the entity's own JsonPropertyName attributes: codice / categoria / marchio.
+  TextColumn get codice => text().nullable()();
+  TextColumn get serialNumber => text().nullable()();
+  TextColumn get categoria => text().nullable()();
+  TextColumn get marchio => text().nullable()();
+  TextColumn get externalId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Agents, mirrored only for the ones this technician's tickets already reference — the
+/// "Riferimento" field. A tenant-wide agent book is explicitly not mirrored (spec 10, D-1(a)).
+class Agents extends Table {
+  TextColumn get id => text()();
+  TextColumn get tenantId => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  TextColumn get nome => text()();
+  TextColumn get email => text().nullable()();
+  TextColumn get cellulare => text().nullable()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── locations ─────────────────────────────────────────────────────────────────
 class Locations extends Table {
   TextColumn get id => text()();
@@ -784,6 +877,24 @@ class PendingTickets extends Table {
   TextColumn get technicianNotes => text().nullable()();
   TextColumn get agentId => text().nullable()();
 
+  /// Reference fields the create wizard now collects, sent on the wire by [TicketApiClient].
+  /// Null for every ticket queued before this column existed — and legal, since none of them is
+  /// required to create a ticket.
+  TextColumn get contractId => text().nullable()();
+  TextColumn get commessaId => text().nullable()();
+  TextColumn get cantiereId => text().nullable()();
+
+  /// Covered products, JSON-encoded — same storage as [Tickets.tagsJson] (its doc comment has the
+  /// reasoning). A JSON list rather than a join table because nothing reads it relationally: it is
+  /// carried to the server verbatim and never queried by id.
+  TextColumn get prodottoAssistenzaIdsJson => text().nullable()();
+
+  /// The request field a rejected foreign key referred to ("customerId"), set when the server
+  /// answered 404 with `extensions.field` and the row is now repairable by picking a replacement
+  /// (see [TicketCreationQueue]). Null when the row is not waiting on a repair — the honest answer
+  /// for every row written before this column existed.
+  TextColumn get repairableField => text().nullable()();
+
   /// Free-form labels — same JSON-text storage as `Tickets.tagsJson` (its own doc comment has
   /// the full reasoning). Client-authored, never delta-synced from the server, same as every
   /// other column on this table — no syncCursorGeneration bump needed.
@@ -1007,13 +1118,17 @@ class ChecklistOmittedTickets extends Table {
     Strumenti,
     ReportStrumenti,
     ChecklistOmittedTickets,
+    Contracts,
+    Commesse,
+    ProdottiAssistenza,
+    Agents,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 36;
+  int get schemaVersion => 37;
 
   @override
   MigrationStrategy get migration {
@@ -1021,6 +1136,7 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (m) async {
         await m.createAll();
         await _createChecklistIndexes();
+        await _createReferenceIndexes();
       },
       onUpgrade: (m, from, to) async {
         if (from < 2) {
@@ -1276,6 +1392,26 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(draftReports, draftReports.submissionProblemJson);
           await _createChecklistIndexes();
         }
+        if (from < 37) {
+          // The reference mirror the ticket wizard needs offline, plus the queue columns that let a
+          // created ticket carry them. New tables and client-authored columns: nothing is backfilled
+          // and the delta cursor is NOT bumped — the reference queries carry no delta, so a device
+          // receives them on its next ordinary sync. See this file's schema-33 step for the same
+          // reasoning about client-authored columns.
+          await m.createTable(contracts);
+          await m.createTable(commesse);
+          await m.createTable(prodottiAssistenza);
+          await m.createTable(agents);
+          // A separate helper, deliberately not folded into _createChecklistIndexes: that one runs
+          // from the `from < 36` branch too, where these tables do not exist yet.
+          await _createReferenceIndexes();
+
+          await m.addColumn(pendingTickets, pendingTickets.contractId);
+          await m.addColumn(pendingTickets, pendingTickets.commessaId);
+          await m.addColumn(pendingTickets, pendingTickets.cantiereId);
+          await m.addColumn(pendingTickets, pendingTickets.prodottoAssistenzaIdsJson);
+          await m.addColumn(pendingTickets, pendingTickets.repairableField);
+        }
       },
     );
   }
@@ -1331,6 +1467,26 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS report_strumenti_report ON report_strumenti (report_id)',
+    );
+  }
+
+  /// Indexes the reference pickers read by: every one of them is "the rows for this customer".
+  ///
+  /// Kept separate from [_createChecklistIndexes] on purpose: that helper is also called from the
+  /// `from < 36` branch, where `contracts`/`commesse`/`prodotti_assistenza` do not exist yet, so a
+  /// `CREATE INDEX ... ON contracts` there would fail the upgrade for any device older than 36.
+  /// `IF NOT EXISTS` keeps this idempotent (a fresh install runs it from `onCreate`, an upgrade
+  /// from the `from < 37` branch).
+  Future<void> _createReferenceIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS contracts_customer ON contracts (customer_id, is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS commesse_customer ON commesse (customer_id, is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS prodotti_assistenza_customer '
+      'ON prodotti_assistenza (customer_id, is_active)',
     );
   }
 

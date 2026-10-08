@@ -138,6 +138,9 @@ void main() {
               "submission_state TEXT NOT NULL DEFAULT 'draft');",
             );
             raw.execute('CREATE TABLE report_controlli (id TEXT NOT NULL PRIMARY KEY);');
+            // The upgrade continues 33 -> ... -> 37, and schema 37 adds columns to
+            // pending_tickets, so it must exist on this minimal fixture for the chain to run.
+            raw.execute('CREATE TABLE pending_tickets (id TEXT NOT NULL PRIMARY KEY);');
             raw.execute("INSERT INTO draft_reports (id, submission_state) VALUES ('old', 'failed');");
             raw.execute(
               "INSERT INTO draft_reports (id, submission_state) VALUES ('ok', 'readyToSubmit');",
