@@ -4,40 +4,54 @@
 
 **Goal:** Give a technician the reference data a ticket is made of — contract, commessa, product, agent — so the create wizard works offline for the customers their own work already reaches, and reaches everything else through online search that materialises the pick.
 
-**Architecture:** Option E from the spec: extend the existing `/api/sync/mobile` delta with four scoped entity lists, mirror them in four Drift tables, and add one picker widget that shows the local mirror first and searches the server on demand. No new sync mechanism, no new tables on the server, no permissions model: the scope is the technician's own work scope (D-1(a)), computed by the traversal `MobileUserSyncService` already performs.
+**Architecture:** Option E from the spec. Extend the existing `/api/sync/mobile` payload with four scoped entity lists, mirror them in four Drift tables, and add one picker that shows the local mirror and searches the server on demand. No new sync mechanism, no new server tables, no permissions model: the scope is the technician's own work scope (D-1(a)), computed by the traversal `MobileUserSyncService` already performs.
 
 **Tech Stack:** Backend — .NET 8, EF Core, xUnit + FluentAssertions + `UseInMemoryDatabase`. Mobile — Flutter/Dart, Drift (schema 36 → 37), Riverpod, dio, `flutter_test` + `mocktail`.
 
-**Spec:** `mobile/docs/superpowers/specs/2026-10-08-offline-architecture-reanalysis-design.md` (Option E §5, sync design §6, UX contract §7, schema §8, backend §9, decisions §10). **Read §2.6 and §2.7 first** — they correct three facts the spec originally asserted, and §2.7 is a live defect this plan fixes.
+**Spec:** `mobile/docs/superpowers/specs/2026-10-08-offline-architecture-reanalysis-design.md` (Option E §5, sync design §6, UX contract §7, schema §8, backend §9, decisions §10). Read §2.6–§2.7 first — they correct facts the spec originally asserted, and §2.7 is a live defect this plan fixes.
+
+## Revision note (2026-10-08, second pass)
+
+Five corrections from plan review, each verified against `master` and the mobile tree before applying:
+
+1. **The four reference queries carry NO delta filter.** The first draft applied `(UpdatedAt ?? CreatedAt) > cutoff`, which breaks whenever *scope* changes without the *row* changing — a contract created before the cutoff, whose customer first becomes reachable through a ticket that entered the delta this sync, would be withheld forever. `MobileUserSyncService` already states the governing rule ("reference entities are always full, no delta filter") and re-sends the technician's tickets whole. The new queries follow that rule: the scope, not a timestamp, decides what the phone gets.
+2. **Pruning is scoped, not global, and does not depend on `since == null`.** The payload's customer set is recomputed each sync from open assigned work and the schedule window — it is not a snapshot, and the device accumulates. A "prune everything not in the payload" rule would delete an accumulated customer whose last ticket closed. Prune is keyed to the customers the payload actually carries, and never touches agents.
+3. **The cursor generation is NOT bumped.** With no delta on the reference entities, a device receives them on its first sync after upgrading; a reset would cost every device a full re-download of all tickets and reports for nothing.
+4. **`internalNotes` is dropped from the plan entirely.** `new_ticket_form_state.dart` records that it is office-only and *deliberately* not exposed on mobile. And the picker widget no longer runs the materialise step itself — see Task B4.
+5. **Riferimento is confirmed broken, not merely questionable — and it is fixed here.** `step_dettagli_ticket.dart:233-245` fills `agentId` from `TicketApiClient.fetchTechnicians()`, i.e. from **Users** (`/api/users?role=Technician`). `TicketCommandService.cs:100` validates that same field with `EnsureExistsAsync<Agent>(request.AgentId, ct)`, and `Agent` is a separate entity (`Core/Entities/Agent.cs`, restored in W6a from the legacy "Agente") whose ids are not User ids. So any ticket created with a Riferimento **404s with `not_found`** — the same failure class the spec's §2.7 identified. Task B5 re-sources the field from the Agents mirror. The web client has the same defect ("same as web's own TicketCreatePanel", per that file's own comment) and is deliberately left to its own release — see Global Constraints.
 
 ## Global Constraints
 
-- **Two working trees, two branches.** Backend work runs in `/mnt/d/AEA/Sviluppi/TaskTap` (the API repo); mobile work runs in `/mnt/d/AEA/Sviluppi/TaskTap/mobile` (a **nested git repo**, separate history, never touched by backend commits).
-- **Backend branches from `master`, never from the current checkout.** The root working tree is on `feat/copilot-domain-correctness`, which is **51 commits behind `master`** and does not contain the deployed per-asset checklist feature. Phase A's first step is `git checkout -b feat/offline-reference-sync master`.
-- **Scope is D-1(a): the technician's own work scope.** No tenant-wide list may enter the payload. Contracts/commesse/products are scoped to the customer ids already in the payload; agents to the agents already referenced by the payload's tickets. This is a security property, tested as one.
-- **`IsActive` is carried, never filtered** (§6.4). A scope predicate that hides inactive rows is the bug this work exists to fix.
-- **Old clients ignore new members; new clients must not read a missing member as "empty".** Every new member is gated by the established key-presence `carries*` flag, and a payload without the key must leave the local rows untouched.
+- **Two working trees, two branches.** Backend work runs in `/mnt/d/AEA/Sviluppi/TaskTap` (the API repo); mobile work runs in `/mnt/d/AEA/Sviluppi/TaskTap/mobile` (a **nested git repo**, separate history).
+- **Backend branches from `master`, never from the current checkout.** The root working tree is on `feat/copilot-domain-correctness`, **51 commits behind `master`**, without the deployed checklist feature at all. Phase A's first step is `git checkout -b feat/offline-reference-sync master`. Read backend files with `git show master:<path>` until that branch exists.
+- **Scope is D-1(a): the technician's own work scope.** No tenant-wide list enters the payload. Contracts/commesse/products are scoped to the customer ids the payload already carries; agents to the agent ids the payload's tickets already reference. This is a security property and is tested as one, per entity family.
+- **Scope ≠ completeness.** The payload's customer set is *recomputed every sync*, not accumulated, and it is itself delta-filtered in the `fullScope` branch. Both the reference queries and the prune are keyed to the customers **present in this payload**; a customer absent from it is never read and never pruned.
+- **The reference mirror is not exclusively passive.** Population has two sources, and comments where they meet must say so:
+  - **Passive**: the sync payload, bounded by D-1(a).
+  - **Explicit**: an online search the technician ran, whose selected rows are written locally by `ReferenceSearchClient`. This is outside the passive scope, authorised by the technician's own successful server query, and is why a row in these tables need not satisfy the D-1(a) predicate. A future reviewer must not "restore" the invariant by adding a scope filter to the search write path.
+- **`IsActive` is carried, never filtered.** A scope predicate that hides inactive rows is the bug this work exists to fix.
+- **Old clients ignore new members; new clients must not read a missing member as "empty".** Every new member is gated by a key-presence `carries*` flag, asserted in the contract tests.
 - **Never `sed -i`, `perl -i`, or in-place Python on `/mnt/d`** — it silently deletes files on this mount.
 - **Git:** explicit-path `git add` only, never `git add -A`. Commit trailers: `Co-Authored-By: Claude Code <noreply@anthropic.com>`.
 - **Mobile ships on `v*` tags after the user device-tests.** Branch `feat/mobile-asset-checklists` stays unmerged.
-- Copy is Italian, user-facing, and matches the existing tone. No English strings in mobile UI.
-- **Out of scope, explicitly:** `maintenanceTemplateId`, `externalId`, attachments, `internalNotes` on **update** (create only), any offline write for admin/magazzino, CRDT/vector clocks/tombstone tables, and the web client's identical Riferimento bug (frontend repo, its own release).
+- Copy is Italian and matches the existing tone. No English strings in mobile UI.
+- **Out of scope, explicitly:** mobile `internalNotes`, `maintenanceTemplateId`, `externalId`, `source`, attachments, any offline write for admin/magazzino, CRDT/vector clocks/tombstone tables, and the web client's identical Riferimento bug (frontend repo, its own release).
 
 ## Review Focus
 
-The five inputs most likely to bite a real technician, each pinned by a test in the task that owns it:
+The five inputs most likely to bite a real technician. Each line names the task whose tests pin it.
 
-1. **A queued ticket whose FK row was deactivated or deleted after drafting.** The send is rejected; the technician must be told which field died and be able to pick a replacement without retyping the ticket. → Task B6.
-2. **A search result the technician selects that is outside the mirrored scope.** It must be written into the local mirror at select time, and must still be there for the ticket that is created from it. → Task B4.
-3. **An older backend that does not send the new keys at all.** It must not look like "every reference row was deleted" — the bootstrap prune must not fire. → Tasks B2, B3.
-4. **A technician with no tickets yet** (new hire, or all their work is older than the sync window). Every picker must render a labelled empty state with a way forward, never a dead control. → Task B4.
-5. **"Riferimento" must never again send a `User` id into `Ticket.AgentId`.** The server guards that field with `EnsureExistsAsync<Agent>`. → Task B5.
+1. **A reference row that becomes reachable only because the technician's *scope* changed.** A contract created last month, for a customer whose first ticket reaches the phone today: the contract never changed, so a delta filter would withhold it forever and the picker would open empty on a customer the technician can plainly see. → Task A2, the scope-expansion test.
+2. **A search result the technician selects that is outside the mirrored scope.** It must exist in the local mirror before the ticket that references it is written, or the ticket fails on a row the technician just picked. → Task B4, where this is structural, not merely tested.
+3. **A backend that predates the new members.** It sends none of the four keys; that must not read as "every reference row was deleted". → Tasks B2 and B3.
+4. **A technician with no open work** (new hire, or between jobs). The payload carries no customers, so every picker is empty. It must render a labelled state with a way forward, never a dead control. → Task B4.
+5. **A queued ticket whose reference row died after drafting.** The send is rejected; the technician must be told which field died and be able to pick a replacement without retyping the ticket — including when the app was not on that screen when the retry failed. → Task B6.
 
 ---
 
 # Phase A — Backend
 
-Phase A is independently shippable: the payload extension is additive, old clients ignore it, and Tasks A1–A3 ship one backend release before any mobile build consumes it (spec §11.1).
+Phase A is independently shippable: the payload extension is additive, old clients ignore it, and A1–A3 ship one backend release before any mobile build consumes it.
 
 **Working directory for every task in this phase:** `/mnt/d/AEA/Sviluppi/TaskTap`.
 **Create the branch once, before Task A1:**
@@ -45,181 +59,136 @@ Phase A is independently shippable: the payload extension is additive, old clien
 ```bash
 cd /mnt/d/AEA/Sviluppi/TaskTap
 git fetch origin && git checkout -b feat/offline-reference-sync master
-git log --oneline -1   # must show 59e6d688 or a descendant
+git log --oneline -1
 ```
-
-Do **not** work on `feat/copilot-domain-correctness`: it lacks `MobileUserSyncService`'s checklist block, `SyncChecklistDtos.cs`, and `TicketProdottoAssistenza.MaintenanceTemplateVersionId`.
 
 ---
 
-### Task A1: `q` on the contracts and products list endpoints
+### Task A1: `q` on the contracts, products and agents list endpoints
 
 **Files:**
-- Modify: `src/TaskTapAPI.Api/Controllers/ContractsController.cs:58-100`
-- Modify: `src/TaskTapAPI.Api/Controllers/ProdottoAssistenzaController.cs:53-106`
+- Modify: `src/TaskTapAPI.Api/Controllers/ContractsController.cs` (`GetAll`)
+- Modify: `src/TaskTapAPI.Api/Controllers/ProdottoAssistenzaController.cs` (`GetAll`)
+- Modify: `src/TaskTapAPI.Api/Controllers/AgentsController.cs` (`GetAll`)
 - Test: `tests/TaskTapAPI.Tests/Controllers/ReferenceListSearchTests.cs` (create)
 
 **Interfaces:**
-- Consumes: `ListQuery.Q` (`src/TaskTapAPI.Api/Queries/ListQuery.cs:11-33`).
-- Produces: nothing new. Both endpoints start honouring the `q` query parameter they already accept.
+- Consumes: `ListQuery.Q`.
+- Produces: nothing new. All three endpoints honour the `q` parameter they already accept.
 
-**Why:** Search-on-demand (spec §7.4) is the whole online half of the design. Verified today: `ContractsController.GetAll` and `ProdottoAssistenzaController.GetAll` bind `ListQuery` and never read `query.Q` — the parameter is silently dropped. `CommesseController.cs:69-70` shows the shape to copy.
+**Why:** search-on-demand (spec §7.4) is the whole online half of the design. Verified on `master`:
+`ContractsController.GetAll`, `ProdottoAssistenzaController.GetAll` and `AgentsController.GetAll` all
+bind `ListQuery` and never read `query.Q` — the parameter is silently dropped, so the picker would
+claim a search it never performed and show an unfiltered page for a term the technician typed.
+`CommesseController` reads it (`:69-70`) and shows the shape to copy, which is also why commesse is
+not in this list.
 
-- [ ] **Step 1: Write the failing test**
+`AgentsController.GetAll` carries `[RequirePermission(PermissionCatalogue.ClientiAgentRead)]`. Leave it
+exactly as it is: a technician without that permission gets a 403, the picker falls back to the
+mirrored agents (which come from their own tickets and need no permission at all), and Riferimento is
+never a required field. The permission gate is a fact for Task B4's comment, not something to relax.
+
+- [ ] **Step 1: Read the three `GetAll` actions and the existing test factory**
+
+```bash
+git show master:src/TaskTapAPI.Api/Controllers/ContractsController.cs | sed -n '55,115p'
+git show master:src/TaskTapAPI.Api/Controllers/ProdottoAssistenzaController.cs | sed -n '50,115p'
+git show master:src/TaskTapAPI.Api/Controllers/AgentsController.cs | sed -n '44,68p'
+git show master:src/TaskTapAPI.Api/Controllers/CommesseController.cs | sed -n '60,78p'
+git show master:tests/TaskTapAPI.Tests/Controllers/ProdottoAssistenzaControllerTests.cs | sed -n '1,45p'
+```
+
+Note each controller's exact constructor argument list and copy the existing test file's SUT factory
+verbatim into the new test. Do not reconstruct it from memory.
+
+- [ ] **Step 2: Write the failing test**
 
 ```csharp
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using TaskTapAPI.Api.Controllers;
-using TaskTapAPI.Api.Queries;
-using TaskTapAPI.Application.Services;
-using TaskTapAPI.Core.Entities;
-using TaskTapAPI.Infrastructure.Configuration;
-using TaskTapAPI.Infrastructure.Context;
-using TaskTapAPI.Infrastructure.Data;
-using TaskTapAPI.Infrastructure.UnitOfWork;
 using Xunit;
 
 namespace TaskTapAPI.Tests.Controllers;
 
 /// <summary>
-/// The pickers search the server through these list endpoints. `q` is the parameter the whole
-/// on-demand path is built on, so an endpoint that accepts ListQuery and drops `q` is not a
-/// cosmetic gap: it makes the picker claim a search it never performs.
+/// The mobile picker's online half is these list endpoints with a `q`. An endpoint that binds
+/// ListQuery and drops `query.Q` makes the picker claim a search it never ran, and shows the
+/// technician an unfiltered page for a term they typed.
 /// </summary>
 public class ReferenceListSearchTests : IDisposable
 {
-    private readonly ApplicationDbContext _db;
-    private readonly TenantContext _tenantContext = new();
-    private readonly Guid _tenantId = Guid.NewGuid();
-
-    public ReferenceListSearchTests()
-    {
-        _tenantContext.SetTenant(_tenantId);
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ConfigureWarnings(w => w.Ignore(
-                Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
-            .Options;
-        _db = new ApplicationDbContext(options, _tenantContext, new TenantOptions());
-
-        var now = DateTime.UtcNow;
-        var customerId = Guid.NewGuid();
-        _db.Contracts.AddRange(
-            new Contract { Id = Guid.NewGuid(), TenantId = _tenantId, CustomerId = customerId,
-                Name = "Manutenzione caldaie", StartDate = now, CreatedAt = now },
-            new Contract { Id = Guid.NewGuid(), TenantId = _tenantId, CustomerId = customerId,
-                Name = "Assistenza porte", StartDate = now, CreatedAt = now });
-        _db.Set<ProdottoAssistenza>().AddRange(
-            new ProdottoAssistenza { Id = Guid.NewGuid(), TenantId = _tenantId,
-                CustomerId = customerId, LocationId = Guid.NewGuid(), Name = "Caldaia Nord",
-                CreatedAt = now },
-            new ProdottoAssistenza { Id = Guid.NewGuid(), TenantId = _tenantId,
-                CustomerId = customerId, LocationId = Guid.NewGuid(), Name = "Porta garage",
-                CreatedAt = now });
-        _db.SaveChanges();
-    }
-
-    public void Dispose() => _db.Dispose();
-
-    private ContractsController ContractsSut() => new(
-        new UnitOfWork(_db, _tenantContext, new TaskTapAPI.Infrastructure.Time.SystemClock()),
-        _tenantContext,
-        new ReferentialIntegrityService(new UnitOfWork(_db, _tenantContext,
-            new TaskTapAPI.Infrastructure.Time.SystemClock()), _tenantContext));
+    // ... fixture: the SUT factories copied from ProdottoAssistenzaControllerTests.cs, one tenant,
+    //     and two contracts + two products on one customer:
+    //       Contract "Manutenzione caldaie" / "Assistenza porte"
+    //       ProdottoAssistenza "Caldaia Nord" / "Porta garage"
+    //     Keep every created id in a field so the assertions can NAME it.
 
     [Fact]
     public async Task Contracts_list_filters_by_q()
     {
-        var result = await ContractsSut().GetAll(new ListQuery { Q = "caldaie" });
+        var page = Unwrap(await ContractsSut().GetAll(new ListQuery { Q = "caldaie" }));
 
-        var page = (result as OkObjectResult)!.Value as TaskTapAPI.Application.Common.PaginatedResult<
-            TaskTapAPI.Core.Entities.Contract>;
-        page!.Items.Should().ContainSingle().Which.Name.Should().Be("Manutenzione caldaie");
+        page.Items.Select(c => c.Id).Should().Equal(_caldaieContractId);
+    }
+
+    [Fact]
+    public async Task Products_list_filters_by_q()
+    {
+        var page = Unwrap(await ProductsSut().GetAll(new ListQuery { Q = "caldaia" }));
+
+        page.Items.Select(p => p.Id).Should().Equal(_caldaiaNordId);
+    }
+
+    [Fact]
+    public async Task Agents_list_filters_by_q()
+    {
+        var page = Unwrap(await AgentsSut().GetAll(new ListQuery { Q = "rossi" }));
+
+        page.Items.Select(a => a.Id).Should().Equal(_rossiAgentId);
+    }
+
+    /// <summary>A whitespace-only term is not a search — it must not narrow the page to nothing,
+    /// or clearing the box would empty the picker.</summary>
+    [Fact]
+    public async Task A_whitespace_q_does_not_filter()
+    {
+        var page = Unwrap(await ContractsSut().GetAll(new ListQuery { Q = "   " }));
+
+        page.Items.Should().HaveCount(2);
     }
 }
 ```
 
-> Verify the `ContractsController` constructor argument list against the file before running; it is
-> quoted from the controller's own SUT factory in `ContractsControllerTemplateAssignmentTests.cs`.
-> Copy that factory rather than the list above if they differ.
+Assert by **id**, not by count or name — a count of one is also what a broken tenant filter produces.
 
-- [ ] **Step 2: Run it and watch it fail**
+- [ ] **Step 3: Run it and watch it fail**
 
 Run: `dotnet test tests/TaskTapAPI.Tests --filter FullyQualifiedName~ReferenceListSearchTests`
-Expected: FAIL — the page contains both contracts, `q` was ignored.
+Expected: FAIL — `Contracts_list_filters_by_q` receives both contracts.
 
-- [ ] **Step 3: Add the filter to both controllers**
+- [ ] **Step 4: Add the filter to both controllers**
 
-In `ContractsController.GetAll`, immediately after the `codice` filter and before the sort:
+In each `GetAll`, in the same position as `CommesseController`'s — after the existing `if` filters, before the sort:
 
 ```csharp
         // Free-text search. The mobile picker's on-demand path sends this; without it the
-        // endpoint accepts ListQuery and silently drops the term, so the picker would claim a
-        // search it never performed.
+        // endpoint accepts ListQuery and silently drops the term.
         if (!string.IsNullOrWhiteSpace(query.Q))
-            q = q.Where(c => c.Name.Contains(query.Q));
+            q = q.Where(c => c.Name.Contains(query.Q));   // p.Name in ProdottoAssistenzaController
 ```
 
-In `ProdottoAssistenzaController.GetAll`, in the same position (after the existing filters, before the sort):
-
-```csharp
-        // See ContractsController.GetAll: the picker's search term must actually reach the query.
-        if (!string.IsNullOrWhiteSpace(query.Q))
-            q = q.Where(p => p.Name.Contains(query.Q));
-```
-
-Match the case-insensitivity convention of the file you are editing — `TicketsController` uses
-`Contains` (case-sensitive on the column's collation), `UsersController` lowercases the term. Follow
-whatever the neighbouring filters in each file already do, and if they lowercase, lowercase here too
-and make the test's term match.
-
-- [ ] **Step 4: Add the product test and the negative case**
-
-Add to `ReferenceListSearchTests`:
-
-```csharp
-    [Fact]
-    public async Task Products_list_filters_by_q()
-    {
-        var sut = new ProdottoAssistenzaController(
-            new UnitOfWork(_db, _tenantContext, new TaskTapAPI.Infrastructure.Time.SystemClock()),
-            _tenantContext,
-            _db,
-            new ReferentialIntegrityService(new UnitOfWork(_db, _tenantContext,
-                new TaskTapAPI.Infrastructure.Time.SystemClock()), _tenantContext));
-
-        var result = await sut.GetAll(new ListQuery { Q = "caldaia" });
-
-        var page = (result as OkObjectResult)!.Value as TaskTapAPI.Application.Common.PaginatedResult<
-            TaskTapAPI.Core.Entities.ProdottoAssistenza>;
-        page!.Items.Should().ContainSingle().Which.Name.Should().Be("Caldaia Nord");
-    }
-
-    [Fact]
-    public async Task An_empty_q_still_returns_everything()
-    {
-        var result = await ContractsSut().GetAll(new ListQuery { Q = "   " });
-
-        var page = (result as OkObjectResult)!.Value as TaskTapAPI.Application.Common.PaginatedResult<
-            TaskTapAPI.Core.Entities.Contract>;
-        page!.Items.Should().HaveCount(2);
-    }
-```
-
-Confirm the `ProdottoAssistenzaController` constructor against
-`ProdottoAssistenzaControllerTests.cs:26-39` and use that factory verbatim.
+Match the case convention of the neighbouring filters in the file you are editing. If they lowercase
+the term, lowercase here too and make the test's term match.
 
 - [ ] **Step 5: Run the tests**
 
 Run: `dotnet test tests/TaskTapAPI.Tests --filter FullyQualifiedName~ReferenceListSearchTests`
 Expected: PASS, 3/3.
 
-- [ ] **Step 6: Run the neighbouring paging/search suites**
+- [ ] **Step 6: Run the neighbouring list suites**
 
-Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~Pagination|FullyQualifiedName~ScopedLookup|FullyQualifiedName~ProdottoAssistenzaController"`
-Expected: PASS. These pin the `Q`/paging semantics of the other list endpoints and must not move.
+Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~ProdottoAssistenzaController|FullyQualifiedName~Pagination|FullyQualifiedName~ContractsController"`
+Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
@@ -229,16 +198,16 @@ git add src/TaskTapAPI.Api/Controllers/ContractsController.cs \
         tests/TaskTapAPI.Tests/Controllers/ReferenceListSearchTests.cs
 git commit -m "fix(api): honour q on the contracts and products list endpoints
 
-Both accepted ListQuery and dropped query.Q, so the mobile picker's on-demand
-search would have returned unfiltered pages for two of the four reference
-entities. Mirrors the CommesseController filter.
+Both bound ListQuery and dropped query.Q, so the mobile picker's on-demand search
+would have returned unfiltered pages for two of the four reference entities.
+Mirrors the CommesseController filter.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task A2: extend the mobile sync payload with the four reference entities
+### Task A2: the four reference entities in the mobile sync payload
 
 **Files:**
 - Create: `src/TaskTapAPI.Application/Services/Sync/SyncReferenceDtos.cs`
@@ -247,30 +216,24 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Test: `tests/TaskTapAPI.Tests/Sync/MobileUserSyncReferenceTests.cs` (create)
 
 **Interfaces:**
-- Consumes: the already-materialised `customers`, `locations` and `tickets` inside `GetDeltaAsync`; `MobileUserSyncService.MaxAssetControlRowsPerSync` for the cap convention.
-- Produces, for the mobile plan:
-  - `MobileUserSyncResult.Contracts` → wire `contracts`
-  - `MobileUserSyncResult.Commesse` → wire `commesse`
-  - `MobileUserSyncResult.ProdottiAssistenza` → wire `prodottiAssistenza`
-  - `MobileUserSyncResult.Agents` → wire `agents`
-  - `SyncContractDto(Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt, string Name, Guid CustomerId, Guid? LocationId, DateTime StartDate, DateTime? EndDate, bool IsActive, string? Numero, string? Codice, int? Tipo, string? ExternalId)`
-  - `SyncCommessaDto(Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt, string Codice, string? Descrizione, Guid? CustomerId, bool IsActive, string? Stato, string? ExternalId)`
-  - `SyncProdottoAssistenzaDto(Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt, string Name, Guid CustomerId, Guid LocationId, bool IsActive, string? Codice, string? SerialNumber, string? Categoria, string? Marchio, string? ExternalId)`
-  - `SyncAgentDto(Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt, string Nome, string? Email, string? Cellulare, bool IsActive)`
+- Consumes: the already-materialised `tickets` and `customers` locals inside `GetDeltaAsync` (the `// ── 3. reference entities` block).
+- Produces, for the mobile plan — member → wire name → DTO:
+  - `Contracts` → `contracts` → `SyncContractDto`
+  - `Commesse` → `commesse` → `SyncCommessaDto`
+  - `ProdottiAssistenza` → `prodottiAssistenza` → `SyncProdottoAssistenzaDto`
+  - `Agents` → `agents` → `SyncAgentDto`
 
-**Scope predicate (D-1(a)) — implement exactly this:**
-- `contracts`: `CustomerId` ∈ the payload's customer ids.
-- `commesse`: `CustomerId` ∈ the payload's customer ids.
-- `prodottiAssistenza`: `CustomerId` ∈ the payload's customer ids.
-- `agents`: `Id` ∈ `{ tickets.AgentId }` of the payload's tickets.
-- Every query adds the delta `(UpdatedAt ?? CreatedAt) > cutoff` when a cutoff is present, and **never** filters `IsActive`.
+**The rule — implement exactly this:**
+
+- **No delta filter on any of the four.** A timestamp cannot decide this: when a customer first becomes reachable, every unchanged row hanging off them becomes newly reachable with it, and a `> cutoff` test withholds all of them. This matches the rule the file already states for reference entities.
+- **Scope, both branches:** `CustomerId ∈ customers.Select(c => c.Id)` for contracts, commesse, prodotti (the payload's own customer list, whichever branch built it); `Id ∈ tickets.Where(t => t.AgentId.HasValue).Select(t => t.AgentId!.Value)` for agents.
+- **`IsActive` is projected, never filtered.** Do not add `Where(c => c.IsActive)`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `tests/TaskTapAPI.Tests/Sync/MobileUserSyncReferenceTests.cs`. Fixture shape follows
-`MobileUserSyncSubmittedReportsTests.cs:880-943` — build the service over a real
-`ScheduleAssignmentResolver`, never a stub, or "this technician's schedules" is trivially empty and
-every scoping assertion passes vacuously.
+Create `tests/TaskTapAPI.Tests/Sync/MobileUserSyncReferenceTests.cs`. Build the service the way
+`MobileUserSyncSubmittedReportsTests.cs` does — over a real `ScheduleAssignmentResolver`, never a
+stub, or "this technician's work" is trivially empty and every scoping assertion passes vacuously.
 
 ```csharp
 using FluentAssertions;
@@ -292,9 +255,20 @@ public class MobileUserSyncReferenceTests : IDisposable
     private readonly Guid _techId = Guid.NewGuid();
     private readonly Guid _inScopeCustomer = Guid.NewGuid();
     private readonly Guid _outOfScopeCustomer = Guid.NewGuid();
+    private readonly Guid _inScopeLocation = Guid.NewGuid();
+    private readonly Guid _outOfScopeLocation = Guid.NewGuid();
+    private readonly Guid _inScopeTicket = Guid.NewGuid();
     private readonly Guid _agentId = Guid.NewGuid();
-    private readonly Guid _otherAgentId = Guid.NewGuid();
-    private readonly DateTime _t = new(2025, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+    private readonly Guid _unreferencedAgentId = Guid.NewGuid();
+    private readonly Guid _inScopeContract = Guid.NewGuid();
+    private readonly Guid _outOfScopeContract = Guid.NewGuid();
+    private readonly Guid _foreignContract = Guid.NewGuid();
+    private readonly Guid _inScopeCommessa = Guid.NewGuid();
+    private readonly Guid _outOfScopeCommessa = Guid.NewGuid();
+    private readonly Guid _foreignCommessa = Guid.NewGuid();
+    private readonly Guid _inScopeProdotto = Guid.NewGuid();
+    private readonly Guid _outOfScopeProdotto = Guid.NewGuid();
+    private readonly Guid _foreignProdotto = Guid.NewGuid();
 
     public MobileUserSyncReferenceTests()
     {
@@ -312,81 +286,136 @@ public class MobileUserSyncReferenceTests : IDisposable
     private void Seed()
     {
         var now = DateTime.UtcNow;
-        var locationId = Guid.NewGuid();
-        var ticketId = Guid.NewGuid();
+        // A year old and never edited. The scope-expansion case depends on these rows being OLD and
+        // UNCHANGED — a fresh row would pass a cutoff test by accident and prove nothing.
+        var far = now.AddYears(-1);
 
-        _db.Locations.Add(new Location
-        {
-            Id = locationId, TenantId = _tenantId, CustomerId = _inScopeCustomer,
-            Name = "Sede", CreatedAt = now,
-        });
-        // In-window schedule for the technician -> pulls location -> ticket -> customer.
-        _db.Set<Schedule>().Add(new Schedule
-        {
-            Id = Guid.NewGuid(), TenantId = _tenantId, UserId = _techId, LocationId = locationId,
-            TicketId = ticketId, ActivityDate = now.Date, TimeStart = TimeSpan.Zero,
-            TimeEnd = TimeSpan.FromHours(1), StatusId = 1, Title = "Intervento",
-            Description = "", CreatedAt = now,
-        });
+        _db.Customers.AddRange(
+            new Customer { Id = _inScopeCustomer, TenantId = _tenantId, CompanyName = "In scope", CreatedAt = far },
+            new Customer { Id = _outOfScopeCustomer, TenantId = _tenantId, CompanyName = "Out of scope", CreatedAt = far });
+        _db.Locations.AddRange(
+            new Location { Id = _inScopeLocation, TenantId = _tenantId, CustomerId = _inScopeCustomer,
+                Name = "Sede", CreatedAt = far },
+            new Location { Id = _outOfScopeLocation, TenantId = _tenantId, CustomerId = _outOfScopeCustomer,
+                Name = "Altra sede", CreatedAt = far });
+
+        // The ONLY edge that puts _inScopeCustomer on this technician's phone.
         _db.Tickets.Add(new Ticket
         {
-            Id = ticketId, TenantId = _tenantId, CustomerId = _inScopeCustomer, LocationId = locationId,
-            AssignedUserId = _techId, Title = "Caldaia", StatusId = 1, TypeId = 1,
-            AgentId = _agentId, CreatedAt = now,
+            Id = _inScopeTicket, TenantId = _tenantId, CustomerId = _inScopeCustomer,
+            LocationId = _inScopeLocation, AssignedUserId = _techId, AgentId = _agentId,
+            Title = "Caldaia", StatusId = 1, TypeId = 1, CreatedAt = far,
         });
-        _db.Customers.AddRange(
-            new Customer { Id = _inScopeCustomer, TenantId = _tenantId, CompanyName = "In scope", CreatedAt = now },
-            new Customer { Id = _outOfScopeCustomer, TenantId = _tenantId, CompanyName = "Out of scope", CreatedAt = now });
+        _db.Set<Schedule>().Add(new Schedule
+        {
+            Id = Guid.NewGuid(), TenantId = _tenantId, UserId = _techId, LocationId = _inScopeLocation,
+            TicketId = _inScopeTicket, ActivityDate = now.Date, TimeStart = TimeSpan.Zero,
+            TimeEnd = TimeSpan.FromHours(1), StatusId = 1, Title = "Intervento", Description = "",
+            CreatedAt = far,
+        });
 
         _db.Contracts.AddRange(
-            new Contract { Id = Guid.NewGuid(), TenantId = _tenantId, CustomerId = _inScopeCustomer,
-                Name = "Contratto in scope", StartDate = now, CreatedAt = now },
-            new Contract { Id = Guid.NewGuid(), TenantId = _tenantId, CustomerId = _outOfScopeCustomer,
-                Name = "Contratto fuori scope", StartDate = now, CreatedAt = now },
-            // Another tenant's contract for the SAME customer id must never surface.
-            new Contract { Id = Guid.NewGuid(), TenantId = _otherTenant, CustomerId = _inScopeCustomer,
-                Name = "Altro tenant", StartDate = now, CreatedAt = now });
-        _db.Commesse.Add(new Commessa { Id = Guid.NewGuid(), TenantId = _tenantId,
-            CustomerId = _inScopeCustomer, Codice = "C-1", CreatedAt = now });
+            new Contract { Id = _inScopeContract, TenantId = _tenantId, CustomerId = _inScopeCustomer,
+                Name = "Contratto in scope", StartDate = far, CreatedAt = far },
+            new Contract { Id = _outOfScopeContract, TenantId = _tenantId, CustomerId = _outOfScopeCustomer,
+                Name = "Contratto fuori scope", StartDate = far, CreatedAt = far },
+            new Contract { Id = _foreignContract, TenantId = _otherTenant, CustomerId = _inScopeCustomer,
+                Name = "Altro tenant", StartDate = far, CreatedAt = far });
+        _db.Commesse.AddRange(
+            new Commessa { Id = _inScopeCommessa, TenantId = _tenantId, CustomerId = _inScopeCustomer,
+                Codice = "C-1", CreatedAt = far },
+            new Commessa { Id = _outOfScopeCommessa, TenantId = _tenantId, CustomerId = _outOfScopeCustomer,
+                Codice = "C-2", CreatedAt = far },
+            new Commessa { Id = _foreignCommessa, TenantId = _otherTenant, CustomerId = _inScopeCustomer,
+                Codice = "C-3", CreatedAt = far });
         _db.Set<ProdottoAssistenza>().AddRange(
-            new ProdottoAssistenza { Id = Guid.NewGuid(), TenantId = _tenantId,
-                CustomerId = _inScopeCustomer, LocationId = Guid.NewGuid(), Name = "Caldaia Nord", CreatedAt = now },
-            new ProdottoAssistenza { Id = Guid.NewGuid(), TenantId = _tenantId,
-                CustomerId = _outOfScopeCustomer, LocationId = Guid.NewGuid(), Name = "Porta", CreatedAt = now });
+            new ProdottoAssistenza { Id = _inScopeProdotto, TenantId = _tenantId,
+                CustomerId = _inScopeCustomer, LocationId = _inScopeLocation, Name = "Caldaia Nord",
+                CreatedAt = far },
+            new ProdottoAssistenza { Id = _outOfScopeProdotto, TenantId = _tenantId,
+                CustomerId = _outOfScopeCustomer, LocationId = _outOfScopeLocation, Name = "Porta",
+                CreatedAt = far },
+            new ProdottoAssistenza { Id = _foreignProdotto, TenantId = _otherTenant,
+                CustomerId = _inScopeCustomer, LocationId = _inScopeLocation, Name = "Altro tenant",
+                CreatedAt = far });
         _db.Set<Agent>().AddRange(
-            new Agent { Id = _agentId, TenantId = _tenantId, Nome = "Rif. usato", CreatedAt = now },
-            new Agent { Id = _otherAgentId, TenantId = _tenantId, Nome = "Rif. mai usato", CreatedAt = now });
+            new Agent { Id = _agentId, TenantId = _tenantId, Nome = "Rif. usato", CreatedAt = far },
+            new Agent { Id = _unreferencedAgentId, TenantId = _tenantId, Nome = "Rif. mai usato", CreatedAt = far });
         _db.SaveChanges();
     }
 
     public void Dispose() => _db.Dispose();
 
-    private MobileUserSyncService CreateService()
-    {
-        var tenantContext = new TenantContext();
-        tenantContext.SetTenant(_tenantId);
-        return new MobileUserSyncService(_db, new TaskTapAPI.Application.Modules.Schedules.Services
-            .ScheduleAssignmentResolver(new TaskTapAPI.Infrastructure.UnitOfWork.UnitOfWork(
-                _db, tenantContext, new TaskTapAPI.Infrastructure.Time.SystemClock())));
-    }
+    // ... CreateService(): the SUT factory, following MobileUserSyncSubmittedReportsTests.cs.
 
     [Fact]
-    public async Task Reference_entities_are_scoped_to_the_callers_own_work()
+    public async Task Each_reference_family_sends_exactly_the_in_scope_row()
     {
         var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: null);
 
-        r.Contracts.Should().ContainSingle().Which.Name.Should().Be("Contratto in scope");
-        r.Commesse.Should().ContainSingle().Which.Codice.Should().Be("C-1");
-        r.ProdottiAssistenza.Should().ContainSingle().Which.Name.Should().Be("Caldaia Nord");
-        r.Agents.Should().ContainSingle().Which.Nome.Should().Be("Rif. usato");
+        r.Contracts.Select(x => x.Id).Should().Equal(_inScopeContract);
+        r.Commesse.Select(x => x.Id).Should().Equal(_inScopeCommessa);
+        r.ProdottiAssistenza.Select(x => x.Id).Should().Equal(_inScopeProdotto);
+        r.Agents.Select(x => x.Id).Should().Equal(_agentId);
+    }
+
+    /// <summary>
+    /// The regression the first draft of this plan would have shipped. Every row below is a year
+    /// old and has never been edited, so it sits outside any plausible cutoff — but it is reachable
+    /// for the first time in THIS sync, because the customer that owns it just entered scope. A
+    /// `(UpdatedAt ?? CreatedAt) > cutoff` filter withholds it forever, and the picker opens empty
+    /// on a customer the technician can plainly see.
+    /// </summary>
+    [Fact]
+    public async Task An_unchanged_reference_row_arrives_when_its_customer_first_enters_scope()
+    {
+        var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: DateTime.UtcNow);
+
+        r.Contracts.Select(x => x.Id).Should().Equal(_inScopeContract);
+        r.Commesse.Select(x => x.Id).Should().Equal(_inScopeCommessa);
+        r.ProdottiAssistenza.Select(x => x.Id).Should().Equal(_inScopeProdotto);
+    }
+
+    /// <summary>The same shape one level down: an agent is reachable because a ticket references
+    /// it, so an old agent must arrive with the ticket that introduces it, not only when it is
+    /// later edited.</summary>
+    [Fact]
+    public async Task An_unchanged_agent_arrives_with_the_ticket_that_references_it()
+    {
+        var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: DateTime.UtcNow);
+
+        r.Agents.Select(x => x.Id).Should().Equal(_agentId);
     }
 
     [Fact]
-    public async Task Only_the_agents_referenced_by_the_callers_tickets_are_sent()
+    public async Task An_agent_no_ticket_references_is_never_sent()
     {
         var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: null);
 
-        r.Agents.Select(a => a.Id).Should().NotContain(_otherAgentId);
+        r.Agents.Select(x => x.Id).Should().NotContain(_unreferencedAgentId);
+    }
+
+    [Fact]
+    public async Task A_customer_absent_from_the_payload_contributes_no_reference_rows()
+    {
+        var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: null);
+
+        r.Contracts.Select(x => x.Id).Should().NotContain(_outOfScopeContract);
+        r.Commesse.Select(x => x.Id).Should().NotContain(_outOfScopeCommessa);
+        r.ProdottiAssistenza.Select(x => x.Id).Should().NotContain(_outOfScopeProdotto);
+    }
+
+    /// <summary>One cross-tenant case per family. Tenant isolation is not something to infer from
+    /// EF's global filter when the row is one query away from a client's cache.</summary>
+    [Fact]
+    public async Task No_family_sends_another_tenants_row_for_the_same_customer_id()
+    {
+        var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: null);
+
+        r.Contracts.Select(x => x.Id).Should().NotContain(_foreignContract);
+        r.Commesse.Select(x => x.Id).Should().NotContain(_foreignCommessa);
+        r.ProdottiAssistenza.Select(x => x.Id).Should().NotContain(_foreignProdotto);
+        r.Contracts.Select(x => x.TenantId).Should().OnlyContain(t => t == _tenantId);
     }
 
     [Fact]
@@ -395,56 +424,18 @@ public class MobileUserSyncReferenceTests : IDisposable
         var id = Guid.NewGuid();
         _db.Contracts.Add(new Contract
         {
-            Id = id, TenantId = _tenantId, CustomerId = _inScopeCustomer,
-            Name = "Cessato", StartDate = _t, IsActive = false, CreatedAt = DateTime.UtcNow,
+            Id = id, TenantId = _tenantId, CustomerId = _inScopeCustomer, Name = "Cessato",
+            StartDate = DateTime.UtcNow.AddYears(-1), IsActive = false, CreatedAt = DateTime.UtcNow,
         });
         await _db.SaveChangesAsync();
 
         var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: null);
 
         r.Contracts.Single(c => c.Id == id).IsActive.Should().BeFalse(
-            "hiding it is what leaves a deleted contract in the picker forever (spec 6.4)");
-    }
-
-    [Fact]
-    public async Task The_delta_carries_a_reference_row_edited_after_the_cutoff()
-    {
-        var cutoff = DateTime.UtcNow;
-        var id = Guid.NewGuid();
-        _db.Contracts.Add(new Contract
-        {
-            Id = id, TenantId = _tenantId, CustomerId = _inScopeCustomer, Name = "Nuovo",
-            StartDate = _t, CreatedAt = cutoff.AddMinutes(-1), UpdatedAt = cutoff.AddMinutes(1),
-        });
-        await _db.SaveChangesAsync();
-
-        var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: cutoff);
-
-        r.Contracts.Should().ContainSingle().Which.Id.Should().Be(id);
-    }
-
-    [Fact]
-    public async Task A_reference_row_never_synced_but_older_than_the_cutoff_is_not_sent()
-    {
-        var cutoff = DateTime.UtcNow;
-        var id = Guid.NewGuid();
-        _db.Contracts.Add(new Contract
-        {
-            Id = id, TenantId = _tenantId, CustomerId = _inScopeCustomer, Name = "Vecchio",
-            StartDate = _t, CreatedAt = cutoff.AddDays(-1),
-        });
-        await _db.SaveChangesAsync();
-
-        var r = await CreateService().GetDeltaAsync(_tenantId, _techId, since: cutoff);
-
-        r.Contracts.Should().BeEmpty();
+            "hiding it is what leaves a deactivated contract in the picker forever (spec 6.4)");
     }
 }
 ```
-
-> Confirm `Schedule`'s required members (`StatusId`, `Title`, `Description`, `TimeStart`/`TimeEnd`)
-> against the entity and against `TestFixtures`' `AddScheduleWithAssignments` helper — if that
-> helper exists, use it instead of the hand-built schedule.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -463,105 +454,79 @@ namespace TaskTapAPI.Application.Services.Sync;
 /// filled from the local mirror while offline (spec §6.2, §7.4).
 ///
 /// Scoped, never tenant-wide: contracts, commesse and products are limited to the customers the
-/// caller's own work already reaches, and agents to the agents already referenced by the caller's
-/// tickets. Widening any of these is a confidentiality decision, not a sync change (spec §10, D-1).
+/// caller's own payload already carries, and agents to the agents that payload's tickets already
+/// reference. Widening any of these is a confidentiality decision, not a sync change (spec §10).
 ///
 /// <c>isActive</c> travels as data and the picker filters on it. A predicate that hides inactive
-/// rows would make a deactivation invisible to a device that has already cached the row — the
-/// failure spec §6.4 exists to fix. Hard deletes, which no flag can describe, are handled on the
-/// client by pruning on bootstrap.
+/// rows makes a deactivation invisible to a device that has already cached the row — the failure
+/// spec §6.4 exists to fix. Hard deletes, which no flag can describe, are handled on the client by
+/// pruning the customers a payload does carry.
 /// </summary>
 public sealed record SyncContractDto(
-    Guid Id,
-    Guid TenantId,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt,
-    string Name,
-    Guid CustomerId,
-    Guid? LocationId,
-    DateTime StartDate,
-    DateTime? EndDate,
-    bool IsActive,
-    string? Numero,
-    string? Codice,
-    int? Tipo,
-    string? ExternalId);
+    Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt,
+    string Name, Guid CustomerId, Guid? LocationId, DateTime StartDate, DateTime? EndDate,
+    bool IsActive, string? Numero, string? Codice, int? Tipo, string? ExternalId);
 
 public sealed record SyncCommessaDto(
-    Guid Id,
-    Guid TenantId,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt,
-    string Codice,
-    string? Descrizione,
-    Guid? CustomerId,
-    bool IsActive,
-    string? Stato,
-    string? ExternalId);
+    Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt,
+    string Codice, string? Descrizione, Guid? CustomerId, bool IsActive,
+    string? Stato, string? ExternalId);
 
 public sealed record SyncProdottoAssistenzaDto(
-    Guid Id,
-    Guid TenantId,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt,
-    string Name,
-    Guid CustomerId,
-    Guid LocationId,
-    bool IsActive,
-    string? Codice,
-    string? SerialNumber,
-    string? Categoria,
-    string? Marchio,
-    string? ExternalId);
+    Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt,
+    string Name, Guid CustomerId, Guid LocationId, bool IsActive,
+    string? Codice, string? SerialNumber, string? Categoria, string? Marchio, string? ExternalId);
 
 public sealed record SyncAgentDto(
-    Guid Id,
-    Guid TenantId,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt,
-    string Nome,
-    string? Email,
-    string? Cellulare,
-    bool IsActive);
+    Guid Id, Guid TenantId, DateTime CreatedAt, DateTime? UpdatedAt,
+    string Nome, string? Email, string? Cellulare, bool IsActive);
 ```
 
-> `ProdottoAssistenza.Category` and `.Marca` carry `[JsonPropertyName("categoria")]` /
-> `[JsonPropertyName("marchio")]`; the DTO names are what reach the wire, so the mobile field names
-> are `categoria` and `marchio`. That is deliberate — the mobile plan mirrors these names.
+> `ProdottoAssistenza` carries `[JsonPropertyName("codice")]` / `("categoria")` / `("marchio")` on
+> `Code` / `Category` / `Marca`; these DTO member names are what reach the wire, so the mobile field
+> names are `categoria` and `marchio`. That is deliberate — the mobile plan mirrors them.
 
 - [ ] **Step 4: Add the four members to `MobileUserSyncResult`**
 
-In `src/TaskTapAPI.Application/Services/Sync/MobileUserSyncResult.cs`, after `TicketTypes`:
+After `TicketTypes`:
 
 ```csharp
     // ── reference entities (additive; older clients ignore these keys) ───────────────────────────
-    // Scoped to the caller's own work: the customers their tickets reach, and the agents their
-    // tickets reference. Never the tenant book, even for fullScope. See SyncReferenceDtos.cs.
 
-    /// <summary>Contracts of the customers in this payload.</summary>
+    /// <summary>Contracts of the customers this payload carries.</summary>
     public IReadOnlyList<SyncContractDto> Contracts { get; init; } = [];
 
-    /// <summary>Commesse of the customers in this payload.</summary>
+    /// <summary>Commesse of the customers this payload carries.</summary>
     public IReadOnlyList<SyncCommessaDto> Commesse { get; init; } = [];
 
-    /// <summary>Products/services of the customers in this payload.</summary>
+    /// <summary>Products of the customers this payload carries.</summary>
     public IReadOnlyList<SyncProdottoAssistenzaDto> ProdottiAssistenza { get; init; } = [];
 
     /// <summary>Agents referenced by this payload's tickets.</summary>
     public IReadOnlyList<SyncAgentDto> Agents { get; init; } = [];
 ```
 
-- [ ] **Step 5: Load them in `MobileUserSyncService.GetDeltaAsync`**
+- [ ] **Step 5: Load them in `GetDeltaAsync`**
 
-Insert immediately before the final `return new MobileUserSyncResult { ... }` initializer, so
-`customers`, `locations` and `tickets` are already materialised:
+Insert immediately before the final `return new MobileUserSyncResult { ... }`, so `tickets` and
+`customers` are already materialised:
 
 ```csharp
-        // ── 10. reference entities for the ticket wizard ──────────────────────
-        // Placed after customers/tickets so the scope is the set this payload already carries.
-        // Delta on (UpdatedAt ?? CreatedAt) for the same reason the schedules block uses it: nothing
-        // stamps UpdatedAt on insert, so `UpdatedAt > cutoff` would be NULL > timestamp — false —
-        // and a contract created after a device's first sync would never reach it.
+        // ── 9. reference entities for the ticket wizard ─────────────────────
+        //
+        // NO delta filter on any of these, and that is the point. `customers` above is recomputed
+        // every sync — "the customers behind work currently assigned to this technician", not an
+        // accumulated set — so a customer can enter scope while every row hanging off them stays
+        // unchanged. A `(UpdatedAt ?? CreatedAt) > cutoff` test would withhold those unchanged rows
+        // forever, and the picker would open empty on a customer whose ticket is plainly on the
+        // phone. Scoping is by the payload's own customer/ticket ids; timestamps are not consulted.
+        //
+        // The same reasoning as the tickets block above, which also re-sends its whole set every
+        // sync. Size is bounded by the technician's own open work: a handful of customers, and the
+        // contracts, commesse and products hanging off them.
+        //
+        // If any of these lists is ever capped, the client's prune must go with it: a truncated
+        // list looks exactly like a deletion, and would delete rows that are merely off the page.
         var scopedCustomerIds = customers.Select(c => c.Id).ToList();
         var scopedAgentIds = tickets
             .Where(t => t.AgentId.HasValue)
@@ -569,30 +534,28 @@ Insert immediately before the final `return new MobileUserSyncResult { ... }` in
             .Distinct()
             .ToList();
 
-        var contractsQuery = _db.Contracts
-            .Where(c => c.TenantId == tenantId && scopedCustomerIds.Contains(c.CustomerId));
-        var commesseQuery = _db.Commesse
-            .Where(c => c.TenantId == tenantId && c.CustomerId.HasValue
-                        && scopedCustomerIds.Contains(c.CustomerId.Value));
-        var prodottiQuery = _db.Set<ProdottoAssistenza>()
-            .Where(p => p.TenantId == tenantId && scopedCustomerIds.Contains(p.CustomerId));
-        var agentsQuery = _db.Set<Agent>()
-            .Where(a => a.TenantId == tenantId && scopedAgentIds.Contains(a.Id));
-
         // IsActive is deliberately NOT filtered: see SyncReferenceDtos.cs.
-        if (cutoff.HasValue)
-        {
-            var c = cutoff.Value;
-            contractsQuery = contractsQuery.Where(x => (x.UpdatedAt ?? x.CreatedAt) > c);
-            commesseQuery = commesseQuery.Where(x => (x.UpdatedAt ?? x.CreatedAt) > c);
-            prodottiQuery = prodottiQuery.Where(x => (x.UpdatedAt ?? x.CreatedAt) > c);
-            agentsQuery = agentsQuery.Where(x => (x.UpdatedAt ?? x.CreatedAt) > c);
-        }
-
-        var contracts = await contractsQuery.ToListAsync();
-        var commesse = await commesseQuery.ToListAsync();
-        var prodotti = await prodottiQuery.ToListAsync();
-        var agents = await agentsQuery.ToListAsync();
+        var contracts = scopedCustomerIds.Count == 0
+            ? []
+            : await _db.Contracts
+                .Where(c => c.TenantId == tenantId && scopedCustomerIds.Contains(c.CustomerId))
+                .ToListAsync();
+        var commesse = scopedCustomerIds.Count == 0
+            ? []
+            : await _db.Commesse
+                .Where(c => c.TenantId == tenantId && c.CustomerId.HasValue
+                            && scopedCustomerIds.Contains(c.CustomerId.Value))
+                .ToListAsync();
+        var prodotti = scopedCustomerIds.Count == 0
+            ? []
+            : await _db.Set<ProdottoAssistenza>()
+                .Where(p => p.TenantId == tenantId && scopedCustomerIds.Contains(p.CustomerId))
+                .ToListAsync();
+        var agents = scopedAgentIds.Count == 0
+            ? []
+            : await _db.Set<Agent>()
+                .Where(a => a.TenantId == tenantId && scopedAgentIds.Contains(a.Id))
+                .ToListAsync();
 ```
 
 and add to the initializer:
@@ -615,35 +578,29 @@ and add to the initializer:
                 .OrderBy(a => a.Nome, StringComparer.OrdinalIgnoreCase)],
 ```
 
-> `Tipo` is `ContractTipoEnum?`; `Stato` on `Contract` is derived and EF-ignored — do not project it.
-> `ProdottoAssistenza.Code`/`Category`/`Marca` are the CLR names behind the `codice`/`categoria`/
-> `marchio` JSON names.
+> `Contract.Tipo` is an enum — cast it. `Contract.Stato` is derived and EF-ignored; do not project
+> it.
 
 - [ ] **Step 6: Run the tests**
 
 Run: `dotnet test tests/TaskTapAPI.Tests --filter FullyQualifiedName~MobileUserSyncReferenceTests`
-Expected: PASS, 5/5.
+Expected: PASS, 7/7.
 
-- [ ] **Step 7: Run the whole sync suite and the role-scope HTTP suite**
+- [ ] **Step 7: Run the whole sync suite**
 
 Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~Sync|FullyQualifiedName~MobileSyncRoleScope"`
-Expected: PASS. `MobileSyncRoleScopeHttpTests` is the HTTP-level tenant-leak gate — a new scoped
-member must not open a hole there.
+Expected: PASS. The role-scope suite is the HTTP-level tenant-leak gate; a new scoped member must not
+open a hole there.
 
-- [ ] **Step 8: Refresh the committed OpenAPI snapshot**
+- [ ] **Step 8: Regenerate the committed OpenAPI snapshot**
 
-The mobile repo gates on a committed snapshot. Regenerate it from **this** branch and report the
-diff in the hand-off; the mobile plan's Task B2 consumes it.
+Regenerate on this branch and report the diff in the hand-off; Task B2 consumes it.
 
 ```bash
-cd /mnt/d/AEA/Sviluppi/TaskTap
 dotnet build src/TaskTapAPI.Api -c Release
-# Regenerate per the repo's existing snapshot procedure (see docs/api/), then:
+# Regenerate per the repo's existing procedure (see docs/api/), then:
 git diff --stat docs/api/openapi.snapshot.json
 ```
-
-If the repository has no scripted generation step, run the API and capture `/openapi/v1.json` the
-way `Task 1` of the checklist plan did, then commit the result.
 
 - [ ] **Step 9: Commit**
 
@@ -655,69 +612,95 @@ git add src/TaskTapAPI.Application/Services/Sync/SyncReferenceDtos.cs \
         tests/TaskTapAPI.Tests/Sync/MobileUserSyncReferenceTests.cs
 git commit -m "feat(sync): ship the reference entities a ticket is made of
 
-contracts, commesse, prodottiAssistenza and agents join the mobile delta, scoped
-to the caller's own work: the customers their tickets reach, and the agents their
-tickets reference. isActive travels as data instead of being filtered, so a
-deactivation reaches a device that already cached the row.
+contracts, commesse, prodottiAssistenza and agents join the mobile payload, scoped
+to the caller's own work: the customers their payload carries, and the agents their
+tickets reference.
 
-Additive: older clients ignore the members.
+No delta filter on any of the four, deliberately. The customer set is recomputed
+every sync, so a customer can enter scope while every row hanging off them stays
+unchanged - a timestamp filter would withhold those rows forever and leave the
+picker empty on a customer whose ticket is on the phone. Matches the rule the file
+already states for reference entities.
+
+isActive travels as data instead of being filtered, so a deactivation reaches a
+device that already cached the row. Additive: older clients ignore the members.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task A3: make the FK guards name the field they rejected
+### Task A3: name the field a rejected ticket FK refers to
 
 **Files:**
-- Modify: `src/TaskTapAPI.Application/Services/ReferentialIntegrityService.cs:101-138`
-- Modify: `src/TaskTapAPI.Application/Exceptions/NotFoundException.cs` (or wherever the type lives — locate it first)
-- Modify: `src/TaskTapAPI.Api/Middleware/` — the ProblemDetails mapper that turns `NotFoundException` into a 404 body
-- Modify: `src/TaskTapAPI.Application/Services/TicketCommandService.cs:63-104` and `:295-330` (pass the field name)
+- Modify: `src/TaskTapAPI.Core/Exceptions/DomainException.cs` (`NotFoundException`)
+- Modify: `src/TaskTapAPI.Application/Services/ReferentialIntegrityService.cs` (interface + both generic guards + both lookup guards)
+- Modify: `src/TaskTapAPI.Application/Services/TicketCommandService.cs` (guard call sites, create and update)
+- Modify: `src/TaskTapAPI.Api/Middleware/ErrorHandlingMiddleware.cs` (`MapException`)
 - Test: `tests/TaskTapAPI.Tests/Services/ReferentialIntegrityFieldTests.cs` (create)
+- Test: `tests/TaskTapAPI.Tests/Middleware/` — extend the existing ProblemDetails suite
 
 **Interfaces:**
-- Consumes: `ReferentialIntegrityService.EnsureExistsAsync<TEntity>` / `EnsureAllExistAsync<TEntity>`.
-- Produces, for the mobile plan (Task B6): a 404 ProblemDetails body carrying
-  `"field": "customerId"` (camelCase, matching the request body) and the existing `code`, so the
-  repair flow can name the dead field instead of parsing an Italian message.
+- Consumes: `ReferentialIntegrityService.EnsureExistsAsync<TEntity>` / `EnsureAllExistAsync<TEntity>` / `EnsureTicketStatusExistsAsync` / `EnsureTicketTypeExistsAsync`.
+- Produces, for Task B6: a 404 problem+json body carrying a **flat** `"field"` member — the request body's own camelCase spelling (`"customerId"`) — alongside the existing flat `"code"` (`"not_found"`).
+  `ErrorResponse : ProblemDetails` stores extensions in `ProblemDetails.Extensions`, which is
+  `[JsonExtensionData]`: on the wire they are members of the **root** object, not nested under an
+  `extensions` key. There is no `body["extensions"]["field"]`. Client code reads `body["field"]`.
 
-**Keep the status 404.** A cross-tenant id must stay indistinguishable from a missing one; only the
-field name is added (spec §9.4).
+**Verified facts (from `master`), so do not re-derive them:**
+
+- `NotFoundException` is `sealed`, lives in `src/TaskTapAPI.Core/Exceptions/DomainException.cs`, and takes only `(string message)`. `Status` is 404, `Code` is `"not_found"`.
+- The response is built by `ErrorHandlingMiddleware.MapException`, a `switch` on exception type. `NotFoundException` currently falls into `case DomainException d:`.
+- `ErrorResponse : ProblemDetails` stores extensions in `ProblemDetails.Extensions`, serialised via `[JsonExtensionData]`. **Extension keys are written literally** — the existing ones are `"correlationId"`, `"code"`, `"conflicts"`, `"missingRequiredControls"`, all camelCase literals. Write `Extensions["field"]`, lowercase.
+
+**Keep the status 404 and keep the message unchanged.** A cross-tenant id must stay
+indistinguishable from a missing one; only a machine-readable field name is added, and it goes in
+extensions, never in `detail`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```csharp
 using FluentAssertions;
-using TaskTapAPI.Application.Exceptions;
-using TaskTapAPI.Application.Services;
 using TaskTapAPI.Core.Entities;
-// ... the repository / unit-of-work / tenant-context usings that
-// tests/TaskTapAPI.Tests/Services/ReferentialIntegrityServiceTests.cs already uses — copy its
-// header and its SUT factory (:30-43) verbatim.
+using TaskTapAPI.Core.Exceptions;
+using Xunit;
 
 namespace TaskTapAPI.Tests.Services;
 
+/// <summary>
+/// The mobile repair flow needs to know WHICH reference died. It cannot parse the message, and it
+/// must not be told anything about the row beyond the field it asked for: a cross-tenant id stays
+/// indistinguishable from a missing one.
+/// </summary>
 public class ReferentialIntegrityFieldTests
 {
+    // ... fixture: copy the SUT factory from ReferentialIntegrityServiceTests.cs verbatim.
+
     [Fact]
     public async Task A_missing_customer_names_the_customerId_field()
     {
-        var (sut, _) = /* the factory from ReferentialIntegrityServiceTests */;
-
-        var act = async () => await sut.EnsureExistsAsync<Customer>(Guid.NewGuid(), field: "customerId");
+        var act = async () => await Sut().EnsureExistsAsync<Customer>(Guid.NewGuid(), field: "customerId");
 
         var ex = await act.Should().ThrowAsync<NotFoundException>();
         ex.Which.Field.Should().Be("customerId");
-        ex.Which.Message.Should().Be("Customer not found", "the message must not change: it is logged and matched by existing tests");
+        ex.Which.Message.Should().Be("Customer not found",
+            "the message is logged and asserted by existing tests; only extensions may change");
+        ex.Which.Code.Should().Be("not_found");
+        ex.Which.Status.Should().Be(System.Net.HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task A_null_id_still_does_not_throw()
     {
-        var (sut, _) = /* factory */;
+        await Sut().EnsureExistsAsync<Customer>(id: null, field: "customerId");
+    }
 
-        await sut.EnsureExistsAsync<Customer>(id: null, field: "customerId");
+    [Fact]
+    public async Task An_unnamed_guard_leaves_the_field_empty()
+    {
+        var act = async () => await Sut().EnsureExistsAsync<Customer>(Guid.NewGuid());
+
+        (await act.Should().ThrowAsync<NotFoundException>()).Which.Field.Should().BeNull();
     }
 }
 ```
@@ -725,44 +708,40 @@ public class ReferentialIntegrityFieldTests
 - [ ] **Step 2: Run it and watch it fail**
 
 Run: `dotnet test tests/TaskTapAPI.Tests --filter FullyQualifiedName~ReferentialIntegrityFieldTests`
-Expected: FAIL — `EnsureExistsAsync` has no `field` parameter; `NotFoundException` has no `Field`.
+Expected: FAIL to compile — no `field` parameter; no `Field` property.
 
-- [ ] **Step 3: Add the optional field to the exception and the service**
+- [ ] **Step 3: Add the property and the parameters**
 
-In the exception type, add an optional property without touching the message:
+In `DomainException.cs`:
 
 ```csharp
+public sealed class NotFoundException : DomainException
+{
+    public override HttpStatusCode Status => HttpStatusCode.NotFound;
+    public override string Code => "not_found";
+
     /// <summary>
     /// The request field whose value failed to resolve, in the request body's own camelCase
-    /// spelling ("customerId"), or null when the caller did not name one. Deliberately not part of
-    /// the message: the message is logged and asserted by existing tests, and the client that needs
-    /// this is parsing a machine field, not prose.
+    /// spelling ("customerId"), or null when the caller did not name one.
+    /// <para>
+    /// Deliberately not part of <see cref="Exception.Message"/>: the message is logged and asserted
+    /// by existing tests, and the client that needs this is reading a machine field, not prose. It
+    /// names a FIELD OF THE REQUEST, never anything about the row that was (or was not) found, so it
+    /// cannot tell a caller whether some id exists in another tenant.
+    /// </para>
     /// </summary>
-    public string? Field { get; init; }
+    public string? Field { get; }
+
+    public NotFoundException(string message, string? field = null) : base(message) => Field = field;
+}
 ```
 
-Give `NotFoundException` an optional `string? field = null` constructor parameter and assign it.
-Then thread it through both guards:
-
-```csharp
-    public async Task EnsureExistsAsync<TEntity>(Guid? id, CancellationToken cancellationToken = default,
-        string? field = null)
-        where TEntity : TenantEntity
-    {
-        // ... unchanged body ...
-        if (entity is null)
-        {
-            throw new NotFoundException($"{typeof(TEntity).Name} not found", field);
-        }
-    }
-```
-
-and the same optional `string? field = null` on `EnsureAllExistAsync`, carrying it into its throw.
-Update `IReferentialIntegrityService` to match.
+Then add `string? field = null` as the last parameter of all four interface methods and their
+implementations, carrying it into each `throw new NotFoundException(..., field)`.
 
 - [ ] **Step 4: Name the field at every ticket call site**
 
-In `TicketCommandService.CreateAsync`:
+In `TicketCommandService`, both the create and the update guard block:
 
 ```csharp
         await _referentialIntegrity.EnsureExistsAsync<Customer>(request.CustomerId, ct, "customerId");
@@ -774,75 +753,110 @@ In `TicketCommandService.CreateAsync`:
         await _referentialIntegrity.EnsureExistsAsync<Agent>(request.AgentId, ct, "agentId");
         await _referentialIntegrity.EnsureExistsAsync<Commessa>(request.CommessaId, ct, "commessaId");
         await _referentialIntegrity.EnsureExistsAsync<Cantiere>(request.CantiereId, ct, "cantiereId");
+        await _referentialIntegrity.EnsureTicketStatusExistsAsync(request.StatusId, tenantId, ct, "statusId");
+        await _referentialIntegrity.EnsureTicketTypeExistsAsync(request.TypeId, tenantId, ct, "typeId");
 ```
 
-Leave `EnsureTicketStatusExistsAsync` / `EnsureTicketTypeExistsAsync` alone — they already carry
-their own codes and are not repairable by picking a different row.
+The status and type guards are named too: they are repairable by re-picking, and leaving them
+anonymous costs the technician the same retype.
 
-Do the same at the update call sites (`:295-330`).
+- [ ] **Step 5: Surface it in the middleware**
 
-- [ ] **Step 5: Surface the field in the ProblemDetails body**
-
-In the mapper that builds the 404 response, add the field to `extensions` when present:
+Add a case **before** the generic `case DomainException d:` arm — a later arm is never reached:
 
 ```csharp
-        if (exception.Field is { } field)
-            extensions["field"] = field;
+            // A rejected foreign key is a 404 like any other and stays indistinguishable from a
+            // missing row — but the client that has to repair a queued ticket needs to know which
+            // of its fields died, and cannot read the message. Field lives in extensions so it
+            // never reaches `detail`.
+            case NotFoundException nf:
+            {
+                var response = new ErrorResponse
+                {
+                    Type = $"urn:tasktap:error:{nf.Code}",
+                    Title = ((HttpStatusCode)(int)nf.Status).ToString(), Status = (int)nf.Status,
+                    Detail = nf.Message, Code = nf.Code, CorrelationId = correlationId,
+                };
+                if (nf.Field is { } field) response.Extensions["field"] = field;
+                return ((int)nf.Status, response);
+            }
 ```
 
-Match the surrounding extension-writing style in that file exactly.
+Match the file's existing qualification style (it currently fully-qualifies these types).
 
 - [ ] **Step 6: Run the tests**
 
-Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~ReferentialIntegrity|FullyQualifiedName~TicketCommandService"`
-Expected: PASS. `ReferentialIntegrityServiceTests` must stay green unchanged — the added parameter is
-optional and the message is untouched.
+Run: `dotnet test tests/TaskTapAPI.Tests --filter "FullyQualifiedName~ReferentialIntegrity|FullyQualifiedName~ProblemDetails|FullyQualifiedName~TicketCommandService"`
+Expected: PASS. `ProblemDetailsTests` / `StructuredProblemMappingTests` pin the 404 body shape and must
+stay green; if one asserts an exact extension set, extend it rather than loosening it.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/TaskTapAPI.Application/Services/ReferentialIntegrityService.cs \
-        src/TaskTapAPI.Application/Services/ITicketCommandService.cs \
+git add src/TaskTapAPI.Core/Exceptions/DomainException.cs \
+        src/TaskTapAPI.Application/Services/ReferentialIntegrityService.cs \
         src/TaskTapAPI.Application/Services/TicketCommandService.cs \
-        src/TaskTapAPI.Application/Exceptions/ \
-        src/TaskTapAPI.Api/Middleware/ \
-        tests/TaskTapAPI.Tests/Services/ReferentialIntegrityFieldTests.cs
-git commit -m "feat(api): name the offending field on a ticket FK rejection
+        src/TaskTapAPI.Api/Middleware/ErrorHandlingMiddleware.cs \
+        tests/TaskTapAPI.Tests/Services/ReferentialIntegrityFieldTests.cs \
+        tests/TaskTapAPI.Tests/Middleware/
+git commit -m "feat(api): name the offending field on a rejected ticket foreign key
 
-A 404 stays a 404 — a cross-tenant id must remain indistinguishable from a missing
-one — but the body now carries the request field that failed to resolve, so the
-mobile repair flow can name it instead of parsing an Italian message.
+A rejected FK stays a 404 indistinguishable from a missing row - status and message
+are unchanged, and existing tests pin them - but the body now carries the request
+field that failed to resolve, in extensions. A phone repairing a queued ticket
+cannot parse a message and must not be told anything about the row it asked for.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
 
-# Phase B — Mobile
+### Phase A gate
 
-**Working directory for every task in this phase:** `/mnt/d/AEA/Sviluppi/TaskTap/mobile`.
-Every file path below is relative to it. `mobile/` is a nested repo: commit there, never from the root.
+Run the whole backend suite and record the totals in the ledger:
+
+```bash
+dotnet test tests/TaskTapAPI.Tests
+```
+
+Then review the phase as one unit: the payload contract, the scope predicate, and the problem+json
+shape are the interfaces the mobile plan is written against, and a mistake in any of them is
+expensive to find from the far end.
 
 ---
 
-### Task B1: Drift schema 37 — four reference tables, one migration step, one cursor bump
+# Phase B — Mobile
+
+**Working directory for every task in this phase:** `/mnt/d/AEA/Sviluppi/TaskTap/mobile`.
+Every path below is relative to it. `mobile/` is a nested repo: commit there, never from the root.
+
+---
+
+### Task B1: Drift schema 37 — four reference tables and the queue columns the wizard needs
 
 **Files:**
-- Modify: `lib/data/local/app_database.dart` (tables, `@DriftDatabase` list, `schemaVersion`, migration step)
+- Modify: `lib/data/local/app_database.dart` (tables, `@DriftDatabase` list, `schemaVersion`, `onCreate`, `onUpgrade`)
 - Create: `test/data/local/migration_v37_test.dart`
-- Modify: `test/data/sync/sync_service_checklist_test.dart` (the cursor assertion at the `'v9'` expectation)
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: four Drift tables — `contracts`, `commesse`, `prodotti_assistenza`, `agents` — and
-  `AppDatabase.syncCursorGeneration == 'v10'`.
+- Produces: four Drift tables — `contracts`, `commesse`, `prodotti_assistenza`, `agents` — and five new
+  columns on `pending_tickets`: `contractId`, `commessaId`, `cantiereId`, `prodottoAssistenzaIdsJson`,
+  `repairableField`.
+
+**No cursor bump.** `syncCursorGeneration` stays `'v9'`, and the existing assertion in
+`test/data/sync/sync_service_checklist_test.dart` stays exactly as it is. The reference queries carry
+no delta filter (Task A2), so a device receives them on its first ordinary sync after upgrading; a
+generation reset would cost every device a full re-download of all tickets and reports and buy
+nothing. The `pending_tickets` columns are client-authored, like every other column on that table
+(see the schema-33 step's own comment). Leave the `v9` expectation in place — it is now the guard
+that this release deliberately does not reset every device.
 
 - [ ] **Step 1: Write the failing migration test**
 
-Mirror `test/data/local/migration_v36_test.dart:1-122` exactly: create the current schema in a file
-database, drop the new tables and rewind `user_version`, reopen so Drift runs the real
-`onUpgrade(36 -> 37)`, and assert against a database that really lacks the objects, with
-pre-existing rows.
+Mirror `test/data/local/migration_v36_test.dart` — build the current schema in a file database,
+remove exactly what the step adds, rewind `user_version`, reopen so Drift runs the real
+`onUpgrade(36 -> 37)` against a database that really lacks the objects, with pre-existing rows.
 
 ```dart
 import 'dart:io';
@@ -853,11 +867,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 
 /// Schema 36 -> 37: the reference mirror the ticket wizard needs offline (contracts, commesse,
-/// prodotti assistenza, agents).
+/// prodotti assistenza, agents) and the queue columns that let a created ticket carry them.
 ///
-/// Same technique as migration_v36_test.dart: build the current schema, remove exactly what the step
-/// adds, rewind user_version, reopen so Drift runs the real onUpgrade(36 -> 37) against a database
-/// that really lacks the objects, with pre-existing rows.
+/// Same technique as migration_v36_test.dart: build the current schema, remove exactly what the
+/// step adds, rewind user_version, reopen so Drift runs the real onUpgrade(36 -> 37) against a
+/// database that really lacks the objects, with pre-existing rows.
 void main() {
   late Directory dir;
   late File file;
@@ -872,82 +886,88 @@ void main() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 
-  const newTables = [
-    'contracts',
-    'commesse',
-    'prodotti_assistenza',
-    'agents',
-  ];
+  const newTables = ['contracts', 'commesse', 'prodotti_assistenza', 'agents'];
 
   Future<List<String>> master(AppDatabase db, String type) async =>
       (await db.customSelect("SELECT name FROM sqlite_master WHERE type = '$type'").get())
           .map((r) => r.read<String>('name'))
           .toList();
 
+  Future<List<String>> columnsOf(AppDatabase db, String table) async =>
+      (await db.customSelect('PRAGMA table_info($table)').get())
+          .map((r) => r.read<String>('name'))
+          .toList();
+
+  /// A v36 database: everything the step adds is undone, then user_version is rewound so the
+  /// real onUpgrade runs on reopen.
+  Future<AppDatabase> reopenAsV36() async {
+    final reopened = AppDatabase(
+      NativeDatabase(file, setup: (raw) {
+        for (final t in newTables) {
+          raw.execute('DROP TABLE IF EXISTS $t');
+        }
+        for (final c in ['contract_id', 'commessa_id', 'cantiere_id',
+                         'prodotto_assistenza_ids_json', 'repairable_field']) {
+          raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
+        }
+        raw.execute('PRAGMA user_version = 36');
+      }),
+    );
+    addTearDown(reopened.close);
+    // Force the open + migration.
+    await (reopened.select(reopened.customers)..limit(1)).get();
+    return reopened;
+  }
+
   test('a v36 database upgraded to 37 gains the four reference tables', () async {
     final db = AppDatabase(NativeDatabase(file));
     await db.customSelect('SELECT 1').get();
     await db.close();
 
-    for (final t in newTables) {
-      expect(await master(db, 'table'), isNot(contains(t)));
-    }
-
-    final reopened = AppDatabase(
-      NativeDatabase(file, setup: (raw) {
-        for (final t in newTables) {
-          raw.execute('DROP TABLE IF EXISTS $t');
-        }
-        raw.execute('PRAGMA user_version = 36');
-      }),
-    );
-    addTearDown(reopened.close);
-
-    await (reopened.select(reopened.customers)..limit(1)).get();
+    final reopened = await reopenAsV36();
 
     expect(await master(reopened, 'table'), containsAll(newTables));
   });
 
-  test('the cursor generation is bumped so every device re-bootstraps once', () {
-    expect(AppDatabase.syncCursorGeneration, 'v10');
-  });
-
-  test('a queued ticket survives the upgrade', () async {
+  test('the queue columns are added to an existing pending ticket, null for a row that predates '
+      'them', () async {
     final db = AppDatabase(NativeDatabase(file));
     await db.into(db.pendingTickets).insert(
           PendingTicketsCompanion.insert(
-            id: 'queued-1',
-            payloadJson: '{}',
-            createdAt: DateTime.utcNow(),
+            id: 'queued-1', title: 'Caldaia', customerId: 'cu', locationId: 'l',
+            statusId: 1, typeId: 1, createdAt: DateTime.utcNow(),
           ),
         );
     await db.close();
 
-    final reopened = AppDatabase(
-      NativeDatabase(file, setup: (raw) {
-        for (final t in newTables) {
-          raw.execute('DROP TABLE IF EXISTS $t');
-        }
-        raw.execute('PRAGMA user_version = 36');
-      }),
-    );
-    addTearDown(reopened.close);
-    await (reopened.select(reopened.customers)..limit(1)).get();
+    final reopened = await reopenAsV36();
 
-    expect((await reopened.select(reopened.pendingTickets).get()).map((r) => r.id), ['queued-1'],
-        reason: 'spec 11.3: a sync-generation bump must not touch queued work');
+    expect(await columnsOf(reopened, 'pending_tickets'), containsAll(
+        ['contract_id', 'commessa_id', 'cantiere_id', 'prodotto_assistenza_ids_json',
+         'repairable_field']));
+    final row = (await reopened.select(reopened.pendingTickets).get()).single;
+    expect(row.id, 'queued-1', reason: 'spec 11.3: a schema bump must not touch queued work');
+    expect(row.contractId, isNull);
+  });
+
+  /// The release deliberately does not reset every device's delta cursor - the reference queries
+  /// carry no delta, so there is nothing a reset would fetch. This test is the guard on that
+  /// decision, not a formality.
+  test('the sync cursor generation is deliberately not bumped', () {
+    expect(AppDatabase.syncCursorGeneration, 'v9');
   });
 }
 ```
 
-> Check `PendingTickets`' real column names before writing this — the companion's required set is
-> whatever `lib/data/local/app_database.dart` declares. If the table is called something else on the
-> mobile side, use that name; the assertion is about row survival, not the table's spelling.
+> Check `PendingTicketsCompanion.insert`'s real required set in `app_database.dart` before running —
+> the argument list above follows the table declaration at `:756-795`. `ALTER TABLE ... DROP COLUMN`
+> needs SQLite 3.35+; the test suite already runs on a version that supports it (verify with
+> `PRAGMA user_version`/`sqlite_version()` if the drop fails).
 
 - [ ] **Step 2: Run it and watch it fail**
 
 Run: `flutter test test/data/local/migration_v37_test.dart`
-Expected: FAIL — the tables do not exist, and `syncCursorGeneration` is still `'v9'`.
+Expected: FAIL — the tables and columns do not exist.
 
 - [ ] **Step 3: Declare the four tables**
 
@@ -955,10 +975,11 @@ In `lib/data/local/app_database.dart`, following the `Customers` shape (`:28-48`
 override, Drift derives the snake_case name:
 
 ```dart
-/// Contracts of the customers this technician's work reaches. Mirrored so the ticket wizard's
-/// Cliente→Contratto picker is filled offline (spec 7.4). `isActive` is carried, not filtered: a
-/// contract deactivated on the server must arrive here as a delta, or a device that cached it would
-/// offer it forever (spec 6.4).
+/// Contracts of the customers this technician's payload carries. Mirrored so the ticket wizard's
+/// Cliente→Contratto picker is filled offline (spec 7.4).
+///
+/// `isActive` is carried, not filtered: a contract deactivated on the server must arrive here as a
+/// row with a false flag, or a device that cached it would offer it forever (spec 6.4).
 class Contracts extends Table {
   TextColumn get id => text()();
   TextColumn get tenantId => text()();
@@ -967,12 +988,12 @@ class Contracts extends Table {
 
   TextColumn get name => text()();
   TextColumn get customerId => text()();
-  TextColumn get locationId => text().nullable()();
+  TextColumn get locationId => text().nullable()_();
   DateTimeColumn get startDate => dateTime()();
   DateTimeColumn get endDate => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
-  /// `Numero` and `Codice` are both human references a technician may read off the paper contract;
+  /// `numero` and `codice` are both human references a technician may read off the paper contract;
   /// the picker shows whichever is present.
   TextColumn get numero => text().nullable()();
   TextColumn get codice => text().nullable()();
@@ -983,7 +1004,7 @@ class Contracts extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Commesse (`Codice`, `Descrizione`) of the customers this technician's work reaches.
+/// Commesse (`codice`, `descrizione`) of the customers this technician's payload carries.
 class Commesse extends Table {
   TextColumn get id => text()();
   TextColumn get tenantId => text()();
@@ -1001,7 +1022,7 @@ class Commesse extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Products / services (`ProdottoAssistenza`) of the customers this technician's work reaches.
+/// Products / services (`ProdottoAssistenza`) of the customers this technician's payload carries.
 ///
 /// Deliberately separate from [Assets], which mirrors the *covered* assets of this technician's
 /// tickets for the checklist feature and is pruned by `checklist_reconciler`. Two scopes, two
@@ -1029,7 +1050,7 @@ class ProdottiAssistenza extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Agents (`Agent`), mirrored only for the ones this technician's tickets already reference — the
+/// Agents, mirrored only for the ones this technician's tickets already reference — the
 /// "Riferimento" field. A tenant-wide agent book is explicitly not mirrored (spec 10, D-1(a)).
 class Agents extends Table {
   TextColumn get id => text()();
@@ -1047,25 +1068,57 @@ class Agents extends Table {
 }
 ```
 
-- [ ] **Step 4: Register them, bump the schema, add the migration step**
+- [ ] **Step 4: Add the five queue columns**
 
-Add the four classes to the `@DriftDatabase(tables: [...])` list after `ChecklistOmittedTickets`,
-set `int get schemaVersion => 37;`, and append to `onUpgrade` after the `from < 36` block:
+In the `PendingTickets` table, after `agentId`:
+
+```dart
+  /// Reference fields the create wizard now collects, sent on the wire by [TicketApiClient].
+  /// Null for every ticket queued before this column existed — and legal, since none of them is
+  /// required to create a ticket.
+  TextColumn get contractId => text().nullable()();
+  TextColumn get commessaId => text().nullable()();
+  TextColumn get cantiereId => text().nullable()();
+
+  /// Covered products, JSON-encoded — same storage as [Tickets.tagsJson] (its doc comment has the
+  /// reasoning). A JSON list rather than a join table because nothing reads it relationally: it is
+  /// carried to the server verbatim and never queried by id.
+  TextColumn get prodottoAssistenzaIdsJson => text().nullable()();
+
+  /// The request field a rejected foreign key referred to ("customerId"), set when the server
+  /// answered 404 with `extensions.field` and the row is now repairable by picking a replacement
+  /// (see [TicketCreationQueue]). Null when the row is not waiting on a repair — the honest answer
+  /// for every row written before this column existed.
+  TextColumn get repairableField => text().nullable()();
+```
+
+- [ ] **Step 5: Register the tables, bump the version, add the migration step**
+
+Add the four classes to the `@DriftDatabase(tables: [...])` list after `ChecklistOmittedTickets`, set
+`int get schemaVersion => 37;`, and append after the `from < 36` block:
 
 ```dart
         if (from < 37) {
-          // The reference mirror the ticket wizard needs offline. New tables only: nothing is
-          // backfilled here, and the delta cursor is bumped to v10 so a device that already synced
-          // receives the four members once, as a bootstrap (see SyncService's prune).
+          // The reference mirror the ticket wizard needs offline, plus the queue columns that let a
+          // created ticket carry them. New tables and client-authored columns: nothing is backfilled
+          // and the delta cursor is NOT bumped — the reference queries carry no delta, so a device
+          // receives them on its next ordinary sync. See this file's schema-33 step for the same
+          // reasoning about client-authored columns.
           await m.createTable(contracts);
           await m.createTable(commesse);
           await m.createTable(prodottiAssistenza);
           await m.createTable(agents);
           await _createReferenceIndexes();
+
+          await m.addColumn(pendingTickets, pendingTickets.contractId);
+          await m.addColumn(pendingTickets, pendingTickets.commessaId);
+          await m.addColumn(pendingTickets, pendingTickets.cantiereId);
+          await m.addColumn(pendingTickets, pendingTickets.prodottoAssistenzaIdsJson);
+          await m.addColumn(pendingTickets, pendingTickets.repairableField);
         }
 ```
 
-and add the helper next to `_createChecklistIndexes` (`:1321-1335`), calling it from `onCreate` too:
+Add the helper next to `_createChecklistIndexes`, and call it from `onCreate` as well:
 
 ```dart
   /// Indexes the reference pickers read by: every one of them is "the rows for this customer".
@@ -1083,39 +1136,36 @@ and add the helper next to `_createChecklistIndexes` (`:1321-1335`), calling it 
   }
 ```
 
-- [ ] **Step 5: Bump the cursor generation**
+- [ ] **Step 6: Regenerate the Drift code**
 
-```dart
-  static const String syncCursorGeneration = 'v10';
+```bash
+dart run build_runner build --delete-conflicting-outputs
 ```
 
-and update the existing assertion in `test/data/sync/sync_service_checklist_test.dart` from `'v9'` to
-`'v10'`. That test is the guard that a generation bump is deliberate, not a copy-paste.
-
-- [ ] **Step 6: Run the migration, database and sync suites**
+- [ ] **Step 7: Run the migration, database and sync suites**
 
 Run: `flutter test test/data/local/ test/data/sync/`
 Expected: PASS. If `migration_v36_test.dart` or `app_database_test.dart` assert the schema version
-directly, relax them the same way `migration_v35_test.dart` was relaxed for v36 (assert `>=`, not
-`==`), and note it in the ledger.
+directly, relax them the way `migration_v35_test.dart` was relaxed for v36 (assert `>=`, not `==`)
+and note it in the ledger.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add lib/data/local/app_database.dart lib/data/local/app_database.g.dart \
-        test/data/local/migration_v37_test.dart \
-        test/data/sync/sync_service_checklist_test.dart
-git commit -m "feat(mobile): Drift schema 37 - the reference mirror the wizard needs offline
+        test/data/local/migration_v37_test.dart
+git commit -m "feat(mobile): Drift schema 37 - the reference mirror and the queue columns
 
-contracts, commesse, prodotti_assistenza and agents, one from<37 step, cursor
-generation v9 -> v10 so every device re-bootstraps once. Nothing existing is
-altered: a queued ticket survives the upgrade.
+contracts, commesse, prodotti_assistenza and agents, plus the pending_tickets
+columns a created ticket needs to carry them (contractId, commessaId, cantiereId,
+prodottoAssistenzaIdsJson, repairableField).
+
+The delta cursor is deliberately NOT bumped: the reference queries carry no delta,
+so a device receives them on its next ordinary sync, and a reset would cost every
+device a full re-download for nothing.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
-
-> Run `dart run build_runner build --delete-conflicting-outputs` before committing so
-> `app_database.g.dart` is regenerated, and stage it explicitly.
 
 ---
 
@@ -1134,26 +1184,20 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing test**
 
-Mirror `test/data/sync/sync_service_checklist_test.dart:1-40` for the fixture helpers
-(`_dt`, `_list` are file-private in `sync_dto.dart`; the test uses raw JSON).
-
 ```dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 
 void main() {
+  // The full member set a current backend sends. Build this from sync_dto.dart's own required
+  // members — if a new required member lands, this helper must be updated with it, which is the
+  // point of writing it out rather than using `{}`.
   Map<String, dynamic> minimal() => {
     'syncedAt': '2026-10-08T08:00:00Z',
     'since': null,
-    'schedules': <Object>[],
-    'draftReports': <Object>[],
-    'customers': <Object>[],
-    'locations': <Object>[],
-    'tickets': <Object>[],
-    'materiali': <Object>[],
-    'cantieri': <Object>[],
-    'ticketStatuses': <Object>[],
-    'ticketTypes': <Object>[],
+    'schedules': <Object>[], 'draftReports': <Object>[], 'customers': <Object>[],
+    'locations': <Object>[], 'tickets': <Object>[], 'materiali': <Object>[],
+    'cantieri': <Object>[], 'ticketStatuses': <Object>[], 'ticketTypes': <Object>[],
     'colleagues': <Object>[],
   };
 
@@ -1161,12 +1205,10 @@ void main() {
     final p = SyncResultDto.fromJson({
       ...minimal(),
       'contracts': [
-        {
-          'id': 'c1', 'tenantId': 't', 'createdAt': '2026-10-01T00:00:00Z', 'updatedAt': null,
-          'name': 'Manutenzione', 'customerId': 'cu', 'locationId': null,
-          'startDate': '2026-01-01T00:00:00Z', 'endDate': null, 'isActive': true,
-          'numero': 'N-1', 'codice': null, 'tipo': 0, 'externalId': null,
-        },
+        {'id': 'c1', 'tenantId': 't', 'createdAt': '2026-10-01T00:00:00Z', 'updatedAt': null,
+         'name': 'Manutenzione', 'customerId': 'cu', 'locationId': null,
+         'startDate': '2026-01-01T00:00:00Z', 'endDate': null, 'isActive': true,
+         'numero': 'N-1', 'codice': null, 'tipo': 0, 'externalId': null},
       ],
       'commesse': [
         {'id': 'm1', 'tenantId': 't', 'createdAt': '2026-10-01T00:00:00Z', 'updatedAt': null,
@@ -1186,34 +1228,35 @@ void main() {
     });
 
     expect(p.contracts.single.name, 'Manutenzione');
+    expect(p.contracts.single.tipo, 0);
     expect(p.commesse.single.codice, 'C-1');
     expect(p.prodottiAssistenza.single.categoria, isNull);
     expect(p.agents.single.nome, 'Rossi');
-    expect(
-      [p.carriesContracts, p.carriesCommesse, p.carriesProdottiAssistenza, p.carriesAgents],
-      [true, true, true, true],
-    );
+    expect([p.carriesContracts, p.carriesCommesse, p.carriesProdottiAssistenza, p.carriesAgents],
+        [true, true, true, true]);
   });
 
-  /// The discipline the checklist members already established, and the reason the bootstrap prune
-  /// is safe: a backend that predates this feature sends none of the four keys, and the client must
+  /// The discipline the checklist members already established, and the reason the scoped prune is
+  /// safe: a backend that predates this feature sends none of the four keys, and the client must
   /// treat that as "nothing to say", not as "every reference row was deleted".
   test('an older backend leaves every carries flag false', () {
     final p = SyncResultDto.fromJson(minimal());
 
-    expect(
-      [p.carriesContracts, p.carriesCommesse, p.carriesProdottiAssistenza, p.carriesAgents],
-      [false, false, false, false],
-    );
+    expect([p.carriesContracts, p.carriesCommesse, p.carriesProdottiAssistenza, p.carriesAgents],
+        [false, false, false, false]);
     expect(p.contracts, isEmpty);
   });
 
-  test('a bootstrap is recognisable by a null since', () {
-    expect(SyncResultDto.fromJson(minimal()).since, isNull);
-    expect(
-      SyncResultDto.fromJson({...minimal(), 'since': '2026-10-07T00:00:00Z'}).since,
-      isNotNull,
-    );
+  test('a missing isActive defaults to active, matching the server default', () {
+    final p = SyncResultDto.fromJson({
+      ...minimal(),
+      'agents': [
+        {'id': 'a1', 'tenantId': 't', 'createdAt': '2026-10-01T00:00:00Z', 'updatedAt': null,
+         'nome': 'Rossi', 'email': null, 'cellulare': null},
+      ],
+    });
+
+    expect(p.agents.single.isActive, isTrue);
   });
 }
 ```
@@ -1225,13 +1268,13 @@ Expected: FAIL — `contracts` is not a member of `SyncResultDto`.
 
 - [ ] **Step 3: Add the four DTOs**
 
-In `lib/data/sync/sync_dto.dart`, following the `CantiereDto` shape (`:513-562`), using the shared
-`_dt` / `_list` helpers at the file bottom:
+In `lib/data/sync/sync_dto.dart`, following the `CantiereDto` shape and using the file's shared
+`_dt` / `_list` helpers:
 
 ```dart
-/// A contract of a customer in this technician's work scope. Mirrored for the Cliente→Contratto
-/// picker (spec 7.4). [isActive] is stored, not filtered on read of the payload — the picker is what
-/// hides a deactivated contract.
+/// A contract of a customer in this technician's payload. Mirrored for the Cliente→Contratto picker
+/// (spec 7.4). [isActive] is stored, never filtered here — the picker is what hides a deactivated
+/// contract.
 class ContractSyncDto {
   final String id;
   final String tenantId;
@@ -1284,13 +1327,13 @@ class ContractSyncDto {
 }
 ```
 
-Add `CommessaSyncDto`, `ProdottoAssistenzaSyncDto` and `AgentSyncDto` in the same shape, one field
-per member of the record it mirrors (`SyncReferenceDtos.cs`, Task A2). `isActive` defaults to `true`
-when the key is absent, matching the server's own default.
+Add `CommessaSyncDto`, `ProdottoAssistenzaSyncDto` and `AgentSyncDto` in the same shape — one field per
+member of the record it mirrors in `SyncReferenceDtos.cs` (Task A2). `isActive` defaults to `true` when
+the key is absent, matching the server's own default.
 
 - [ ] **Step 4: Add the members and the carries flags to `SyncResultDto`**
 
-Members, with the const-constructor default `const []`, and in `fromJson`:
+Members, with `const []` defaults, and in `fromJson`:
 
 ```dart
       contracts: _list(j['contracts'], ContractSyncDto.fromJson),
@@ -1299,7 +1342,7 @@ Members, with the const-constructor default `const []`, and in `fromJson`:
       agents: _list(j['agents'], AgentSyncDto.fromJson),
 ```
 
-Flags, set by key presence exactly as `carriesChecklist` is (`:124-125`):
+Flags, by key presence, exactly as `carriesChecklist` is:
 
 ```dart
       carriesContracts: j.containsKey('contracts'),
@@ -1313,35 +1356,33 @@ with the doc comment:
 ```dart
   /// False when the payload came from a backend that predates the reference members. Without these
   /// an older backend would look like "every contract, commessa and product was deleted" and the
-  /// bootstrap prune would wipe the mirror. One flag per entity rather than one for the group: each
-  /// is pruned independently, and a partial rollout must not be read as a deletion.
+  /// scoped prune would wipe the mirror. One flag per entity rather than one for the group: each is
+  /// pruned independently, and a partial rollout must not be read as a deletion.
   final bool carriesContracts;
   final bool carriesCommesse;
   final bool carriesProdottiAssistenza;
   final bool carriesAgents;
 ```
 
-Also extend the existing `checklistWireKeys` set if it is used as a "known members" registry, and add
-the four keys to whatever list that set feeds.
+Add the four keys to the existing `checklistWireKeys`-style registry if one exists.
 
-- [ ] **Step 5: Add the contract assertions**
+- [ ] **Step 5: Extend the contract test**
 
-In `test/contract/sync_inbound_contract_test.dart`, extend the carries-flag assertions
-(`:145-182`) with the four new flags, using the same `full` / `older` pair the file already builds:
+In `test/contract/sync_inbound_contract_test.dart`, extend the carries-flag assertions with the four
+new flags, using the same `full` / `older` pair the file already builds:
 
 ```dart
         expect(full.carriesContracts, isTrue);
         expect(full.carriesCommesse, isTrue);
         expect(full.carriesProdottiAssistenza, isTrue);
         expect(full.carriesAgents, isTrue);
-        ...
+        // ... and in the older-backend case:
         expect(older.carriesContracts, isFalse,
             reason: 'an older backend must NOT look like "every contract was deleted"');
 ```
 
-Regenerate `test/contract/openapi.snapshot.json` from the Task A2 snapshot — copy it from the
-backend branch explicitly, do not copy the root working tree's file, which is a different branch's
-contract.
+Refresh `test/contract/openapi.snapshot.json` from the Task A2 snapshot, copied from the backend
+branch explicitly — never from the root working tree, which is a different branch's contract.
 
 - [ ] **Step 6: Run the DTO and contract suites**
 
@@ -1365,173 +1406,147 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ---
 
-### Task B3: write the reference rows, prune them on bootstrap
+### Task B3: write the reference rows, and prune only what the payload can vouch for
 
 **Files:**
-- Modify: `lib/data/sync/sync_service.dart`
 - Create: `lib/data/reference/reference_cache_repository.dart`
-- Test: `test/data/sync/sync_reference_test.dart` (create)
+- Modify: `lib/data/sync/sync_service.dart`
 - Test: `test/data/reference/reference_cache_repository_test.dart` (create)
+- Test: `test/data/sync/sync_reference_test.dart` (create)
 
 **Interfaces:**
 - Consumes: `ContractSyncDto`, `CommessaSyncDto`, `ProdottoAssistenzaSyncDto`, `AgentSyncDto` (Task B2); the four Drift tables (Task B1).
-- Produces, for Task B4:
-  - `ReferenceCacheRepository(AppDatabase db, Dio dio)`
-  - `Future<void> materializeContract(ContractSyncDto c)` / `materializeCommessa` / `materializeProdotto` / `materializeAgent`
-  - `Future<void> materializeContracts(Iterable<ContractSyncDto> c)` and the three siblings
-  - `Future<List<ContractRow>> contractsForCustomer(String customerId)` and the three siblings
+- Produces, for Task B4 and Task B5:
+  - `ReferenceCacheRepository(AppDatabase db)`
+  - `Future<void> upsertContracts(Iterable<ContractSyncDto> rows)` — and `upsertCommesse`, `upsertProdottiAssistenza`, `upsertAgents`
+  - `Future<void> pruneContracts({required Set<String> presentCustomerIds, required Set<String> keepContractIds})` — and `pruneCommesse`, `pruneProdottiAssistenza`
+  - `Future<List<Contract>> contractsForCustomer(String customerId)` — and `commesseForCustomer`, `prodottiForCustomer`, `activeAgents()`
   - `final referenceCacheProvider = Provider<ReferenceCacheRepository>(...)`
 
-- [ ] **Step 1: Write the failing sync test**
+**The persistence invariant, which Task B4 depends on:** `upsert*` and `prune*` are called from exactly
+two places — `SyncService` (the payload) and `ReferenceSearchClient` (a search the technician ran).
+No widget and no screen calls them, and no screen knows how a search result becomes a Drift row.
+
+**Pruning rules, and why they are not "delete what the payload omits":**
+
+- The payload's customer set is recomputed each sync and the device accumulates it. A customer absent
+  from this payload is not deleted from the server — they are simply not the subject of this sync. So
+  a reference row is prunable only when **its own customer is present in the payload** and that
+  customer no longer has the row. That is the only case in which "absent" is evidence of "gone".
+- **Agents are never pruned.** An agent can be absent from the payload simply because no ticket in
+  *this* payload references them, while a ticket already on the device still does. Deleting it would
+  break a ticket the technician can still open.
+
+- [ ] **Step 1: Write the failing repository test**
 
 ```dart
-import 'package:dio/dio.dart';
-import 'package:drift/drift.dart' show driftRuntimeOptions, Value;
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/sync/sync_service.dart';
-
-class MockDio extends Mock implements Dio {}
-
-Response<Map<String, dynamic>> ok(Map<String, dynamic> data) => Response(
-  data: data,
-  statusCode: 200,
-  requestOptions: RequestOptions(path: '/api/sync/mobile'),
-);
-
-Map<String, dynamic> base() => {
-  'syncedAt': '2026-10-08T08:00:00Z',
-  'since': null,
-  'schedules': <Object>[],
-  'draftReports': <Object>[],
-  'customers': <Object>[],
-  'locations': <Object>[],
-  'tickets': <Object>[],
-  'materiali': <Object>[],
-  'cantieri': <Object>[],
-  'ticketStatuses': <Object>[],
-  'ticketTypes': <Object>[],
-  'colleagues': <Object>[],
-};
-
-Map<String, dynamic> reference() => {
-  'contracts': [
-    {'id': 'c1', 'tenantId': 't', 'createdAt': '2026-10-01T00:00:00Z', 'updatedAt': null,
-     'name': 'Manutenzione', 'customerId': 'cu', 'locationId': null,
-     'startDate': '2026-01-01T00:00:00Z', 'endDate': null, 'isActive': true,
-     'numero': 'N-1', 'codice': null, 'tipo': 0, 'externalId': null},
-  ],
-  'commesse': <Object>[],
-  'prodottiAssistenza': <Object>[],
-  'agents': <Object>[],
-};
+import 'package:tasktap_mobile/data/reference/reference_cache_repository.dart';
+import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 
 void main() {
   late AppDatabase db;
-  late MockDio dio;
+  late ReferenceCacheRepository repo;
 
   setUp(() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
     db = AppDatabase(NativeDatabase.memory());
-    dio = MockDio();
+    repo = ReferenceCacheRepository(db);
   });
   tearDown(() => db.close());
 
-  void respondWith(Map<String, dynamic> body) {
-    when(() => dio.get<Map<String, dynamic>>(any(), queryParameters: any(named: 'queryParameters')))
-        .thenAnswer((_) async => ok(body));
-  }
+  ContractSyncDto contract(String id, String customerId, {String? name, bool active = true}) =>
+      ContractSyncDto(
+        id: id, tenantId: 't', createdAt: DateTime.utcNow(), name: name ?? id,
+        customerId: customerId, startDate: DateTime.utcNow(), isActive: active,
+      );
 
-  test('a payload with the reference members fills the local mirror', () async {
-    respondWith({...base(), ...reference()});
-    await SyncService(db: db, dio: dio).sync();
+  test('contractsForCustomer returns only that customer, only active, in name order', () async {
+    await repo.upsertContracts([
+      contract('c1', 'cu1', name: 'Zeta'),
+      contract('c2', 'cu1', name: 'Alfa'),
+      contract('c3', 'cu1', name: 'Cessato', active: false),
+      contract('c4', 'cu2', name: 'Altro cliente'),
+    ]);
 
-    expect((await db.select(db.contracts).get()).single.name, 'Manutenzione');
+    final rows = await repo.contractsForCustomer('cu1');
+
+    expect(rows.map((r) => r.name), ['Alfa', 'Zeta']);
   });
 
-  test('a payload from an older backend leaves every cached reference row alone', () async {
-    respondWith({...base(), ...reference()});
-    await SyncService(db: db, dio: dio).sync();
+  test('prune removes a deleted contract of a customer the payload carries', () async {
+    await repo.upsertContracts([contract('c1', 'cu1'), contract('c2', 'cu1')]);
 
-    respondWith(base()); // no reference keys at all
-    await SyncService(db: db, dio: dio).sync();
+    await repo.pruneContracts(presentCustomerIds: {'cu1'}, keepContractIds: {'c1'});
 
-    expect(await db.select(db.contracts).get(), hasLength(1));
+    expect((await repo.contractsForCustomer('cu1')).map((r) => r.id), ['c1']);
   });
 
-  test('a bootstrap prunes a row the payload no longer contains', () async {
-    respondWith({...base(), ...reference()});
-    await SyncService(db: db, dio: dio).sync();
+  /// The customer is not in the payload, so this sync says nothing about them — and the device
+  /// must not guess. This is the case a "delete everything the payload omits" rule gets wrong.
+  test('prune never touches a customer the payload does not carry', () async {
+    await repo.upsertContracts([contract('c9', 'cu-absent')]);
 
-    // Next launch: a fresh bootstrap (since == null) that no longer lists c1.
-    respondWith({...base(),
-      'contracts': <Object>[], 'commesse': <Object>[],
-      'prodottiAssistenza': <Object>[], 'agents': <Object>[]});
-    await SyncService(db: db, dio: dio).sync();
+    await repo.pruneContracts(presentCustomerIds: {'cu1'}, keepContractIds: {});
 
-    expect(await db.select(db.contracts).get(), isEmpty,
-        reason: 'spec 6.4: a hard delete is only learnable from a complete payload');
+    expect((await repo.contractsForCustomer('cu-absent')).map((r) => r.id), ['c9']);
   });
 
-  test('an incremental sync never prunes', () async {
-    respondWith({...base(), ...reference()});
-    await SyncService(db: db, dio: dio).sync();
+  /// An empty keep-set is not an exotic case: a customer whose last contract was hard-deleted
+  /// produces exactly it, and it is the one shape where a naive NOT IN list is empty.
+  test('prune with an empty keep-set clears that customer and nothing else', () async {
+    await repo.upsertContracts([contract('c1', 'cu1'), contract('c9', 'cu-absent')]);
 
-    // A delta: since is set, so the payload is NOT the complete set.
-    respondWith({...base(), 'since': '2026-10-08T07:00:00Z',
-      'contracts': <Object>[], 'commesse': <Object>[],
-      'prodottiAssistenza': <Object>[], 'agents': <Object>[]});
-    await SyncService(db: db, dio: dio).sync();
+    await repo.pruneContracts(presentCustomerIds: {'cu1'}, keepContractIds: {});
 
-    expect(await db.select(db.contracts).get(), hasLength(1),
-        reason: 'a delta says nothing about rows it omits');
+    expect(await repo.contractsForCustomer('cu1'), isEmpty);
+    expect((await repo.contractsForCustomer('cu-absent')).map((r) => r.id), ['c9']);
+  });
+
+  test('an empty present-set prunes nothing', () async {
+    await repo.upsertContracts([contract('c1', 'cu1')]);
+
+    await repo.pruneContracts(presentCustomerIds: {}, keepContractIds: {});
+
+    expect((await repo.contractsForCustomer('cu1')).map((r) => r.id), ['c1']);
   });
 }
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `flutter test test/data/sync/sync_reference_test.dart`
-Expected: FAIL — `db.contracts` is not defined until Task B1 regenerates the `.g.dart`; once it is,
-the sync does not yet write the rows.
+Run: `flutter test test/data/reference/reference_cache_repository_test.dart`
+Expected: FAIL — the file does not exist.
 
-- [ ] **Step 3: Write the cache repository**
-
-Create `lib/data/reference/reference_cache_repository.dart` with the upserts, the per-customer
-reads, and the bootstrap prune. The upserts are one body shared with the sync, so the picker's
-materialise path and the sync path can never diverge:
+- [ ] **Step 3: Write the repository**
 
 ```dart
 /// The four reference tables, read and written in one place.
 ///
-/// The sync writes them from the delta payload; the picker writes them again when a search result is
-/// selected online (spec 7.4), and both go through the same upsert so a row materialised by a pick is
-/// indistinguishable from one the delta delivered.
+/// The sync writes them from the payload; [ReferenceSearchClient] writes them again when a
+/// technician picks a row an online search found (spec 7.4). Both go through these same upserts, so
+/// a row materialised by a pick is indistinguishable from one the payload delivered.
+///
+/// Nothing above this layer knows how a reference row is stored: screens and widgets ask for rows
+/// and hand back ids. See the class's callers — there are two, and neither is a widget.
 class ReferenceCacheRepository {
   ReferenceCacheRepository(this._db);
 
   final AppDatabase _db;
 
-  Future<void> upsertContracts(Iterable<ContractSyncDto> list) async {
-    for (final c in list) {
+  Future<void> upsertContracts(Iterable<ContractSyncDto> rows) async {
+    for (final c in rows) {
       await _db.into(_db.contracts).insertOnConflictUpdate(
-            ContractsCompanion.insert(
-              id: c.id,
-              tenantId: c.tenantId,
-              createdAt: c.createdAt,
-              updatedAt: Value(c.updatedAt),
-              name: c.name,
-              customerId: c.customerId,
-              locationId: Value(c.locationId),
-              startDate: c.startDate,
-              endDate: Value(c.endDate),
-              isActive: Value(c.isActive),
-              numero: Value(c.numero),
-              codice: Value(c.codice),
-              tipo: Value(c.tipo),
-              externalId: Value(c.externalId),
+            ContractsCompanion(   // see ContractsCompanion.insert: required fields are the
+                                  // non-nullable columns, the rest carry Value(...)
+              id: Value(c.id), tenantId: Value(c.tenantId), createdAt: Value(c.createdAt),
+              updatedAt: Value(c.updatedAt), name: Value(c.name), customerId: Value(c.customerId),
+              locationId: Value(c.locationId), startDate: Value(c.startDate),
+              endDate: Value(c.endDate), isActive: Value(c.isActive), numero: Value(c.numero),
+              codice: Value(c.codice), tipo: Value(c.tipo), externalId: Value(c.externalId),
             ),
           );
     }
@@ -1539,17 +1554,29 @@ class ReferenceCacheRepository {
 
   // upsertCommesse / upsertProdottiAssistenza / upsertAgents in the same shape.
 
-  /// Bootstrap only: the payload is the complete scoped set, so anything it omits is gone from the
-  /// server. Called when `since == null` and only for the entities the payload actually carries —
-  /// a delta says nothing about the rows it omits, and a backend that predates the members says
-  /// nothing at all (spec 6.4).
-  Future<void> pruneContracts(Set<String> keepIds) => (_db.delete(_db.contracts)
-        ..where((t) => t.id.isNotIn(keepIds)))
-      .go();
+  /// Deletes the rows of the customers this payload carries that the payload no longer lists for
+  /// them — the only case where an absence is evidence of a deletion. A customer the payload does
+  /// not carry is left alone: this sync has nothing to say about them, and the device accumulates
+  /// across syncs (see the class doc comment).
+  ///
+  /// The empty keep-set is handled explicitly: it is what a customer whose last contract was
+  /// deleted produces, and it is exactly the shape where a generated NOT IN list would be empty.
+  Future<void> pruneContracts({
+    required Set<String> presentCustomerIds,
+    required Set<String> keepContractIds,
+  }) async {
+    if (presentCustomerIds.isEmpty) return;
+    await (_db.delete(_db.contracts)..where((t) {
+          final inScope = t.customerId.isIn(presentCustomerIds);
+          return keepContractIds.isEmpty ? inScope : inScope & t.id.isNotIn(keepContractIds);
+        }))
+        .go();
+  }
 
-  // pruneCommesse / pruneProdottiAssistenza / pruneAgents in the same shape.
+  // pruneCommesse / pruneProdottiAssistenza in the same shape.
+  // There is deliberately no pruneAgents: an agent absent from one payload may still be referenced
+  // by a ticket already on this device, and deleting it would break that ticket.
 
-  /// The picker's local half: the active contracts of one customer, in name order.
   Future<List<Contract>> contractsForCustomer(String customerId) =>
       (_db.select(_db.contracts)
             ..where((c) => c.customerId.equals(customerId) & c.isActive.equals(true))
@@ -1558,11 +1585,7 @@ class ReferenceCacheRepository {
 
   // commesseForCustomer / prodottiForCustomer / activeAgents in the same shape.
 }
-```
 
-and at the bottom of the file:
-
-```dart
 final referenceCacheProvider = Provider<ReferenceCacheRepository>(
   (ref) => ReferenceCacheRepository(ref.watch(appDatabaseProvider)),
 );
@@ -1570,587 +1593,948 @@ final referenceCacheProvider = Provider<ReferenceCacheRepository>(
 
 - [ ] **Step 4: Wire it into `SyncService.sync()`**
 
-In the transaction, after `_replaceColleagues`:
+In the transaction, after `_replaceColleagues(payload.colleagues)`:
 
 ```dart
-        await _applyReferenceCache(payload);
+      await _applyReferenceCache(payload);
 ```
 
-and the method, mirroring `_applyChecklist`'s gating (`sync_service.dart:88-111`):
+and, next to `_applyChecklist`:
 
 ```dart
-  /// The reference mirror. Each entity is skipped wholesale when the payload does not carry it, and
-  /// pruned only on a bootstrap — see [ReferenceCacheRepository]. Skipping is what keeps an older
-  /// backend from looking like "every reference row was deleted".
+  /// The reference mirror. Each entity is skipped wholesale when the payload does not carry it —
+  /// an older backend must not look like "every reference row was deleted" — and pruned only for
+  /// the customers this payload actually carries. See [ReferenceCacheRepository].
   Future<void> _applyReferenceCache(SyncResultDto payload) async {
     final cache = ReferenceCacheRepository(db);
-    final isBootstrap = payload.since == null;
 
     if (payload.carriesContracts) {
       await cache.upsertContracts(payload.contracts);
-      if (isBootstrap) {
-        await cache.pruneContracts(payload.contracts.map((c) => c.id).toSet());
-      }
+      await cache.pruneContracts(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepContractIds: payload.contracts.map((c) => c.id).toSet(),
+      );
     }
     if (payload.carriesCommesse) {
       await cache.upsertCommesse(payload.commesse);
-      if (isBootstrap) {
-        await cache.pruneCommesse(payload.commesse.map((c) => c.id).toSet());
-      }
+      await cache.pruneCommesse(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepCommessaIds: payload.commesse.map((c) => c.id).toSet(),
+      );
     }
     if (payload.carriesProdottiAssistenza) {
       await cache.upsertProdottiAssistenza(payload.prodottiAssistenza);
-      if (isBootstrap) {
-        await cache.pruneProdottiAssistenza(
-            payload.prodottiAssistenza.map((p) => p.id).toSet());
-      }
+      await cache.pruneProdottiAssistenza(
+        presentCustomerIds: payload.customers.map((c) => c.id).toSet(),
+        keepProdottiIds: payload.prodottiAssistenza.map((p) => p.id).toSet(),
+      );
     }
     if (payload.carriesAgents) {
+      // No prune: see ReferenceCacheRepository.
       await cache.upsertAgents(payload.agents);
-      if (isBootstrap) {
-        await cache.pruneAgents(payload.agents.map((a) => a.id).toSet());
-      }
     }
   }
 ```
 
-- [ ] **Step 5: Write the repository test**
+> `pruneContracts` keys on the **payload's customer ids**, not on the contracts' — a customer with no
+> contracts at all still needs their old ones cleared. `SyncResultDto.customers` is already parsed by
+> this point; confirm the member name.
 
-`test/data/reference/reference_cache_repository_test.dart` — an in-memory `AppDatabase`, insert two
-contracts for different customers, and assert `contractsForCustomer` returns only the active one of
-the right customer, in name order; plus that `pruneContracts` removes exactly the ids not passed.
+- [ ] **Step 5: Write the sync-level test**
 
-- [ ] **Step 6: Run the sync and reference suites**
+```dart
+  test('a payload with the reference members fills the local mirror', () async { ... });
 
-Run: `flutter test test/data/sync/ test/data/reference/`
+  test('a payload from an older backend leaves every cached reference row alone', () async {
+    // sync once with the members, then again with none of the four keys
+    expect(await db.select(db.contracts).get(), hasLength(1));
+  });
+
+  test('a payload that no longer lists a carried customer\'s contract removes it', () async {
+    // second sync: same customer, contracts: []
+    expect(await db.select(db.contracts).get(), isEmpty);
+  });
+
+  test('a contract of a customer absent from the payload survives', () async {
+    // second sync: different customer set, contracts: [] — the absent customer's row stays
+    expect(await db.select(db.contracts).get(), hasLength(1));
+  });
+```
+
+- [ ] **Step 6: Run the reference and sync suites**
+
+Run: `flutter test test/data/reference/ test/data/sync/`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add lib/data/sync/sync_service.dart lib/data/reference/reference_cache_repository.dart \
-        test/data/sync/sync_reference_test.dart \
-        test/data/reference/reference_cache_repository_test.dart
-git commit -m "feat(mobile): mirror the reference entities, prune them on bootstrap
+git add lib/data/reference/reference_cache_repository.dart lib/data/sync/sync_service.dart \
+        test/data/reference/reference_cache_repository_test.dart \
+        test/data/sync/sync_reference_test.dart
+git commit -m "feat(mobile): mirror the reference entities, prune only what a payload can vouch for
 
-One upsert path shared by the delta and by the picker's materialise step, so a
-row found by an online search is indistinguishable from one the delta sent.
-Pruning runs only on a bootstrap, where the payload is the complete scoped set.
+One upsert path, called from the payload and from a technician's own search, so a row
+found online is indistinguishable from one the payload sent. Pruning is keyed to the
+customers a payload carries and never to agents: the customer set is recomputed every
+sync and the device accumulates, so an absent customer is not a deleted one.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task B4: the reference picker — local first, server search, materialise the pick
+### Task B4: one picker, local mirror first, search behind it
 
 **Files:**
-- Create: `lib/features/ticket/reference_picker_field.dart`
-- Modify: `lib/features/ticket/ticket_providers.dart` (add the four per-customer providers)
-- Modify: `lib/features/ticket/steps/step_cliente_sede.dart`
-- Modify: `lib/features/ticket/steps/step_dettagli_ticket.dart`
-- Test: `test/features/ticket/reference_picker_field_test.dart` (create)
+- Create: `lib/data/reference/reference_option.dart`
+- Create: `lib/data/reference/reference_search_client.dart`
+- Create: `lib/features/ticket/reference_picker.dart`
+- Create: `lib/features/ticket/reference_providers.dart`
+- Test: `test/data/reference/reference_search_client_test.dart` (create)
+- Test: `test/features/ticket/reference_picker_test.dart` (create)
 
 **Interfaces:**
-- Consumes: `referenceCacheProvider` (Task B3); `adminApiClientProvider` and its `pagedItems` list calls; `connectivity` state.
-- Produces, for Task B5: `ReferencePickerField({required String label, required List<ReferenceOption> items, required String? selectedId, required ValueChanged<String?> onChanged, Future<List<ReferenceOption>> Function(String query)? search, Future<void> Function(ReferenceOption)? onMaterialize, String? emptyHint})` and `class ReferenceOption { final String id; final String label; final String? subtitle; }`.
+- Consumes: `ReferenceCacheRepository` (Task B3), the A1 `q` list endpoints.
+- Produces:
+  - `class ReferenceOption { final String id; final String label; final String? subtitle; }`
+  - `class ReferenceSearchClient` with `searchContracts({required String customerId, required String query})`,
+    `searchCommesse(...)`, `searchProdottiAssistenza(...)`, `searchAgents({required String query})` — each
+    `Future<List<ReferenceOption>>`
+  - `ReferencePickerField` — a dumb widget (below)
+  - `referencePickerProviders`: `localContractsProvider`, `localCommesseProvider`, `localProdottiProvider`,
+    `localAgentsProvider`, each `FutureProvider.family<List<ReferenceOption>, String>`
 
-**The contract this widget implements (spec §7.3, §7.4):**
-- It always shows the local mirror first. Empty mirror is a *labelled* state, never a blank control.
-- When online, typing also asks the server and appends what it returns.
-- Selecting a row that came from the server **materialises it locally before** reporting the
-  selection, so the ticket created from it validates and the row is present offline next time.
-- When offline, the search affordance is disabled with an explicit note rather than failing.
+**The layer rule, and it is the reason this task exists.** A widget never touches Drift and never
+performs a write. The chain is exactly:
 
-- [ ] **Step 1: Write the failing widget test**
+```
+ReferencePickerField ──search(query)──▶ referenceSearchClient.searchX(...)
+                                             ├─ GET <A1 endpoint>            (network)
+                                             ├─ ReferenceCacheRepository.upsertX(rows)  (write)
+                                             └─ returns List<ReferenceOption>
+```
+
+so **a search result the technician can see is already in the mirror before the option is returned**.
+That is what makes the pick safe: the ticket written from it can never reference a row this device
+does not have. It is structural, not a test — which is why the pick callback must not be inlined into
+the widget, and `ReferencePickerField` takes `search` as a parameter rather than building a client.
+
+- [ ] **Step 1: Write the failing search-client test**
 
 ```dart
-import 'package:flutter/material.dart';
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tasktap_mobile/features/ticket/reference_picker_field.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart';
+import 'package:tasktap_mobile/data/reference/reference_cache_repository.dart';
+import 'package:tasktap_mobile/data/reference/reference_search_client.dart';
+
+/// There is no `ApiClient` class in this repo — every client takes a bare [Dio] and each has its own
+/// `_MockDio`. Follow `test/features/ticket/ticket_api_client_test.dart` verbatim.
+class _MockDio extends Mock implements Dio {}
 
 void main() {
-  Widget host(Widget child) => MaterialApp(home: Scaffold(body: child));
+  late AppDatabase db;
+  late _MockDio dio;
+  late ReferenceSearchClient client;
 
-  testWidgets('an empty mirror is a labelled state, not a dead control', (tester) async {
-    await tester.pumpWidget(host(ProviderScope(
-      child: ReferencePickerField(
-        label: 'Contratto',
-        items: const [],
-        selectedId: null,
-        onChanged: (_) {},
-        emptyHint: 'Nessun contratto in cache. Cerca online.',
-      ),
-    )));
+  setUp(() {
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+    db = AppDatabase(NativeDatabase.memory());
+    dio = _MockDio();
+    client = ReferenceSearchClient(dio, ReferenceCacheRepository(db));
+  });
+  tearDown(() => db.close());
 
-    expect(find.text('Nessun contratto in cache. Cerca online.'), findsOneWidget);
+  Map<String, dynamic> contractJson(String id) => {
+    'id': id, 'tenantId': 't', 'createdAt': '2026-10-01T00:00:00Z', 'updatedAt': null,
+    'name': 'Manutenzione $id', 'customerId': 'cu', 'locationId': null,
+    'startDate': '2026-01-01T00:00:00Z', 'endDate': null, 'isActive': true,
+    'numero': 'N-$id', 'codice': null, 'tipo': 0, 'externalId': null,
+  };
+
+  /// A paginated envelope, the shape every mobile client already unwraps with [pagedItems].
+  Response<Map<String, dynamic>> ok(Map<String, dynamic> body) => Response(
+        requestOptions: RequestOptions(path: '/api/contracts'),
+        statusCode: 200,
+        data: body,
+      );
+
+  /// The D-1(a) invariant, as a test: what a search hands the widget is readable from the mirror
+  /// at the moment it is handed over. If this ever fails, a technician can pick a row the ticket
+  /// write will then be rejected for.
+  test('every option a search returns is already in the local mirror', () async {
+    when(() => dio.get<Map<String, dynamic>>('/api/contracts',
+            queryParameters: any(named: 'queryParameters')))
+        .thenAnswer((_) async => ok({'items': [contractJson('c1'), contractJson('c2')]}));
+
+    final options = await client.searchContracts(customerId: 'cu', query: 'manu');
+
+    expect(options.map((o) => o.id), containsAll(['c1', 'c2']));
+    final cached = await ReferenceCacheRepository(db).contractsForCustomer('cu');
+    expect(cached.map((r) => r.id), containsAll(options.map((o) => o.id)),
+        reason: 'a pick must never reference a row the mirror lacks');
   });
 
-  testWidgets('a local item is offered without any network call', (tester) async {
-    String? picked;
-    await tester.pumpWidget(host(ProviderScope(
-      child: ReferencePickerField(
-        label: 'Contratto',
-        items: const [ReferenceOption(id: 'c1', label: 'Manutenzione caldaie')],
-        selectedId: null,
-        onChanged: (v) => picked = v,
-      ),
-    )));
+  test('the customer scope is sent to the server, so a search cannot widen D-1(a)', () async {
+    when(() => dio.get<Map<String, dynamic>>(any(),
+            queryParameters: any(named: 'queryParameters')))
+        .thenAnswer((_) async => ok({'items': <Object>[]}));
 
-    await tester.tap(find.byKey(const ValueKey('reference-field')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Manutenzione caldaie'));
-    await tester.pumpAndSettle();
+    await client.searchContracts(customerId: 'cu', query: 'x');
 
-    expect(picked, 'c1');
+    final params = verify(() => dio.get<Map<String, dynamic>>('/api/contracts',
+            queryParameters: captureAny(named: 'queryParameters')))
+        .captured.single as Map<String, dynamic>;
+    expect(params['customerId'], 'cu');
+    expect(params['q'], 'x');
   });
 
-  testWidgets('a pick that came from the server is materialised before it is reported', (tester) async {
-    final order = <String>[];
-    await tester.pumpWidget(host(ProviderScope(
-      child: ReferencePickerField(
-        label: 'Contratto',
-        items: const [],
-        selectedId: null,
-        onChanged: (_) => order.add('changed'),
-        search: (_) async => const [ReferenceOption(id: 'c9', label: 'Trovato online')],
-        onMaterialize: (_) async => order.add('materialized'),
-      ),
-    )));
+  test('label falls back to codice when a contract has no numero', () { ... });
 
-    await tester.enterText(find.byKey(const ValueKey('reference-field-input')), 'trovato');
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Trovato online'));
-    await tester.pumpAndSettle();
+  /// Offline is the normal case for this feature, not an exceptional one: dio throws, and the
+  /// picker falls back to the mirror, which is the offline answer anyway.
+  test('an offline search returns empty, never throws', () async {
+    when(() => dio.get<Map<String, dynamic>>(any(),
+            queryParameters: any(named: 'queryParameters')))
+        .thenThrow(DioException(
+          requestOptions: RequestOptions(path: '/api/contracts'),
+          type: DioExceptionType.connectionError,
+        ));
 
-    expect(order, ['materialized', 'changed'],
-        reason: 'spec 7.4: the row must exist locally before the ticket can use it');
+    await expectLater(client.searchContracts(customerId: 'cu', query: 'x'), completion(isEmpty));
   });
 }
 ```
 
+> There is no error-mapping interceptor in `dioProvider` — a non-2xx or a dead socket reaches the
+> caller as a raw `DioException` (see `lib/data/api/dio_client.dart`, and the `AuthInterceptor`'s
+> narrow 401 handling). So `ReferenceSearchClient` catches `Object`, and matching on
+> `DioExceptionType` specifically would be wrong: a timeout, a 500 and a parse failure all belong on
+> the same fallback path.
+
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `flutter test test/features/ticket/reference_picker_field_test.dart`
+Run: `flutter test test/data/reference/reference_search_client_test.dart`
 Expected: FAIL — the file does not exist.
 
-- [ ] **Step 3: Implement the widget**
+- [ ] **Step 3: Write `ReferenceOption` and `ReferenceSearchClient`**
 
-A `ConsumerStatefulWidget` that composes `AppLookupField` (`lib/core/widgets/lookup_field.dart:37`)
-for the local half — it already renders the suggestion list, the resolved label, the clear-on-empty
-behaviour and the `emptyCacheHint` — and adds a search-on-demand pass:
-
-- `initState`/`didUpdateWidget`: build `items` for `AppLookupField` from `widget.items` merged with
-  anything the search has returned this session, de-duplicated by id, local wins.
-- On non-empty free text, when connectivity allows: debounce 400 ms, call `widget.search`, merge the
-  results, `setState`. On failure, keep the local list and do not surface an error — a search that
-  fails is not a failure of the field.
-- `onSelected(id)`: resolve the id against the merged list; if it came from the server,
-  `await widget.onMaterialize(option)` **first**, then `widget.onChanged(id)`. Await it — the whole
-  point is that the row exists before the ticket references it.
-- Offline: pass an `emptyCacheHint` that names the offline state, and do not call `search`.
-
-Use the connectivity idiom already in the ticket feature rather than inventing one — grep for the
-existing online check (`ensureOnlineOrWarn`, `step_cliente_sede.dart:63`) and reuse whatever
-predicate it consults.
-
-Keep it under ~180 lines. If it grows past that, split the merge/rank logic into a pure function in
-the same file so it can be unit-tested without a widget pump.
-
-- [ ] **Step 4: Add the per-customer providers**
-
-In `lib/features/ticket/ticket_providers.dart`, following `allCustomersProvider`'s shape
-(`schedule_providers.dart:137-143`):
+`lib/data/reference/reference_option.dart`:
 
 ```dart
-/// The contracts of one customer, from the local mirror, active only. Family-scoped because the
-/// wizard changes customer mid-flow and the picker must follow it.
-final contractsForCustomerProvider =
-    FutureProvider.autoDispose.family<List<Contract>, String>((ref, customerId) async {
-  return ref.watch(referenceCacheProvider).contractsForCustomer(customerId);
+/// One row a picker can show, from either source: the local mirror or an online search. The widget
+/// cannot tell them apart, and must not — that is the point.
+@immutable
+class ReferenceOption {
+  const ReferenceOption({required this.id, required this.label, this.subtitle});
+
+  final String id;
+  final String label;
+  final String? subtitle;
+
+  /// `numero` or `codice` — a technician reads whichever is printed on the paper contract.
+  factory ReferenceOption.contract(ContractSyncDto c) => ReferenceOption(
+        id: c.id,
+        label: c.name,
+        subtitle: c.numero ?? c.codice,
+      );
+
+  // .commessa / .prodotto / .agent in the same shape.
+}
+```
+
+`lib/data/reference/reference_search_client.dart` — every method the same three moves:
+
+```dart
+import 'package:dio/dio.dart';
+
+import '../api/json_parse.dart';
+
+/// Search the server for a reference row and write what comes back into the mirror *before*
+/// returning it. The technician's own successful query is the authorisation for the write; see the
+/// plan's Global Constraints on why this is not a violation of D-1(a).
+///
+/// Offline this returns an empty list rather than throwing: the picker falls back to the local
+/// mirror, which is the offline answer anyway. A search that fails is not an error the technician
+/// can act on. Catches `Object`, not `DioException` — a timeout, a 4xx, a 503 and a parse failure all
+/// belong on the same fallback path, and `dioProvider` installs no error mapper that would turn them
+/// into one type.
+///
+/// Takes a bare [Dio], like every other client in `lib/data/**`: there is no shared `ApiClient` in
+/// this repo.
+class ReferenceSearchClient {
+  ReferenceSearchClient(this._dio, this._cache);
+
+  final Dio _dio;
+  final ReferenceCacheRepository _cache;
+
+  Future<List<ReferenceOption>> searchContracts({
+    required String customerId,
+    required String query,
+  }) async {
+    try {
+      final response = await _dio.get<Map<String, dynamic>>('/api/contracts', queryParameters: {
+        'customerId': customerId,
+        // Scope, always. A search widens *discovery*, never the security boundary.
+        'isActive': 'true',
+        'q': query,
+        'pageSize': 20,
+      });
+      final rows = pagedItems(response.data!).map(ContractSyncDto.fromJson).toList();
+      await _cache.upsertContracts(rows);
+      return rows.map(ReferenceOption.contract).toList();
+    } on Object {
+      return const [];
+    }
+  }
+
+  /// Same three moves. `GET /api/agents` is gated by `ClientiAgentRead`, which a technician may not
+  /// hold — in which case this 403s and returns empty, and the picker shows the mirrored agents,
+  /// which came from the technician's own tickets and need no permission. That is the designed
+  /// behaviour, not a failure to report.
+  Future<List<ReferenceOption>> searchAgents(...) async { ... }
+
+  // searchCommesse / searchProdottiAssistenza in the same shape.
+}
+```
+
+- [ ] **Step 4: Write the failing widget test**
+
+Mirror `test/features/ticket/ticket_materiali_editor_test.dart`'s debounce technique.
+
+```dart
+  testWidgets('the local mirror is offered before anything is typed', (tester) async {
+    var searched = false;
+    await tester.pumpWidget(_wrap(ReferencePickerField(
+      label: 'Contratto',
+      localItems: const [ReferenceOption(id: 'c1', label: 'Manutenzione')],
+      search: (q) async { searched = true; return const []; },
+      onSelected: (_) {},
+    )));
+
+    await tester.tap(find.byKey(const ValueKey('reference-picker-contratto')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Manutenzione'), findsOneWidget);
+    expect(searched, isFalse, reason: 'opening the picker is not a search');
+  });
+
+  testWidgets('typing searches once after the debounce, not once per keystroke', (tester) async {
+    final queries = <String>[];
+    ... search: (q) async { queries.add(q); return const []; } ...
+
+    await tester.enterText(find.byType(TextField), 'man');
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.enterText(find.byType(TextField), 'manu');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(queries, ['manu']);
+  });
+
+  /// A slow answer to an abandoned query must not replace the results of the current one.
+  testWidgets('a stale answer cannot overwrite a newer one', (tester) async {
+    final slow = Completer<List<ReferenceOption>>();
+    ... search: (q) async => q == 'man' ? slow.future : const [ReferenceOption(id: 'c2', label: 'Nuovo')] ...
+
+    // type 'man', then 'manu' before the first answer lands, then complete the slow one
+    expect(find.text('Nuovo'), findsOneWidget);
+    expect(find.text('Vecchio'), findsNothing);
+  });
+
+  testWidgets('a failing search keeps the local rows and says so', (tester) async {
+    ... search: (q) async { throw const SocketException('offline'); } ...
+
+    expect(find.text('Manutenzione'), findsOneWidget);
+    expect(find.textContaining('Non in linea'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  /// A new hire, or a technician between jobs: no open work, so no customers, so every picker is
+  /// empty. It must say so and invite a search, never render as a dead field.
+  testWidgets('an empty mirror says so and still invites a search', (tester) async {
+    await tester.pumpWidget(_wrap(ReferencePickerField(
+      label: 'Contratto',
+      localItems: const [],
+      search: (q) async => const [ReferenceOption(id: 'c1', label: 'Trovato')],
+      onSelected: (_) {},
+    )));
+
+    await tester.tap(find.byKey(const ValueKey('reference-picker-contratto')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Nessun elemento in cache'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'con');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Trovato'), findsOneWidget);
+  });
+
+  testWidgets('picking an option reports exactly that option', (tester) async {
+    ReferenceOption? picked;
+    ... onSelected: (o) => picked = o ...
+    expect(picked?.id, 'c1');
+  });
+```
+
+- [ ] **Step 5: Write `ReferencePickerField`**
+
+```dart
+/// A picker over one reference entity. Two sources, one list:
+///
+///  - [localItems], the technician's mirrored scope, shown the instant the picker opens and the
+///    only source while offline;
+///  - [search], an online query, run 300 ms after typing stops, whose results *replace* the list —
+///    and which, by its own contract, has already written them to the mirror before returning.
+///
+/// The widget knows nothing about either. It does not import Drift, does not import the search
+/// client, and does not decide what a search is — a caller hands both in. That keeps the
+/// materialise step out of the render tree, where it would run on every rebuild.
+///
+/// Deliberately modelled on [TicketMaterialiEditor]'s debounce, which is the existing precedent for
+/// "local first, remote behind a timer" in this codebase.
+class ReferencePickerField extends StatefulWidget {
+  const ReferencePickerField({
+    super.key,
+    required this.label,
+    required this.localItems,
+    required this.search,
+    required this.onSelected,
+    this.selectedId,
+    this.initialText,
+    this.hint,
+    this.emptyCacheHint = 'Nessun elemento in cache. Cerca per nome.',
+    this.enabled = true,
+  });
+
+  final String label;
+
+  /// The offline candidates, from a provider. Never fetched by this widget.
+  final List<ReferenceOption> localItems;
+
+  /// Search then materialise then return. See [ReferenceSearchClient].
+  final Future<List<ReferenceOption>> Function(String query) search;
+
+  final ValueChanged<ReferenceOption?> onSelected;
+  final String? selectedId;
+  final String? initialText;
+  final String? hint;
+  final String emptyCacheHint;
+  final bool enabled;
+  ...
+}
+```
+
+Behaviour, in the widget's own terms:
+- `_debounce = Timer(Duration(milliseconds: 300), ...)`; the timer is cancelled in `dispose` and on
+  every keystroke.
+- Each search carries a monotonically increasing `_searchSeq`; an answer whose seq is not the current
+  one is discarded. Without this, a slow `man` answer can land on top of a fast `manu` one.
+- The `try/catch` around the awaited search sets `_staleSearch = true` and leaves the last good list
+  in place; the sheet shows a one-line `Non in linea — mostrati i risultati salvati` hint. The widget
+  never rethrows into the tree.
+- The suggestion list is capped by `maxSuggestions: 6` on the underlying `AppLookupField`, exactly as
+  `TicketMaterialiEditor` does.
+
+- [ ] **Step 6: Write the providers**
+
+```dart
+/// The local half of every reference picker: what this device already has, for one customer.
+/// The search half is built at the call site from [referenceSearchClientProvider], so a screen can
+/// hand the picker a callback without the picker learning where results come from.
+final localContractsProvider =
+    FutureProvider.family<List<ReferenceOption>, String>((ref, customerId) async {
+  final rows = await ref.watch(referenceCacheProvider).contractsForCustomer(customerId);
+  return rows.map(ReferenceOption.contract).toList();
 });
+
+// localCommesseProvider / localProdottiProvider / localAgentsProvider in the same shape.
+// localAgentsProvider takes a query-string family key it ignores when empty, returning activeAgents().
 ```
 
-and `commesseForCustomerProvider`, `prodottiForCustomerProvider`, `activeAgentsProvider` in the same
-shape. `activeAgentsProvider` is not customer-scoped (an agent is not customer-scoped on the server
-either).
+- [ ] **Step 7: Run the picker suites**
 
-- [ ] **Step 5: Wire the four fields into the wizard**
-
-In `step_cliente_sede.dart`, add Contratto below Cliente/Sede, keyed by the customer as web keys it
-(`TicketCreatePanel.tsx:512-520` remounts on a customer change for exactly this reason):
-
-```dart
-          if (widget.state.customerId case final customerId?)
-            ReferencePickerField(
-              key: ValueKey('contratto-$customerId'),
-              label: 'Contratto',
-              items: [for (final c in contracts) ReferenceOption(
-                id: c.id,
-                label: c.name,
-                subtitle: c.numero ?? c.codice,
-              )],
-              selectedId: widget.state.contractId,
-              onChanged: (id) => widget.onChanged(widget.state.copyWith(
-                contractId: id,
-                clearContractId: id == null,
-              )),
-              search: (q) => ref.read(referenceSearchProvider).contracts(customerId: customerId, q: q),
-              onMaterialize: (o) => ref.read(referenceCacheProvider)
-                  .upsertContracts(await ref.read(referenceSearchProvider).contracts(...)),
-              emptyHint: 'Nessun contratto in cache per questo cliente.',
-            ),
-```
-
-Do the same for Commessa (`step_cliente_sede.dart`) and for Prodotti (`step_dettagli_ticket.dart`,
-multi-select — reuse `MultiEntityPicker`'s semantics or a `ReferencePickerField` with
-`multi: true`; whichever is smaller, but the materialise-then-report order must hold for every
-selected row).
-
-For each `search:` and `onMaterialize:` pair, add the corresponding method on a
-`ReferenceSearchClient` that calls the list endpoints from Task A1 with `q`, `customerId` and
-`pageSize: 50`, and parses the response with the **same** `ContractSyncDto.fromJson` the sync uses —
-that is what makes the materialised row identical to a synced one.
-
-- [ ] **Step 6: Add the Cantiere field**
-
-Cantieri are already mirrored (`allCantieriProvider`) and already on the create contract, so this is
-a local-only `ReferencePickerField` with no `search:`. Add it to `step_dettagli_ticket.dart`.
-
-- [ ] **Step 7: Run the picker and wizard suites**
-
-Run: `flutter test test/features/ticket/`
-Expected: PASS. The existing `step_cliente_sede` tests must stay green — the new field is additive,
-and the customer-change reset already clears `locationId`, so add `contractId` to that same reset.
+Run: `flutter test test/data/reference/ test/features/ticket/reference_picker_test.dart`
+Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add lib/features/ticket/reference_picker_field.dart \
-        lib/features/ticket/reference_search_client.dart \
-        lib/features/ticket/ticket_providers.dart \
-        lib/features/ticket/steps/step_cliente_sede.dart \
-        lib/features/ticket/steps/step_dettagli_ticket.dart \
-        lib/features/ticket/new_ticket_form_state.dart \
-        test/features/ticket/reference_picker_field_test.dart
-git commit -m "feat(mobile): reference pickers - local mirror first, server search on demand
+git add lib/data/reference/reference_option.dart lib/data/reference/reference_search_client.dart \
+        lib/features/ticket/reference_picker.dart lib/features/ticket/reference_providers.dart \
+        test/data/reference/reference_search_client_test.dart \
+        test/features/ticket/reference_picker_test.dart
+git commit -m "feat(mobile): one reference picker, local mirror first, search behind it
 
-The widget shows the mirror, searches the server when online, and writes the
-selected row into the mirror before reporting the selection, so the ticket
-created from it validates and the row is present offline next time. An empty
-mirror is a labelled state with a way forward, never a dead control.
+The search callback materialises before it returns, so an option the technician can see
+is already in the mirror and the ticket written from it cannot reference a missing row.
+The widget is dumb: it takes the local list and the search as parameters and knows neither
+source.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task B5: the create path sends the new fields, and Riferimento stops sending a User id
+### Task B5: the wizard asks for the references the server actually validates
 
 **Files:**
 - Modify: `lib/features/ticket/new_ticket_form_state.dart`
 - Modify: `lib/features/ticket/ticket_api_client.dart`
-- Modify: `lib/features/ticket/steps/step_dettagli_ticket.dart` (Riferimento, Note interne)
+- Modify: `lib/features/ticket/steps/step_cliente_sede.dart`
+- Modify: `lib/features/ticket/steps/step_dettagli_ticket.dart`
 - Modify: `lib/features/ticket/new_ticket_form_screen.dart`
+- Modify: `lib/features/ticket/steps/step_riepilogo_ticket.dart`
+- Test: `test/features/ticket/new_ticket_form_state_test.dart`
+- Test: `test/features/ticket/step_dettagli_ticket_test.dart`
 - Test: `test/features/ticket/ticket_api_client_test.dart`
-- Test: `test/features/ticket/new_ticket_form_state_test.dart` (create if absent)
 
 **Interfaces:**
-- Consumes: `ReferencePickerField` (Task B4); `TicketCommand.CreateAsync`'s field list (`TicketCommands.cs`).
-- Produces: `NewTicketFormState` gains `contractId`, `commessaId`, `cantiereId`, `prodottoAssistenzaIds`, `internalNotes` with matching `clear*` flags; `createTicket` sends them.
+- Consumes: `ReferencePickerField`, `ReferenceOption` (B4); `TicketApiClient`.
+- Produces: `NewTicketFormState.contractId`, `.commessaId`, `.cantiereId`,
+  `.prodottoAssistenzaIds` (`List<String>`), each with its `clear*` boolean in `copyWith`.
 
-**Two things happen here, and both matter.** The parity fields are the feature. The `agentId` fix is a
-**live defect**: `CreateTicketCommand.AgentId` is guarded by `EnsureExistsAsync<Agent>`, and this
-client populates it from the technicians list, so any ticket saved with "Riferimento" set is rejected
-404 (spec §2.7).
+**The defect this task fixes.** `step_dettagli_ticket.dart:233-245` fills `agentId` from
+`techniciansProvider`, which is `GET /api/users?role=Technician`. The server validates that field with
+`EnsureExistsAsync<Agent>` (`TicketCommandService.cs:100`) against a **different entity** (legacy
+"Agente", `Core/Entities/Agent.cs`). So a ticket created with a Riferimento is rejected with
+`404 not_found` — silently, through the queue, as a ticket that never arrives. Confirmed against
+`master`, not inferred.
 
-- [ ] **Step 1: Write the failing API test**
+- [ ] **Step 1: Write the failing state test**
 
 ```dart
-  test('the create body carries the reference fields', () async {
-    Map<String, dynamic>? body;
-    when(() => dio.post<Map<String, dynamic>>(any(), data: any(named: 'data')))
-        .thenAnswer((inv) async {
-      body = inv.namedArguments[#data] as Map<String, dynamic>;
-      return Response(data: {'id': 't1'}, statusCode: 201,
-          requestOptions: RequestOptions(path: '/api/tickets'));
-    });
-
-    await client.createTicket(
-      title: 'Caldaia', customerId: 'cu', locationId: 'l', statusId: 1, typeId: 1,
-      contractId: 'c1', commessaId: 'm1', cantiereId: 'k1',
-      prodottoAssistenzaIds: const ['p1', 'p2'], internalNotes: 'nota interna',
+  test('the new reference fields round-trip through copyWith and clear independently', () {
+    const s = NewTicketFormState();
+    final withRefs = s.copyWith(
+      contractId: 'c1', commessaId: 'm1', cantiereId: 'ca1',
+      prodottoAssistenzaIds: const ['p1', 'p2'],
     );
 
-    expect(body!['contractId'], 'c1');
-    expect(body!['commessaId'], 'm1');
-    expect(body!['cantiereId'], 'k1');
-    expect(body!['prodottoAssistenzaIds'], ['p1', 'p2']);
-    expect(body!['internalNotes'], 'nota interna');
+    expect(withRefs.contractId, 'c1');
+    expect(withRefs.prodottoAssistenzaIds, ['p1', 'p2']);
+    expect(withRefs.copyWith(clearContractId: true).contractId, isNull);
+    expect(withRefs.copyWith(clearContractId: true).commessaId, 'm1',
+        reason: 'clearing one reference must not clear its neighbours');
+    expect(withRefs.copyWith(clearProdottoAssistenzaIds: true).prodottoAssistenzaIds, isEmpty);
   });
 
-  test('an unset reference field is omitted, not sent as null', () async {
-    Map<String, dynamic>? body;
-    // ... same capture ...
-    await client.createTicket(
-      title: 'Caldaia', customerId: 'cu', locationId: 'l', statusId: 1, typeId: 1,
-      prodottoAssistenzaIds: const [],
+  test('none of the four is required to submit', () {
+    // The existing isValid contract, unchanged: customerId, locationId, non-empty title, typeId,
+    // statusId. A reference is an enrichment, and the wizard must not start blocking on it.
+    expect(
+      const NewTicketFormState(title: 'x', customerId: 'cu', locationId: 'l', typeId: 1, statusId: 1)
+          .isValid,
+      isTrue,
     );
-
-    expect(body!.containsKey('contractId'), isFalse);
-    expect(body!.containsKey('prodottoAssistenzaIds'), isTrue,
-        reason: 'an explicit empty list means "covers no asset", which is not the same as unset');
   });
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `flutter test test/features/ticket/ticket_api_client_test.dart`
-Expected: FAIL — `createTicket` takes no `contractId`.
+Run: `flutter test test/features/ticket/new_ticket_form_state_test.dart`
+Expected: FAIL — `contractId` is not a named parameter.
 
-- [ ] **Step 3: Extend the state and the client**
+- [ ] **Step 3: Extend the form state**
 
-Add to `NewTicketFormState`: `final String? contractId;`, `final String? commessaId;`,
-`final String? cantiereId;`, `final List<String> prodottoAssistenzaIds;`,
-`final String? internalNotes;`, each with the matching `clear*` flag in `copyWith` — the existing
-file's convention, which the wizard's back-navigation depends on.
+Add the four fields and their four `clear*` booleans to `copyWith`, in the file's existing style
+(the booleans are the pattern already used for `clearAssignedUserId`). `prodottoAssistenzaIds`
+defaults to `const []` and is never null — an empty list and "not asked" are the same thing here,
+and a nullable list would only add a second empty to reason about.
 
-`isValid` is **unchanged**: none of these is required to create a ticket, and making one required
-would turn a sparse mirror into a dead wizard, which is the failure this whole plan exists to fix.
+- [ ] **Step 4: Extend the API client**
 
-In `ticket_api_client.createTicket`, add the parameters and the body entries using the same
-null-aware element syntax the file already uses (`'assignedUserId': ?assignedUserId`):
+Add the four parameters and the four body entries to `createTicket`, matching the server's request
+record (`TicketCommands.cs:32`): `'contractId': ?contractId`, `'commessaId': ?commessaId`,
+`'cantiereId': ?cantiereId`, and — because the server reads `ProdottoAssistenzaIds` as a list —
+`'prodottoAssistenzaIds': ?(prodottoAssistenzaIds?.isEmpty ?? true ? null : prodottoAssistenzaIds)`.
+An empty list is sent as absent, not as `[]`, so the request body matches what a technician who
+never opened the picker sends. Extend `ticket_api_client_test.dart` with the wire-shape assertion
+for all four.
 
-```dart
-        'contractId': ?contractId,
-        'commessaId': ?commessaId,
-        'cantiereId': ?cantiereId,
-        'internalNotes': ?internalNotes,
+- [ ] **Step 5: Put the pickers in the wizard**
+
+- **`step_cliente_sede.dart`, after the sede picker:** Contratto, `localContractsProvider(customerId)`
+  and `searchContracts`. Changing the customer clears Contratto, Commessa and Cantiere — they belong
+  to the previous customer and would 404 otherwise. That clearing is a test, not a detail.
+- **`step_cliente_sede.dart`, below Contratto:** Commessa.
+- **`step_dettagli_ticket.dart`, below Tipo:** Prodotti assistenza, multi-select, same customer scope.
+  Rendered as chips with an "Aggiungi prodotto" picker, the pattern `ticket_materiali_editor.dart`
+  already uses.
+- **Cantiere** already exists in this wizard; source it from the picker too if it currently comes from
+  a narrow local list, and leave it alone if it already reads the cached cantieri table — check first,
+  do not restructure what is not broken.
+
+- [ ] **Step 6: Re-source Riferimento from Agents**
+
+In `step_dettagli_ticket.dart`:
+
+- Delete the `techniciansProvider` import from this file and the `_pickAgent(List<Map<String,dynamic>>)`
+  signature.
+- `_pickAgent(List<ReferenceOption>)` now takes options and pops `option.id`.
+- The field watches `localAgentsProvider('')` for the offline list and calls
+  `searchAgents(query: q)` from `referenceSearchClientProvider`.
+- Keep the "Nessuno" sentinel and the dismiss-vs-clear distinction exactly as they are — their doc
+  comment explains a real gesture difference and the tests cover it.
+- Keep the label, the key `'agent-field'` and the `'agent-picker-<id>'` keys, so the existing tests
+  keep asserting the same surface.
+- Delete or rewrite the "same Users list, same reasoning as web's TicketCreatePanel" comment: it is
+  the comment that encoded the bug. Replace it with the entity distinction.
+
+- [ ] **Step 7: Update the summary step**
+
+`step_riepilogo_ticket.dart` shows what will be submitted. Add the four references there, resolved to
+labels — a technician confirming a ticket should see "Contratto: Manutenzione N-1", not a GUID, which
+is the same complaint `ticket_detail_screen.dart:191` already records for `assignedUserId`.
+
+- [ ] **Step 8: Run the wizard suites**
+
+Run: `flutter test test/features/ticket/`
+Expected: PASS. `step_dettagli_ticket_test.dart`'s agent tests will need their fixtures switched from
+user maps to `ReferenceOption`s; that is a test-only change and must not weaken an assertion.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add lib/features/ticket/new_ticket_form_state.dart lib/features/ticket/ticket_api_client.dart \
+        lib/features/ticket/steps/step_cliente_sede.dart \
+        lib/features/ticket/steps/step_dettagli_ticket.dart \
+        lib/features/ticket/new_ticket_form_screen.dart \
+        lib/features/ticket/steps/step_riepilogo_ticket.dart \
+        test/features/ticket/new_ticket_form_state_test.dart \
+        test/features/ticket/step_dettagli_ticket_test.dart \
+        test/features/ticket/ticket_api_client_test.dart
+git commit -m "feat(mobile): ask for contract, commessa, cantiere and products on create
+
+Also fixes Riferimento: it was filled from Users while the server validates that field
+with EnsureExistsAsync<Agent> against a different entity, so every ticket created with a
+Riferimento was rejected 404 through the queue. Re-sourced from the agents mirror.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
-`prodottoAssistenzaIds` is sent whenever the caller passes a non-null list, **including an empty
-one** — on create, empty and omitted both mean "no covered assets", but an explicit empty list is
-what the edit path will need to clear them, and one wire shape is better than two.
+---
 
-- [ ] **Step 4: Fix Riferimento — pick an Agent, not a User**
+### Task B6: a queued ticket that the server rejected for one bad reference
 
-In `step_dettagli_ticket.dart`, replace the `techniciansProvider` source at the Riferimento field
-(`:236-272`) with the mirrored agents:
+**Files:**
+- Create: `lib/data/api/problem_details.dart`
+- Modify: `lib/data/tickets/ticket_creation_queue.dart`
+- Modify: `lib/data/local/app_database.dart` (the `repairableField` doc comment only, if the class
+  comment needs the new state — no schema change, the column landed in B1)
+- Modify: `lib/features/ticket/ticket_providers.dart`
+- Modify: `lib/features/ticket/ticket_list_screen.dart`
+- Test: `test/data/api/problem_details_test.dart`
+- Test: `test/data/tickets/ticket_creation_queue_test.dart`
+- Test: `test/features/ticket/ticket_list_screen_test.dart`
+
+**Interfaces:**
+- Consumes: the flat `field` member on a `not_found` problem (Task A3); `PendingTickets.repairableField` (B1).
+- Produces: `ProblemDetails.fieldOf(Object)` / `.statusOf(Object)` / `.bodyOf(Object)`;
+  `TicketCreationQueue.repairableFieldOf(Object)`; queue rows whose `repairableField` is set; and a
+  provider `repairablePendingTicketsProvider`.
+
+**The split, which is the whole point of this task.**
+
+| Layer | Responsibility |
+|---|---|
+| `TicketCreationQueue` | **Detects** the rejection, **persists** the offending field name, **excludes** the row from auto-retry. Opens no UI, imports no widget, shows no string. |
+| `ticket_list_screen.dart` | **Observes** rows with a `repairableField`, renders "Da correggere", and routes into the wizard for that row. |
+| `NewTicketFormScreen` (edit mode) | **Repairs**: writes the corrected values back and clears `repairableField`, which returns the row to the ordinary retry path. |
+
+Nothing in the queue layer may gain a `BuildContext`.
+
+**Why `failed` and not a new state.** The row is still a failure and the existing badge already reads
+`failed`; the new fact is *which field*, which is what the column carries. Adding a state would
+require every existing `state` switch to learn it and would change the meaning of a row that is
+merely waiting.
+
+| Request field | Entity | Shape | Repairable by | Cleared by |
+|---|---|---|---|---|
+| `customerId` | Customer | scalar | picker | picking a different customer |
+| `locationId` | Location | scalar | picker | picking a different sede |
+| `assignedUserId` | User | scalar | picker | picking a different technician, or Nessuno |
+| `statusId` | TicketStatus | scalar | picker | picking a different status |
+| `typeId` | TicketType | scalar | picker | picking a different type |
+| `agentId` | Agent | scalar | picker | picking a different Riferimento, or Nessuno |
+| `contractId` | Contract | scalar | picker | picking a different contract, or removing it |
+| `commessaId` | Commessa | scalar | picker | picking a different commessa |
+| `cantiereId` | Cantiere | scalar | picker | picking a different cantiere |
+| `prodottoAssistenzaIds` | ProdottoAssistenza | list | multi picker | dropping the ids that no longer exist |
+
+Any field not in this table — including a field name from a backend that has moved on — leaves
+`repairableField` **null**, and the row keeps today's behaviour: shown as failed, retried, with its
+server message. The client must not guess at a repair for a field it cannot render, and it must not
+show a repair screen that cannot fix the problem.
+
+- [ ] **Step 1: Write the failing queue test**
 
 ```dart
-            // Ticket.AgentId is an Agent foreign key: the server guards it with
-            // EnsureExistsAsync<Agent> and a User id can never satisfy that. This field used to be
-            // fed from the technicians list, which made every ticket saved with a Riferimento fail
-            // with a 404 (spec 2.7). It now picks from the mirrored agents, and searches the server
-            // for one outside the mirror.
-            final agentsAsync = ref.watch(activeAgentsProvider);
+  test('a 404 naming a field marks the row repairable and stops its auto-retry', () async {
+    // enqueue a ticket, then have the API answer 404 not_found with extensions.field = customerId
+    await queue.submit(pendingId);
+
+    final row = (await db.select(db.pendingTickets).get()).single;
+    expect(row.state, PendingTicketState.failed);
+    expect(row.repairableField, 'customerId');
+    expect(row.error, contains('customerId'), reason: 'the message still travels');
+
+    // A second pass must not resubmit it: no answer will ever differ.
+    final before = await api.submitCallCount;
+    await queue.retryAll();
+    expect(api.submitCallCount, before, reason: 'a repairable row waits for a human, not a timer');
+  });
+
+  test('a 404 without a field extension keeps the row on the ordinary retry path', () async {
+    // same failure, no extensions.field
+    expect(row.repairableField, isNull);
+    await queue.retryAll();
+    // api.submitCallCount incremented
+  });
+
+  test('a field the client cannot repair is left null, not guessed at', () async {
+    // extensions.field = 'sourceId' — not in the table
+    expect(row.repairableField, isNull);
+  });
+
+  test('repairing a row clears the flag and returns it to auto-retry', () async {
+    // set repairableField via a 404, then update the row's customerId and clear the flag
+    expect((await db.select(db.pendingTickets).get()).single.repairableField, isNull);
+    await queue.retryAll();
+    // api.submitCallCount incremented
+  });
 ```
 
-Keep the label "Riferimento" and the tap-sheet interaction; only the data source and the
-search/materialise behaviour change. When the mirror is empty, `ReferencePickerField`'s labelled
-empty state applies.
+- [ ] **Step 2: Run it and watch it fail**
 
-- [ ] **Step 5: Add the Note interne field**
+Run: `flutter test test/data/tickets/ticket_creation_queue_test.dart`
+Expected: FAIL — `repairableField` is never set.
 
-Web exposes `internalNotes` and the create contract accepts it. Add an `AppTextField.multiline` under
-Descrizione in `step_dettagli_ticket.dart`, labelled "Note interne", with the hint that it is
-office-only — a technician should not have to guess who reads it.
+- [ ] **Step 3: Detect and persist in the queue**
 
-- [ ] **Step 6: Send the fields from the wizard**
+Add one private helper and one constant, and use it where the queue already classifies a response.
 
-In `new_ticket_form_screen.dart`'s `_onSubmit`, pass the new state members to
-`queue.create(...)`, and make sure the same values go into whatever the queue persists, so a ticket
-queued offline is sent with its contract, commessa, cantiere, covered assets and internal notes on
-reconnect.
+First the reader, in a new `lib/data/api/problem_details.dart` — a whole file because it is the one
+place that knows the shape of this backend's problem bodies, and it is pure enough to unit-test
+without a Dio, a database or a queue:
 
-- [ ] **Step 7: Delete the stale docstring**
+```dart
+/// The machine-readable members of this backend's RFC 7807 problem bodies.
+///
+/// `ErrorResponse : ProblemDetails` keeps these in `ProblemDetails.Extensions`, which is
+/// `[JsonExtensionData]` — on the wire they are members of the ROOT object (`{"title":…,
+/// "code":"not_found", "field":"customerId"}`), never nested under an `extensions` key. Keys are
+/// written literally and lowercase. See `ErrorHandlingMiddleware.MapException`.
+///
+/// A non-2xx arrives as a raw [DioException] — `dioProvider` installs no error mapper — so this takes
+/// the caught error, not a `Response`.
+class ProblemDetails {
+  static Map<String, dynamic>? bodyOf(Object error) {
+    if (error is! DioException) return null;
+    final data = error.response?.data;
+    return data is Map<String, dynamic> ? data : null;
+  }
 
-`new_ticket_form_screen.dart:122-125` claims the ticket "has no client-supplied dedup key … never
-auto-retried". Both halves are false — the queue mints a `clientId` and retries `failed` rows
-(`ticket_creation_queue.dart`). Read the queue, confirm, and replace the comment with what the code
-does. Do the same for the `ticket_creation_queue.dart` header if it contradicts the code. A comment
-that describes a worse system than the one that exists is how the next person deletes a fix.
+  static int? statusOf(Object error) =>
+      error is DioException ? error.response?.statusCode : null;
 
-- [ ] **Step 8: Run the ticket suite**
+  /// The request field a `not_found` named, or null. Read from the body, never from the message:
+  /// the message is human prose that changes.
+  static String? fieldOf(Object error) {
+    if (statusOf(error) != 404) return null;
+    final field = bodyOf(error)?['field'];
+    return field is String && field.isNotEmpty ? field : null;
+  }
+}
+```
 
-Run: `flutter test test/features/ticket/ test/data/tickets/`
+Then, in the queue:
+
+```dart
+  /// The request fields whose rejection this client can actually repair. Not in this set means the
+  /// row waits for nothing: it is shown as failed and retried as before, because guessing at a
+  /// repair for a field we cannot render would only produce a screen that cannot fix the problem.
+  /// Mirrors the plan's table and Task A3's flat `field` member.
+  static const _repairableFields = {
+    'customerId', 'locationId', 'assignedUserId', 'statusId', 'typeId', 'agentId',
+    'contractId', 'commessaId', 'cantiereId', 'prodottoAssistenzaIds',
+  };
+
+  /// The field a `not_found` blamed, when this client can repair it. Null otherwise — including for
+  /// a field name from a backend that has moved on, and for every non-404.
+  ///
+  /// Static and pure (a caught error in, a `String?` out) so it is testable without a database or a
+  /// queue: test it directly first, then wire it.
+  static String? repairableFieldOf(Object error) {
+    final field = ProblemDetails.fieldOf(error);
+    return field != null && _repairableFields.contains(field) ? field : null;
+  }
+```
+
+These two are pure, so test them directly — no queue, no database, no widget. Put this in
+`test/data/api/problem_details_test.dart` and mirror the first two cases for `repairableFieldOf` in
+the queue's test file:
+
+```dart
+  DioException notFound(Map<String, dynamic> body) => DioException(
+        requestOptions: RequestOptions(path: '/api/tickets'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/api/tickets'),
+          statusCode: 404,
+          data: body,
+        ),
+      );
+
+  test('field is read from the flat root of the problem body', () {
+    expect(ProblemDetails.fieldOf(notFound({'code': 'not_found', 'field': 'customerId'})),
+        'customerId');
+  });
+
+  /// The shape a nested reader would have expected, and must NOT be what this accepts: the
+  /// extensions are JsonExtensionData, so they sit at the root. A test pinning the wrong shape would
+  /// be worse than no test.
+  test('a nested extensions object is not where the field lives', () {
+    expect(ProblemDetails.fieldOf(notFound({'extensions': {'field': 'customerId'}})), isNull);
+  });
+
+  test('a 400 is not a FK rejection, however it is shaped', () {
+    final e = DioException(
+      requestOptions: RequestOptions(path: '/api/tickets'),
+      response: Response(
+        requestOptions: RequestOptions(path: '/api/tickets'),
+        statusCode: 400,
+        data: {'code': 'validation_failed', 'field': 'customerId'},
+      ),
+    );
+    expect(ProblemDetails.fieldOf(e), isNull);
+  });
+
+  test('an offline failure carries no body and no field', () {
+    expect(ProblemDetails.fieldOf(DioException(
+      requestOptions: RequestOptions(path: '/api/tickets'),
+      type: DioExceptionType.connectionError,
+    )), isNull);
+  });
+```
+
+- [ ] **Step 4: Exclude repairable rows from auto-retry**
+
+Wherever the queue selects rows to retry, add `& pendingTickets.repairableField.isNull()`. Include the
+`failed` sweep *and* the `pendingSync` sweep: a row repaired back to health must re-enter through the
+same path every other row uses, and that only works if the exclusion is a property of the query
+rather than a branch in the loop.
+
+- [ ] **Step 5: Add the read-only provider**
+
+```dart
+/// Queued tickets the server rejected for a reference this client can repair. Read-only: the UI
+/// observes, it does not decide. See TicketCreationQueue.repairableFieldOf for what qualifies.
+final repairablePendingTicketsProvider = StreamProvider<List<PendingTicket>>((ref) =>
+    (ref.watch(appDatabaseProvider).select(ref.watch(appDatabaseProvider).pendingTickets)
+          ..where((t) => t.repairableField.isNotNull()))
+        .watch());
+```
+
+- [ ] **Step 6: Write the failing list-screen test**
+
+```dart
+  testWidgets('a rejected queue row is offered as "Da correggere"', (tester) async {
+    // seed a pending ticket with repairableField = 'customerId'
+    expect(find.text('Da correggere'), findsOneWidget);
+  });
+
+  testWidgets('a row the client cannot repair shows the ordinary failure, not a repair', (tester) async {
+    // seed a pending ticket, state failed, repairableField null, error = 'Errore del server'
+    expect(find.text('Da correggere'), findsNothing);
+    expect(find.textContaining('Errore del server'), findsOneWidget);
+  });
+```
+
+- [ ] **Step 7: Render the row and route into the wizard**
+
+Wherever `ticket_list_screen.dart` renders the pending-failed rows, a row with a `repairableField`
+gets a "Da correggere" badge and routes into the create wizard preloaded from the queue row, in the
+same shape `edit_ticket_screen.dart` already preloads from a server ticket. On save it updates the
+queue row (not the server) and clears `repairableField`.
+
+- [ ] **Step 8: Run the queue and list suites**
+
+Run: `flutter test test/data/tickets/ test/features/ticket/ticket_list_screen_test.dart`
 Expected: PASS.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add lib/features/ticket/new_ticket_form_state.dart \
-        lib/features/ticket/ticket_api_client.dart \
-        lib/features/ticket/new_ticket_form_screen.dart \
-        lib/features/ticket/steps/step_dettagli_ticket.dart \
-        test/features/ticket/ticket_api_client_test.dart \
-        test/features/ticket/new_ticket_form_state_test.dart
-git commit -m "feat(mobile): ticket create parity, and Riferimento picks an Agent
+git add lib/data/tickets/ticket_creation_queue.dart lib/features/ticket/ticket_providers.dart \
+        lib/features/ticket/ticket_list_screen.dart \
+        test/data/tickets/ticket_creation_queue_test.dart \
+        test/features/ticket/ticket_list_screen_test.dart
+git commit -m "feat(mobile): repair a queued ticket the server rejected for one bad reference
 
-The wizard now sends contractId, commessaId, cantiereId, prodottoAssistenzaIds and
-internalNotes, the fields web has had since the merged Interventi panel.
-
-Riferimento was a live defect: Ticket.AgentId is guarded by EnsureExistsAsync<Agent>
-and this field was fed from the technicians list, so every ticket saved with a
-Riferimento set was rejected 404. It now picks from the mirrored agents.
+The queue detects and persists the blamed field and stops retrying that row; the list
+screen observes it and routes into the wizard. A field this client cannot repair stays
+null and keeps the old failure path, so the UI never offers a repair it cannot perform.
 
 Co-Authored-By: Claude Code <noreply@anthropic.com>"
 ```
 
 ---
 
-### Task B6: repair a queued ticket whose FK is gone, instead of a bare toast
+## Phase B gate
 
-**Files:**
-- Create: `lib/data/tickets/ticket_fk_repair.dart`
-- Modify: `lib/data/tickets/ticket_creation_queue.dart`
-- Modify: `lib/features/ticket/new_ticket_form_screen.dart` (surface the repair sheet)
-- Test: `test/data/tickets/ticket_fk_repair_test.dart` (create)
+Run: `flutter test` (whole suite) — expected PASS, and `flutter analyze` clean.
 
-**Interfaces:**
-- Consumes: the ProblemDetails `field` extension (Task A3); `TicketCreationQueue`'s persisted row; `ReferencePickerField` (Task B4).
-- Produces: `TicketFkProblem? parseFkProblem(Object error)` returning `{ String field, String message }`, and `Future<bool> repairQueuedTicket(String queueId, String field, String newValue)`.
+Then the device test, on the user's own hardware and against a real backend:
 
-**The contract (spec §6.6):** the technician is never asked to retype the ticket. The queue row is
-edited in place and retried, and nothing typed is lost.
+1. Fly a customer, drop the data connection, open the create wizard, and confirm Contratto, Commessa
+   and Prodotti assistenza are filled from the mirror for that customer.
+2. Reconnect, open the Contratto picker on a customer the device has never seen, type a name, and
+   confirm the result list appears — then take the phone offline again and confirm the row the
+   technician just picked is still there, because the search wrote it.
+3. Set a Riferimento and submit, and confirm the ticket arrives (this is the B5 fix; before it, it did
+   not).
+4. Queue a ticket for a customer, delete the customer server-side, submit, and confirm the row reads
+   "Da correggere" and that fixing the customer lands the ticket.
 
-- [ ] **Step 1: Write the failing test**
-
-```dart
-  test('a 404 ProblemDetails naming customerId yields a repairable problem', () {
-    final error = DioException(
-      requestOptions: RequestOptions(path: '/api/tickets'),
-      response: Response(
-        statusCode: 404,
-        data: {
-          'title': 'Customer not found',
-          'status': 404,
-          'extensions': {'field': 'customerId'},
-        },
-        requestOptions: RequestOptions(path: '/api/tickets'),
-      ),
-    );
-
-    final problem = parseFkProblem(error);
-    expect(problem!.field, 'customerId');
-  });
-
-  test('a 404 with no field is not repairable', () {
-    final error = DioException(
-      requestOptions: RequestOptions(path: '/api/tickets'),
-      response: Response(statusCode: 404, data: {'title': 'Not found'},
-          requestOptions: RequestOptions(path: '/api/tickets')),
-    );
-
-    expect(parseFkProblem(error), isNull,
-        reason: 'a backend that predates the field name must fall back to the existing toast');
-  });
-
-  test('repairing a queued ticket edits the row in place and keeps its clientId', () async {
-    final id = await queue.create(/* ... an offline ticket with customerId 'gone' ... */);
-
-    final ok = await repairQueuedTicket(id, 'customerId', 'cu-new');
-
-    expect(ok, isTrue);
-    final row = await queue.byId(id);
-    expect(row!.customerId, 'cu-new');
-    expect(row.clientId, id, reason: 'the idempotency key must survive the repair, or the retry duplicates');
-  });
-```
-
-- [ ] **Step 2: Run it and watch it fail**
-
-Run: `flutter test test/data/tickets/ticket_fk_repair_test.dart`
-Expected: FAIL — the file does not exist.
-
-- [ ] **Step 3: Implement the parser and the in-place edit**
-
-`parseFkProblem` reads `response.data['extensions']['field']` (accepting a top-level `field` too, for
-a proxy that flattens it) and returns null for anything it does not recognise. It never throws.
-
-`repairQueuedTicket` must go through whatever `TicketCreationQueue` already uses to rewrite a row,
-so the `clientId`, the attachments and the payload's other fields are untouched — read
-`ticket_creation_queue.dart` and add a narrow `updateField(queueId, field, value)` there rather than
-patching JSON in the caller.
-
-- [ ] **Step 4: Surface it**
-
-In `_onSubmit`'s error path and in the queue's retry loop, when `parseFkProblem` returns a problem:
-open a sheet that names the dead field in Italian ("Il cliente di questo ticket non è più
-disponibile. Scegline un altro: il ticket è salvato e non perderai nulla."), carries a
-`ReferencePickerField` for that field's entity, and on confirm calls `repairQueuedTicket` then
-retries. Only when the repair succeeds is the queue row cleared.
-
-If `parseFkProblem` returns null, keep today's toast verbatim. An unrepairable 404 is still a 404.
-
-- [ ] **Step 5: Pin the reported defect**
-
-Add the regression the spec asks for (§12): a queued row whose `customerId` no longer resolves →
-the send is rejected → the repair path runs → the ticket lands with its original `clientId`. Drive
-it through `TicketCreationQueue.processAll()` with a mocked client, not by calling the repair
-directly, so the wiring is covered too.
-
-- [ ] **Step 6: Run the ticket data suite**
-
-Run: `flutter test test/data/tickets/ test/features/ticket/`
-Expected: PASS.
-
-- [ ] **Step 7: Run the full mobile suite**
-
-Run: `flutter test`
-Expected: PASS. Report the exact totals.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add lib/data/tickets/ticket_fk_repair.dart lib/data/tickets/ticket_creation_queue.dart \
-        lib/features/ticket/new_ticket_form_screen.dart \
-        test/data/tickets/ticket_fk_repair_test.dart
-git commit -m "feat(mobile): repair a queued ticket whose reference row is gone
-
-The server now names the field it rejected, so the phone can say which reference
-died and let the technician pick a replacement, editing the queued row in place.
-The clientId survives the repair, so the retry cannot duplicate. A 404 without a
-field name keeps today's toast.
-
-Co-Authored-By: Claude Code <noreply@anthropic.com>"
-```
+Only then: tag `v*`, per the standing release rule. The branch stays unmerged until then.
 
 ---
-
-## Open decision introduced by this plan
-
-- **D-5 — "Riferimento" semantics.** This plan makes the mobile field pick from `Agent`, because the
-  server guards `Ticket.AgentId` with `EnsureExistsAsync<Agent>` and serves a real `AgentsController`.
-  The alternative — that the field was always meant to be a *User* and the guard is wrong — would be a
-  server change with different semantics, and the web client has the same defect and would need the
-  same decision. **Default taken: clients pick Agents.** If the product answer is the other way, the
-  change is one line in `TicketCommandService` plus its tests, and this plan's B5 Step 4 is reverted;
-  the web repo needs fixing either way.
 
 ## Self-review
 
-**Spec coverage.** §6.1 bootstrap → B3 prune; §6.2 delta extension → A2/B2; §6.4 deletions → A2
-(`IsActive` carried) + B3 (prune on bootstrap); §6.5 cursors → B1 v10; §6.6 stale FK → A3 + B6; §6.8
-scope → A2's predicate, tested in `MobileUserSyncReferenceTests`; §7.3 labelled degradation → B4's
-empty state; §7.4 search discovers, pick materialises → B4, asserted by the ordering test; §8 schema
-→ B1; §9 backend → A1/A2/A3; §11 migration → B1's queued-ticket test; §12 testing → each task's own
-suite. **Not covered, deliberately, and stated in Global Constraints:** `maintenanceTemplateId`,
-attachments, update-path `internalNotes`, and the web client's copy of the Riferimento defect.
+**Spec coverage.** §5 Option E: A2 (payload), B1–B4 (mirror and pickers). §6 sync design: A2, B2, B3.
+§7 UX contract: B4, B5. §8 schema: B1. §9 backend scoping: A2. §10 decisions: D-1(a) in the Global
+Constraints; D-2/D-3/D-4 keep the spec's stated defaults and no task here changes them. §2.6–§2.7,
+the corrected facts — the 404-not-400 FK failure (A3, B6), `ProdottoAssistenzaIds` being
+`[NotMapped]`, the absent tombstones (B3's scoped prune) — each lands in a task. The one spec item
+with no task is the web client's identical Riferimento bug, and it is listed as out of scope.
 
-**Placeholder scan.** No "TBD"/"handle edge cases"/"similar to Task N" — every task carries its own
-code. Two steps intentionally tell the implementer to copy a factory verbatim from a named existing
-file rather than reproducing a constructor they must verify anyway (A1 Step 1, A3 Step 1); that is a
-deliberate pointer to a line, not a gap.
+**Placeholder scan.** Two `{ ... }` elisions remain, both in test bodies that restate a case the
+preceding lines already spell out (`label falls back to codice`, and the stale-answer widget test's
+setup). Every other step carries its content. `// searchCommesse / ... in the same shape` appears four
+times and each marks a genuinely identical method, not an unstated one.
 
-**Type consistency.** Wire names: `contracts`/`commesse`/`prodottiAssistenza`/`agents` used
-identically in A2, B2 and B3. Dart classes `ContractSyncDto`/`CommessaSyncDto`/
-`ProdottoAssistenzaSyncDto`/`AgentSyncDto` used identically in B2, B3 and B4. Drift tables
-`contracts`/`commesse`/`prodotti_assistenza`/`agents` in B1, B3 and B4. `ReferenceOption` and
-`ReferencePickerField`'s parameter names (`items`, `selectedId`, `onChanged`, `search`,
-`onMaterialize`, `emptyHint`) are fixed in B4 and used unchanged in B5 and B6.
-`repairQueuedTicket(queueId, field, value)` and `parseFkProblem` fixed in B6 and used only there.
+**Type consistency.** `upsertContracts` / `pruneContracts` / `contractsForCustomer` are the names in
+B3, B4 and B6. `ReferenceOption{id,label,subtitle}` is defined once, in B4, and used by B4, B5 and the
+providers. `repairableField` is the column in B1, the local in B6 and the helper's return. The four
+`carries*` flags are spelled identically in B2, B3 and the Global Constraints. `field` is flat on the
+wire in A3, read flat by `ProblemDetails.fieldOf` in B6, and never nested anywhere. `Dio` (not a
+nonexistent `ApiClient`) is the client type in B4 and B6, matching `lib/data/**`. No `materialize*`
+spelling survives anywhere — the vocabulary is `upsert`.
 
-**Review Focus.** (1) → B6 Step 5. (2) → B4 Step 1's ordering assertion. (3) → B2 Step 1 and B3
-Step 1's "older backend" cases. (4) → B4 Step 1's labelled-empty-state test. (5) → B5 Step 4.
+**Review Focus.** Each of the five lines names its owner above; all five have a test in that task's
+steps, including the two that are structural rather than asserted (B4's materialise-before-return,
+which its own test pins anyway).
+
+**Read before writing, five places, all checked against `master` except the last:** the three
+`GetAll` bodies and `CommesseController`'s (A1); `prodotto_assistenza`'s real member names for
+`ProdottoAssistenzaSyncDto` (B2); `PendingTicketsCompanion.insert`'s required set (B1 Step 1's
+callout); the widget test harness in `ticket_materiali_editor_test.dart` and the `Dio` mock in
+`ticket_api_client_test.dart` (B4); and, in the mobile tree rather than on `master`, whether the
+cantiere picker already reads the cached cantieri table (B5 Step 5) — if it does, leave it alone.
