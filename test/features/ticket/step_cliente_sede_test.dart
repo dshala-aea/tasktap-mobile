@@ -75,12 +75,15 @@ class _ClienteSedeHarnessState extends State<_ClienteSedeHarness> {
 const _contrattoField = ValueKey('reference-picker-contratto');
 const _commessaField = ValueKey('reference-picker-commessa');
 
-/// The Commessa field's own key: the value it is showing plus the epoch a *refused* clear bumps
-/// (`StepClienteSede._commessaPickerEpoch`). Both halves are part of the key because both are what
-/// make the field rebuild — the value for a change the state really made, the epoch for a refusal
-/// that made none.
-ValueKey<String> commessaFieldKey(String? commessaId, [int epoch = 0]) =>
-    ValueKey('commessa-$commessaId-$epoch');
+/// The Commessa field's own key: the epoch the step bumps when it changes the commessa on purpose
+/// (`StepClienteSede._commessaPickerEpoch`) — a pick, a refused clear, a customer change. The value
+/// it is showing is deliberately *not* part of the key: the picker reports a pick released by editing
+/// the text as a null selection, so a key built from the value could not tell a commit from a
+/// keystroke and would rebuild the field mid-word, wiping what the technician had just typed.
+ValueKey<String> commessaFieldKey([int epoch = 0]) => ValueKey('commessa-$epoch');
+
+/// As [commessaFieldKey], for the Contratto field (`StepClienteSede._contractPickerEpoch`).
+ValueKey<String> contrattoFieldKey([int epoch = 0]) => ValueKey('contratto-$epoch');
 
 void main() {
   late AppDatabase db;
@@ -219,6 +222,17 @@ void main() {
   Finder clearButtonOf(Key fieldKey) =>
       find.descendant(of: find.byKey(fieldKey), matching: find.byType(IconButton));
 
+  /// What a picker's text box currently holds. Read off the field's own [EditableText] rather than
+  /// through `find.text`: a focused picker offers suggestions out of the mirror, so the text typed
+  /// into it and the suggestion row that matches it are two widgets with the same string, and only
+  /// one of them is the field.
+  String fieldText(WidgetTester tester, Key fieldKey) => tester
+      .widget<EditableText>(
+        find.descendant(of: find.byKey(fieldKey), matching: find.byType(EditableText)),
+      )
+      .controller
+      .text;
+
   /// Unmount inside the body and let the frame after it settle — same two lines the sibling step
   /// tests end on: the ProviderScope disposes its container here, which cancels the drift stream
   /// queries and arms drift's zero-duration stream-removal timer, both of which have to happen
@@ -298,7 +312,7 @@ void main() {
     final key = await pumpStep(tester, commessaClearable: false);
 
     expect(find.text('COM-001'), findsOneWidget);
-    await tester.tap(clearButtonOf(commessaFieldKey('com-1')));
+    await tester.tap(clearButtonOf(commessaFieldKey()));
     await tester.pump();
 
     // Nothing was handed up at all, so the stored commessa survives a gesture that would otherwise
@@ -321,7 +335,7 @@ void main() {
     final key = await pumpStep(tester, commessaClearable: false);
 
     expect(find.text('COM-001'), findsOneWidget);
-    await tester.tap(clearButtonOf(commessaFieldKey('com-1')));
+    await tester.tap(clearButtonOf(commessaFieldKey()));
     await tester.pump();
 
     // The refusal itself is unchanged: nothing was handed up, so the stored commessa survives...
@@ -331,11 +345,11 @@ void main() {
 
     // ...and the field no longer sits empty over it. The epoch bumped the key, the field was rebuilt
     // from the stored id, and the code is back on it, ticked as the resolved record it is.
-    expect(find.byKey(commessaFieldKey('com-1', 1)), findsOneWidget);
+    expect(find.byKey(commessaFieldKey(1)), findsOneWidget);
     expect(find.text('COM-001'), findsOneWidget);
     expect(
       find.descendant(
-        of: find.byKey(commessaFieldKey('com-1', 1)),
+        of: find.byKey(commessaFieldKey(1)),
         matching: find.byIcon(LucideIcons.check),
       ),
       findsOneWidget,
@@ -351,13 +365,18 @@ void main() {
     // to end. `AppLookupField` shows no suggestions for an already-resolved field until its text
     // changes (`_suggestions` returns nothing while `_selectedId != null`), so a pick starts by
     // typing: that releases the old pick, which is exactly the gesture that is now refused, and the
-    // search still runs behind it. The toast is left to expire first so it cannot swallow the tap.
+    // search still runs behind it.
     await tester.enterText(
       find.descendant(of: find.byKey(_commessaField), matching: find.byType(TextFormField)),
       'COM-002',
     );
+
+    // Typing raises no refusal at all: the refusal belongs to the emptied box — the X — and this is
+    // the pin for that. Said here, it was an error reported against a technician who is only
+    // searching, and it stood in the way of the very tap that follows it.
+    expect(find.text('La commessa non può essere rimossa da qui.'), findsNothing);
+
     await tester.pump(const Duration(milliseconds: 350));
-    await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('COM-002').last);
@@ -373,7 +392,7 @@ void main() {
 
     // Guards the default: the create wizard's own clear must not have been made a refusal.
     expect(find.text('COM-001'), findsOneWidget);
-    await tester.tap(clearButtonOf(commessaFieldKey('com-1')));
+    await tester.tap(clearButtonOf(commessaFieldKey()));
     await tester.pumpAndSettle();
 
     expect(key.currentState!.state.commessaId, isNull);
@@ -389,7 +408,7 @@ void main() {
 
     expect(
       find.descendant(
-        of: find.byKey(commessaFieldKey('com-1')),
+        of: find.byKey(commessaFieldKey()),
         matching: find.byIcon(LucideIcons.check),
       ),
       findsOneWidget,
@@ -398,12 +417,14 @@ void main() {
     await unmount(tester);
   });
 
-  // ── The value key: what it is actually for ──────────────────────────────────
+  // ── The epoch key: what it is actually for ──────────────────────────────────
 
-  /// The reason the Commessa field is keyed by its own value. Switching customer clears the
-  /// commessa in *state* (it belongs to the customer being dropped), and `AppLookupField` never
-  /// clears its own text on an update — only ever fills it in — so without the key the field went on
-  /// showing the previous customer's commessa code over a null selection.
+  /// The rebuild a customer change has to ask for now that the key is an epoch. Switching customer
+  /// clears the commessa in *state* (it belongs to the customer being dropped), and `AppLookupField`
+  /// never clears its own text on an update — only ever fills it in — so the step has to move the
+  /// epoch for the field to be rebuilt from the state that no longer holds a commessa. Under the
+  /// value key that rebuild came for free, which is exactly why removing the value from the key makes
+  /// this test load-bearing.
   testWidgets('changing the customer takes the commessa off the field, not just out of state', (
     tester,
   ) async {
@@ -416,15 +437,16 @@ void main() {
 
     expect(key.currentState!.state.customerId, 'cust-2');
     expect(key.currentState!.state.commessaId, isNull);
-    // The field no longer claims a commessa the state does not hold, and the new customer's own
-    // (empty) list is what it is now keyed to.
-    expect(find.byKey(commessaFieldKey('com-1')), findsNothing);
+    // The epoch moved, so the field was rebuilt from that state...
+    expect(find.byKey(commessaFieldKey(1)), findsOneWidget);
+    expect(find.byKey(commessaFieldKey()), findsNothing);
+    // ...and no longer claims a commessa the state does not hold.
     expect(find.text('COM-001'), findsNothing);
 
     await unmount(tester);
   });
 
-  // ── The same key on the Contratto field ─────────────────────────────────────
+  // ── The same epoch on the Contratto field ───────────────────────────────────
 
   /// D2: the customer-change branch sets `clearContractId` too (and so does emptying the Cliente
   /// field), and the Contratto field carried no key at all — so the previous customer's contract
@@ -437,25 +459,25 @@ void main() {
       await insertSecondCustomer();
 
       final key = await pumpStep(tester);
-      expect(find.byKey(const ValueKey('contratto-ctr-1')), findsOneWidget);
+      expect(find.byKey(contrattoFieldKey()), findsOneWidget);
       expect(find.text('Contratto Annuale'), findsOneWidget);
 
       await selectBetaSpa(tester);
 
       expect(key.currentState!.state.customerId, 'cust-2');
       expect(key.currentState!.state.contractId, isNull);
-      // Keyed by its own value, the cleared contract rebuilt the field into an empty one rather than
-      // leaving the old name standing over a selection the record no longer points at.
-      expect(find.byKey(const ValueKey('contratto-null')), findsOneWidget);
+      // The customer change bumped the epoch, so the field was rebuilt empty rather than left
+      // standing over a selection the record no longer points at.
+      expect(find.byKey(contrattoFieldKey(1)), findsOneWidget);
       expect(find.text('Contratto Annuale'), findsNothing);
 
       await unmount(tester);
     },
   );
 
-  /// The direction that key could plausibly have broken: an ordinary pick on an empty field. The key
-  /// moves with the value it shows, so a pick *does* rebuild the field — and that rebuild has to
-  /// resolve the picked id to its name, not reset the field to blank over a real selection.
+  /// The direction an epoch key could plausibly have broken: an ordinary pick on an empty field. The
+  /// epoch moves on the commit, so a pick *does* rebuild the field — and that rebuild has to resolve
+  /// the picked id to its name, not reset the field to blank over a real selection.
   testWidgets('a contract picked on the default build lands on the field', (tester) async {
     final key = await pumpStep(tester, state: seeded.copyWith(clearContractId: true));
 
@@ -471,8 +493,63 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(key.currentState!.state.contractId, 'ctr-1');
-    expect(find.byKey(const ValueKey('contratto-ctr-1')), findsOneWidget);
+    expect(find.byKey(contrattoFieldKey(1)), findsOneWidget);
     expect(find.text('Contratto Annuale'), findsOneWidget);
+
+    await unmount(tester);
+  });
+
+  // ── Typing over a resolved reference (default flags: the create wizard) ──────
+
+  /// The direction a value key breaks. Releasing a pick by editing the text is the one way back to a
+  /// suggestion list once a field holds a pick — and both these fields report that release as a null
+  /// selection, which the create wizard turns into a cleared id. While the key carried the id, that
+  /// cleared id *was* the wipe: the key moved, the subtree was rebuilt, and the character just typed
+  /// went with it. `AppLookupField.didUpdateWidget` only ever fills text in and never clears it, so
+  /// the field has to survive a state change it did not make.
+  testWidgets('typing to search another commessa does not wipe what was typed', (tester) async {
+    final key = await pumpStep(tester);
+
+    final field = find.byKey(_commessaField);
+    expect(find.text('COM-001'), findsOneWidget);
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: field, matching: find.byType(TextFormField)),
+      'COM-002',
+    );
+    await tester.pumpAndSettle();
+
+    // What survived is the *field's* text, so that is what is read: a bare `find.text('COM-002')`
+    // would also count the suggestion row the mirror offers for what was typed — the list is open
+    // while the field has focus — and cannot tell the two apart. The claim is about the field.
+    expect(fieldText(tester, _commessaField), 'COM-002');
+
+    // The other half of the same gesture, and the reason the key must not carry the value: that
+    // release also took the id out of state. The field now holds a query with no tick, and a record
+    // still holding the old commessa would be the two disagreeing — so the two have to hold together,
+    // and this is the half a "the text survived" assertion would not notice going missing.
+    expect(key.currentState!.state.commessaId, isNull);
+
+    await unmount(tester);
+  });
+
+  /// As the commessa above, on the field whose release goes through the same null.
+  testWidgets('typing to search another contract does not wipe what was typed', (tester) async {
+    final key = await pumpStep(tester);
+
+    final field = find.byKey(_contrattoField);
+    expect(find.text('Contratto Annuale'), findsOneWidget);
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: field, matching: find.byType(TextFormField)),
+      'Contratto Nuovo',
+    );
+    await tester.pumpAndSettle();
+
+    expect(fieldText(tester, _contrattoField), 'Contratto Nuovo');
+    expect(key.currentState!.state.contractId, isNull);
 
     await unmount(tester);
   });
