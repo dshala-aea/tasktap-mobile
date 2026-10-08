@@ -23,8 +23,11 @@ import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/tickets/pending_ticket_attachment_repository.dart';
 import 'package:tasktap_mobile/data/tickets/pending_ticket_attachment_state.dart';
+import 'package:tasktap_mobile/data/sync/checklist_reconciler.dart';
+import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
+import 'package:tasktap_mobile/domain/checklist/control_type.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_detail_screen.dart';
 import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 
@@ -977,6 +980,63 @@ void main() {
 
       expect(find.text('Controlli non disponibili offline'), findsOneWidget);
       expect(find.text('Nessun controllo previsto'), findsNothing);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('shows the per-asset checklist card from the local mirror', (tester) async {
+      await seedBase(db);
+      // The asset checklist is read from the synced mirror, not the online REST read — seed one
+      // covered, templated asset so the card's entry point renders.
+      await applyChecklistBatch(
+        db,
+        ChecklistBatch(
+          authoritativeTicketIds: {'ticket-1'},
+          controlGroups: const [
+            SyncControlGroupDto(
+              id: 'g1',
+              maintenanceTemplateVersionId: 'v1',
+              name: 'Sicurezza',
+              sortOrder: 0,
+            ),
+          ],
+          ticketControls: const [
+            SyncTicketControlDto(
+              id: 'c-0-0',
+              ticketId: 'ticket-1',
+              prodottoAssistenzaId: 'a0',
+              templateControlId: 'tc-0',
+              controlLineageId: 'l0',
+              groupId: 'g1',
+              label: 'Controllo 0',
+              type: ControlType.checkbox,
+              isRequired: true,
+            ),
+          ],
+          ticketAssets: const [
+            SyncTicketAssetDto(
+              ticketId: 'ticket-1',
+              prodottoAssistenzaId: 'a0',
+              maintenanceTemplateVersionId: 'v1',
+            ),
+          ],
+          assets: const [SyncAssetDto(id: 'a0', name: 'Caldaia 1')],
+        ),
+      );
+      final dio = MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1/controls'),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'groups': <dynamic>[],
+          'assetProgress': <dynamic>[],
+        }, '/api/tickets/ticket-1/controls'),
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tapTab(tester, 'Controllo');
+
+      expect(find.text('Controlli per asset'), findsOneWidget);
+      expect(find.textContaining('1 asset'), findsOneWidget);
       await resetAndDispose(tester);
     });
   });

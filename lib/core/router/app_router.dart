@@ -11,6 +11,7 @@ import '../../features/dashboard/dashboard_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
 import '../../features/ticket/new_ticket_form_screen.dart';
+import '../../features/checklist/asset_checklist_screen.dart';
 import '../../features/ticket/ticket_detail_screen.dart';
 import '../../features/ticket/ticket_list_screen.dart';
 import '../../presentation/screens/login/login_screen.dart';
@@ -101,6 +102,9 @@ abstract final class AppRoutes {
 
   /// Build the detail path for a given ticket id.
   static String ticketDetailPath(String id) => '/ticket/$id';
+
+  /// The per-asset checklist of a ticket (full screen; read-only entry from the ticket detail).
+  static String ticketAssetChecklistPath(String ticketId) => '/ticket/$ticketId/assets';
 
   static const String timbra = '/timbra';
 
@@ -508,6 +512,14 @@ GoRouter buildRouter(WidgetRef ref) {
                     builder: (context, state) => TicketDetailScreen(
                       ticketId: state.pathParameters['id']!,
                     ),
+                    routes: [
+                      GoRoute(
+                        path: 'assets',
+                        parentNavigatorKey: rootNavigatorKey,
+                        builder: (context, state) =>
+                            AssetChecklistScreen(ticketId: state.pathParameters['id']!),
+                      ),
+                    ],
                   ),
                 ],
               ),
