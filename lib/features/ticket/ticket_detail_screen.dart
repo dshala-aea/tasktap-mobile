@@ -24,6 +24,8 @@ import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
+import '../checklist/checklist_providers.dart';
+import '../checklist/ticket_asset_checklists_card.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider, formatElapsed;
 import '../rapportino/create_draft.dart';
 import 'edit_ticket_screen.dart';
@@ -822,45 +824,62 @@ class _ControlloTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controlsAsync = ref.watch(ticketControlsProvider(ticketId));
+    // Asset checklists come from the local mirror (offline); the ticket-level list below is still
+    // the online-only REST read. A ticket without assets renders exactly as before.
+    final showAssets = ref.watch(ticketChecklistProvider(ticketId)).valueOrNull?.hasAnything ?? false;
+    final assetCard = TicketAssetChecklistsCard(ticketId: ticketId);
+    Widget wrap(Widget ticketLevel) => showAssets
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [assetCard, ticketLevel],
+          )
+        : ticketLevel;
 
     return controlsAsync.when(
-      loading: () => const _TabLoading(),
-      error: (e, _) => UnavailableState.forFetchError(
-        icon: LucideIcons.clipboardCheck,
-        offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Controlli non disponibili offline',
-        offlineBody:
-            'Il checklist di questo ticket richiede una connessione: riprova quando torni online.',
-        errorTitle: 'Impossibile caricare i controlli',
-        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
-      ).paddedForTab(),
+      loading: () => wrap(const _TabLoading()),
+      error: (e, _) => wrap(
+        UnavailableState.forFetchError(
+          icon: LucideIcons.clipboardCheck,
+          offline: e is TicketDetailOfflineException,
+          offlineTitle: 'Controlli non disponibili offline',
+          offlineBody:
+              'Il checklist di questo ticket richiede una connessione: riprova quando torni online.',
+          errorTitle: 'Impossibile caricare i controlli',
+          errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+        ).paddedForTab(),
+      ),
       data: (groups) {
         final flat = flattenTicketControls(groups);
         if (flat.isEmpty) {
-          return const _EmptyTab(
-            icon: LucideIcons.clipboardCheck,
-            label: 'Nessun controllo previsto',
-            body:
-                'Questo ticket non ha un template di manutenzione collegato: non è previsto '
-                'alcun controllo per questo intervento.',
-          );
+          return showAssets
+              ? assetCard
+              : const _EmptyTab(
+                  icon: LucideIcons.clipboardCheck,
+                  label: 'Nessun controllo previsto',
+                  body:
+                      'Questo ticket non ha un template di manutenzione collegato: non è previsto '
+                      'alcun controllo per questo intervento.',
+                );
         }
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.pagePadding,
-            AppSpacing.md,
-            AppSpacing.pagePadding,
-            0,
-          ),
-          child: Column(
-            children: flat
-                .map(
-                  (f) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: _TicketControlStatusCard(flat: f),
-                  ),
-                )
-                .toList(),
+        return wrap(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.pagePadding,
+              AppSpacing.md,
+              AppSpacing.pagePadding,
+              0,
+            ),
+            child: Column(
+              children: flat
+                  .map(
+                    (f) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: _TicketControlStatusCard(flat: f),
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
         );
       },
