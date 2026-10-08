@@ -630,6 +630,103 @@ void main() {
       },
     );
 
+    testWidgets(
+      'changing the customer clears the sede, and Avanti waits for a new one',
+      (tester) async {
+        // A second customer with a sede of their own, seeded here rather than in setUp: every other
+        // test in this group picks a customer by name out of the suggestion list, and a third name
+        // in it would change what they see.
+        await db
+            .into(db.customers)
+            .insert(
+              CustomersCompanion.insert(
+                id: 'cust-2',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                companyName: 'Beta Srl',
+              ),
+            );
+        await db
+            .into(db.locations)
+            .insert(
+              LocationsCompanion.insert(
+                id: 'loc-2',
+                tenantId: 'tenant-1',
+                createdAt: DateTime.utc(2026, 1, 1),
+                customerId: 'cust-2',
+                name: 'Sede Roma',
+              ),
+            );
+
+        await tester.pumpWidget(buildLauncher(isOnline: false));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Apri form'));
+        await tester.pumpAndSettle();
+
+        // A customer and a sede of theirs: step 1 is complete.
+        await tester.tap(find.byKey(const ValueKey('cliente-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Acme Srl').last);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('sede-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sede Milano').last);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
+              .onPressed,
+          isNotNull,
+        );
+
+        // Switch to the other customer. The field is re-opened by typing rather than by tapping:
+        // once a value is picked the field offers no suggestions until its text changes, and
+        // typing is what releases the pick it is holding.
+        await tester.tap(find.byKey(const ValueKey('cliente-cust-1')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.descendant(
+            of: find.byKey(const ValueKey('cliente-cust-1')),
+            matching: find.byType(TextFormField),
+          ),
+          'Beta',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Beta Srl').last);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Sede non ancora selezionata'), findsOneWidget);
+        expect(
+          tester
+              .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
+              .onPressed,
+          isNull,
+          reason: 'a customer without a sede is not a complete step 1',
+        );
+
+        // And the new customer's own sede completes it again.
+        await tester.tap(find.byKey(const ValueKey('sede-null')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sede Roma').last);
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
+              .onPressed,
+          isNotNull,
+        );
+
+        // Unmount inside the body and let the frame after it settle: this test's ProviderScope
+        // disposes its container here, under the test's own pumps, which is also where drift's
+        // zero-duration stream-removal timer is armed and then elapses. Left to the framework's
+        // teardown the timer is still pending with the tree already gone, and flutter_test asserts
+        // no pending timers when a test ends. No SnackBar was shown here, so there is no
+        // auto-dismiss timer to fast-forward past.
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+      },
+    );
+
     // ── Repair mode (Task B6) ────────────────────────────────────────────────
     //
     // The queue refused a queued ticket over a reference that no longer resolves and held it out of
@@ -670,8 +767,8 @@ void main() {
         findsOneWidget,
       );
 
-      // Re-pick a live customer. The sede the row carried survives the seeding, so step 1 is valid
-      // again the moment the customer is (the wizard clears the references scoped to the old one).
+      // Re-pick a live customer. The references scoped to the customer being dropped go with it —
+      // the sede too, which is why it is re-picked below rather than assumed to survive.
       await tester.tap(find.byKey(const ValueKey('cliente-null')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Acme Srl').last);
@@ -680,9 +777,24 @@ void main() {
         tester
             .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
             .onPressed,
+        isNull,
+        reason: 'the sede was cleared with the customer that owned it',
+      );
+
+      // Pick a sede of the new customer, and only then is step 1 valid again. Naming the sede
+      // explicitly is the point: the row happens to carry `loc-1`, which this fixture's own customer
+      // owns, so leaving it to chance would let the assertion pass for a reason the wizard never
+      // promised.
+      await tester.tap(find.byKey(const ValueKey('sede-null')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sede Milano').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
+            .onPressed,
         isNotNull,
-        reason:
-            'only the blamed reference was dropped — step 1 is valid again',
+        reason: 'a live customer and a sede of theirs — step 1 is valid again',
       );
 
       await tester.tap(find.text('Avanti'));

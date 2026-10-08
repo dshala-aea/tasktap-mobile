@@ -211,11 +211,16 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           onSelected: (id) => widget.onChanged(
             widget.state.copyWith(
               customerId: id,
-              locationId: null, // reset location when customer changes
+              // The sede takes the explicit flag rather than a plain `locationId: null`: `copyWith`
+              // reads a null argument as "not supplied" (`locationId: locationId ?? this.locationId`)
+              // and hands the old sede straight back, so the reset this line intends never happened
+              // and a ticket could be filed against the previous customer's sede.
+              clearLocationId: true,
               // A contract, a commessa and a cantiere belong to the customer that owned them —
               // keeping one across a customer change would point the new ticket at a row the
               // server will refuse with a 404, and through the queue that is a ticket that never
-              // arrives. Clearing here is the fix, not a detail.
+              // arrives. Clearing here is the fix, not a detail. The sede above is the same class
+              // of reference and clears for the same reason.
               clearContractId: true,
               clearCommessaId: true,
               clearCantiereId: true,
