@@ -96,6 +96,18 @@ class DictationCapability {
       'Dettatura non disponibile: accesso al microfono non consentito.',
   };
 
+  /// The actionable half of [unavailableMessage], for a control that already states the feature is
+  /// unavailable above it. Only the remedy, because [unavailableMessage] begins with "Dettatura non
+  /// disponibile" and printing both would say it twice.
+  String? get unavailableHint => switch (blocker) {
+    DictationBlocker.none => null,
+    DictationBlocker.noRecognizer => 'Questo dispositivo non ha il riconoscimento vocale.',
+    DictationBlocker.noItalianLocale => 'Manca il riconoscimento vocale italiano.',
+    DictationBlocker.noOnDeviceRecognition =>
+      'Installa il pacchetto vocale italiano nelle impostazioni di sistema.',
+    DictationBlocker.microphoneDenied => 'Accesso al microfono non consentito.',
+  };
+
   @override
   String toString() =>
       'DictationCapability(recognizer: $recognizerAvailable, italian: $italianLocaleId, '

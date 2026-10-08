@@ -1,9 +1,15 @@
 // dart format width=100
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Imported directly, not through speech_to_text.dart: the plugin's main library only re-exports
+// ListenMode/SpeechConfigOption/SpeechListenOptions from the platform interface and leaves
+// SpeechRecognitionError — the type its own SpeechErrorListener typedef hands back — unexported.
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import 'dictation_capability.dart';
+import 'dictation_outcome.dart';
+import 'dictation_session.dart';
 
 /// Speaking instead of typing, for the fields of the existing rapportino (ADR-0017).
 ///
@@ -14,10 +20,14 @@ abstract interface class IDictationService {
   /// What this handset can do. Called before any dictation control is drawn.
   Future<DictationCapability> capability();
 
-  /// Starts listening, emitting partial transcripts as they arrive.
+  /// Starts listening, emitting partial transcripts as they arrive and reporting *why* the session
+  /// ended — words, a silent finish, or a refused language — through [onDone].
   ///
   /// On-device only. Implementations must refuse rather than reach the network.
-  Future<void> start({required ValueChanged<String> onTranscript, required VoidCallback onDone});
+  Future<void> start({
+    required ValueChanged<String> onTranscript,
+    required ValueChanged<DictationOutcome> onDone,
+  });
 
   Future<void> stop();
 
@@ -60,19 +70,48 @@ class DictationService implements IDictationService {
 
   bool _initialized = false;
 
+  /// The session in flight. The listeners below outlive any single one, because the plugin installs
+  /// them once at initialize time on a process-wide singleton — they are the only channel a
+  /// session's errors and status can arrive on, so the *current* session is held here for them to
+  /// find rather than being captured in a per-call closure.
+  DictationSession? _session;
+  ValueChanged<DictationOutcome>? _onDone;
+
   @override
   bool get isListening => _speech.isListening;
 
   Future<bool> _ensureInitialized() async {
     if (_initialized) return true;
     try {
-      // Errors and status are surfaced per-session by [start]; here the only question is whether
-      // a recogniser exists at all.
-      _initialized = await _speech.initialize(onError: (_) {}, onStatus: (_) {});
+      _initialized = await _speech.initialize(onError: _handleError, onStatus: _handleStatus);
+      // Assigned directly as well as passed above: `initialize` returns early without touching
+      // either field once it has succeeded, so on a second service instance — or after anything
+      // else initialised the shared singleton first — the arguments above are silently ignored and
+      // these are the assignments that actually take effect.
+      _speech.errorListener = _handleError;
+      _speech.statusListener = _handleStatus;
     } catch (_) {
       _initialized = false;
     }
     return _initialized;
+  }
+
+  void _handleError(SpeechRecognitionError error) => _session?.onError(error.errorMsg);
+
+  void _handleStatus(String status) {
+    if (status == 'done' || status == 'notListening') _endSession();
+  }
+
+  /// Ends the session once, whatever ends it — a done status, a throw, or an explicit [stop].
+  void _endSession() {
+    final session = _session;
+    if (session == null) return;
+    final onDone = _onDone;
+    // Both cleared before the callback runs: a session can deliver a final result and a done status,
+    // and a second `done` arriving after the first must not fire the callback a second time.
+    _session = null;
+    _onDone = null;
+    onDone?.call(session.outcome);
   }
 
   @override
@@ -100,40 +139,66 @@ class DictationService implements IDictationService {
   @override
   Future<void> start({
     required ValueChanged<String> onTranscript,
-    required VoidCallback onDone,
+    required ValueChanged<DictationOutcome> onDone,
   }) async {
     final capability = await this.capability();
     if (!capability.canDictate) {
       // Refusing is the point. Listening anyway with onDevice requested would, on Android,
       // construct a network recogniser and stream site audio to a server — silently, and against
       // a decision that was made deliberately.
-      onDone();
+      onDone(DictationOutcome.stoppedByUser);
       return;
     }
 
-    await _speech.listen(
-      onResult: (result) => onTranscript(result.recognizedWords),
-      listenOptions: SpeechListenOptions(
-        onDevice: true,
-        localeId: capability.italianLocaleId,
-        // Partial results are what make this feel like typing rather than like submitting a job:
-        // the technician watches the words appear and stops when they have what they need.
-        partialResults: true,
-        cancelOnError: true,
-        // Long enough to describe an intervento without being cut off mid-sentence, short enough
-        // that a phone left in a pocket is not listening indefinitely.
-        listenFor: const Duration(minutes: 2),
-        pauseFor: const Duration(seconds: 4),
-      ),
-    );
+    final session = DictationSession();
+    _session = session;
+    _onDone = onDone;
 
-    _speech.statusListener = (status) {
-      if (status == 'done' || status == 'notListening') onDone();
-    };
+    // Assigned before listen(), never after it returns: this settable field is the plugin's only
+    // status channel — listen() has no onStatus argument — so a session that ends quickly fires
+    // `done` before a listener assigned afterward would ever be in place, and the control would sit
+    // reading "listening" forever.
+    _speech.statusListener = _handleStatus;
+    _speech.errorListener = _handleError;
+
+    try {
+      await _speech.listen(
+        onResult: (result) {
+          session.onTranscript(result.recognizedWords);
+          onTranscript(result.recognizedWords);
+        },
+        listenOptions: SpeechListenOptions(
+          onDevice: true,
+          localeId: capability.italianLocaleId,
+          // Partial results are what make this feel like typing rather than like submitting a job:
+          // the technician watches the words appear and stops when they have what they need.
+          partialResults: true,
+          cancelOnError: true,
+          // Long enough to describe an intervento without being cut off mid-sentence, short enough
+          // that a phone left in a pocket is not listening indefinitely.
+          listenFor: const Duration(minutes: 2),
+          pauseFor: const Duration(seconds: 4),
+        ),
+      );
+    } catch (_) {
+      // listen() throws rather than reporting through the status channel when the platform refuses
+      // to start at all — most often `SpeechToTextNotInitializedException`. Treated as a session
+      // that failed, not one that never happened.
+      session.onError('error_client');
+      _endSession();
+    }
   }
 
   @override
-  Future<void> stop() => _speech.stop();
+  Future<void> stop() async {
+    _session?.onStoppedByUser();
+    await _speech.stop();
+    // stop() asks the recogniser for a final result and a `done` status follows it — but ending the
+    // session here as well keeps the control honest if that status never arrives. `_endSession`
+    // clears `_onDone`, yet the closure captured in `onResult` above still writes to the controller,
+    // so a final result arriving after this still lands in the field.
+    _endSession();
+  }
 }
 
 final dictationServiceProvider = Provider<IDictationService>((ref) => DictationService());

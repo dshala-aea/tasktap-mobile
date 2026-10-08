@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:tasktap_mobile/core/dictation/dictation_target.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart';
 import 'package:tasktap_mobile/core/widgets/geo_map_card.dart';
@@ -90,11 +91,13 @@ ProviderContainer _buildContainer({
   );
 }
 
-Widget _buildStep(ProviderContainer container) {
+Widget _buildStep(ProviderContainer container, {DictationTargetRegistry? dictation}) {
   return UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(
-      home: Scaffold(body: StepDettagli(reportId: _reportId)),
+    child: MaterialApp(
+      home: Scaffold(
+        body: StepDettagli(reportId: _reportId, dictation: dictation),
+      ),
     ),
   );
 }
@@ -132,7 +135,11 @@ void main() {
     });
 
     testWidgets('shown with the imported values and editable', (tester) async {
-      final container = _buildContainer(db: db, diagnosi: 'Pompa bloccata', soluzione: 'Sostituita');
+      final container = _buildContainer(
+        db: db,
+        diagnosi: 'Pompa bloccata',
+        soluzione: 'Sostituita',
+      );
       addTearDown(container.dispose);
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
@@ -162,9 +169,7 @@ void main() {
     // A resolved ticketId/cantiereId not yet in the local mirror still leaves the "Collegamento"
     // section expanded (linkedTicket/linkedCantiere can't be named), but the field itself must
     // still mark itself resolved (the check icon) rather than looking like unconfirmed free text.
-    testWidgets('Ticket field shows the resolved check icon when ticketId is set', (
-      tester,
-    ) async {
+    testWidgets('Ticket field shows the resolved check icon when ticketId is set', (tester) async {
       final container = _buildContainer(
         db: db,
         ticketId: 'ticket-not-yet-cached',
@@ -300,6 +305,54 @@ void main() {
       // The old rendering would have shown this exact string — assert it's gone entirely.
       expect(find.text('GPS: 45.46420, 9.19000'), findsNothing);
       expect(find.textContaining('45.4642'), findsNothing);
+    });
+  });
+
+  group('StepDettagli — the step microphone is one control, not a suffix per field', () {
+    testWidgets('no per-field microphone is rendered any more', (tester) async {
+      final container = _buildContainer(db: db, ticketId: 'ticket-1');
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(_buildStep(container));
+      await tester.pumpAndSettle();
+
+      // The microphone now lives in the sheet footer (DictationBar), outside this step — so neither
+      // the live nor the crossed-out icon belongs here.
+      expect(find.byIcon(LucideIcons.mic), findsNothing);
+      expect(find.byIcon(LucideIcons.micOff), findsNothing);
+    });
+
+    testWidgets('a passed-in registry learns the three dictate-capable fields', (tester) async {
+      final container = _buildContainer(db: db, ticketId: 'ticket-1');
+      addTearDown(container.dispose);
+      final registry = DictationTargetRegistry();
+
+      await tester.pumpWidget(_buildStep(container, dictation: registry));
+      await tester.pumpAndSettle();
+
+      // Descrizione is the first registered, so it is the default target.
+      expect(registry.active?.label, 'Descrizione');
+      // select() is a no-op for an id it never registered, so each of these only moves if the step
+      // really registered the field.
+      registry.select('diagnosi');
+      expect(registry.active?.id, 'diagnosi');
+      registry.select('soluzione');
+      expect(registry.active?.id, 'soluzione');
+    });
+
+    testWidgets('typing in a field makes it the microphone target', (tester) async {
+      final container = _buildContainer(db: db, ticketId: 'ticket-1', diagnosi: 'Pompa bloccata');
+      addTearDown(container.dispose);
+      final registry = DictationTargetRegistry();
+
+      await tester.pumpWidget(_buildStep(container, dictation: registry));
+      await tester.pumpAndSettle();
+      expect(registry.active?.id, 'details');
+
+      await tester.enterText(find.widgetWithText(TextField, 'Pompa bloccata'), 'Guasto');
+      await tester.pump();
+
+      expect(registry.active?.id, 'diagnosi');
     });
   });
 }
