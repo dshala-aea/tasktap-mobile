@@ -634,38 +634,103 @@ void main() {
     //
     // The queue refused a queued ticket over a reference that no longer resolves and held it out of
     // the retry sweeps. The wizard is where it gets fixed — and the one thing it must never do is
-    // create anything: a second pending row beside the rejected one, or a PUT for a ticket the
-    // server has never heard of.
-    testWidgets(
-      'a repair writes back onto the rejected row — it never creates a second ticket',
-      (tester) async {
-        await db
-            .into(db.pendingTickets)
-            .insert(
-              PendingTicketsCompanion.insert(
-                id: 'pt-repair',
-                createdAt: DateTime.utc(2026, 6, 1),
-                title: 'Perdita idrica',
-                customerId: 'cust-gone',
-                locationId: 'loc-1',
-                statusId: 1,
-                typeId: 1,
-                state: const Value('failed'),
-                error: const Value(
-                  'Non trovato sul server. Potrebbe essere stato eliminato.',
-                ),
-                repairableField: const Value('customerId'),
+    // create a second LOCAL row or take the `PUT` route for a server ticket that has never existed.
+    // Online it DOES send the corrected ticket, from here: that send was the missing half, and the
+    // online test below is what pins it.
+    Future<PendingTicket> seedRepairRow() async {
+      await db
+          .into(db.pendingTickets)
+          .insert(
+            PendingTicketsCompanion.insert(
+              id: 'pt-repair',
+              createdAt: DateTime.utc(2026, 6, 1),
+              title: 'Perdita idrica',
+              customerId: 'cust-gone',
+              locationId: 'loc-1',
+              statusId: 1,
+              typeId: 1,
+              state: const Value('failed'),
+              error: const Value(
+                'Non trovato sul server. Potrebbe essere stato eliminato.',
               ),
-            );
-        final rejected = await db.select(db.pendingTickets).getSingle();
+              repairableField: const Value('customerId'),
+            ),
+          );
+      return db.select(db.pendingTickets).getSingle();
+    }
+
+    /// Walks the seeded repair to the "Salva correzione" tap. The one thing every repair shares,
+    /// online or offline, is the wizard journey; only what happens at the save differs.
+    Future<void> walkRepairToSave(WidgetTester tester) async {
+      // Step 1: the Cliente field is empty — that is the field the server refused — and the notice
+      // above it says as much.
+      expect(find.text('Correggi ticket'), findsOneWidget);
+      expect(
+        find.text('Il riferimento non è più valido: scegline un altro'),
+        findsOneWidget,
+      );
+
+      // Re-pick a live customer. The sede the row carried survives the seeding, so step 1 is valid
+      // again the moment the customer is (the wizard clears the references scoped to the old one).
+      await tester.tap(find.byKey(const ValueKey('cliente-null')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Acme Srl').last);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
+            .onPressed,
+        isNotNull,
+        reason:
+            'only the blamed reference was dropped — step 1 is valid again',
+      );
+
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+
+      // Step 2 arrived with the ticket's own title and type — nothing was retyped.
+      expect(find.text('Perdita idrica'), findsOneWidget);
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.widgetWithText(AppButton, 'Salva correzione'),
+        300,
+      );
+      tester
+          .widget<AppButton>(
+            find.widgetWithText(AppButton, 'Salva correzione'),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'a repair writes the correction back onto the rejected row and sends it — one row, no PUT',
+      (tester) async {
+        final rejected = await seedRepairRow();
+
+        // The corrected ticket is accepted this time.
+        when(
+          () => mockDio.post<Map<String, dynamic>>(
+            '/api/tickets',
+            data: any(named: 'data'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<Map<String, dynamic>>(
+            data: {'id': 'server-ticket-1'},
+            statusCode: 200,
+            requestOptions: RequestOptions(path: '/api/tickets'),
+          ),
+        );
 
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
               appDatabaseProvider.overrideWithValue(db),
               dioProvider.overrideWithValue(mockDio),
-              // Online on purpose: if the save took the create path it would POST, and `verifyNever`
-              // below is what says it did not.
               isOnlineProvider.overrideWithValue(true),
             ],
             child: MaterialApp(home: NewTicketFormScreen(repairRow: rejected)),
@@ -673,51 +738,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Step 1: the Cliente field is empty — that is the field the server refused — and the notice
-        // above it says as much.
-        expect(find.text('Correggi ticket'), findsOneWidget);
-        expect(
-          find.text('Il riferimento non è più valido: scegline un altro'),
-          findsOneWidget,
-        );
+        await walkRepairToSave(tester);
 
-        // Re-pick a live customer. The sede the row carried survives the seeding, so step 1 is valid
-        // again the moment the customer is (the wizard clears the references scoped to the old one).
-        await tester.tap(find.byKey(const ValueKey('cliente-null')));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Acme Srl').last);
-        await tester.pumpAndSettle();
-        expect(
-          tester
-              .widget<AppButton>(find.widgetWithText(AppButton, 'Avanti'))
-              .onPressed,
-          isNotNull,
-          reason:
-              'only the blamed reference was dropped — step 1 is valid again',
-        );
-
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-
-        // Step 2 arrived with the ticket's own title and type — nothing was retyped.
-        expect(find.text('Perdita idrica'), findsOneWidget);
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Avanti'));
-        await tester.pumpAndSettle();
-
-        await tester.scrollUntilVisible(
-          find.widgetWithText(AppButton, 'Salva correzione'),
-          300,
-        );
-        tester
-            .widget<AppButton>(
-              find.widgetWithText(AppButton, 'Salva correzione'),
-            )
-            .onPressed!();
-        await tester.pumpAndSettle();
-
-        // One row, the same row.
+        // One row, the same row — the repair UPDATEd it, it did not insert beside it.
         final rows = await db.select(db.pendingTickets).get();
         expect(rows, hasLength(1), reason: 'a repair is not a second ticket');
         expect(rows.single.id, 'pt-repair');
@@ -727,16 +750,27 @@ void main() {
           reason: 'the corrected reference was written back',
         );
         expect(rows.single.repairableField, isNull);
-        // Still `failed` — the last send did fail, and nothing was sent from here to change that.
-        expect(rows.single.state, 'failed');
-
-        // No request of any kind left the device.
-        verifyNever(
-          () => mockDio.post<Map<String, dynamic>>(
-            any(),
-            data: any(named: 'data'),
-          ),
+        expect(
+          rows.single.state,
+          'submitted',
+          reason: 'online, the repair sends the ticket now — the toast is not an empty promise',
         );
+
+        // Exactly one create, carrying the CORRECTED payload and the row's own id as the dedup key.
+        // The old `verifyNever(post)` sat here and is precisely what locked the bug in: it asserted
+        // the ticket was never sent, which is the defect, not the contract.
+        final posted =
+            verify(
+                  () => mockDio.post<Map<String, dynamic>>(
+                    '/api/tickets',
+                    data: captureAny(named: 'data'),
+                  ),
+                ).captured.single
+                as Map;
+        expect(posted['customerId'], 'cust-1');
+        expect(posted['clientId'], 'pt-repair');
+
+        // A PUT would reach for a server ticket that has never existed.
         verifyNever(
           () => mockDio.put<Map<String, dynamic>>(
             any(),
@@ -744,7 +778,53 @@ void main() {
           ),
         );
 
-        expect(find.textContaining('Correzione salvata'), findsOneWidget);
+        expect(find.textContaining('Ticket creato con successo'), findsOneWidget);
+        await flushSnackBarTimer(tester);
+      },
+    );
+
+    testWidgets(
+      'a repair made offline is queued, not sent — and promises the automatic send',
+      (tester) async {
+        final rejected = await seedRepairRow();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              appDatabaseProvider.overrideWithValue(db),
+              dioProvider.overrideWithValue(mockDio),
+              isOnlineProvider.overrideWithValue(false),
+            ],
+            child: MaterialApp(home: NewTicketFormScreen(repairRow: rejected)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await walkRepairToSave(tester);
+
+        // Nothing left the device.
+        verifyNever(
+          () => mockDio.post<Map<String, dynamic>>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
+
+        final rows = await db.select(db.pendingTickets).get();
+        expect(rows, hasLength(1), reason: 'a repair is not a second ticket');
+        expect(rows.single.id, 'pt-repair');
+        expect(rows.single.customerId, 'cust-1');
+        expect(rows.single.repairableField, isNull);
+        expect(
+          rows.single.state,
+          'pendingSync',
+          reason: 'a never-sent correction is queued for the reconnect, not left showing the 404',
+        );
+
+        expect(
+          find.textContaining('verrà inviato automaticamente'),
+          findsOneWidget,
+        );
         await flushSnackBarTimer(tester);
       },
     );
