@@ -126,18 +126,44 @@ void main() {
   /// swallowed rather than asserted on. What must not happen is *no request at
   /// all*: a method that returns early leaves `last` null, and a silently
   /// uncovered route is exactly what this file exists to prevent.
-  Future<Sent> capture(Future<void> Function() call) async {
+  ///
+  /// [expect] is an optional extra assertion over the captured body, for a case whose whole point
+  /// is a key that must **not** be sent: the subset check below can only flag keys a schema
+  /// declares, so a key that was removed from the client is invisible to it.
+  ///
+  /// (`fail` stands in for the top-level `expect` on the missing-request guard: naming the
+  /// parameter `expect` would otherwise shadow it inside this function.)
+  Future<Sent> capture(
+    Future<void> Function() call, {
+    void Function(Map<String, dynamic> body)? expect,
+  }) async {
     try {
       await call();
     } catch (_) {
       // Expected: the adapter never answers.
     }
     final options = adapter.last;
-    expect(options, isNotNull, reason: 'the method returned without issuing a request');
+    if (options == null) {
+      fail('the method returned without issuing a request');
+    }
+    final body = options.data is Map<String, dynamic>
+        ? options.data as Map<String, dynamic>
+        : null;
+    // A supplied `expect` must actually run. `expect != null && body != null` would silently pass
+    // when a guard was pinned on a method that sends no JSON body — green without asserting.
+    if (expect != null) {
+      if (body == null) {
+        fail(
+          'an expect callback was supplied but the request carried no JSON body, so the guard '
+          'never ran',
+        );
+      }
+      expect(body);
+    }
     return Sent(
-      method: options!.method.toUpperCase(),
+      method: options.method.toUpperCase(),
       path: options.path,
-      body: options.data is Map<String, dynamic> ? options.data as Map<String, dynamic> : null,
+      body: body,
       query: options.queryParameters,
     );
   }
@@ -626,7 +652,8 @@ void main() {
           activityDate: DateTime.utc(2026, 8, 20),
           timeStartMinutes: 480,
           timeEndMinutes: 720,
-          userId: _id(22),
+          technicianIds: [_id(22), _id(23)],
+          leadUserId: _id(23),
           statusId: 1,
           locationId: _id(23),
         ),
@@ -638,15 +665,15 @@ void main() {
       return capture(() => client.updateSchedule(_id(24), statusId: 2));
     });
 
+    // The clearing case, and the reason the sentinel GUID is gone: a list can say "empty" directly,
+    // where a scalar could only say it by sending an id that belongs to nothing.
     contractTest('schedule update with assignment fields matches the server', () {
       final client = AdminApiClient(dio);
       return capture(
         () => client.updateSchedule(
           _id(24),
-          userId: AdminApiClient.emptyAssignmentId,
-          teamLeadId: _id(39),
-          staffIds: '["${_id(40)}"]',
-          squadraId: AdminApiClient.emptyAssignmentId,
+          technicianIds: const [],
+          squadraId: _id(43),
           force: true,
         ),
       );
@@ -659,9 +686,56 @@ void main() {
           activityDate: DateTime.utc(2026, 8, 20),
           timeStartMinutes: 480,
           timeEndMinutes: 720,
-          userId: _id(41),
+          technicianIds: [_id(41)],
           excludeScheduleId: _id(42),
         ),
+      );
+    });
+
+    // The subset check cannot see a *removed* key — it only flags keys the schema does not declare,
+    // so a client that kept sending `userId` would pass every case above. And the snapshot still
+    // declares the legacy `staffIds`, so the subset check cannot catch its reintroduction at all.
+    // This is the guard against those silent failures: ADR-0022 retired the scalar assignee fields,
+    // and none of the three schedule writes may send them again.
+    void expectNoRetiredAssigneeScalars(Map<String, dynamic> body) {
+      expect(body.containsKey('userId'), isFalse, reason: 'userId was retired by ADR-0022');
+      expect(body.containsKey('teamLeadId'), isFalse, reason: 'ADR-0022 retired teamLeadId');
+      expect(body.containsKey('staffIds'), isFalse, reason: 'ADR-0022 retired staffIds');
+    }
+
+    contractTest('no schedule create sends the retired scalar assignee fields', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.createSchedule(
+          activityDate: DateTime.utc(2026, 8, 20),
+          timeStartMinutes: 480,
+          timeEndMinutes: 720,
+          technicianIds: [_id(44)],
+          statusId: 1,
+          locationId: _id(23),
+        ),
+        expect: expectNoRetiredAssigneeScalars,
+      );
+    });
+
+    contractTest('no schedule update sends the retired scalar assignee fields', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.updateSchedule(_id(24), technicianIds: [_id(44)], leadUserId: _id(44)),
+        expect: expectNoRetiredAssigneeScalars,
+      );
+    });
+
+    contractTest('no schedule conflict check sends the retired scalar assignee fields', () {
+      final client = AdminApiClient(dio);
+      return capture(
+        () => client.checkScheduleConflicts(
+          activityDate: DateTime.utc(2026, 8, 20),
+          timeStartMinutes: 480,
+          timeEndMinutes: 720,
+          technicianIds: [_id(45)],
+        ),
+        expect: expectNoRetiredAssigneeScalars,
       );
     });
 
