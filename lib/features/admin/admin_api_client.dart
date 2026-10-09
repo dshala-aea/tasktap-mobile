@@ -463,18 +463,19 @@ class AdminApiClient {
     required DateTime activityDate,
     required int timeStartMinutes,
     required int timeEndMinutes,
-    // Optional, matching backend `CreateScheduleRequest.UserId` (ADR-0009): a schedule can be
-    // assigned to a squadra and to no individual, and requiring this here made a team-only
-    // schedule impossible to create from mobile.
-    String? userId,
+    /// Everyone directly assigned (ADR-0022 §1). Replaces the scalar `userId`. Null is "this
+    /// request says nothing about direct assignment" (leave it alone); an empty list is "clear
+    /// it" — which is why the all-zeros-GUID sentinel is gone, a list can say it directly.
+    List<String>? technicianIds,
+
+    /// Which of [technicianIds] compiles the rapportino. Null when there is exactly one.
+    String? leadUserId,
     required int statusId,
     required String locationId,
     String? ticketId,
     bool allDay = false,
     String? title,
     String? description,
-    String? teamLeadId,
-    String? staffIds,
     String? squadraId,
 
     /// Sent as `?force=true` when the caller already showed the admin a conflict list (from
@@ -492,7 +493,8 @@ class AdminApiClient {
             '${(timeStartMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeStartMinutes % 60).toString().padLeft(2, '0')}:00',
         'timeEnd':
             '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
-        'userId': ?userId,
+        'technicianIds': ?technicianIds,
+        'leadUserId': ?leadUserId,
         'statusId': statusId,
         'locationId': locationId,
         'ticketId': ?ticketId,
@@ -500,40 +502,39 @@ class AdminApiClient {
         if (title != null && title.isNotEmpty) 'title': title,
         if (description != null && description.isNotEmpty)
           'description': description,
-        'teamLeadId': ?teamLeadId,
-        'staffIds': ?staffIds,
         'squadraId': ?squadraId,
       },
     );
     return res.data!['id'] as String;
   }
 
-  /// Updates a schedule, including its assignment (`teamLeadId`/`staffIds`/`squadraId`) — this used
-  /// to only cover the five scalar fields, which meant an admin could never re-assign an existing
-  /// schedule from mobile even though `UpdateScheduleRequest` (`SchedulesController.cs`) has always
-  /// accepted these.
+  /// Updates a schedule, including its assignment (`technicianIds`/`leadUserId`/`squadraId`) — this
+  /// used to only cover the five scalar fields, which meant an admin could never re-assign an
+  /// existing schedule from mobile even though `UpdateScheduleRequest` (`SchedulesController.cs`)
+  /// has always accepted these.
   ///
-  /// To actually *change* which assignment kind a schedule has (e.g. individual → squadra), the
-  /// caller must explicitly clear the sources being replaced by passing the all-zeros GUID
-  /// (`00000000-0000-0000-0000-000000000000`) for `userId`/`teamLeadId`/`squadraId`, or `"[]"` for
-  /// `staffIds` — omitting a field here means "untouched" server-side
-  /// (`ScheduleAssignmentWriter.ApplyAsync`: "only sources the input speaks about are reconciled"),
-  /// and a JSON `null` binds identically to an absent key, so there is no other way to say "no
-  /// longer this". `AdminScheduleFormScreen._save` does this when switching assignment type.
+  /// The direct set is cleared with an **empty list** (`technicianIds: []`): a request that names
+  /// the list is speaking about direct assignment, and an empty one says "none" — which is why the
+  /// all-zeros-GUID sentinel is dead for it. Only `squadraId` still needs that sentinel
+  /// ([emptyAssignmentId]): an absent squadra id does not mention the Team source at all, so it
+  /// cannot remove one already stored, and there is no list to say "empty" for it. Omitting any
+  /// field here means "untouched" server-side (`ScheduleAssignmentWriter.ApplyAsync`: "only sources
+  /// the input speaks about are reconciled"), and a JSON `null` binds identically to an absent key,
+  /// so there is no other way to say "no longer this".
+  /// `AdminScheduleFormScreen._submit` does this when switching assignment type.
   Future<void> updateSchedule(
     String id, {
     DateTime? activityDate,
     int? timeStartMinutes,
     int? timeEndMinutes,
-    String? userId,
+    List<String>? technicianIds,
+    String? leadUserId,
     int? statusId,
     String? locationId,
     String? ticketId,
     bool? allDay,
     String? title,
     String? description,
-    String? teamLeadId,
-    String? staffIds,
     String? squadraId,
 
     /// See [createSchedule]'s `force`.
@@ -551,45 +552,49 @@ class AdminApiClient {
         if (timeEndMinutes != null)
           'timeEnd':
               '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
-        'userId': ?userId,
+        'technicianIds': ?technicianIds,
+        'leadUserId': ?leadUserId,
         'statusId': ?statusId,
         'locationId': ?locationId,
         'ticketId': ?ticketId,
         'allDay': ?allDay,
         'title': ?title,
         'description': ?description,
-        'teamLeadId': ?teamLeadId,
-        'staffIds': ?staffIds,
         'squadraId': ?squadraId,
       },
     );
   }
 
-  /// Live schedule detail — `GET /api/schedules/{id}` (`SchedulesController.GetById`). Unlike the
-  /// Drift mirror (`Schedule` row + `ScheduleAssignees`, synced from the sparser sync payload),
-  /// this resolves `teamLeadId`/`squadraId`/`squadraNome`, which nothing on-device carries. Used to
-  /// prefill the assignment picker when opening the edit form — offline, the form falls back to
-  /// what the mirror knows (direct/team, no squadra id) rather than blocking entirely.
+  /// Live schedule detail — `GET /api/schedules/{id}` (`SchedulesController.GetById`). Carries the
+  /// `assignees[]` rows (each flagged `isDirect`/`isLead`/`isTeam`/`isLegacyStaff`) plus `squadraId` /
+  /// `squadraNome`, which nothing on-device carries. Used to prefill the assignment picker when
+  /// opening the edit form: the form rebuilds the Direct set and its designated lead from the flags.
+  /// Offline, the form falls back to the Drift mirror (`Schedule` row + `ScheduleAssignees`, whose
+  /// rows carry the same flags but no squadra id) rather than blocking entirely.
   Future<Map<String, dynamic>?> fetchScheduleDetail(String id) async {
     final res = await _dio.get<Map<String, dynamic>>('/api/schedules/$id');
     return res.data;
   }
 
-  /// The all-zeros GUID `updateSchedule` needs to *explicitly* clear an assignment field — see
-  /// that method's doc comment for why an omitted/null field cannot do this.
+  /// The all-zeros GUID `updateSchedule` needs to *explicitly* clear `squadraId` — see that
+  /// method's doc comment for why an omitted/null field cannot do this. The direct set needs no
+  /// sentinel: `technicianIds: []` says "clear it" directly.
   static const String emptyAssignmentId =
       '00000000-0000-0000-0000-000000000000';
 
   /// Pre-flight conflict check, mirroring `POST /api/schedules/check-conflicts`
-  /// (`SchedulesController.CheckConflicts`). Returns every schedule the given user/squadra is
-  /// already explicitly booked on for the same day with an overlapping time (or either is
+  /// (`SchedulesController.CheckConflicts`). Returns every schedule the given technicians/squadra
+  /// are already explicitly booked on for the same day with an overlapping time (or either is
   /// `allDay`). An empty list means it is safe to save without `force`.
+  ///
+  /// [technicianIds] is the whole set the form is about to submit (ADR-0022 §1 replaced the scalar
+  /// `userId`), so the dialog shows every booked colleague rather than one.
   Future<List<ScheduleConflict>> checkScheduleConflicts({
     required DateTime activityDate,
     required int timeStartMinutes,
     required int timeEndMinutes,
     bool allDay = false,
-    String? userId,
+    List<String>? technicianIds,
     String? squadraId,
     String? excludeScheduleId,
   }) async {
@@ -602,7 +607,7 @@ class AdminApiClient {
         'timeEnd':
             '${(timeEndMinutes ~/ 60).toString().padLeft(2, '0')}:${(timeEndMinutes % 60).toString().padLeft(2, '0')}:00',
         'allDay': allDay,
-        'userId': ?userId,
+        'technicianIds': ?technicianIds,
         'squadraId': ?squadraId,
         'excludeScheduleId': ?excludeScheduleId,
       },

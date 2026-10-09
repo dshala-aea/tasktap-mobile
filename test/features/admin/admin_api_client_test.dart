@@ -78,7 +78,7 @@ void main() {
         activityDate: DateTime(2026, 8, 24),
         timeStartMinutes: 480,
         timeEndMinutes: 600,
-        userId: 'u1',
+        technicianIds: const ['u1'],
         statusId: 1,
         locationId: 'loc-1',
       );
