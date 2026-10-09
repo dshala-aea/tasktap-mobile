@@ -22093,13 +22093,16 @@
             "pattern": "^-?(\\d\u002B\\.)?\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,7})?$",
             "type": "string"
           },
-          "userId": {
+          "technicianIds": {
             "type": [
               "null",
-              "string"
+              "array"
             ],
-            "description": "The individually assigned technician. Optional, and it has to be: ADR-0009 made assignment\na set of rows precisely so a schedule could name a squadra and no individual, which\nGuid? ScheduleConflictDto.UserId has been nullable for ever since. Requiring it here\ncontradicted that and made a team-only schedule impossible to express.",
-            "format": "uuid"
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Everyone directly assigned to the activity, each becoming one Source = Direct row\n(ADR-0022 \u00A71). Replaces the scalar \u0060userId\u0060, which could name at most one \u2014 the only\nroute to a second technician was \u0060staffIds\u0060, and that strips them of report rights.\n\nNull means \u0022this request does not speak about direct assignment\u0022 (leave it alone on\nupdate); \u0060[]\u0060 means \u0022clear it\u0022. Replaces \u0060userId\u0060."
           },
           "statusId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -22138,11 +22141,12 @@
               "string"
             ]
           },
-          "teamLeadId": {
+          "leadUserId": {
             "type": [
               "null",
               "string"
             ],
+            "description": "Which of List\u0026lt;Guid\u0026gt;? CreateScheduleRequest.TechnicianIds compiles the rapportino \u2014 the one row carrying\nRole = Lead. Required once there are two or more technicians and, when supplied, required\nto be one of them: ADR-0022 \u00A74 rejects a request that removes the lead rather than\nresolving it. Replaces \u0060teamLeadId\u0060.",
             "format": "uuid"
           },
           "staffIds": {
@@ -28325,6 +28329,23 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "leadUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "directUserIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -28347,12 +28368,15 @@
           "allDay": {
             "type": "boolean"
           },
-          "userId": {
+          "technicianIds": {
             "type": [
               "null",
-              "string"
+              "array"
             ],
-            "format": "uuid"
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           },
           "squadraId": {
             "type": [
@@ -33254,13 +33278,6 @@
               "string"
             ]
           },
-          "userId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "statusId": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -33295,13 +33312,6 @@
               "string"
             ]
           },
-          "teamLeadId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "staffIds": {
             "type": [
               "null",
@@ -33313,6 +33323,25 @@
               "null",
               "string"
             ],
+            "format": "uuid"
+          },
+          "technicianIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Everyone directly assigned. Null means \u0022not provided in this update\u0022 \u2014 leave the stored\ndirect assignees alone; \u0060[]\u0060 means \u0022clear them\u0022. See\nList\u0026lt;Guid\u0026gt;? CreateScheduleRequest.TechnicianIds."
+          },
+          "leadUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Which of List\u0026lt;Guid\u0026gt;? UpdateScheduleRequest.TechnicianIds leads. See\nGuid? CreateScheduleRequest.LeadUserId.",
             "format": "uuid"
           },
           "intervalDays": {

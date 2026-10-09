@@ -1,6 +1,5 @@
 // dart format width=100
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -23,14 +22,15 @@ import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 import 'package:tasktap_mobile/core/theme/app_text_styles.dart';
 
 /// Who a schedule is assigned to — the three assignment kinds this form offers, matching the
-/// backend's own model (ADR-0009: `Direct`, `TeamLead`(+legacy `StaffIds`), `Squadra`). Legacy
-/// staff-only assignment (no lead) is deliberately not a fourth tab: `ScheduleAssignmentDerivation`
-/// treats a lead as the natural anchor for a staff list, and offering a leaderless staff group as
-/// its own primary choice would just be a worse version of [capoSquadra].
+/// backend's model since ADR-0022: `Direct` (§1 — one or more technicians, exactly one of whom may
+/// be the report's author) and `Team` (`Squadra`). Legacy staff-only assignment is deliberately not
+/// a fourth tab: a staff participant was exactly what ADR-0022 retired (§Context — they could not
+/// write the report), and a leaderless group would just be a worse version of [capoSquadra].
 enum AssignmentType { tecnico, capoSquadra, squadra }
 
-/// Admin schedule form — create or edit, with a real assignment picker (individual technician,
-/// team lead + staff, or squadra) and a pre-save conflict check.
+/// Admin schedule form — create or edit, with a real assignment picker (a single technician, a
+/// shared job of co-equal technicians with one designated to compile the rapportino, or a squadra)
+/// and a pre-save conflict check.
 class AdminScheduleFormScreen extends ConsumerStatefulWidget {
   const AdminScheduleFormScreen({super.key, this.scheduleId});
 
@@ -95,11 +95,16 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
 
   /// Resolves the current assignment for edit mode.
   ///
-  /// Tries the live detail endpoint first — it is the only source that carries `teamLeadId` and
-  /// `squadraId` (see [AdminApiClient.fetchScheduleDetail]'s doc comment). Offline, or on any
-  /// failure, falls back to the local `ScheduleAssignees` mirror: it can still say "direct" vs
-  /// "team", just not which squadra, so the squadra tab stays disabled in that case rather than
-  /// preselect a team the admin cannot see the name of.
+  /// The assignment is rebuilt from the `assignees[]` rows — the **Direct** set and the one row
+  /// carrying `isLead` — never from the retired scalar `userId`/`teamLeadId` or the legacy
+  /// `isLegacyStaff` blur. Since ADR-0022 §1 every technician, the report's author included, is a
+  /// Direct row, and the Direct set is exactly what [_submit] writes back; reading anything else
+  /// opened a shared job with only its lead and silently dropped the colleagues on save.
+  ///
+  /// Tries the live detail endpoint first ([AdminApiClient.fetchScheduleDetail]), which also carries
+  /// `squadraId`. Offline, or on any failure, falls back to the local `ScheduleAssignees` mirror: it
+  /// carries the same direct/lead/team flags, just not the squadra's id, so the squadra tab stays
+  /// disabled in that case rather than preselect a team the admin cannot see the name of.
   Future<void> _loadAssignment() async {
     setState(() => _isLoadingAssignment = true);
     try {
@@ -107,29 +112,39 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
       final detail = await api.fetchScheduleDetail(widget.scheduleId!);
       if (detail == null || !mounted) return;
 
-      final userId = detail['userId'] as String?;
-      final teamLeadId = detail['teamLeadId'] as String?;
       final squadraId = detail['squadraId'] as String?;
       final assignees = (detail['assignees'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
-      final legacyStaff = assignees
-          .where((a) => a['isLegacyStaff'] == true)
+      final directIds = assignees
+          .where((a) => a['isDirect'] == true)
           .map((a) => a['userId'] as String)
-          .toSet();
+          .toList();
+      final leadId = assignees
+          .where((a) => a['isLead'] == true)
+          .map((a) => a['userId'] as String)
+          .firstOrNull;
 
       setState(() {
         _assignmentLoadedLive = true;
         if (squadraId != null) {
           _assignmentType = AssignmentType.squadra;
           _selectedSquadraId = squadraId;
-        } else if (teamLeadId != null) {
+        } else if (directIds.length >= 2) {
+          // Two or more Direct rows: a shared job. Its lead is whoever carries `isLead`; when that
+          // flag is missing (data that violates ADR-0022 §4) the selection is left blank and
+          // [_assignmentLeadErrorMessage] asks the office — this form never picks a lead for them.
           _assignmentType = AssignmentType.capoSquadra;
-          _selectedTeamLeadId = teamLeadId;
+          _selectedTeamLeadId = leadId;
           _selectedStaffIds
             ..clear()
-            ..addAll(legacyStaff);
-        } else if (userId != null) {
+            ..addAll(directIds.where((id) => id != leadId));
+        } else if (directIds.isNotEmpty) {
+          // A lone Direct technician: the server promotes them to `Role = Lead` (ADR-0022 §3), so
+          // `teamLeadId` comes back non-null, but the job is still a one-person `tecnico` assignment.
+          // Round-tripping through this tab is stable (the server re-promotes); opening the
+          // "Capo squadra" tab instead would misdescribe the job — and send a `leadUserId` it should
+          // not.
           _assignmentType = AssignmentType.tecnico;
-          _selectedUserId = userId;
+          _selectedUserId = directIds.first;
         }
       });
     } catch (_) {
@@ -140,14 +155,22 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         db.scheduleAssignees,
       )..where((a) => a.scheduleId.equals(widget.scheduleId!))).get();
       if (!mounted) return;
-      final direct = assignees.where((a) => a.isDirect).firstOrNull;
+      // Same reconstruction as the live branch, from the mirror's identical direct/lead/team flags.
+      final directIds = assignees.where((a) => a.isDirect).map((a) => a.userId).toList();
+      final leadId = assignees.where((a) => a.isLead).map((a) => a.userId).firstOrNull;
       final isTeam = assignees.any((a) => a.isTeam);
       setState(() {
         if (isTeam) {
           _assignmentType = AssignmentType.squadra; // id unknown — tab stays disabled below
-        } else if (direct != null) {
+        } else if (directIds.length >= 2) {
+          _assignmentType = AssignmentType.capoSquadra;
+          _selectedTeamLeadId = leadId;
+          _selectedStaffIds
+            ..clear()
+            ..addAll(directIds.where((id) => id != leadId));
+        } else if (directIds.isNotEmpty) {
           _assignmentType = AssignmentType.tecnico;
-          _selectedUserId = direct.userId;
+          _selectedUserId = directIds.first;
         }
       });
     } finally {
@@ -201,20 +224,64 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
     AssignmentType.squadra => 'Seleziona una squadra',
   };
 
-  /// The `userId`/`squadraId` [AdminApiClient.checkScheduleConflicts] should test — only `Direct`
-  /// and `Team` sources are ever flagged as conflicts server-side (see
-  /// `SchedulesController.FindConflictsAsync`'s remarks: a lead or legacy-staff booking elsewhere
-  /// has never been a conflict), so a `capoSquadra` assignment has nothing to check yet.
-  (String? userId, String? squadraId) get _conflictCheckTargets => switch (_assignmentType) {
-    AssignmentType.tecnico => (_selectedUserId, null),
-    AssignmentType.capoSquadra => (null, null),
-    AssignmentType.squadra => (null, _selectedSquadraId),
+  /// Everyone the active assignment tab directly assigns, in the order the wire wants them — the
+  /// lead first for a capoSquadra. Single source of the list, shared by [_submit] and the
+  /// pre-flight so the two can never name different people.
+  List<String> get _technicianIds => switch (_assignmentType) {
+    AssignmentType.tecnico => _selectedUserId == null ? <String>[] : [_selectedUserId!],
+    AssignmentType.capoSquadra => [
+      if (_selectedTeamLeadId != null) _selectedTeamLeadId!,
+      ..._selectedStaffIds.where((id) => id != _selectedTeamLeadId),
+    ],
+    // A squadra assigns no individuals directly. On edit this list is sent (empty) to clear any
+    // directly-assigned technicians the schedule used to carry; on create it is omitted entirely.
+    AssignmentType.squadra => const <String>[],
   };
+
+  /// Which of [_technicianIds] compiles the rapportino. Only a capoSquadra names one; a lone
+  /// technician is promoted to lead server-side (ADR-0022 §3).
+  String? get _leadUserId =>
+      _assignmentType == AssignmentType.capoSquadra ? _selectedTeamLeadId : null;
+
+  /// Mirrors the server's ADR-0022 §4 rule before the round trip (`SchedulesController`'s
+  /// create/update guards): a capoSquadra assignment with two or more people must name a lead who
+  /// is one of them — a removed lead is rejected, never silently resolved. The picker already
+  /// requires a lead, so this keeps that promise should the picker ever change.
+  bool get _assignmentLeadIsCoherent {
+    if (_assignmentType != AssignmentType.capoSquadra) return true;
+    final selected = <String>{
+      if (_selectedTeamLeadId != null) _selectedTeamLeadId!,
+      ..._selectedStaffIds,
+    };
+    if (selected.length >= 2 && _selectedTeamLeadId == null) return false;
+    if (_selectedTeamLeadId != null && !selected.contains(_selectedTeamLeadId)) return false;
+    return true;
+  }
+
+  String get _assignmentLeadErrorMessage => _selectedTeamLeadId == null
+      ? 'Seleziona un capo squadra'
+      : 'Il capo squadra deve essere tra i tecnici selezionati';
+
+  /// The technicians/squadra [AdminApiClient.checkScheduleConflicts] should test. Every assignment
+  /// kind now produces a technician list, so every kind can be pre-flighted — a capoSquadra's lead
+  /// and staff are co-equal direct assignees since ADR-0022 §1, so they are booked as such.
+  (List<String>? technicianIds, String? squadraId) get _conflictCheckTargets =>
+      switch (_assignmentType) {
+        AssignmentType.squadra => (null, _selectedSquadraId),
+        AssignmentType.tecnico || AssignmentType.capoSquadra => (
+          _technicianIds.isEmpty ? null : _technicianIds,
+          null,
+        ),
+      };
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (!_assignmentIsValid) {
       showAppToast(context, message: _assignmentErrorMessage, tone: ToastTone.warning);
+      return;
+    }
+    if (!_assignmentLeadIsCoherent) {
+      showAppToast(context, message: _assignmentLeadErrorMessage, tone: ToastTone.warning);
       return;
     }
     if (_selectedLocationId == null) {
@@ -235,14 +302,14 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
     try {
       final api = ref.read(adminApiClientProvider);
 
-      final (checkUserId, checkSquadraId) = _conflictCheckTargets;
+      final (checkTechnicianIds, checkSquadraId) = _conflictCheckTargets;
       var force = false;
-      if (checkUserId != null || checkSquadraId != null) {
+      if (checkTechnicianIds != null || checkSquadraId != null) {
         final conflicts = await api.checkScheduleConflicts(
           activityDate: _selectedDate,
           timeStartMinutes: _timeOfDayToMinutes(_startTime),
           timeEndMinutes: _timeOfDayToMinutes(_endTime),
-          userId: checkUserId,
+          technicianIds: checkTechnicianIds,
           squadraId: checkSquadraId,
           excludeScheduleId: widget.scheduleId,
         );
@@ -315,22 +382,23 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   }
 
   Future<void> _submit({required AdminApiClient api, required bool force}) async {
-    final empty = AdminApiClient.emptyAssignmentId;
-    // On edit, a field that is not this assignment's own has to be explicitly cleared (the
-    // all-zeros GUID / "[]") rather than omitted — see AdminApiClient.updateSchedule's doc comment
-    // for why omission cannot express "no longer this" once a schedule already has an assignment.
-    final userId = _assignmentType == AssignmentType.tecnico
-        ? _selectedUserId
-        : (_isEditing ? empty : null);
-    final teamLeadId = _assignmentType == AssignmentType.capoSquadra
-        ? _selectedTeamLeadId
-        : (_isEditing ? empty : null);
-    final staffIds = _assignmentType == AssignmentType.capoSquadra
-        ? jsonEncode(_selectedStaffIds.toList())
-        : (_isEditing ? '[]' : null);
+    // One list and one lead, for every assignment kind. capoSquadra used to send its extras as
+    // staffIds — the shape ADR-0022 exists to eliminate, because a staff participant cannot write
+    // the report. They are co-equal technicians now, and the lead still names the author.
+    //
+    // On edit the list is always sent, empty included: an empty list clears the direct set on a
+    // schedule that is now the squadra's, where omitting it would leave the old technicians. On
+    // create a squadra-only schedule omits the field entirely.
+    final List<String>? technicianIds = _assignmentType == AssignmentType.squadra && !_isEditing
+        ? null
+        : _technicianIds;
+
+    // A squadra row is cleared only by naming the all-zeros GUID: an absent squadraId does not
+    // mention the Team source at all, so it cannot remove one already stored (see
+    // AdminApiClient.updateSchedule's doc comment). The direct set needs no such sentinel.
     final squadraId = _assignmentType == AssignmentType.squadra
         ? _selectedSquadraId
-        : (_isEditing ? empty : null);
+        : (_isEditing ? AdminApiClient.emptyAssignmentId : null);
 
     if (_isEditing) {
       await api.updateSchedule(
@@ -338,13 +406,12 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         activityDate: _selectedDate,
         timeStartMinutes: _timeOfDayToMinutes(_startTime),
         timeEndMinutes: _timeOfDayToMinutes(_endTime),
-        userId: userId,
+        technicianIds: technicianIds,
+        leadUserId: _leadUserId,
         locationId: _selectedLocationId,
         ticketId: _selectedTicketId,
         title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
         description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
-        teamLeadId: teamLeadId,
-        staffIds: staffIds,
         squadraId: squadraId,
         force: force,
       );
@@ -353,14 +420,13 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
         activityDate: _selectedDate,
         timeStartMinutes: _timeOfDayToMinutes(_startTime),
         timeEndMinutes: _timeOfDayToMinutes(_endTime),
-        userId: userId,
+        technicianIds: technicianIds,
+        leadUserId: _leadUserId,
         locationId: _selectedLocationId!,
         ticketId: _selectedTicketId,
         statusId: 0,
         title: _titleCtrl.text.trim().isEmpty ? null : _titleCtrl.text.trim(),
         description: _descriptionCtrl.text.trim().isEmpty ? null : _descriptionCtrl.text.trim(),
-        teamLeadId: teamLeadId,
-        staffIds: staffIds,
         squadraId: squadraId,
         force: force,
       );
@@ -632,8 +698,11 @@ class _AssignmentPicker extends ConsumerWidget {
             ),
             if (staffOptions.isNotEmpty) ...[
               const SizedBox(height: 12),
+              // "Altri tecnici", not "Staff aggiuntivo": the people in this picker are co-equal
+              // technicians (they can all write the report — ADR-0022 §Context), not the retired
+              // staff participants who could not. Mirrors the web form's `tecniciLabel` ("Tecnici").
               Text(
-                'Staff aggiuntivo',
+                'Altri tecnici',
                 style: AppTextStyles.labelMedium.copyWith(color: context.colors.inkMuted),
               ),
               const SizedBox(height: 6),

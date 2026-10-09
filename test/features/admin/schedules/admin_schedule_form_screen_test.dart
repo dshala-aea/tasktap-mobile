@@ -9,7 +9,9 @@
 //   - the picker is genuinely in the widget tree, not just accepted by the client method;
 //   - an edit submits assignment fields, explicitly clearing the ones not in use;
 //   - the pre-save conflict check: a clean save proceeds normally, a conflicting save shows the
-//     conflict list and lets the admin force-save, and force-save sends `force=true`.
+//     conflict list and lets the admin force-save, and force-save sends `force=true`;
+//   - the prefill round trip: a live/mirror payload is read back into the same shape `_submit`
+//     writes, so reopening a multi-technician job and saving keeps every technician.
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' hide isNotNull;
@@ -278,7 +280,7 @@ void main() {
   });
 
   group('create — payload shape per assignment type', () {
-    testWidgets('Tecnico sends userId, no teamLeadId/staffIds/squadraId', (tester) async {
+    testWidgets('tecnico with one person sends a one-item list and no lead', (tester) async {
       await openForm(tester);
 
       await selectDropdown(tester, index: 0, optionText: 'Mario Rossi'); // technician
@@ -287,14 +289,18 @@ void main() {
       await tapSubmitButton(tester, 'Crea pianificazione');
 
       final body = lastScheduleCreatePayload();
-      expect(body['userId'], 'tech-1');
+      expect(body['technicianIds'], ['tech-1']);
+      expect(body.containsKey('leadUserId'), isFalse);
+      expect(body.containsKey('userId'), isFalse);
       expect(body.containsKey('teamLeadId'), isFalse);
       expect(body.containsKey('staffIds'), isFalse);
       expect(body.containsKey('squadraId'), isFalse);
       await teardown(tester);
     });
 
-    testWidgets('Capo squadra sends teamLeadId + staffIds, no userId/squadraId', (tester) async {
+    testWidgets('capoSquadra sends every selected person as a technician, with the lead named', (
+      tester,
+    ) async {
       await openForm(tester);
 
       await tester.tap(find.text('Capo squadra'));
@@ -311,14 +317,16 @@ void main() {
       await tapSubmitButton(tester, 'Crea pianificazione');
 
       final body = lastScheduleCreatePayload();
-      expect(body['teamLeadId'], 'tech-1');
-      expect(body['staffIds'], contains('tech-2'));
+      expect(body['technicianIds'], ['tech-1', 'tech-2']);
+      expect(body['leadUserId'], 'tech-1');
       expect(body.containsKey('userId'), isFalse);
+      expect(body.containsKey('teamLeadId'), isFalse);
+      expect(body.containsKey('staffIds'), isFalse);
       expect(body.containsKey('squadraId'), isFalse);
       await teardown(tester);
     });
 
-    testWidgets('Squadra sends squadraId, no userId/teamLeadId', (tester) async {
+    testWidgets('squadra sends squadraId and omits the technician list on create', (tester) async {
       await openForm(tester);
 
       await tester.tap(find.text('Squadra'));
@@ -331,14 +339,17 @@ void main() {
 
       final body = lastScheduleCreatePayload();
       expect(body['squadraId'], 'sq-1');
+      expect(body.containsKey('technicianIds'), isFalse);
+      expect(body.containsKey('leadUserId'), isFalse);
       expect(body.containsKey('userId'), isFalse);
       expect(body.containsKey('teamLeadId'), isFalse);
+      expect(body.containsKey('staffIds'), isFalse);
       await teardown(tester);
     });
   });
 
   group('update — includes assignment fields', () {
-    testWidgets('edit submits userId and explicitly clears the unused assignment sources', (
+    testWidgets('edit submits the technician list and clears the squadra with the sentinel', (
       tester,
     ) async {
       await db
@@ -358,14 +369,17 @@ void main() {
               description: '',
             ),
           );
-      // Offline-safe fallback path: no ScheduleAssignees row and the live detail fetch below both
-      // resolve to "direct, tech-1" — consistent so the test isn't sensitive to which one wins.
+      // The live detail payload rebuilds the assignment from `assignees[]` — a lone Direct
+      // technician, promoted to Role = Lead server-side (ADR-0022 §3) so `teamLeadId` is non-null.
+      // The form must still open on `tecnico` (see the prefill round-trip group below).
       when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-1')).thenAnswer(
         (_) async => _ok({
           'userId': 'tech-1',
-          'teamLeadId': null,
+          'teamLeadId': 'tech-1',
           'squadraId': null,
-          'assignees': <dynamic>[],
+          'assignees': [
+            {'userId': 'tech-1', 'isDirect': true, 'isLead': true},
+          ],
         }, '/api/schedules/sched-1'),
       );
 
@@ -382,10 +396,62 @@ void main() {
       ).captured;
       final body = captured[captured.length - 1] as Map<String, dynamic>;
 
-      expect(body['userId'], 'tech-1');
-      expect(body['teamLeadId'], '00000000-0000-0000-0000-000000000000');
+      // Every selected person is a technician now; the direct set is cleared with `[]` when the
+      // assignment is no longer direct. The squadra has no list to say "empty", so it is still
+      // cleared with the all-zeros GUID — an absent squadraId does not mention the Team source.
+      expect(body['technicianIds'], ['tech-1']);
       expect(body['squadraId'], '00000000-0000-0000-0000-000000000000');
-      expect(body['staffIds'], '[]');
+      expect(body.containsKey('leadUserId'), isFalse);
+      expect(body.containsKey('userId'), isFalse);
+      expect(body.containsKey('teamLeadId'), isFalse);
+      expect(body.containsKey('staffIds'), isFalse);
+      await teardown(tester);
+    });
+
+    testWidgets('squadra clears the technician list instead of the all-zeros GUID', (tester) async {
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: 'sched-3',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              activityDate: DateTime.utc(2026, 6, 21),
+              timeStartMinutes: 480,
+              timeEndMinutes: 600,
+              userId: 'tech-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: 'Squadra',
+              description: '',
+            ),
+          );
+      when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-3')).thenAnswer(
+        (_) async => _ok({
+          'userId': null,
+          'teamLeadId': null,
+          'squadraId': 'sq-1',
+          'assignees': <dynamic>[],
+        }, '/api/schedules/sched-3'),
+      );
+
+      await openForm(tester, scheduleId: 'sched-3');
+
+      await tapSubmitButton(tester, 'Salva modifiche');
+
+      final captured = verify(
+        () => mockDio.put<dynamic>(
+          '/api/schedules/sched-3',
+          queryParameters: captureAny(named: 'queryParameters'),
+          data: captureAny(named: 'data'),
+        ),
+      ).captured;
+      final body = captured[captured.length - 1] as Map<String, dynamic>;
+
+      // A list says "empty" directly, where a scalar could only say it by sending an id that
+      // belongs to nothing — the reason the sentinel is dead for the direct set.
+      expect(body['technicianIds'], isEmpty);
+      expect(body['squadraId'], 'sq-1');
       await teardown(tester);
     });
 
@@ -412,9 +478,11 @@ void main() {
       when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-2')).thenAnswer(
         (_) async => _ok({
           'userId': 'tech-1',
-          'teamLeadId': null,
+          'teamLeadId': 'tech-1',
           'squadraId': null,
-          'assignees': <dynamic>[],
+          'assignees': [
+            {'userId': 'tech-1', 'isDirect': true, 'isLead': true},
+          ],
         }, '/api/schedules/sched-2'),
       );
 
@@ -429,6 +497,150 @@ void main() {
         ),
       );
       expect(find.textContaining('successivo'), findsOneWidget);
+      await teardown(tester);
+    });
+  });
+
+  // Regression group for the defect this round fixed: `_submit` writes co-technicians as Direct
+  // rows, so `_loadAssignment` MUST rebuild the assignment from `assignees[]`'s `isDirect`/`isLead`
+  // flags. Reading the retired scalars (`userId`/`teamLeadId`) or the legacy `isLegacyStaff` rows
+  // opened a shared job with only its lead and an empty extras set, so saving sent
+  // `technicianIds: [lead]` and silently deleted the colleague.
+  group('prefill round trip — the form reads back what it writes', () {
+    Finder fieldLabel(String label) =>
+        find.byWidgetPredicate((w) => w is AppFieldLabel && w.label == label);
+
+    AppChip chipNamed(WidgetTester tester, String name) => tester
+        .widgetList<AppChip>(find.byType(AppChip))
+        .singleWhere((c) => c.label == name);
+
+    Future<void> insertSchedule(String id, {String title = 'Intervento'}) async {
+      await db
+          .into(db.schedules)
+          .insert(
+            SchedulesCompanion.insert(
+              id: id,
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              activityDate: DateTime.utc(2026, 6, 21),
+              timeStartMinutes: 480,
+              timeEndMinutes: 600,
+              userId: 'tech-1',
+              statusId: 1,
+              locationId: 'loc-1',
+              title: title,
+              description: '',
+            ),
+          );
+    }
+
+    Map<String, dynamic> lastUpdateBody(WidgetTester tester, String id) {
+      final captured = verify(
+        () => mockDio.put<dynamic>(
+          '/api/schedules/$id',
+          queryParameters: captureAny(named: 'queryParameters'),
+          data: captureAny(named: 'data'),
+        ),
+      ).captured;
+      return captured[captured.length - 1] as Map<String, dynamic>;
+    }
+
+    testWidgets('a two-Direct live payload opens capoSquadra with both people and saves both', (
+      tester,
+    ) async {
+      await insertSchedule('sched-shared', title: 'Doppio');
+      when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-shared')).thenAnswer(
+        (_) async => _ok({
+          'userId': 'tech-1',
+          'teamLeadId': 'tech-1',
+          'squadraId': null,
+          'assignees': [
+            {'userId': 'tech-1', 'isDirect': true, 'isLead': true},
+            {'userId': 'tech-2', 'isDirect': true, 'isLead': false},
+          ],
+        }, '/api/schedules/sched-shared'),
+      );
+
+      await openForm(tester, scheduleId: 'sched-shared');
+
+      // Opens on the shared-job tab (not `tecnico`), with the lead designated and the colleague
+      // selected — the state that was empty before the fix.
+      expect(fieldLabel('Capo squadra *'), findsOneWidget);
+      expect(fieldLabel('Tecnico *'), findsNothing);
+      expect(chipNamed(tester, 'Luigi Bianchi').active, isTrue);
+
+      await tapSubmitButton(tester, 'Salva modifiche');
+
+      final body = lastUpdateBody(tester, 'sched-shared');
+      // Both technicians survive the edit — the BLOCKER's regression assertion.
+      expect(body['technicianIds'], ['tech-1', 'tech-2']);
+      expect(body['leadUserId'], 'tech-1');
+      await teardown(tester);
+    });
+
+    testWidgets('a single Direct technician opens tecnico and saves no lead', (tester) async {
+      await insertSchedule('sched-lone');
+      // Server promotes a lone technician to Role = Lead (ADR-0022 §3), so `teamLeadId` is non-null.
+      when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-lone')).thenAnswer(
+        (_) async => _ok({
+          'userId': 'tech-1',
+          'teamLeadId': 'tech-1',
+          'squadraId': null,
+          'assignees': [
+            {'userId': 'tech-1', 'isDirect': true, 'isLead': true},
+          ],
+        }, '/api/schedules/sched-lone'),
+      );
+
+      await openForm(tester, scheduleId: 'sched-lone');
+
+      // Rule 3: one Direct technician is a `tecnico` job, however the server reports its lead.
+      expect(fieldLabel('Tecnico *'), findsOneWidget);
+      expect(fieldLabel('Capo squadra *'), findsNothing);
+
+      await tapSubmitButton(tester, 'Salva modifiche');
+
+      final body = lastUpdateBody(tester, 'sched-lone');
+      expect(body['technicianIds'], ['tech-1']);
+      expect(body.containsKey('leadUserId'), isFalse);
+      await teardown(tester);
+    });
+
+    testWidgets('the mirror fallback prefills both technicians from the local assignee rows', (
+      tester,
+    ) async {
+      await insertSchedule('sched-mirror');
+      // The live GET fails transiently → the form falls back to the Drift mirror, which carries the
+      // same Direct/Lead flags and so must reconstruct the set identically.
+      when(() => mockDio.get<Map<String, dynamic>>('/api/schedules/sched-mirror')).thenThrow(
+        DioException(requestOptions: RequestOptions(path: '/api/schedules/sched-mirror')),
+      );
+      await db.into(db.scheduleAssignees).insert(
+        ScheduleAssigneesCompanion.insert(
+          scheduleId: 'sched-mirror',
+          userId: 'tech-1',
+          isDirect: const Value(true),
+          isLead: const Value(true),
+        ),
+      );
+      await db.into(db.scheduleAssignees).insert(
+        ScheduleAssigneesCompanion.insert(
+          scheduleId: 'sched-mirror',
+          userId: 'tech-2',
+          isDirect: const Value(true),
+        ),
+      );
+
+      await openForm(tester, scheduleId: 'sched-mirror');
+
+      expect(fieldLabel('Capo squadra *'), findsOneWidget);
+      expect(chipNamed(tester, 'Luigi Bianchi').active, isTrue);
+
+      await tapSubmitButton(tester, 'Salva modifiche');
+
+      final body = lastUpdateBody(tester, 'sched-mirror');
+      expect(body['technicianIds'], ['tech-1', 'tech-2']);
+      expect(body['leadUserId'], 'tech-1');
       await teardown(tester);
     });
   });
@@ -450,6 +662,35 @@ void main() {
           data: any(named: 'data'),
         ),
       ).called(1);
+      await teardown(tester);
+    });
+
+    // Before this change a capoSquadra assignment was excluded from the pre-flight entirely
+    // (`_conflictCheckTargets` returned `(null, null)` for it), so a lead or staff member already
+    // booked elsewhere was only caught after a 409. Every kind now produces a technician list.
+    testWidgets('capoSquadra pre-flights the whole technician set, not nothing', (tester) async {
+      await openForm(tester);
+
+      await tester.tap(find.text('Capo squadra'));
+      await tester.pumpAndSettle();
+      await selectDropdown(tester, index: 0, optionText: 'Mario Rossi'); // team lead
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Luigi Bianchi')); // staff
+      await tester.pumpAndSettle();
+      await selectDropdown(tester, index: 1, optionText: 'Sede Nord'); // location
+
+      await tapSubmitButton(tester, 'Crea pianificazione');
+
+      final captured = verify(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/schedules/check-conflicts',
+          data: captureAny(named: 'data'),
+        ),
+      ).captured;
+      final data = captured.single as Map<String, dynamic>;
+      expect(data['technicianIds'], ['tech-1', 'tech-2']);
+      expect(data.containsKey('userId'), isFalse);
+      expect(data.containsKey('leadUserId'), isFalse);
       await teardown(tester);
     });
 
