@@ -99,6 +99,52 @@ void main() {
             statusId: 1,
             typeId: 1,
             priority: const Value('Alta'),
+            // The ticket really carries both references — the sync writes them onto this row
+            // (`sync_service.dart`). They used to be left null here, and that was the blind spot
+            // that hid the defect: with no reference on any fixture, edit mode's unseeded
+            // Contratto/Commessa fields were drawn blank in every test and nothing noticed. F1.
+            contractId: const Value('ctr-1'),
+            commessaId: const Value('com-1'),
+          ),
+        );
+
+    // The reference mirror for the ticket's customer, so both pickers have a row to resolve the
+    // seeded ids against — without these, a correct seed still renders nothing and the test would
+    // not be able to tell "seeded but unresolvable" from "not seeded".
+    await db
+        .into(db.contracts)
+        .insert(
+          ContractsCompanion.insert(
+            id: 'ctr-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Contratto Annuale',
+            customerId: 'cust-1',
+            startDate: DateTime.utc(2026, 1, 1),
+          ),
+        );
+    await db
+        .into(db.commesse)
+        .insert(
+          CommesseCompanion.insert(
+            id: 'com-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            codice: 'COM-001',
+            customerId: const Value('cust-1'),
+            descrizione: const Value('Rifacimento bagno'),
+          ),
+        );
+    await db
+        .into(db.prodottiAssistenza)
+        .insert(
+          ProdottiAssistenzaCompanion.insert(
+            id: 'prod-1',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            name: 'Caldaia X20',
+            customerId: 'cust-1',
+            locationId: 'loc-1',
           ),
         );
 
@@ -445,6 +491,160 @@ void main() {
     });
   });
 
+  // F1, from the Phase B whole-phase review: edit mode reuses the create wizard's two steps, which
+  // draw three reference controls this screen's PUT cannot write (Contratto: no `ContractId` on
+  // `UpdateTicketRequest`; Commessa: applied set-only server-side; Prodotti: a full replace with no
+  // authoritative local list to replace from). Before the fix the screen drew Contratto and Commessa
+  // blank on a ticket that had both and sent neither — so a technician could pick a commessa, read
+  // "Ticket aggiornato", and have nothing change.
+  group('EditTicketScreen — references the PUT cannot write (F1)', () {
+    testWidgets("opens with the ticket's real Contratto and Commessa, not blank fields", (
+      tester,
+    ) async {
+      await openEditor(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      // The headline assertion: the record's own references, resolved from the local mirror the
+      // sync wrote. Unseeded, both of these fields render as an empty box on a ticket that has a
+      // contract and a commessa — a lie about the record.
+      expect(find.text('Contratto Annuale'), findsOneWidget);
+      expect(find.text('COM-001'), findsOneWidget);
+
+      // Contratto is drawn read-only here, and says so — a contract change is not persistable from
+      // this screen at all.
+      expect(find.text('Non modificabile in questa schermata.'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('saving sends the commessa on the PUT and keeps it in the local mirror', (
+      tester,
+    ) async {
+      when(
+        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => Response<dynamic>(
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-1'),
+        ),
+      );
+
+      await openEditor(tester);
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+
+      final salva = salvaOrAvantiButton(tester, 'Salva');
+      salva.onPressed!();
+      await tester.pumpAndSettle();
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: captureAny(named: 'data')),
+      ).captured;
+      final sentData = captured.single as Map<String, dynamic>;
+      // The one reference this endpoint can actually move is now in the body — it used to be sent
+      // nowhere, which is what made "Ticket aggiornato" a false statement.
+      expect(sentData['commessaId'], 'com-1');
+      // ...and the one it cannot is not sneaked in as a null (there is no `contractId` on
+      // `UpdateTicketRequest` at all).
+      expect(sentData.containsKey('contractId'), isFalse);
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.commessaId, 'com-1');
+      // The contract the PUT never mentioned is untouched locally too — a mirror may not drop a
+      // value the request said nothing about.
+      expect(row.contractId, 'ctr-1');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('clearing the commessa is refused, says why, and the stored one is still sent', (
+      tester,
+    ) async {
+      when(
+        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data')),
+      ).thenAnswer(
+        (_) async => Response<dynamic>(
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/api/tickets/ticket-1'),
+        ),
+      );
+
+      await openEditor(tester);
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+
+      // The X on the resolved Commessa field — the only gesture that releases a pick. The field's
+      // key carries the epoch a state change bumps (`StepClienteSede._commessaPickerEpoch`) and not
+      // the value it shows, so this is where it starts: epoch 0, with `com-1` on the field.
+      final clearCommessa = find.descendant(
+        of: find.byKey(const ValueKey('commessa-0')),
+        matching: find.byType(IconButton),
+      );
+      expect(find.text('COM-001'), findsOneWidget);
+      expect(clearCommessa, findsOneWidget);
+
+      await tester.tap(clearCommessa);
+      await tester.pump();
+      // Refused out loud: the field is still enabled (picking a commessa is real), so a gesture it
+      // silently ignored would read as the app being broken.
+      expect(find.text('La commessa non può essere rimossa da qui.'), findsOneWidget);
+      // And the refusal does not leave the field empty over the commessa the record still holds: the
+      // epoch re-keyed it, so it is rebuilt from the stored id and the code is back on it.
+      expect(find.text('COM-001'), findsOneWidget);
+
+      // Let the toast expire so it cannot swallow the next tap.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+      final salva = salvaOrAvantiButton(tester, 'Salva');
+      salva.onPressed!();
+      await tester.pumpAndSettle();
+
+      final captured = verify(
+        () => mockDio.put<dynamic>('/api/tickets/ticket-1', data: captureAny(named: 'data')),
+      ).captured;
+      final sentData = captured.single as Map<String, dynamic>;
+      // The refused clear changed nothing: the ticket still goes out with the commessa it had, and
+      // no null is sent (the server is set-only, so a null would be a no-op dressed as a removal).
+      expect(sentData['commessaId'], 'com-1');
+
+      final row = await (db.select(db.tickets)..where((t) => t.id.equals('ticket-1'))).getSingle();
+      expect(row.commessaId, 'com-1');
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('Prodotti assistenza is drawn read-only: no adder, no chip delete, and it says so', (
+      tester,
+    ) async {
+      await openEditor(tester);
+      await tester.tap(find.text('Avanti'));
+      await tester.pumpAndSettle();
+
+      // No drag: the section sits right below Tipo, inside the lazily-built ListView's own build
+      // window. Every assertion below is made against that same tree state — and the caption below
+      // proves the section really is on screen, so the absences are absences here rather than
+      // widgets that were never built (which is what a `findsNothing` on a scrolled-away section
+      // would silently be).
+      expect(find.text('Non modificabile in questa schermata.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('prodotto-adder-0')), findsNothing);
+      expect(find.byKey(const ValueKey('reference-picker-prodotti assistenza')), findsNothing);
+      // Nothing on this screen offers to remove coverage: this PUT replaces the whole list, and
+      // mobile holds no authoritative copy of it to replace with, so a removal here is a deletion
+      // of rows the device never knew about.
+      expect(find.byWidgetPredicate((w) => w is Chip && w.onDeleted != null), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('EditTicketScreen — error handling', () {
     testWidgets('a failed save surfaces the error and keeps the edit in place', (tester) async {
       when(() => mockDio.put<dynamic>('/api/tickets/ticket-1', data: any(named: 'data'))).thenThrow(
@@ -538,9 +738,11 @@ void main() {
                 'closedAt': null,
                 'technicianNotes': null,
                 'internalNotes': null,
-                'contractId': null,
+                // The colleague changed the title, not the references — and this fixture carrying
+                // null here was part of the blind spot that hid F1. See setUp.
+                'contractId': 'ctr-1',
                 'prodottoAssistenzaId': null,
-                'commessaId': null,
+                'commessaId': 'com-1',
               },
             ],
             'ticketStatuses': [],

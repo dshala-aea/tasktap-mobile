@@ -39,6 +39,7 @@ class ReferencePickerField extends StatefulWidget {
     this.hint,
     this.emptyCacheHint = 'Nessun elemento in cache. Cerca per nome.',
     this.enabled = true,
+    this.onCleared,
   });
 
   final String label;
@@ -49,8 +50,20 @@ class ReferencePickerField extends StatefulWidget {
   /// Search then materialise then return. See [ReferenceSearchClient].
   final Future<List<ReferenceOption>> Function(String query) search;
 
-  /// Called with the picked option, or with null when a pick is released by editing the text.
+  /// Called with the picked option, or with null when a pick is released — either by editing the
+  /// text or by emptying the box; see [onCleared] for telling those two apart.
   final ValueChanged<ReferenceOption?> onSelected;
+
+  /// Called when the release above came from *emptying* the box — the field's own X, or a backspace
+  /// that left nothing — rather than from a text edit, and called before [onSelected]'s null for
+  /// that same gesture.
+  ///
+  /// Both gestures arrive at [onSelected] as the same null, and a caller that has to treat them
+  /// differently has nothing else to go on. A caller that *refuses* the clear (a reference its save
+  /// cannot drop) has to be able to tell the release it must undo on screen from the one it must
+  /// leave alone: the text edit is the technician searching for the next pick, and rebuilding the
+  /// field under them would wipe what they are typing.
+  final VoidCallback? onCleared;
 
   final String? selectedId;
   final String? initialText;
@@ -112,7 +125,13 @@ class _ReferencePickerFieldState extends State<ReferencePickerField> {
     // Editing the text releases a pick. Keeping the old id behind new text is how a ticket ends up
     // filed against the wrong contract — the same reason [AppLookupField] drops its own selection
     // the moment its text changes.
-    if (widget.selectedId?.isNotEmpty ?? false) widget.onSelected(null);
+    final released = widget.selectedId?.isNotEmpty ?? false;
+    // An emptied box is the field's own X, not a search on the way to another pick — the one place
+    // the two are told apart, and it is told here because it is only visible here. Reported first so
+    // a caller that refuses the clear has re-keyed the field before the null reaches it — see
+    // [onCleared].
+    if (released && text.trim().isEmpty) widget.onCleared?.call();
+    if (released) widget.onSelected(null);
 
     _debounce?.cancel();
     final query = text.trim();

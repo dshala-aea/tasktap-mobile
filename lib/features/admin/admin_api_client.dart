@@ -633,6 +633,13 @@ class AdminApiClient {
   /// `StepDettagliTicket.showPriority`'s doc comment for why). dueDate/technicianNotes/agentId/tags
   /// added once `StepDettagliTicket` gained UI for them — field-parity gap with web's own ticket
   /// edit form.
+  ///
+  /// [commessaId] is the one reference this endpoint *can* move: `UpdateTicketRequest` carries
+  /// `CommessaId`, and the server applies it set-only (`TicketCommandService.ApplyFields`:
+  /// `if (request.CommessaId.HasValue)`). The null-aware `?` element below is therefore the whole
+  /// contract — a null omits the key, which is "leave it as it is", while an explicit JSON null
+  /// would be the same thing but with nothing left to distinguish a mistake from the intent.
+  /// ContractId has no parameter here at all; see `StepClienteSede.contractEditable`.
   Future<void> updateTicket(
     String id, {
     String? title,
@@ -645,6 +652,7 @@ class AdminApiClient {
     String? technicianNotes,
     String? agentId,
     List<String>? tags,
+    String? commessaId,
   }) async {
     await _dio.put(
       '/api/tickets/$id',
@@ -660,6 +668,7 @@ class AdminApiClient {
         'technicianNotes': ?technicianNotes,
         'agentId': ?agentId,
         'tags': ?tags,
+        'commessaId': ?commessaId,
       },
     );
   }

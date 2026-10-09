@@ -15,6 +15,7 @@ import '../reference_picker.dart';
 import '../reference_providers.dart';
 import '../ticket_providers.dart';
 import 'blamed_field_notice.dart';
+import 'read_only_caption.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
@@ -46,6 +47,7 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
     required this.onChanged,
     this.ticketId,
     this.blamedField,
+    this.prodottiEditable = true,
   });
 
   final NewTicketFormState state;
@@ -61,6 +63,17 @@ class StepDettagliTicket extends ConsumerStatefulWidget {
   /// [BlamedFieldNotice]. Names `typeId`, `agentId` or `prodottoAssistenzaIds`, or null. Never set
   /// from [ticketId]'s edit path: editing a ticket the server already has is not a repair.
   final String? blamedField;
+
+  /// Whether the Prodotti assistenza coverage is a control. `false` in edit mode, and not because
+  /// the field is missing from the wire: `UpdateTicketRequest.ProdottoAssistenzaIds` is a full
+  /// *replace* — a non-null list, empty included, deletes every coverage row not in it — while
+  /// mobile has no authoritative local copy of that list to replace it with (`SyncTicketDto` still
+  /// carries only the legacy singular `prodottoAssistenzaId`, and `TicketAssets` is a
+  /// checklist-sync artifact pruned by `checklist_reconciler`, not a mirror of coverage). Seeding
+  /// from what this device holds and sending it back would therefore *delete* real coverage.
+  /// Defaults to `true`: the create wizard is building the list, so a replace is exactly right
+  /// there.
+  final bool prodottiEditable;
 
   @override
   ConsumerState<StepDettagliTicket> createState() => _StepDettagliTicketState();
@@ -195,41 +208,52 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
                 Chip(
                   key: ValueKey('prodotto-chip-$id'),
                   label: Text(_prodottoLabels[id] ?? byId[id]?.label ?? _kUnresolvedProdottoLabel),
-                  onDeleted: () => widget.onChanged(
-                    widget.state.copyWith(prodottoAssistenzaIds: [...ids]..remove(id)),
-                  ),
+                  // No X at all when the caller cannot persist a removal, rather than an X that
+                  // refuses: the chip would otherwise be the one control on the screen that looks
+                  // live and does nothing. See [StepDettagliTicket.prodottiEditable].
+                  onDeleted: widget.prodottiEditable
+                      ? () => widget.onChanged(
+                          widget.state.copyWith(prodottoAssistenzaIds: [...ids]..remove(id)),
+                        )
+                      : null,
                 ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
         ],
-        ReferencePickerField(
-          // Re-keyed after every pick (see _prodottoPickerEpoch) so the field empties itself and
-          // the next product can be typed for immediately.
-          key: ValueKey('prodotto-adder-$_prodottoPickerEpoch'),
-          label: 'Prodotti assistenza',
-          localItems: prodotti,
-          search: (q) async => customerId == null
-              ? const <ReferenceOption>[]
-              : ref
-                    .read(referenceSearchClientProvider)
-                    .searchProdottiAssistenza(customerId: customerId, query: q),
-          hint: 'Cerca prodotto…',
-          emptyCacheHint: customerId == null
-              ? 'Seleziona prima un cliente.'
-              : 'Nessun prodotto in cache. Cerca per nome.',
-          enabled: customerId != null,
-          onSelected: (option) {
-            // A pick released by editing the text (null) is not a product to add.
-            if (option == null || ids.contains(option.id)) return;
-            ref.invalidate(localProdottiProvider(customerId!));
-            setState(() {
-              _prodottoLabels[option.id] = option.label;
-              _prodottoPickerEpoch++;
-            });
-            widget.onChanged(widget.state.copyWith(prodottoAssistenzaIds: [...ids, option.id]));
-          },
-        ),
+        // The adder itself is gone when it cannot persist, not merely disabled: there is nowhere
+        // for a product picked here to go — this PUT replaces the whole list, and the local mirror
+        // holds no authoritative copy of it to replace with.
+        if (widget.prodottiEditable)
+          ReferencePickerField(
+            // Re-keyed after every pick (see _prodottoPickerEpoch) so the field empties itself and
+            // the next product can be typed for immediately.
+            key: ValueKey('prodotto-adder-$_prodottoPickerEpoch'),
+            label: 'Prodotti assistenza',
+            localItems: prodotti,
+            search: (q) async => customerId == null
+                ? const <ReferenceOption>[]
+                : ref
+                      .read(referenceSearchClientProvider)
+                      .searchProdottiAssistenza(customerId: customerId, query: q),
+            hint: 'Cerca prodotto…',
+            emptyCacheHint: customerId == null
+                ? 'Seleziona prima un cliente.'
+                : 'Nessun prodotto in cache. Cerca per nome.',
+            enabled: customerId != null,
+            onSelected: (option) {
+              // A pick released by editing the text (null) is not a product to add.
+              if (option == null || ids.contains(option.id)) return;
+              ref.invalidate(localProdottiProvider(customerId!));
+              setState(() {
+                _prodottoLabels[option.id] = option.label;
+                _prodottoPickerEpoch++;
+              });
+              widget.onChanged(widget.state.copyWith(prodottoAssistenzaIds: [...ids, option.id]));
+            },
+          )
+        else
+          const ReadOnlyFieldCaption(),
       ],
     );
   }

@@ -19,6 +19,7 @@ import '../new_ticket_form_state.dart';
 import '../reference_picker.dart';
 import '../reference_providers.dart';
 import 'blamed_field_notice.dart';
+import 'read_only_caption.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 import 'package:tasktap_mobile/core/theme/app_spacing.dart';
 
@@ -34,6 +35,8 @@ class StepClienteSede extends ConsumerStatefulWidget {
     required this.state,
     required this.onChanged,
     this.blamedField,
+    this.contractEditable = true,
+    this.commessaClearable = true,
   });
 
   final NewTicketFormState state;
@@ -42,6 +45,21 @@ class StepClienteSede extends ConsumerStatefulWidget {
   /// The request field the server refused, when this wizard is a repair — see
   /// [BlamedFieldNotice]. Names one of the four references this step owns, or null.
   final String? blamedField;
+
+  /// Whether the Contratto field is a control. `false` in edit mode, where the PUT behind this
+  /// screen carries no `ContractId` at all (`TicketsController.UpdateTicketRequest`), so a pick here
+  /// would be dropped by the save without a word — "Ticket aggiornato" over a contract that never
+  /// moved. The field is still drawn, showing the record's real contract, with
+  /// [ReadOnlyFieldCaption] under it saying why it is not editable. Defaults to `true`: the create
+  /// wizard's own contract pick is real and must stay live.
+  final bool contractEditable;
+
+  /// Whether clearing the Commessa is offered. `false` in edit mode: the server applies a commessa
+  /// set-only (`TicketCommandService.ApplyFields`: `if (request.CommessaId.HasValue)`), so a null
+  /// sent from here is a removal the record never gets. *Picking* a commessa is real and does
+  /// persist, so the field stays enabled either way — only the release is refused, with a toast
+  /// rather than silence. Defaults to `true` for the create wizard.
+  final bool commessaClearable;
 
   @override
   ConsumerState<StepClienteSede> createState() => _StepClienteSedeState();
@@ -60,6 +78,29 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
   // otherwise finds nothing — allLocationsProvider's local Drift mirror doesn't have the new row
   // until the sync above actually lands — and would show blank text despite a real selection.
   String? _pendingSedeName;
+
+  /// Bumped when something *other than the field's own edit gesture* changes the state behind the
+  /// Contratto field, so the field is rebuilt from it: a pick here, or one of the two branches below
+  /// that drop the customer. The field's own release — the X, or an edit that no longer represents a
+  /// pick — clears the id and deliberately does *not* bump: the box already shows what the technician
+  /// typed, and rebuilding it under them is the wipe this key exists to avoid.
+  ///
+  /// The key does not carry the id the field shows, for the same reason: `ReferencePickerField`
+  /// reports a pick released by editing the text as a null selection too, so a key built from the
+  /// value cannot tell a commit from a keystroke — and the create wizard turns that release into a
+  /// cleared id, which would then rebuild the field under the technician mid-word and wipe what they
+  /// had just typed. See the key's own comment in [_buildReferences].
+  ///
+  /// The same re-key-to-reset trick as `_prodottoPickerEpoch` in `step_dettagli_ticket.dart`, for
+  /// the same reason: the field has to be rebuilt from the store because it cannot be told to
+  /// reload itself.
+  int _contractPickerEpoch = 0;
+
+  /// As [_contractPickerEpoch], for the Commessa field — and it covers one gesture that field alone
+  /// has. A refused clear deliberately changes no state, so nothing here would rebuild the field and
+  /// the box would sit empty over the commessa the record still holds; the epoch is the only thing
+  /// left that can put the stored commessa back (see `onCleared` in [_buildReferences]).
+  int _commessaPickerEpoch = 0;
 
   @override
   void dispose() {
@@ -131,27 +172,65 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
         const SizedBox(height: 24),
         BlamedFieldNotice(field: 'contractId', blamedField: widget.blamedField),
         ReferencePickerField(
+          // Keyed by an epoch, not by the contract it shows. What may rebuild this field is a
+          // *deliberate* change, and a keystroke is not one: `ReferencePickerField._onFreeText`
+          // reports a pick released by editing the text through the same `onSelected(null)` as the
+          // field's own X, so under a value key that release — the only way back to a suggestion list
+          // once the field holds a pick — moved the key mid-edit and rebuilt the field under the
+          // technician, wiping the character just typed. The value cannot tell a commit from a
+          // keystroke; the epoch moves on the commits only. Same trick, same reason, as
+          // `_prodottoPickerEpoch` in `step_dettagli_ticket.dart`.
+          //
+          // A rebuild the *state* asks for still has to be asked for here. The two branches below
+          // that drop the customer (its own `onSelected`, and emptying its text) take the contract
+          // out of state with `clearContractId: true` — and this widget would survive that, because
+          // `AppLookupField` holds its own `_selectedId`/text and only ever *fills* text in, never
+          // clears it. Without a bump the previous customer's contract name would stay on screen over
+          // a null selection, on a field that edit mode draws read-only and therefore cannot be
+          // corrected by typing. Both of those branches bump this epoch.
+          key: ValueKey('contratto-$_contractPickerEpoch'),
           label: 'Contratto',
           localItems: contracts,
           search: (q) => search.searchContracts(customerId: customerId, query: q),
           selectedId: widget.state.contractId,
           hint: 'Cerca contratto…',
           emptyCacheHint: 'Nessun contratto in cache. Cerca per nome.',
+          // Drawn but not offered when the caller cannot persist a change — see
+          // [StepClienteSede.contractEditable]. `enabled: false` is what the widget already does
+          // with a read-only field (an AbsorbPointer, so it cannot be typed into either), and the
+          // caption below says why rather than leaving a dead field.
+          enabled: widget.contractEditable,
           onSelected: (option) {
+            if (option == null) {
+              // A release — the X, or an edit that no longer represents a pick. It clears the id
+              // (the picker's own contract: keeping the old id behind new text is how a ticket is
+              // filed against the wrong contract) but it must NOT move the key, or the field
+              // rebuilds under the technician and wipes what they are typing. The epoch moves on the
+              // commits only.
+              widget.onChanged(widget.state.copyWith(clearContractId: true));
+              return;
+            }
             // The search wrote the row into the mirror *before* returning it, so refetching the
             // local list here is enough for the summary to resolve a label for a row this device
             // only just learned about.
             ref.invalidate(localContractsProvider(customerId));
-            widget.onChanged(
-              option == null
-                  ? widget.state.copyWith(clearContractId: true)
-                  : widget.state.copyWith(contractId: option.id),
-            );
+            setState(() => _contractPickerEpoch++);
+            widget.onChanged(widget.state.copyWith(contractId: option.id));
           },
         ),
+        if (!widget.contractEditable) const ReadOnlyFieldCaption(),
         const SizedBox(height: 20),
         BlamedFieldNotice(field: 'commessaId', blamedField: widget.blamedField),
         ReferencePickerField(
+          // Keyed by an epoch, not by the commessa it shows — see the Contratto key above for why a
+          // keystroke must not move a reference field's key.
+          //
+          // Four call sites move this epoch, and every one of them is deliberate: a pick
+          // (`onSelected` below); a *refused* clear (`onCleared` below — the one rebuild no state
+          // change can ask for, since a refusal changes no state at all); and the two branches that
+          // drop the customer, its `onSelected` and its emptied text, which take the commessa out of
+          // state behind this field's back. Nothing else moves it — in particular, no keystroke.
+          key: ValueKey('commessa-$_commessaPickerEpoch'),
           label: 'Commessa',
           localItems: commesse,
           search: (q) => search.searchCommesse(customerId: customerId, query: q),
@@ -159,12 +238,40 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           hint: 'Cerca commessa…',
           emptyCacheHint: 'Nessuna commessa in cache. Cerca per codice.',
           onSelected: (option) {
+            if (option == null) {
+              // A release by editing the text is the technician searching for the next commessa, and
+              // it is refused here the same way — but silently, because a toast per keystroke would
+              // be a false error on a field they are only searching. See `onCleared` for the release
+              // that is a real gesture and does say why.
+              if (!widget.commessaClearable) return;
+              widget.onChanged(widget.state.copyWith(clearCommessaId: true));
+              return;
+            }
             ref.invalidate(localCommesseProvider(customerId));
-            widget.onChanged(
-              option == null
-                  ? widget.state.copyWith(clearCommessaId: true)
-                  : widget.state.copyWith(commessaId: option.id),
-            );
+            setState(() => _commessaPickerEpoch++);
+            widget.onChanged(widget.state.copyWith(commessaId: option.id));
+          },
+          // The re-key that makes a refused clear visible, on the one gesture that *is* a clear.
+          //
+          // A refusal deliberately changes no state, so there is nothing in the state for the field
+          // to be rebuilt from and the box would keep sitting empty over the commessa the record
+          // still holds. Only an *emptied* box bumps the epoch, which is why this is here and not in
+          // the refusal above: that refusal is reached by two different gestures, and the other one —
+          // releasing the pick by editing the text — is a search, not a clear. Rebuilding the field
+          // under the technician then would wipe what they are typing, and typing is the only way in
+          // to a suggestion list once a field already holds a pick.
+          //
+          // When the clear is allowed there is nothing to do: `onSelected`'s null branch above drops
+          // the id, and the box is already empty — there is nothing on the field to rebuild.
+          onCleared: () {
+            if (!widget.commessaClearable) {
+              showAppToast(
+                context,
+                message: 'La commessa non può essere rimossa da qui.',
+                tone: ToastTone.error,
+              );
+              setState(() => _commessaPickerEpoch++);
+            }
           },
         ),
       ],
@@ -208,24 +315,36 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           hint: 'Cerca cliente…',
           items: [for (final c in customers) LookupItem(id: c.id, name: c.companyName)],
           selectedId: widget.state.customerId,
-          onSelected: (id) => widget.onChanged(
-            widget.state.copyWith(
-              customerId: id,
-              // The sede takes the explicit flag rather than a plain `locationId: null`: `copyWith`
-              // reads a null argument as "not supplied" (`locationId: locationId ?? this.locationId`)
-              // and hands the old sede straight back, so the reset this line intends never happened
-              // and a ticket could be filed against the previous customer's sede.
-              clearLocationId: true,
-              // A contract, a commessa and a cantiere belong to the customer that owned them —
-              // keeping one across a customer change would point the new ticket at a row the
-              // server will refuse with a 404, and through the queue that is a ticket that never
-              // arrives. Clearing here is the fix, not a detail. The sede above is the same class
-              // of reference and clears for the same reason.
-              clearContractId: true,
-              clearCommessaId: true,
-              clearCantiereId: true,
-            ),
-          ),
+          onSelected: (id) {
+            // The two reference fields are keyed by an epoch, so a change of customer — which takes
+            // the contract, the commessa and the cantiere out of state just below — has to move those
+            // epochs here. Under the value key that rebuild came for free; under an epoch it has to be
+            // asked for, or the fields survive the change (`AppLookupField` holds its own
+            // `_selectedId`/text and only ever *fills* text in) and go on showing the previous
+            // customer's contract and commessa over a null selection. This is the request.
+            setState(() {
+              _contractPickerEpoch++;
+              _commessaPickerEpoch++;
+            });
+            widget.onChanged(
+              widget.state.copyWith(
+                customerId: id,
+                // The sede takes the explicit flag rather than a plain `locationId: null`: `copyWith`
+                // reads a null argument as "not supplied" (`locationId: locationId ?? this.locationId`)
+                // and hands the old sede straight back, so the reset this line intends never happened
+                // and a ticket could be filed against the previous customer's sede.
+                clearLocationId: true,
+                // A contract, a commessa and a cantiere belong to the customer that owned them —
+                // keeping one across a customer change would point the new ticket at a row the
+                // server will refuse with a 404, and through the queue that is a ticket that never
+                // arrives. Clearing here is the fix, not a detail. The sede above is the same class
+                // of reference and clears for the same reason.
+                clearContractId: true,
+                clearCommessaId: true,
+                clearCantiereId: true,
+              ),
+            );
+          },
           // The customer here must resolve to a real cached record — unlike the rapportino's
           // Cliente field, NewTicketFormState has no free-text fallback (customerId is a plain
           // FK sent straight to the server). Cleared only when the field is actually emptied, not
@@ -236,7 +355,11 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           onFreeText: (text) {
             if (text.isEmpty) {
               // Same reasoning as onSelected above: the references are scoped to the customer
-              // that is being dropped, so they go with it.
+              // that is being dropped, so they go with it — and the epochs move with them.
+              setState(() {
+                _contractPickerEpoch++;
+                _commessaPickerEpoch++;
+              });
               widget.onChanged(
                 widget.state.copyWith(
                   clearCustomerId: true,
