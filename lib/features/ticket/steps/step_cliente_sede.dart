@@ -79,12 +79,17 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
   // until the sync above actually lands — and would show blank text despite a real selection.
   String? _pendingSedeName;
 
-  /// Bumped whenever the state behind the Contratto field changes *on purpose*, so the field is
-  /// rebuilt from it. The key does not carry the id it shows: `ReferencePickerField` reports a pick
-  /// released by editing the text as a null selection too, so a key built from the value cannot tell
-  /// a commit from a keystroke — and the create wizard turns that release into a cleared id, which
-  /// would then rebuild the field under the technician mid-word and wipe what they had just typed.
-  /// See the key's own comment in [_buildReferences]; the epoch moves on the commits only.
+  /// Bumped when something *other than the field's own edit gesture* changes the state behind the
+  /// Contratto field, so the field is rebuilt from it: a pick here, or one of the two branches below
+  /// that drop the customer. The field's own release — the X, or an edit that no longer represents a
+  /// pick — clears the id and deliberately does *not* bump: the box already shows what the technician
+  /// typed, and rebuilding it under them is the wipe this key exists to avoid.
+  ///
+  /// The key does not carry the id the field shows, for the same reason: `ReferencePickerField`
+  /// reports a pick released by editing the text as a null selection too, so a key built from the
+  /// value cannot tell a commit from a keystroke — and the create wizard turns that release into a
+  /// cleared id, which would then rebuild the field under the technician mid-word and wipe what they
+  /// had just typed. See the key's own comment in [_buildReferences].
   ///
   /// The same re-key-to-reset trick as `_prodottoPickerEpoch` in `step_dettagli_ticket.dart`, for
   /// the same reason: the field has to be rebuilt from the store because it cannot be told to
@@ -220,11 +225,11 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
           // Keyed by an epoch, not by the commessa it shows — see the Contratto key above for why a
           // keystroke must not move a reference field's key.
           //
-          // Three things move this epoch, and all three are deliberate: a pick (`onSelected` below);
-          // a *refused* clear, which changes no state at all and so has no state change to rebuild
-          // from (`onCleared` below, and the only gesture that bumps it); and the customer change in
-          // `build` below, which takes the commessa out of state behind this field's back. Nothing
-          // else.
+          // Four call sites move this epoch, and every one of them is deliberate: a pick
+          // (`onSelected` below); a *refused* clear (`onCleared` below — the one rebuild no state
+          // change can ask for, since a refusal changes no state at all); and the two branches that
+          // drop the customer, its `onSelected` and its emptied text, which take the commessa out of
+          // state behind this field's back. Nothing else moves it — in particular, no keystroke.
           key: ValueKey('commessa-$_commessaPickerEpoch'),
           label: 'Commessa',
           localItems: commesse,

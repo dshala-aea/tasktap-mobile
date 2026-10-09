@@ -372,8 +372,10 @@ void main() {
     );
 
     // Typing raises no refusal at all: the refusal belongs to the emptied box — the X — and this is
-    // the pin for that. Said here, it was an error reported against a technician who is only
-    // searching, and it stood in the way of the very tap that follows it.
+    // the pin for that. The pump comes first because the pin needs it: a toast is an overlay entry,
+    // and an overlay entry builds on the *next* frame, so an assertion taken straight after
+    // `enterText` — which pumps none — would pass whatever the keystroke had raised.
+    await tester.pump();
     expect(find.text('La commessa non può essere rimossa da qui.'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 350));
