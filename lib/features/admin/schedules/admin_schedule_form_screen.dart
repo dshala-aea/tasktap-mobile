@@ -230,7 +230,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   List<String> get _technicianIds => switch (_assignmentType) {
     AssignmentType.tecnico => _selectedUserId == null ? <String>[] : [_selectedUserId!],
     AssignmentType.capoSquadra => [
-      if (_selectedTeamLeadId != null) _selectedTeamLeadId!,
+      ?_selectedTeamLeadId,
       ..._selectedStaffIds.where((id) => id != _selectedTeamLeadId),
     ],
     // A squadra assigns no individuals directly. On edit this list is sent (empty) to clear any
@@ -249,10 +249,7 @@ class _AdminScheduleFormScreenState extends ConsumerState<AdminScheduleFormScree
   /// requires a lead, so this keeps that promise should the picker ever change.
   bool get _assignmentLeadIsCoherent {
     if (_assignmentType != AssignmentType.capoSquadra) return true;
-    final selected = <String>{
-      if (_selectedTeamLeadId != null) _selectedTeamLeadId!,
-      ..._selectedStaffIds,
-    };
+    final selected = <String>{?_selectedTeamLeadId, ..._selectedStaffIds};
     if (selected.length >= 2 && _selectedTeamLeadId == null) return false;
     if (_selectedTeamLeadId != null && !selected.contains(_selectedTeamLeadId)) return false;
     return true;
