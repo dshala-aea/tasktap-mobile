@@ -27,6 +27,20 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 /// off-by-one west of UTC. That is why this file is in the tz-matrix job: Europe/Rome passes under
 /// either implementation, Pacific/Auckland only under the right one, America/Los_Angeles only under
 /// the right one.
+/// Columns the ladder adds *after* 37, which a real v37 database therefore does not have.
+///
+/// `reopenAsV37` fabricates its v37 by opening the *current* schema and rewinding `user_version`, so
+/// every `addColumn` step above 37 has to be undone there or the reopen dies on
+/// `duplicate column name`. Schema 39's `draft_reports.expected_version` is what broke this test the
+/// first time CI ran it. A schema-40 `addColumn` means adding its column here — the failure is loud,
+/// not silent, but this list is what keeps it from being a surprise.
+///
+/// Only `addColumn` steps belong here. A step that rewrites or re-creates a table (schema 38's
+/// `alterTable` on `due_date`) is undone by the fixture's own column surgery, below.
+const _columnsAddedAfter37 = <String, List<String>>{
+  'draft_reports': ['expected_version'],
+};
+
 void main() {
   late Directory dir;
   late File file;
@@ -50,8 +64,9 @@ void main() {
   final ticketCreatedAt = DateTime.utc(2026, 6, 1, 9);
 
   /// A v37 database: both `due_date` columns are put back to INTEGER (dropping the value, so the
-  /// rows below are written as the old code would have left them), the epochs are stamped in, and
-  /// `user_version` is rewound so the real `onUpgrade(37 -> 38)` runs on reopen.
+  /// rows below are written as the old code would have left them), the columns later steps add are
+  /// dropped, the epochs are stamped in, and `user_version` is rewound so the real
+  /// `onUpgrade(37 -> 38)` runs on reopen.
   Future<AppDatabase> reopenAsV37() async {
     final reopened = AppDatabase(
       NativeDatabase(
@@ -60,6 +75,11 @@ void main() {
           for (final t in ['tickets', 'pending_tickets']) {
             raw.execute('ALTER TABLE $t DROP COLUMN due_date');
             raw.execute('ALTER TABLE $t ADD COLUMN due_date INTEGER');
+          }
+          for (final MapEntry(key: table, value: columns) in _columnsAddedAfter37.entries) {
+            for (final column in columns) {
+              raw.execute('ALTER TABLE $table DROP COLUMN $column');
+            }
           }
           raw.execute("UPDATE tickets SET due_date = $serverEpoch WHERE id = 't-server'");
           raw.execute("UPDATE tickets SET due_date = $pickerEpoch WHERE id = 't-picker'");
@@ -190,6 +210,9 @@ void main() {
     expect(server.createdAt.isAtSameMomentAs(ticketCreatedAt), isTrue);
     expect(queued.title, 'Queued ticket');
     expect(await columnsOf(db, 'tickets'), contains('tags_json'));
+    // `_columnsAddedAfter37` dropped it to make the reopen a real v37; step 39 putting it back is
+    // what proves the ladder actually ran rather than the fixture having been v39 all along.
+    expect(await columnsOf(db, 'draft_reports'), contains('expected_version'));
   });
 
   test('schemaVersion has not gone backwards', () async {
