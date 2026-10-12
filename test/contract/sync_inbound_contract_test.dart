@@ -78,6 +78,15 @@ void main() {
   Map<String, dynamic> instance(String name) =>
       sample({r'$ref': '#/components/schemas/$name'}) as Map<String, dynamic>;
 
+  // The four reference `Sync*Dto` schemas below (`SyncContractDto`, `SyncCommessaDto`,
+  // `SyncProdottoAssistenzaDto`, `SyncAgentDto`) are ahead of `origin/master` in the snapshot.
+  // They were produced by backend commit `1950b3d7` on branch `feat/offline-reference-sync`,
+  // which is on no origin ref — `origin/master`'s `MobileUserSyncResult` does not declare the
+  // `agents`/`commesse`/`contracts`/`prodottiAssistenza` properties these back. When that branch
+  // lands, this file's copy becomes a plain fast-forward and the merge procedure in
+  // `openapi_contract_test.dart`'s header can go back to a copy. Until then, a refresh must merge
+  // (that gate fails by name on either a dropped or a stale side), and this comment is the only
+  // record that the contract in the snapshot exists on one unpushed branch.
   final readKeys = <String, Set<String>>{
     'SyncControlGroupDto': SyncControlGroupDto.wireKeys,
     'SyncTicketControlDto': SyncTicketControlDto.wireKeys,
