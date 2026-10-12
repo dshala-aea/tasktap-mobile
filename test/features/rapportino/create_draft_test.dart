@@ -34,11 +34,13 @@ class _FakeCantiereReportApiClient extends CantiereReportApiClient {
     this.reportIdToReturn = 'report-1',
     this.locationIdToReturn,
     this.staffToReturn = const [],
+    this.versionToReturn,
   }) : super(Dio());
 
   final String reportIdToReturn;
   final String? locationIdToReturn;
   final List<ReportStaffSeedDto> staffToReturn;
+  final String? versionToReturn;
 
   String? calledWithCantiereId;
 
@@ -55,7 +57,11 @@ class _FakeCantiereReportApiClient extends CantiereReportApiClient {
   @override
   Future<ReportSeedDto> fetchReportSeed(String reportId) async {
     if (throwsOnFetchStaff != null) throw throwsOnFetchStaff!;
-    return ReportSeedDto(locationId: locationIdToReturn, staff: staffToReturn);
+    return ReportSeedDto(
+      locationId: locationIdToReturn,
+      staff: staffToReturn,
+      version: versionToReturn,
+    );
   }
 }
 
@@ -667,6 +673,34 @@ void main() {
       },
     );
 
+    testWidgets('captures the server report version on the local draft (stale-submit guard)', (
+      tester,
+    ) async {
+      final api = _FakeCantiereReportApiClient(
+        reportIdToReturn: 'server-report-ver',
+        versionToReturn: '7788',
+      );
+      final container = buildContainer(user: _testUser, cantiereReportApi: api);
+      addTearDown(container.dispose);
+
+      final id = await _callCreateCantiereReportDraft(
+        tester,
+        container,
+        cantiereId: 'cant-1',
+        cantiereName: 'Cantiere Via Roma',
+      );
+
+      final draft = await repo.getDraft(id!);
+      expect(
+        draft!.expectedVersion,
+        '7788',
+        reason:
+            'the backend already created this Report, so the follow-up fetch is the only moment '
+            'the phone can learn the version it must send back on submit; if it were fetched at '
+            'submit time instead, the guard would compare a version against itself',
+      );
+    });
+
     testWidgets(
       'still creates the local draft with the zero-worklogs fallback when the seed fetch fails',
       (tester) async {
@@ -696,6 +730,14 @@ void main() {
 
         final draft = await repo.getDraft(id);
         expect(draft!.locationId, '', reason: 'no seed to hydrate from — falls back to blank');
+        expect(
+          draft.expectedVersion,
+          isNull,
+          reason:
+              'the seed fetch that would have carried the version failed, so the phone never saw '
+              'one — the submit must then carry none and let the server skip the check, rather '
+              'than invent a version that would 409 on every send',
+        );
       },
     );
 

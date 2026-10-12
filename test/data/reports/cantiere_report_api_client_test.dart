@@ -93,12 +93,13 @@ void main() {
   });
 
   group('fetchReportSeed', () {
-    test('GETs /api/reports/{id} and parses locationId + the staff array', () async {
+    test('GETs /api/reports/{id} and parses locationId, the staff array and the version', () async {
       when(() => mockDio.get<Map<String, dynamic>>('/api/reports/report-1')).thenAnswer(
         (_) async => _okResponse({
           'id': 'report-1',
           'title': '',
           'locationId': 'loc-resolved-1',
+          'version': '90210',
           'staff': [
             {
               'userId': 'user-1',
@@ -115,6 +116,7 @@ void main() {
       final seed = await client.fetchReportSeed('report-1');
 
       expect(seed.locationId, 'loc-resolved-1');
+      expect(seed.version, '90210');
       expect(seed.staff, hasLength(2));
       expect(seed.staff[0].userId, 'user-1');
       expect(seed.staff[0].hoursWorked, 4.5);
@@ -138,6 +140,7 @@ void main() {
         final seed = await client.fetchReportSeed('report-1');
 
         expect(seed.locationId, isNull);
+        expect(seed.version, isNull, reason: 'no `version` on the wire → null, guard off');
         expect(seed.staff, isEmpty);
       },
     );

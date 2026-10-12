@@ -41,6 +41,7 @@ Future<void> _insertDraft(
   String? technicianSigId,
   String? ticketId,
   bool richiedeSecondoIntervento = false,
+  String? expectedVersion,
   // unique suffix for child rows when inserting multiple drafts in same test
   String? suffix,
 }) async {
@@ -62,6 +63,7 @@ Future<void> _insertDraft(
           customerSignatureAllegatoId: Value(customerSigId),
           technicianSignatureAllegatoId: Value(technicianSigId),
           richiedeSecondoIntervento: Value(richiedeSecondoIntervento),
+          expectedVersion: Value(expectedVersion),
         ),
       );
 
@@ -387,6 +389,60 @@ void main() {
       });
       await queue.processAll();
       expect(captured!.materiali.single.unitPrice, 12.5);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // The stale-submit guard's wire half: the version captured when the phone last SAW the server's
+  // copy must be carried back out on submit, unchanged. These drive the REAL _buildRequest (via
+  // processAll), so a future refactor that dropped the field from the mapping — or that fetched a
+  // fresh version at submit time, which would make the guard inert — fails here.
+  // ══════════════════════════════════════════════════════════════════════════
+  group('SubmissionQueue.processAll — expectedVersion round-trip', () {
+    Future<SubmitReportRequest?> submit() async {
+      SubmitReportRequest? captured;
+      when(
+        () => mockApiClient.submitReport(
+          request: any(named: 'request'),
+          idempotencyKey: any(named: 'idempotencyKey'),
+        ),
+      ).thenAnswer((inv) async {
+        captured = inv.namedArguments[#request] as SubmitReportRequest?;
+        return const SubmitReportResponse(id: 'report-1', title: 'T', stato: '1', inviatoAt: null);
+      });
+      await queue.processAll();
+      return captured;
+    }
+
+    test('a draft carrying a server version sends it back on the submit body', () async {
+      // The state importServerReport leaves the row in: local-only, with the version it saw.
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'key-ver',
+        expectedVersion: '4321',
+      );
+
+      final req = await submit();
+
+      expect(req!.expectedVersion, '4321');
+      expect(req.toJson()['expectedVersion'], '4321');
+    });
+
+    test('a locally-created draft (never on the server) omits expectedVersion', () async {
+      // createLocalDraft / createReworkDraft / applyConfirmedDraft mint a fresh client GUID and
+      // never see a server version, so the column is null.
+      await _insertDraft(db, submissionState: 'readyToSubmit', idempotencyKey: 'key-null');
+
+      final req = await submit();
+
+      expect(req!.expectedVersion, isNull);
+      expect(
+        req.toJson().containsKey('expectedVersion'),
+        isFalse,
+        reason: 'absent, not null — the server reads absent as "do not check", the pre-guard wire '
+            'shape every old client build still sends',
+      );
     });
   });
 
@@ -1354,6 +1410,59 @@ void main() {
         expect(submitCalls(), 1);
       });
     }
+
+    // The regression test for the defect this branch exists to fix: the office edits a rapportino
+    // after the phone took its copy, so the phone's expectedVersion is stale. The submit must be a
+    // terminal 409 that keeps the draft and its local edits, spends no retry budget, is never
+    // auto-retried, and says what actually happened — the rapportino was changed in the office —
+    // rather than the generic send failure (or the backend's own English "Please retry" detail).
+    test('stale submit (409) is terminal, keeps the draft, and names the office conflict', () async {
+      await _insertDraft(
+        db,
+        submissionState: 'readyToSubmit',
+        idempotencyKey: 'k',
+        expectedVersion: '99',
+      );
+      stubSubmitThrows(
+        http(
+          409,
+          body: {
+            'status': 409,
+            'code': 'concurrency_conflict',
+            'detail': 'The resource was modified by another process. Please retry.',
+          },
+        ),
+      );
+
+      await gated.processAll();
+      await gated.processAll(); // an automatic reconnect/resume flush must not resend
+
+      final d = (await repo.getDraft('report-1'))!;
+      expect(d.submissionState, 'failed');
+      expect(d.submissionErrorTransient, isFalse);
+      expect(d.submissionAttempts, 0, reason: 'a permanent failure spends no retry budget');
+      expect(submitCalls(), 1, reason: '409 is permanent — never auto-retried unattended');
+      // The draft and its work survive: this is a dead end the technician is told about, not a
+      // deletion. See the group comment above kStaleSubmitConflictMessage on why there is no
+      // re-import/merge here.
+      expect(d.expectedVersion, '99', reason: 'the row keeps the version it was built with');
+      expect(await repo.getStaff('report-1'), isNotEmpty, reason: 'children are not deleted');
+      expect(
+        d.submissionError,
+        contains('modificato in ufficio'),
+        reason: 'the message names the office edit, not a generic send failure',
+      );
+      expect(
+        d.submissionError,
+        isNot(contains('Please retry')),
+        reason: "the backend's English detail must not reach the technician's screen",
+      );
+      expect(
+        d.submissionError,
+        isNot(contains('Il server ha rifiutato la richiesta')),
+        reason: 'not the generic 4xx sentence either',
+      );
+    });
 
     test('a poison draft does not stop a good one in the same processAll', () async {
       await _insertDraft(db, id: 'a-poison', submissionState: 'readyToSubmit', idempotencyKey: 'k1');

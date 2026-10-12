@@ -12,6 +12,7 @@
 class SubmitReportRequest {
   const SubmitReportRequest({
     required this.id,
+    this.expectedVersion,
     this.scheduleId,
     this.ticketId,
     required this.locationId,
@@ -37,6 +38,20 @@ class SubmitReportRequest {
 
   /// Client-generated report GUID. Enables idempotent re-submit.
   final String id;
+
+  /// The report row's version (`xmin` as a decimal string) as this device last *saw* it — the
+  /// `version` of `GET /api/reports/{id}`, persisted on the draft at import time
+  /// (`DraftReports.expectedVersion`). Mirrors backend `SubmitReportRequest.ExpectedVersion`.
+  ///
+  /// The server compares it to the report's current version and rejects the submit with a 409
+  /// `concurrency_conflict` when the office edited the report after this version was captured,
+  /// instead of letting this submit silently overwrite that edit. Omitted from the JSON when null,
+  /// which the server reads as "do not check" — the correct signal for a draft that has never been
+  /// on the server (a brand-new offline rapportino), and the pre-guard behaviour for old builds.
+  ///
+  /// Never populate this from a fetch taken while building the request: a version read immediately
+  /// before submitting always matches the row it is compared against, so the guard would be inert.
+  final String? expectedVersion;
 
   /// Optional schedule the report belongs to.
   final String? scheduleId;
@@ -108,6 +123,10 @@ class SubmitReportRequest {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    // Emitted only when set: `null`/absent is the server's "do not check" path. `if (x != null)`
+    // rather than always emitting means a never-on-the-server draft sends no `expectedVersion` at
+    // all, exactly the pre-guard wire shape.
+    if (expectedVersion != null) 'expectedVersion': expectedVersion,
     if (scheduleId != null) 'scheduleId': scheduleId,
     if (ticketId != null) 'ticketId': ticketId,
     'locationId': locationId,

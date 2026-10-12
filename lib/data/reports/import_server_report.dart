@@ -98,6 +98,13 @@ Future<void> importServerReport({
             customerSignoffText: Value(report.customerSignoffText),
             materialiNotRequired: Value(report.materialiNotRequired),
             isAiAssisted: Value(report.isAiAssisted),
+            // The stale-submit guard: the version of the server copy the phone is mirroring right
+            // now. This is the one moment the phone *sees* the server's row, so it is the only
+            // place this value may be captured — never fetched again at submit time, or the guard
+            // would compare a version against itself and detect nothing. The editor's autosaves
+            // never touch this column (their companion omits it), so it survives hours of offline
+            // editing and goes out unchanged on submit.
+            expectedVersion: Value(report.version),
             stato: const Value('Bozza'),
             isLocalOnly: const Value(true),
             submissionState: const Value('draft'),

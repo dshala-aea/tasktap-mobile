@@ -43,6 +43,24 @@ export 'draft_submission_state.dart';
 //     until the technician taps "Riprova".
 // ══════════════════════════════════════════════════════════════════════════════
 
+/// What the technician reads when a submit is refused with a 409 (`concurrency_conflict`): the
+/// report was edited in the office after this phone last saw it, so the `expectedVersion` this
+/// send carried is stale.
+///
+/// Written to tell them the two things the generic send failure cannot: **why** this one is
+/// different (someone else changed the rapportino — it is not a network glitch), and **not to
+/// retry** — a retry carries the same stale version and will 409 again every time — but to call the
+/// office. The last sentence reassures them the draft on the device (and their local edits) is
+/// still there, because "Invio fallito" otherwise reads as "your signature just vanished".
+///
+/// There is deliberately no resolution flow yet: the draft stays on the phone, `failed`, intact. A
+/// merge / re-import ("take the office's version" vs "keep mine") is a product decision, not
+/// something to guess at here — guessing would discard someone's work in one direction or the other.
+const String kStaleSubmitConflictMessage =
+    'Questo rapportino è stato modificato in ufficio dopo che ne è stata scaricata una copia su '
+    'questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo aggiornare. '
+    'Quello che hai compilato è ancora salvato sul telefono.';
+
 class SubmissionQueue {
   SubmissionQueue({
     required DraftReportRepository repo,
@@ -252,13 +270,22 @@ class SubmissionQueue {
       // exception is gone, sometimes on a different day. It used to store `e.toString()`, so the
       // subtitle under "Invio fallito" — the sentence a technician reads when a signed rapportino
       // did not leave the phone — was a Dio stack.
+      //
+      // A 409 (the stale-submit guard) is special-cased BEFORE humanErrorMessage, not through it:
+      // the backend's own `detail` for it is an English "The resource was modified by another
+      // process. Please retry.", which humanErrorMessage's _serverSentence would prefer — and
+      // "Please retry" is exactly wrong here, since a retry resends the same stale version and is
+      // guaranteed to 409 again. See kStaleSubmitConflictMessage.
+      final message = e is FileSystemException
+          ? 'File non trovato sul dispositivo: una foto o una firma non è più disponibile. '
+                'Rimuovila dal rapportino e riprova.'
+          : _isStaleSubmitConflict(e)
+          ? kStaleSubmitConflictMessage
+          : humanErrorMessage(e, azione: 'inviare il rapportino');
       await _repo.updateSubmissionState(
         reportId: draft.id,
         state: DraftSubmissionState.failed,
-        error: e is FileSystemException
-            ? 'File non trovato sul dispositivo: una foto o una firma non è più disponibile. '
-                  'Rimuovila dal rapportino e riprova.'
-            : humanErrorMessage(e, azione: 'inviare il rapportino'),
+        error: message,
         errorTransient: transient,
         // Only transient failures consume the auto-retry budget; permanent ones are never
         // auto-retried, so their counter is irrelevant.
@@ -279,6 +306,14 @@ class SubmissionQueue {
     return status >= 500 || status == 401 || status == 408 || status == 429;
   }
 
+  /// Whether [e] is the stale-submit `409 concurrency_conflict`: the report was edited (in the
+  /// office, or on another device) after this phone last saw its version, so the `expectedVersion`
+  /// this submit carried no longer matches. It is the submit endpoint's only 409 — every other
+  /// rejection (already Inviato, wrong state) is a 400 — so the status code is the whole signal.
+  /// Permanent (see [_isTransient]), never auto-retried.
+  static bool _isStaleSubmitConflict(Object e) =>
+      e is DioException && e.response?.statusCode == HttpStatus.conflict;
+
   Future<SubmitReportRequest> _buildRequest(DraftReport draft) async {
     final staff = await _repo.getStaff(draft.id);
     final materiali = await _repo.getMateriali(draft.id);
@@ -298,6 +333,11 @@ class SubmissionQueue {
 
     return SubmitReportRequest(
       id: draft.id,
+      // The version captured when this device last SAW the server's copy (import / cantiere-create),
+      // read straight off the persisted draft. Read here, never fetched: a version fetched at submit
+      // time would always match the row being compared and the guard would be inert. Null for a
+      // draft that has never been on the server → the request omits it and the server skips the check.
+      expectedVersion: draft.expectedVersion,
       scheduleId: draft.scheduleId,
       ticketId: draft.ticketId,
       locationId: draft.locationId,

@@ -388,6 +388,25 @@ void main() {
       expect(rows.first.stato, 'Bozza');
     });
 
+    test('a synced-down draft carries no version — the bulk sync DTO has none', () async {
+      // The stale-submit guard's boundary, pinned rather than assumed. The mobile-sync
+      // `draftReports` payload (ReportDto) has no version field, so this path cannot set
+      // expectedVersion even in principle — it is a backend DTO change, out of scope here. A row
+      // that only ever arrived via sync therefore submits with no version until the technician
+      // opens it, at which point the list's import (importServerReport) fetches the full report and
+      // stamps the version. This test states that boundary: sync alone does not arm the guard.
+      _stubDioGet(mockDio, _syncPayload(draftReports: [_draftReportJson()]));
+
+      await svc.sync();
+
+      final row = (await db.select(db.draftReports).get()).single;
+      expect(
+        row.expectedVersion,
+        isNull,
+        reason: 'sync-down cannot learn a version; only a full report import can',
+      );
+    });
+
     test('carries diagnosi, soluzione and cantiereId from the synced report', () async {
       _stubDioGet(
         mockDio,

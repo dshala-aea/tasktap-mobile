@@ -580,6 +580,19 @@ class DraftReports extends Table {
   /// structured shape or there was none. Client-authored only, never synced.
   TextColumn get submissionProblemJson => text().nullable()();
 
+  /// The report row's opaque version (`xmin` as a decimal string) as the phone last *saw* the
+  /// server's copy — the `version` field of `GET /api/reports/{id}`. Persisted at every point a
+  /// server report is mirrored into a local draft (import, cantiere-create) and read back at submit
+  /// time as `SubmitReportRequest.expectedVersion`; the server refuses the submit with a 409 if the
+  /// office edited the report after this version was captured, instead of silently overwriting it.
+  ///
+  /// It MUST be captured at ingestion, never fetched at submit time: a version read immediately
+  /// before submitting always matches the row it is compared against, so the guard would detect
+  /// nothing while looking correct. Null means "this draft was never on the server", and the submit
+  /// then omits the field (the server skips the check — today's behaviour for a brand-new offline
+  /// draft). Client-authored only, never synced.
+  TextColumn get expectedVersion => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1146,7 +1159,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration {
@@ -1466,6 +1479,14 @@ class AppDatabase extends _$AppDatabase {
               },
             ),
           );
+        }
+        if (from < 39) {
+          // Stale-submit guard: the report row's version the phone last saw, carried from the
+          // import/cantiere-create fetch to `POST /api/reports/submit`. A plain nullable column —
+          // every pre-existing row is left null, which reads as "never on the server" and makes the
+          // server skip the check, exactly the old behaviour, so no backfill is possible or wanted
+          // (the device genuinely does not know those versions and must not invent one).
+          await m.addColumn(draftReports, draftReports.expectedVersion);
         }
       },
     );
