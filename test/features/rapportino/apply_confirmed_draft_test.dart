@@ -9,7 +9,6 @@
 // resolves to a fixed id, pumped through UncontrolledProviderScope + Consumer so the function
 // under test receives a real WidgetRef from a real widget callback.
 
-import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -156,7 +155,7 @@ void main() {
     // The regression this guards: mount reportEditorProvider(localId) AFTER applyConfirmedDraft
     // and await its `ready`, then assert the applied header is still there. A notifier write before
     // hydration (markAiAssisted's autosave of a blank placeholder state) would blank title/ticketId.
-    final sub = container.listen(reportEditorProvider(id!), (_, __) {});
+    final sub = container.listen(reportEditorProvider(id!), (_, _) {});
     addTearDown(sub.close);
     await container.read(reportEditorProvider(id).notifier).ready;
 
