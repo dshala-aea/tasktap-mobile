@@ -61,6 +61,18 @@ const String kStaleSubmitConflictMessage =
     'questo telefono. Non riprovare a inviarlo: contatta l\'ufficio per farlo aggiornare. '
     'Quello che hai compilato è ancora salvato sul telefono.';
 
+/// Whether [error] — a draft's persisted `submissionError` — is the stale-submit conflict text
+/// above, so a reader can recognise the one failure a retry cannot fix (see the Riepilogo step's
+/// failed-send branch, which hides its "Riprova invio" button for exactly this case) without
+/// comparing message strings inline.
+///
+/// Comparing against the const itself is sound, not a shortcut: `_processDraft` writes this very
+/// const into the column for a 409, and nothing else can produce that sentence — every other
+/// failure path goes through `humanErrorMessage` or the fixed FileSystemException text, neither
+/// of which contains it. If that ever stops being the single writer, this identity check is what
+/// needs revisiting.
+bool isStaleSubmitConflictMessage(String? error) => error == kStaleSubmitConflictMessage;
+
 class SubmissionQueue {
   SubmissionQueue({
     required DraftReportRepository repo,
@@ -308,9 +320,15 @@ class SubmissionQueue {
 
   /// Whether [e] is the stale-submit `409 concurrency_conflict`: the report was edited (in the
   /// office, or on another device) after this phone last saw its version, so the `expectedVersion`
-  /// this submit carried no longer matches. It is the submit endpoint's only 409 — every other
-  /// rejection (already Inviato, wrong state) is a 400 — so the status code is the whole signal.
-  /// Permanent (see [_isTransient]), never auto-retried.
+  /// this submit carried no longer matches. Permanent (see [_isTransient]), never auto-retried.
+  ///
+  /// ASSUMPTION, to revisit rather than to trust: this keys on the status code alone, which is
+  /// only correct while the conflict is the *only* 409 this flow can get. That holds today — a
+  /// rejection for any other reason (already Inviato, wrong state) is a 400 — but a future 409
+  /// from another step (an attachment upload, say) would be mislabelled as the stale-submit
+  /// conflict and handed [kStaleSubmitConflictMessage], which tells the technician not to retry
+  /// something an unattended retry would in fact have fixed. If a second 409 source is ever
+  /// added, discriminate on the response body's `code` (`concurrency_conflict`), not the status.
   static bool _isStaleSubmitConflict(Object e) =>
       e is DioException && e.response?.statusCode == HttpStatus.conflict;
 

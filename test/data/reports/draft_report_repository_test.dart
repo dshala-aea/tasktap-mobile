@@ -12,12 +12,14 @@
 //   - Allegati insert/delete/get
 //   - Signature save creates an allegato with correct fields
 //   - watchLocalDrafts returns only isLocalOnly=true drafts, newest first
+//   - expectedVersion (the stale-submit guard's input) survives later autosave/state writes
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/reports/draft_report_repository.dart';
+import 'package:tasktap_mobile/data/sync/draft_submission_state.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +29,7 @@ DraftReportsCompanion _draftCompanion({
   String id = 'r-1',
   String title = 'Rapportino Test',
   bool isLocalOnly = true,
+  String? expectedVersion,
 }) => DraftReportsCompanion.insert(
   id: id,
   tenantId: 'tenant-1',
@@ -36,6 +39,7 @@ DraftReportsCompanion _draftCompanion({
   locationId: 'loc-1',
   isLocalOnly: Value(isLocalOnly),
   stato: const Value('Bozza'),
+  expectedVersion: Value(expectedVersion),
 );
 
 ReportStaffTableCompanion _staffCompanion({
@@ -158,6 +162,63 @@ void main() {
       final draft = await repo.getDraft('r-new');
       expect(draft, isNotNull);
       expect(draft!.title, 'Nuovo');
+    });
+  });
+
+  // The submit guard reads `expectedVersion` off the persisted row at send time
+  // (SubmissionQueue._buildRequest) and the server 409s when it is stale — so a write that
+  // clobbers it silently disarms the guard and an office edit is overwritten instead of refused.
+  // Nothing ever re-captures it, and it survives only because every writer's companion omits the
+  // column and Drift leaves absent columns untouched. Both real write paths are pinned here so a
+  // future full-row write (e.g. a `toCompanion(true)` round-trip in an autosave) that clears it
+  // fails a test instead of shipping.
+  group('expectedVersion survives a later write', () {
+    test('a header autosave companion leaves it untouched', () async {
+      await repo.createDraft(_draftCompanion(expectedVersion: '4321'));
+
+      // The shape ReportEditorNotifier._buildHeaderCompanion actually writes on every field
+      // change: a full set of the editor's own columns, expectedVersion absent.
+      await repo.saveDraft(
+        DraftReportsCompanion(
+          id: const Value('r-1'),
+          tenantId: const Value('tenant-1'),
+          createdAt: Value(DateTime.utc(2026, 6, 21, 10)),
+          updatedAt: Value(DateTime.utc(2026, 6, 21, 11)),
+          title: const Value('Titolo aggiornato'),
+          details: const Value('Sostituito il pressostato.'),
+          insertedUserId: const Value('user-1'),
+          locationId: const Value('loc-1'),
+          stato: const Value('Bozza'),
+          isLocalOnly: const Value(true),
+        ),
+      );
+
+      final draft = (await repo.getDraft('r-1'))!;
+      expect(draft.title, 'Titolo aggiornato');
+      expect(
+        draft.expectedVersion,
+        '4321',
+        reason: 'an autosave must not disarm the stale-submit guard',
+      );
+    });
+
+    test('updateSubmissionState leaves it untouched', () async {
+      await repo.createDraft(_draftCompanion(expectedVersion: '4321'));
+
+      await repo.updateSubmissionState(
+        reportId: 'r-1',
+        state: DraftSubmissionState.failed,
+        error: 'qualche errore',
+        errorTransient: false,
+      );
+
+      final draft = (await repo.getDraft('r-1'))!;
+      expect(draft.submissionState, 'failed');
+      expect(
+        draft.expectedVersion,
+        '4321',
+        reason: 'the queue records why a send failed, not a new version to send',
+      );
     });
   });
 

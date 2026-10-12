@@ -19,6 +19,7 @@ DraftReport _draft({
   String stato = 'Bozza',
   String submissionState = 'draft',
   bool isLocalOnly = true,
+  bool submissionErrorTransient = false,
 }) => DraftReport(
   id: 'r-1',
   tenantId: 'tenant-1',
@@ -54,7 +55,7 @@ DraftReport _draft({
   idempotencyKey: null,
   submissionError: null,
   submissionAttempts: 0,
-  submissionErrorTransient: false,
+  submissionErrorTransient: submissionErrorTransient,
   technicianSignaturePrefillSuppressed: false,
   strumentiPrefilled: false,
 );
@@ -73,8 +74,30 @@ void main() {
       expect(rapportinoStatusLabel(_draft(submissionState: 'submitting')), 'Invio…');
     });
 
-    test('failed submit attempt → Bozza (stato never left Bozza on this device)', () {
-      expect(rapportinoStatusLabel(_draft(submissionState: 'failed')), 'Bozza');
+    test('failed submit attempt → Invio fallito, not Bozza (stato never left Bozza on this '
+        'device, so nothing else would say the send did not go through)', () {
+      expect(rapportinoStatusLabel(_draft(submissionState: 'failed')), kFailedSendStatusLabel);
+      expect(rapportinoStatusLabel(_draft(submissionState: 'failed')), 'Invio fallito');
+    });
+
+    test('a transient failed attempt is labelled the same — the list reports that the last '
+        'send failed, not whether an unattended retry is still coming', () {
+      expect(
+        rapportinoStatusLabel(
+          _draft(submissionState: 'failed', submissionErrorTransient: true),
+        ),
+        'Invio fallito',
+      );
+    });
+
+    test('a failed local row whose server stato has moved on still reads the server status', () {
+      // "Invio fallito" is this device's own stale local state; a lifecycle the office has since
+      // moved further along outranks it, same as it does for the submitted fallback above.
+      expect(rapportinoStatusLabel(_draft(submissionState: 'failed', stato: 'Inviato')), 'Inviata');
+      expect(
+        rapportinoStatusLabel(_draft(submissionState: 'failed', stato: 'Respinto')),
+        'Respinta',
+      );
     });
 
     test('submitted locally, stato already Inviato (the realistic combination markSubmitted '

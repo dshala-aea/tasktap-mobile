@@ -20,6 +20,7 @@ import '../../../core/utils/error_message.dart';
 import '../../../data/local/app_database.dart';
 import '../../../data/sync/connectivity_provider.dart';
 import '../../../data/sync/draft_submission_state.dart';
+import '../../../data/sync/submission_queue.dart' show isStaleSubmitConflictMessage;
 import '../../../data/sync/submission_queue_watcher.dart';
 import '../../../data/users/user_signature_api_client.dart';
 import '../../../domain/reports/draft_validation.dart';
@@ -426,6 +427,19 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
               }
 
               if (subState == DraftSubmissionState.failed) {
+                // The stale-submit conflict is the one failure here that a button must not
+                // offer. The queue persisted a non-transient `failed` row whose message already
+                // says, in so many words, "Non riprovare a inviarlo" — and a retry would resend
+                // the identical stored request (same idempotency key, same stale
+                // `expectedVersion`), so it is guaranteed to 409 again. The card above is the
+                // instruction; a button that can only fail again would contradict it.
+                //
+                // Scoped to that one message, deliberately, NOT to `submissionErrorTransient`:
+                // editing the draft does not reset `failed`, so a technician who corrects a
+                // 400-refused draft is still in this branch with a permanent failure — hiding
+                // the button for every permanent failure would strand them with no way to send
+                // the data they just fixed. Every other failure keeps "Riprova invio".
+                final staleConflict = isStaleSubmitConflictMessage(draft?.submissionError);
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -435,20 +449,22 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
                       title: 'Invio fallito',
                       subtitle: draft?.submissionError,
                     ),
-                    const SizedBox(height: 12),
-                    // AppButton has no gradientColors escape hatch (VetroButton's own — the old
-                    // fixed stopLight/stopDark pair had no themed equivalent to move to). This
-                    // resubmit action is exactly the case AppButton's own `danger` variant exists
-                    // for — a destructive/error-recovery affordance — and its fill/fg already read
-                    // through `context.colors.redSoft`/`context.colors.red` rather than a fixed
-                    // hex pair, so it carries the same "this failed, look here" language across
-                    // both themes instead of one gradient tuned for light mode only.
-                    AppButton.danger(
-                      label: 'Riprova invio',
-                      icon: const Icon(LucideIcons.refreshCw),
-                      onPressed: _submitting ? null : _onInvia,
-                      isLoading: _submitting,
-                    ),
+                    if (!staleConflict) ...[
+                      const SizedBox(height: 12),
+                      // AppButton has no gradientColors escape hatch (VetroButton's own — the old
+                      // fixed stopLight/stopDark pair had no themed equivalent to move to). This
+                      // resubmit action is exactly the case AppButton's own `danger` variant exists
+                      // for — a destructive/error-recovery affordance — and its fill/fg already read
+                      // through `context.colors.redSoft`/`context.colors.red` rather than a fixed
+                      // hex pair, so it carries the same "this failed, look here" language across
+                      // both themes instead of one gradient tuned for light mode only.
+                      AppButton.danger(
+                        label: 'Riprova invio',
+                        icon: const Icon(LucideIcons.refreshCw),
+                        onPressed: _submitting ? null : _onInvia,
+                        isLoading: _submitting,
+                      ),
+                    ],
                   ],
                 );
               }

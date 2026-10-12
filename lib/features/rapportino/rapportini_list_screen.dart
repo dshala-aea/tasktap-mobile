@@ -201,7 +201,12 @@ class _RapportiniListBody extends ConsumerWidget {
       final label = rapportinoStatusLabel(d).toLowerCase();
       final matchFilter = switch (filter) {
         _RapportinoFilter.tutti => true,
-        _RapportinoFilter.bozza => label == 'bozza',
+        // A draft whose last send failed keeps its place under "Bozza": it is still an unsent
+        // draft on this device, only its last attempt did not go through — and its pill now says
+        // so (kFailedSendStatusLabel). Matching on the label alone would hide it from every chip
+        // but "Tutti", exactly when the technician is filtering for the work that never left.
+        _RapportinoFilter.bozza =>
+          label == 'bozza' || label == kFailedSendStatusLabel.toLowerCase(),
         _RapportinoFilter.inviata => label == 'inviata',
         _RapportinoFilter.respinta => label == 'respinta',
         _RapportinoFilter.pagata => label == 'pagata',
