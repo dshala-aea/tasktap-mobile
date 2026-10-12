@@ -171,6 +171,25 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
     });
+
+    testWidgets('a draft whose last send failed does not read as an untouched Bozza', (
+      tester,
+    ) async {
+      await _seedDraft(db, id: 'draft-1', submissionState: 'failed');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      expect(find.text('INVIO FALLITO'), findsWidgets);
+      expect(
+        find.text('BOZZA'),
+        findsNothing,
+        reason: 'a background-flush failure must be visible without opening the draft',
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 
   group('RapportiniListScreen — opening a server-created Bozza', () {
@@ -279,6 +298,27 @@ void main() {
 
       // Only Bozza A should remain
       expect(find.text('Bozza A'), findsOneWidget);
+      expect(find.text('Inviata B'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('filter Bozza keeps a draft whose last send failed', (tester) async {
+      await _seedDraft(db, id: 'draft-1', title: 'Invio andato male', submissionState: 'failed');
+      await _seedDraft(db, id: 'draft-2', title: 'Inviata B', submissionState: 'submitted');
+
+      await tester.pumpWidget(_buildList(db: db));
+      await tester.pumpAndSettle();
+
+      final bozzaChip = find.widgetWithText(AppChip, 'Bozza').first;
+      await tester.ensureVisible(bozzaChip);
+      await tester.tap(bozzaChip);
+      await tester.pumpAndSettle();
+
+      // It is still an unsent draft on this device — its own pill just says so. Matching on the
+      // pill label alone would drop it out of every chip but "Tutti".
+      expect(find.text('Invio andato male'), findsOneWidget);
       expect(find.text('Inviata B'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());

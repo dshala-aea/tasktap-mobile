@@ -70,6 +70,12 @@ void main() {
     expect(d.diagnosi, 'Pompa bloccata');
     expect(d.soluzione, 'Sostituita');
     expect(d.customerSignoffText, 'Lavoro accettato');
+    expect(
+      d.expectedVersion,
+      '4321',
+      reason: 'the version of the server copy must be captured at the one moment the phone sees '
+          'it — this import — and never fetched again at submit time',
+    );
     expect(d.stato, 'Bozza');
     expect(d.isLocalOnly, isTrue);
     expect(d.submissionState, 'draft');
@@ -136,6 +142,20 @@ void main() {
     expect(d.isLocalOnly, isTrue);
     // Local-only data the server does not hold survives the upsert.
     expect(d.metadataJson, contains('gpsLatitude'));
+  });
+
+  test('a server response with no version leaves expectedVersion null (guard off)', () async {
+    api.json = backendFixture()..remove('version');
+
+    await run();
+
+    final d = (await repo.getDraft(_rid))!;
+    expect(
+      d.expectedVersion,
+      isNull,
+      reason: 'the phone genuinely saw no version, so the submit must carry none and the server '
+          'skips the check — never an invented one that would 409 on every send',
+    );
   });
 
   test('re-importing with overwriteLocal is idempotent (no duplicate rows)', () async {

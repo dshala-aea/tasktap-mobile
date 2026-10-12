@@ -361,6 +361,13 @@ Future<String?> createCantiereReportDraft(
       locationId: seed.locationId ?? '',
       cantiereId: Value(cantiereId),
       customerId: Value(customerId),
+      // The stale-submit guard. The backend already created this Report, so the follow-up
+      // fetchReportSeed above is the phone's only sighting of the server's row: its `version` is
+      // captured here and sent back on submit. If that fetch failed the seed is blank and the
+      // version stays null — the submit then carries no version and the server skips the check,
+      // which is the honest degradation (the phone genuinely never saw a version) rather than an
+      // invented one that would 409 against every submit.
+      expectedVersion: Value(seed.version),
       metadataJson: Value(
         (workAddress?.isNotEmpty ?? false)
             ? jsonEncode({'workAddress': workAddress})

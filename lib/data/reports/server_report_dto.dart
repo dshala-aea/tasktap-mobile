@@ -119,6 +119,7 @@ class ServerReportDto {
   const ServerReportDto({
     required this.id,
     required this.tenantId,
+    this.version,
     required this.title,
     this.scheduleId,
     this.ticketId,
@@ -145,6 +146,18 @@ class ServerReportDto {
 
   final String id;
   final String tenantId;
+
+  /// The report row's opaque version (`xmin` as a decimal string), the `version` field of
+  /// `GET /api/reports/{id}`. The phone persists this at import time and sends it back as
+  /// `SubmitReportRequest.expectedVersion`; if the office edits the report before the phone
+  /// submits, the server refuses with a 409 `concurrency_conflict` instead of overwriting it.
+  ///
+  /// Deliberately read from the raw JSON rather than a generated model: the `GET` response is a
+  /// hand-rolled anonymous projection with no schema in the OpenAPI snapshot, so `version` never
+  /// appears in any generated client type — this hand-written DTO is the only shape that carries
+  /// it. Null when the server build predates the field (the guard is then skipped server-side).
+  final String? version;
+
   final String title;
   final String? scheduleId;
   final String? ticketId;
@@ -175,6 +188,7 @@ class ServerReportDto {
   factory ServerReportDto.fromJson(Map<String, dynamic> j) => ServerReportDto(
     id: j['id'] as String,
     tenantId: j['tenantId'] as String,
+    version: j['version'] as String?,
     title: j['title'] as String? ?? '',
     scheduleId: j['scheduleId'] as String?,
     ticketId: j['ticketId'] as String?,

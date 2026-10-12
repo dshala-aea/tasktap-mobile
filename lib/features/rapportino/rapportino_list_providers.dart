@@ -150,6 +150,7 @@ final rapportinoRowSummaryProvider = Provider.autoDispose.family<RapportinoRowSu
 // stato == Fatturato        → "Pagata"
 // stato == Annullato        → "Annullato"
 // submissionState==submitted OR stato==Inviato → "Inviata"
+// submissionState==failed   → "Invio fallito" (see [kFailedSendStatusLabel])
 // everything else           → "Bozza"
 //
 // `stato` is checked first for the four states past "submitted" because it — not the local
@@ -162,6 +163,17 @@ final rapportinoRowSummaryProvider = Provider.autoDispose.family<RapportinoRowSu
 // requiring both would make a report this device submitted, and that has not been touched by the
 // office since, momentarily read as "Bozza" between submit and the next sync.
 // ══════════════════════════════════════════════════════════════════════════════
+
+/// The pill label for a draft whose last send failed (`submissionState == failed`).
+///
+/// A `failed` draft used to be labelled "Bozza", exactly like one nothing had ever happened to —
+/// so a conflict or any other refusal raised by a *background* flush (reconnect, app resume,
+/// startup — see `submission_queue_watcher.dart`) was invisible until the technician happened to
+/// open the draft and walk to Riepilogo. This is a status, not an instruction: it says the last
+/// send did not go through and stops there — deliberately not "Da reinviare" or "Verifica", since
+/// what to do about it (retry, edit, call the office) depends on a failure the list row does not
+/// know the reason for. "Invio fallito" is the same wording as the Riepilogo card's own title.
+const String kFailedSendStatusLabel = 'Invio fallito';
 
 /// Returns the Italian status label shown in the StatusPill for a draft.
 String rapportinoStatusLabel(DraftReport draft) {
@@ -181,6 +193,11 @@ String rapportinoStatusLabel(DraftReport draft) {
   }
   if (sub == DraftSubmissionState.submitted || draft.stato == 'Inviato') {
     return 'Inviata';
+  }
+  // Checked after the two blocks above, so a server lifecycle the office has since moved on
+  // (or a send that in fact went through) still wins over this device's stale local `failed`.
+  if (sub == DraftSubmissionState.failed) {
+    return kFailedSendStatusLabel;
   }
   return 'Bozza';
 }
