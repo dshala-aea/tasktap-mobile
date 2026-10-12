@@ -24,6 +24,7 @@ import '../../data/local/app_database.dart';
 
 enum DraftValidationIssue {
   missingTitle,
+  missingLocation,
   missingCustomer,
   noStaff,
   noMateriali, // only when materialiNotRequired == false
@@ -46,6 +47,8 @@ class DraftValidationResult {
       switch (i) {
         case DraftValidationIssue.missingTitle:
           return 'Titolo mancante';
+        case DraftValidationIssue.missingLocation:
+          return 'Sede non specificata';
         case DraftValidationIssue.missingCustomer:
           return 'Cliente non specificato';
         case DraftValidationIssue.noStaff:
@@ -77,6 +80,16 @@ DraftValidationResult validateDraft({
   final title = draft.title.trim();
   if (title.isEmpty) {
     issues.add(DraftValidationIssue.missingTitle);
+  }
+
+  // The location is required by `SubmitReportRequest.LocationId` (a non-nullable Guid) and the
+  // server rejects an unknown one at `EnsureExistsAsync<Location>`. `AiConversationConfirmResponse
+  // .locationId` is explicitly nullable — "best-effort and may be null when nothing resolved" — and
+  // a cantiere-bound session can resolve to a tenant-default location unrelated to that cantiere.
+  // So the phone must say "this needs a location" before the technician signs and sends, instead of
+  // letting the server answer with a field the form never asked for.
+  if (draft.locationId.trim().isEmpty) {
+    issues.add(DraftValidationIssue.missingLocation);
   }
 
   // Customer: either a cached id or a free-text fallback

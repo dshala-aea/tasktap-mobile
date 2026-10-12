@@ -14,8 +14,7 @@ import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/ai/ai_api_client.dart';
-import '../../data/reports/import_server_report.dart' show ServerReportNotEditableException;
-import 'import_server_report_action.dart';
+import 'apply_confirmed_draft.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // AiCopilotScreen — the multi-turn AI copilot (distinct from step_dettagli.dart's
@@ -24,9 +23,11 @@ import 'import_server_report_action.dart';
 // The operator talks (typed, or dictated on-device per ADR-0017 — text only, never uploaded
 // audio), the assistant calls TaskTap tools to verify people/hours/materials/checklist items
 // against real data, and a structured draft builds up as the conversation progresses. Confermare
-// is blocked while any open item is Ambiguous/Conflict, mirroring the backend's own gate, and
-// creates the Bozza via POST .../confirm (idempotency-keyed) before pushing into the ordinary
-// editor for review.
+// is blocked while any open item is Ambiguous/Conflict, mirroring the backend's own gate. It calls
+// POST .../confirm (idempotency-keyed), which RESOLVES the draft and persists nothing (spec §5.4):
+// the phone then applies the response to its own Drift draft (`applyConfirmedDraft`, spec §5.5)
+// and opens the ordinary editor on it. Nothing is created server-side, so there is no server object
+// to download and no import to retry.
 //
 // No voice-recording-and-upload flow here (unlike the web copilot's record/transcribe control):
 // this app never calls server-side transcription, by design (see AiApiClient's own "Server-upload
@@ -72,13 +73,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _sending = false;
   bool _confirming = false;
 
-  /// Set once Confirm succeeded: the report exists on the server and only the local import is
-  /// left. A failed import retries THAT step (never Confirm again, never a blank editor).
-  String? _confirmedReportId;
-  String? _importError;
-
-  /// The server report is no longer a Bozza: retrying cannot help, only leaving can.
-  bool _importNotEditable = false;
   String? _startError;
   String? _confirmKey;
   int _thinkingStage = 0;
@@ -144,7 +138,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   Future<void> _send() async {
     final text = _inputCtrl.text.trim();
     final sessionId = _sessionId;
-    if (text.isEmpty || sessionId == null || _sending || _confirmedReportId != null) return;
+    if (text.isEmpty || sessionId == null || _sending) return;
 
     setState(() {
       _messages.add(_ChatMessage(isOperator: true, text: text));
@@ -182,12 +176,55 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     setState(() => _confirming = true);
 
     try {
-      final result = await ref
+      final response = await ref
           .read(aiApiClientProvider)
           .confirmConversation(sessionId, idempotencyKey: _confirmKey!);
       if (!mounted) return;
-      _confirmedReportId = result.reportId;
-      await _importAndOpen();
+
+      // Spec §5.5: mobile applies the resolved draft to its own report and then uses the existing
+      // save/submit path. Nothing is created server-side — Confirm resolves, it does not create
+      // (§5.4) — so there is no server object to download, no import to retry, and no state that
+      // can move on underneath us between the two calls.
+      final localId = await applyConfirmedDraft(
+        ref,
+        response: response,
+        ticketId: widget.ticketId,
+        cantiereId: widget.cantiereId,
+      );
+      if (!mounted) return;
+
+      if (localId == null) {
+        // The same refusal createLocalDraft makes: no signed-in internal user id, so there is
+        // nobody to attribute a rapportino to. Retrying the same button is the whole recovery.
+        setState(() => _confirming = false);
+        showAppToast(
+          context,
+          message: 'Non riesco a creare il rapportino su questo telefono. Riprova.',
+          tone: ToastTone.error,
+        );
+        return;
+      }
+
+      // What the server could not resolve is operator-facing and belongs on screen before the
+      // technician leaves the conversation — this is the only place those sentences are visible.
+      if (response.warnings.isNotEmpty) {
+        showAppToast(context, message: response.warnings.join('\n'), tone: ToastTone.warning);
+      }
+
+      // The draft is in Drift, provenance included — applyConfirmedDraft wrote isAiAssisted in the
+      // same companion. The session has now done its job and is released (the controller's own
+      // rule). Clearing _sessionId first keeps dispose()/_abandon from firing a second DELETE at an
+      // id the server has already forgotten.
+      //
+      // Do NOT call reportEditorProvider(localId).notifier.markAiAssisted() here. That provider has
+      // just been constructed, its `state` is still the blank placeholder, and _hydrate() has not
+      // resolved — its autosave would write blanks over everything applyConfirmedDraft just saved.
+      // See the markAiAssisted constraint in the plan's Global Constraints; the flag is already set.
+      _sessionId = null;
+      unawaited(ref.read(aiApiClientProvider).abandonConversation(sessionId));
+
+      if (!mounted) return;
+      context.go(AppRoutes.rapportiniEditor(localId));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -197,49 +234,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         if (e is AiConversationException && e.isStaleVersionConflict) _confirmKey = null;
       });
       showAppToast(context, message: e.toString(), tone: ToastTone.error);
-    }
-  }
-
-  /// Mirror the server-created report into the local DB, THEN open the editor. The editor reads
-  /// only Drift, so opening it first shows a blank form whose submit would wipe the server's
-  /// diagnosi/soluzione and child rows.
-  Future<void> _importAndOpen() async {
-    final reportId = _confirmedReportId;
-    if (reportId == null) return;
-    setState(() {
-      _confirming = true;
-      _importError = null;
-    });
-    try {
-      await importServerReportForEditing(
-        ref,
-        reportId: reportId,
-        cantiereId: widget.cantiereId,
-        // Replay of an earlier Confirm may find an already-imported row: keep the technician's
-        // edits (default) rather than overwrite.
-      );
-      if (!mounted) return;
-      showAppToast(context, message: 'Rapportino creato', tone: ToastTone.success);
-      context.go(AppRoutes.rapportiniEditor(reportId));
-    } on ServerReportNotEditableException {
-      if (!mounted) return;
-      const message = 'Questo rapportino non è più modificabile.';
-      setState(() {
-        _confirming = false;
-        _importNotEditable = true;
-        _importError = message;
-      });
-      showAppToast(context, message: message, tone: ToastTone.warning);
-    } catch (e) {
-      if (!mounted) return;
-      const message =
-          'Il rapportino è stato creato ma non è stato possibile scaricarlo sul telefono. '
-          'Controlla la connessione e riprova.';
-      setState(() {
-        _confirming = false;
-        _importError = message;
-      });
-      showAppToast(context, message: message, tone: ToastTone.error);
     }
   }
 
@@ -312,19 +306,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                     _draft.openItems.isNotEmpty)
                   _buildDraftSummary(context),
                 _buildInputRow(context, sessionReady, quotaExhausted),
-                if (_importError != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.pagePadding,
-                      AppSpacing.sm,
-                      AppSpacing.pagePadding,
-                      0,
-                    ),
-                    child: Text(
-                      _importError!,
-                      style: TextStyle(color: context.colors.red, fontSize: 13),
-                    ),
-                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.pagePadding,
@@ -339,20 +320,16 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _importNotEditable
-                            ? AppButton(label: 'Chiudi', onPressed: _abandon)
-                            : _confirmedReportId != null
-                            ? AppButton(
-                                label: _confirming ? 'Scarico il rapportino…' : 'Riprova',
-                                onPressed: _confirming ? null : _importAndOpen,
-                              )
-                            : AppButton(
-                                label: _confirming ? 'Creazione…' : 'Conferma e crea rapportino',
-                                onPressed:
-                                    !sessionReady || _messages.isEmpty || blocked || _confirming
-                                    ? null
-                                    : _confirm,
-                              ),
+                        // The label says "apri", not "crea": Confirm no longer creates anything
+                        // server-side, and the technician lands on a local Bozza that is not yet
+                        // sent. Copy that said "crea" would be the one place in the app where a
+                        // rapportino looks filed and is not.
+                        child: AppButton(
+                          label: _confirming ? 'Preparo il rapportino…' : 'Conferma e apri il rapportino',
+                          onPressed: !sessionReady || _messages.isEmpty || blocked || _confirming
+                              ? null
+                              : _confirm,
+                        ),
                       ),
                     ],
                   ),

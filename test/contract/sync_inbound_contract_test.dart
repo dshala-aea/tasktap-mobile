@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/sync/checklist_sync_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_dto.dart';
 import 'package:tasktap_mobile/domain/checklist/control_type.dart';
@@ -78,6 +79,15 @@ void main() {
   Map<String, dynamic> instance(String name) =>
       sample({r'$ref': '#/components/schemas/$name'}) as Map<String, dynamic>;
 
+  // The four reference `Sync*Dto` schemas below (`SyncContractDto`, `SyncCommessaDto`,
+  // `SyncProdottoAssistenzaDto`, `SyncAgentDto`) are ahead of `origin/master` in the snapshot.
+  // They were produced by backend commit `1950b3d7` on branch `feat/offline-reference-sync`,
+  // which is on no origin ref — `origin/master`'s `MobileUserSyncResult` does not declare the
+  // `agents`/`commesse`/`contracts`/`prodottiAssistenza` properties these back. When that branch
+  // lands, this file's copy becomes a plain fast-forward and the merge procedure in
+  // `openapi_contract_test.dart`'s header can go back to a copy. Until then, a refresh must merge
+  // (that gate fails by name on either a dropped or a stale side), and this comment is the only
+  // record that the contract in the snapshot exists on one unpushed branch.
   final readKeys = <String, Set<String>>{
     'SyncControlGroupDto': SyncControlGroupDto.wireKeys,
     'SyncTicketControlDto': SyncTicketControlDto.wireKeys,
@@ -89,6 +99,12 @@ void main() {
     'SyncCommessaDto': CommessaSyncDto.wireKeys,
     'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
     'SyncAgentDto': AgentSyncDto.wireKeys,
+    // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
+    // pinned here rather than inferred from the draft summary's classes.
+    'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,
+    'AiResolvedStaff': AiResolvedStaff.wireKeys,
+    'AiResolvedMaterial': AiResolvedMaterial.wireKeys,
+    'AiResolvedControl': AiResolvedControl.wireKeys,
   };
 
   for (final entry in readKeys.entries) {
@@ -119,6 +135,36 @@ void main() {
       expect(SyncResultDto.referenceWireKeys.difference(declared), isEmpty);
     },
   );
+
+  test('the confirm response uses the array names the server declares', () {
+    final declared = props('AiConversationConfirmResponse');
+    expect(declared, containsAll(['materials', 'controlli']));
+    expect(declared, isNot(contains('materiali')));
+    expect(declared, isNot(contains('observations')));
+    expect(
+      declared,
+      isNot(contains('isAiAssisted')),
+      reason: 'the client owns provenance; a server field that is always absent is a trap',
+    );
+  });
+
+  test('the confirm response parses an instance generated from the snapshot schema', () {
+    final r = AiConversationConfirmResponse.fromJson(
+      instance('AiConversationConfirmResponse'),
+    );
+    expect(r.title, isNotEmpty);
+    expect(r.staff, hasLength(1));
+    expect(r.materials, hasLength(1));
+    expect(r.controlli, hasLength(1));
+    expect(r.warnings, hasLength(1));
+
+    // The resolved shapes are the ones the editor's apply path reads, and the free-text material
+    // path is the one that reaches a real technician (nothing matched a catalogue).
+    final m = AiResolvedMaterial.fromJson(instance('AiResolvedMaterial'));
+    expect(m.freeTextName, isNotEmpty);
+    final c = AiResolvedControl.fromJson(instance('AiResolvedControl'));
+    expect(c.ticketControlId, isNotEmpty);
+  });
 
   test('every DTO parses an instance generated from the snapshot schema', () {
     final g = SyncControlGroupDto.fromJson(instance('SyncControlGroupDto'));

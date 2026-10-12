@@ -146,6 +146,13 @@ void main() {
       await tester.pumpWidget(_buildStep(container));
       await tester.pumpAndSettle();
 
+      // Scroll it into view first. The Riepilogo body is a SingleChildScrollView and the toggle
+      // sits below the validation panel, so its offset depends on how many issues the panel is
+      // currently reporting; at the default 800x600 test surface a panel one line taller put the
+      // toggle at y=607 and tap() missed it silently (a warning, not a failure), leaving the state
+      // unflipped. Ensuring visibility makes this test independent of the panel's height.
+      await tester.ensureVisible(find.byType(AppToggle));
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(AppToggle));
       await tester.pumpAndSettle();
 
