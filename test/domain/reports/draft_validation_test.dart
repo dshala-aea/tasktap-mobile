@@ -32,6 +32,10 @@ Future<DraftReport> _insertDraft(
   String? ticketId = 'ticket-1',
   String? customerSignatureAllegatoId = 'sig-cust-1',
   String? technicianSignatureAllegatoId = 'sig-tech-1',
+  // Defaults to a real location, so every existing fixture keeps passing: only a test that opts
+  // into `locationId: ''` exercises the missing-location check (mirrors what applyConfirmedDraft
+  // writes for a confirm response whose locationId is null).
+  String locationId = 'loc-1',
   bool materialiNotRequired = false,
 }) async {
   await db
@@ -43,7 +47,7 @@ Future<DraftReport> _insertDraft(
           createdAt: DateTime.utc(2026, 6, 21),
           title: title,
           insertedUserId: 'user-1',
-          locationId: 'loc-1',
+          locationId: locationId,
           customerId: Value(customerId),
           ticketId: Value(ticketId),
           customerSignatureAllegatoId: Value(customerSignatureAllegatoId),
@@ -258,6 +262,65 @@ void main() {
         ]),
       );
       expect(result.isValid, isFalse);
+    });
+  });
+
+  // ── Location ───────────────────────────────────────────────────────────────
+
+  group('validateDraft — location', () {
+    test('a draft with no location is rejected', () async {
+      final draft = await _insertDraft(db, locationId: ''); // as applyConfirmedDraft writes a null one
+
+      final result = validateDraft(
+        draft: draft,
+        staffCount: 1,
+        materialiCount: 1,
+        customerFreeText: '',
+      );
+
+      expect(result.isValid, isFalse);
+      expect(result.issues, contains(DraftValidationIssue.missingLocation));
+      expect(
+        result.italianMessages,
+        contains('Sede non specificata'),
+        reason:
+            'the Riepilogo step renders italianMessages verbatim; a missing string here is a '
+            'blank line in front of the technician',
+      );
+    });
+
+    test('a blank location does not hide the other problems', () async {
+      final draft = await _insertDraft(
+        db,
+        title: '',
+        locationId: '',
+        materialiNotRequired: false,
+      );
+
+      final result = validateDraft(
+        draft: draft,
+        staffCount: 0,
+        materialiCount: 0,
+        customerFreeText: null,
+      );
+
+      expect(
+        result.issues,
+        containsAll([
+          DraftValidationIssue.missingTitle,
+          DraftValidationIssue.missingLocation,
+          DraftValidationIssue.noStaff,
+        ]),
+        reason: 'the check appends and continues, like every other one in this function',
+      );
+    });
+
+    test('a location of only whitespace counts as missing', () async {
+      final draft = await _insertDraft(db, locationId: '   ');
+
+      final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
+
+      expect(result.issues, contains(DraftValidationIssue.missingLocation));
     });
   });
 

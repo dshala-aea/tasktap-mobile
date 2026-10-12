@@ -97,7 +97,11 @@ Future<void> _seedDraft(AppDatabase db, String reportId) async {
           createdAt: DateTime.utc(2026, 6, 21, 10),
           title: 'init',
           insertedUserId: 'user-1',
-          locationId: '',
+          // A real location, not '': `validateDraft` now requires one (a confirm response whose
+          // locationId resolved to nothing is submitted against a non-nullable Guid and rejected by
+          // EnsureExistsAsync<Location> server-side). The "ready to submit" tests below seed a draft
+          // that is otherwise complete, so this is what a complete draft actually looks like.
+          locationId: 'loc-1',
           isLocalOnly: const Value(true),
           stato: const Value('Bozza'),
         ),
