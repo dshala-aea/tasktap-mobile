@@ -60,6 +60,16 @@ String formatWorkDate(DateTime workDate, String pattern, {String? locale}) =>
       locale,
     ).format(DateTime.utc(workDate.year, workDate.month, workDate.day));
 
+/// [parseDateOnly]'s inverse: the `yyyy-MM-dd` label of a civil date, for the
+/// TEXT columns and JSON-text fields that hold one.
+///
+/// The one place that spelling lives, so a column written from four call sites
+/// cannot end up with four slightly different formats. [formatWorkDate] does the
+/// work: the y/m/d fields are read off the label, never the carrier. Null in,
+/// null out, so a nullable column round-trips as one.
+String? formatDateOnly(DateTime? civilDate) =>
+    civilDate == null ? null : formatWorkDate(civilDate, 'yyyy-MM-dd');
+
 /// Frame of every legacy `WorkDate/StartTime/EndTime` label the backend
 /// writes. Independent of the tenant zone (plan Ruling 3).
 const kLegacyLabelZoneId = 'Europe/Rome';

@@ -2,12 +2,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/theme/app_vetro_palette.dart';
+import '../../core/time/business_time.dart' show formatWorkDate, parseDateOnly;
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
@@ -498,14 +498,23 @@ class _TicketRow extends StatelessWidget {
     final v = context.vetro;
     final reference = ticketReference(ticket.numero);
 
-    final dueDate = ticket.dueDate;
+    // `dueDate` is a CIVIL date (`yyyy-MM-dd` TEXT read through `parseDateOnly`, i.e.
+    // `DateTime.utc(y, m, d)`) — see `Tickets.dueDate` in app_database.dart. So it is compared with
+    // a civil date, never with an instant: `.isBefore(DateTime.now())` pits a UTC midnight against
+    // the device clock, which flips the badge hours early or late by the device's own offset, and
+    // disagrees with the server's own overdue rule (`TicketOverdueSweep`: strictly before today's
+    // Italian date).
+    final dueDate = parseDateOnly(ticket.dueDate);
+    final now = DateTime.now();
     final isOverdue =
         dueDate != null &&
-        dueDate.isBefore(DateTime.now()) &&
+        dueDate.isBefore(DateTime.utc(now.year, now.month, now.day)) &&
         statusName.toLowerCase() != 'completato';
+    // `.toLocal()` here was the second half of the same bug: a civil date carries no instant to
+    // convert, and converting it anyway showed the previous day west of UTC.
     final dueLabel = dueDate == null
         ? null
-        : DateFormat('dd/MM/yy', 'it').format(dueDate.toLocal());
+        : formatWorkDate(dueDate, 'dd/MM/yy', locale: 'it');
 
     final row = Semantics(
       // The stripe colour is a sighted-only cue; this is the same information for TalkBack/

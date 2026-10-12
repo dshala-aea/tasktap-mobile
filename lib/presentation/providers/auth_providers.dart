@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/notifications/notification_service.dart';
 import '../../core/time/business_time_providers.dart';
+import '../../data/auth/session_ender.dart';
 import '../../data/auth/zitadel_auth_repository.dart';
 import '../../data/entitlements/entitlement_service.dart'
     show internalUserIdPrefsKey;
@@ -24,6 +24,22 @@ import '../../domain/auth/i_auth_repository.dart';
 /// ```
 final authRepositoryProvider = Provider<IAuthRepository>((ref) {
   return ZitadelAuthRepository();
+});
+
+// ── Session teardown ────────────────────────────────────────────────────────
+
+/// The teardown every "end this session" path runs — the logout button and the interceptor's forced
+/// sign-out alike. See [SessionEnder] for why there is only one.
+///
+/// A provider rather than a bare function so both callers get the *same* collaborators the app is
+/// really using: `dioProvider` (a `Provider<Dio>`, built once) reads this from inside the
+/// interceptor's error path, where `ref` is still valid.
+final sessionEnderProvider = Provider<SessionEnder>((ref) {
+  return SessionEnder(
+    repo: ref.watch(authRepositoryProvider),
+    db: ref.watch(appDatabaseProvider),
+    resetBusinessZone: () => ref.read(businessZoneIdProvider.notifier).reset(),
+  );
 });
 
 // ── Auth state stream ──────────────────────────────────────────────────────
@@ -121,32 +137,11 @@ class LoginNotifier extends StateNotifier<LoginState> {
   }
 
   Future<void> signOut() async {
-    // Unregister this device's FCM token BEFORE signing out — the access token this call needs
-    // is gone the moment signOut() completes, and a device that stays registered keeps receiving
-    // push for an account no longer signed in on it. Mirrors the same guard/token-source
-    // `_syncPushRegistration` already uses in impostazioni_provider.dart.
-    if (NotificationService.isAvailable) {
-      final token = _repo.currentUser?.accessToken;
-      if (token != null && token.isNotEmpty) {
-        await NotificationService.instance.unregisterDeviceToken(token);
-      }
-    }
-    await _repo.signOut();
-
-    // This is a shared/rotating-device field-service app (van tablets, rotating technicians) —
-    // leaving the local Drift DB and SharedPreferences populated after sign-out would let the
-    // next person to sign in on this device (possibly a different tenant entirely) see the
-    // previous account's full cached tickets/customers/cantieri/notifications and settings.
-    try {
-      await _ref.read(appDatabaseProvider).wipeAllData();
-      await (await SharedPreferences.getInstance()).clear();
-    } finally {
-      // Riverpod state outlives the prefs wipe: without this the next tenant would inherit this
-      // tenant's business zone until its own /me answers. In `finally` so a failing wipe cannot
-      // skip it.
-      await _ref.read(businessZoneIdProvider.notifier).reset();
-    }
-
+    // One sequence, shared with the forced path — the interceptor ends a session through the same
+    // `SessionEnder` (see `sessionEnderProvider`), because when this teardown lived here and a
+    // narrower one lived there, a forced sign-out left the previous user's database and prefs on
+    // the device.
+    await _ref.read(sessionEnderProvider).end();
     state = const LoginState();
   }
 

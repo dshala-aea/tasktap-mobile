@@ -1,6 +1,7 @@
 // dart format width=100
 import 'package:uuid/uuid.dart';
 
+import '../../core/time/business_time.dart' show parseDateOnly;
 import '../../core/utils/error_message.dart';
 import '../../features/ticket/ticket_api_client.dart';
 import '../api/problem_details.dart';
@@ -273,7 +274,11 @@ class TicketCreationQueue {
         statusId: t.statusId,
         typeId: t.typeId,
         priorita: t.priorita,
-        dueDate: t.dueDate,
+        // Read back out of the CIVIL-date column into the `DateTime` the API takes — see
+        // `Tickets.dueDate`'s doc comment. A malformed/absent label reads as null rather than
+        // throwing here: this is a resend of a row that already exists, and refusing to send it
+        // because of a date would strand the ticket on the device.
+        dueDate: parseDateOnly(t.dueDate),
         technicianNotes: t.technicianNotes,
         agentId: t.agentId,
         contractId: t.contractId,

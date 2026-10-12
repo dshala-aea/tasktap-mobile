@@ -30,7 +30,15 @@ final dioProvider = Provider<Dio>((ref) {
   // Share the single repository instance so the interceptor sees the same
   // session (access token) that the login flow established.
   final authRepo = ref.watch(authRepositoryProvider);
-  dio.interceptors.add(AuthInterceptor(dio: dio, authRepo: authRepo));
+  final interceptor = AuthInterceptor(dio: dio, authRepo: authRepo);
+  // A forced sign-out must leave the device as clean as the logout button does — the interceptor's
+  // own path used to call only `authRepo.signOut()` and left the previous user's Drift rows and
+  // prefs behind. Read through the provider rather than building the teardown here, so both callers
+  // run one sequence (see `SessionEnder`). `ref.read`, not `watch`: this runs long after the Dio
+  // instance was built, and re-creating the client's interceptor on a dependency change is not
+  // something this provider should do.
+  interceptor.onForcedSignOut = () => ref.read(sessionEnderProvider).end();
+  dio.interceptors.add(interceptor);
 
   // What the network actually did, in debug builds only.
   //
@@ -91,8 +99,11 @@ class AuthInterceptor extends Interceptor {
   final Dio dio;
   final IAuthRepository authRepo;
 
-  /// Observable — set this callback to react to forced sign-out.
-  void Function()? onForcedSignOut;
+  /// Observable — set this callback to react to forced sign-out. `dioProvider` points it at the
+  /// shared [SessionEnder] (`sessionEnderProvider`), so the forced path ends the session exactly the
+  /// way the logout button does; see [AuthInterceptor._endSession] for what happens when nothing
+  /// set it.
+  Future<void> Function()? onForcedSignOut;
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -132,10 +143,9 @@ class AuthInterceptor extends Interceptor {
       } else if (refreshResult.failure is SessionExpired) {
         // The identity provider positively confirmed the refresh token is dead (invalid_grant) —
         // the only failure that means the session is actually gone (see
-        // ZitadelAuthRepository._restore's identical narrowing). Force sign-out and navigate to
-        // login.
-        await authRepo.signOut();
-        onForcedSignOut?.call();
+        // ZitadelAuthRepository._restore's identical narrowing). End the session and let the app
+        // route to /login.
+        await _endSession();
         return handler.next(err);
       } else {
         // NetworkError (Zitadel unreachable) or anything _mapError couldn't classify precisely
@@ -151,5 +161,22 @@ class AuthInterceptor extends Interceptor {
     }
 
     handler.next(err);
+  }
+
+  /// End the session after a confirmed [SessionExpired].
+  ///
+  /// The hook is the whole teardown (secure-storage credentials, the Drift database, prefs, the
+  /// business zone — [SessionEnder]); the local `signOut` is only the fallback for an interceptor
+  /// nobody wired, which is the case in this file's own tests. It is the *previous*, incomplete
+  /// behaviour: it drops the credentials but leaves the signed-out user's rows on the device. Still
+  /// strictly better than leaving a dead session in place, and unreachable from `dioProvider`, which
+  /// always sets the hook.
+  Future<void> _endSession() async {
+    final hook = onForcedSignOut;
+    if (hook != null) {
+      await hook();
+    } else {
+      await authRepo.signOut();
+    }
   }
 }

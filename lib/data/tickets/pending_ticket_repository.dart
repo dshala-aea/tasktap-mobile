@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../../core/time/business_time.dart' show formatDateOnly;
 import '../local/app_database.dart';
 import 'pending_ticket_state.dart';
 
@@ -59,7 +60,7 @@ PendingTicketsCompanion _rowCompanion({
     statusId: Value(statusId),
     typeId: Value(typeId),
     priorita: Value(priorita),
-    dueDate: Value(dueDate),
+    dueDate: Value(formatDateOnly(dueDate)),
     technicianNotes: Value(technicianNotes),
     agentId: Value(agentId),
     contractId: Value(contractId),

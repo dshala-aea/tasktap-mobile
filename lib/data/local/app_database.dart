@@ -205,7 +205,18 @@ class Tickets extends Table {
   /// through `ticketStatusMapProvider` instead of a client-side enum.
   TextColumn get priority => text().nullable()();
 
-  DateTimeColumn get dueDate => dateTime().nullable()();
+  /// The day the office wants this job done — a CIVIL date (`yyyy-MM-dd` TEXT), not an instant.
+  ///
+  /// A Drift `DateTimeColumn` would store the epoch seconds and read them back through
+  /// `DateTime.fromMillisecondsSinceEpoch`, which is *local*: a date pinned as UTC midnight came back
+  /// as the previous calendar day on any device west of UTC, and no formatter can recover a day that
+  /// was already lost on read. Same reasoning, and the same storage, as
+  /// [Strumenti.calibrationExpiry] below.
+  ///
+  /// Read it with `parseDateOnly` and write it with `formatDateOnly` (`core/time/business_time.dart`);
+  /// the wire form is unchanged (`date-time` — the backend's `UtcDateTimeConverter` reads an
+  /// unspecified kind as UTC, so a date-only or a `Z`-suffixed midnight both land on the same day).
+  TextColumn get dueDate => text().nullable()();
 
   /// Free-form labels, no catalogue behind them (see `TicketDto.tags`'s own doc comment). No
   /// list-column type exists in Drift, so stored as JSON text — same convention as
@@ -873,7 +884,10 @@ class PendingTickets extends Table {
   /// Set once the server confirms creation — the real Ticket.id.
   TextColumn get serverTicketId => text().nullable()();
 
-  DateTimeColumn get dueDate => dateTime().nullable()();
+  /// CIVIL date (`yyyy-MM-dd` TEXT), same as [Tickets.dueDate] — see its own doc comment for why a
+  /// `DateTimeColumn` is the wrong storage for a day the office named. Client-authored (this row is
+  /// the create-path outbox, never delta-synced), so no `syncCursorGeneration` bump.
+  TextColumn get dueDate => text().nullable()();
   TextColumn get technicianNotes => text().nullable()();
   TextColumn get agentId => text().nullable()();
 
@@ -1132,7 +1146,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration {
@@ -1416,9 +1430,80 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(pendingTickets, pendingTickets.prodottoAssistenzaIdsJson);
           await m.addColumn(pendingTickets, pendingTickets.repairableField);
         }
+        if (from < 38) {
+          // `dueDate` becomes a civil date stored as `yyyy-MM-dd` TEXT on both tables — see
+          // `Tickets.dueDate`'s own doc comment for the bug and `Strumenti.calibrationExpiry`'s for
+          // the precedent. This is not an `addColumn` step: the two columns already exist as INTEGER
+          // epoch seconds, SQLite has no ALTER COLUMN TYPE, and a plain copy would carry the number
+          // straight into a TEXT column (where the affinity would render it as "1759536000").
+          //
+          // `alterTable` is Drift's supported way to change a column's type: it re-creates the table
+          // from the current definition and copies the rows across, and `columnTransformer` is the
+          // hook that rewrites the values on the way. What is being rewritten is an epoch second
+          // count of whatever moment the old column stored, and which moment that is depends on who
+          // wrote the row — see [_civilDayOfDueDate] for which day each of them means.
+          //
+          // No `syncCursorGeneration` bump: unlike schema 12/20/23/32, nothing has to be refetched —
+          // the rows the device already holds are rewritten in place, and a full sync would only
+          // re-deliver the same dates.
+          await m.alterTable(
+            // ignore: experimental_member_use
+            TableMigration(
+              tickets,
+              columnTransformer: {
+                tickets.dueDate: CustomExpression<String>(_civilDayOfDueDate('tickets')),
+              },
+            ),
+          );
+          await m.alterTable(
+            // ignore: experimental_member_use
+            TableMigration(
+              pendingTickets,
+              columnTransformer: {
+                pendingTickets.dueDate: CustomExpression<String>(
+                  _civilDayOfDueDate('pending_tickets'),
+                ),
+              },
+            ),
+          );
+        }
       },
     );
   }
+
+  /// The `columnTransformer` expression that rewrites one INTEGER `due_date` column (schema 37 and
+  /// older) into the `yyyy-MM-dd` label of the day it was meant to mean.
+  ///
+  /// The old column is Drift's `DateTimeColumn`: an epoch second count of *some* moment. Which
+  /// moment, and therefore which calendar day it stands for, depends on who wrote the row:
+  ///
+  ///   - the sync writes the server's copy of the ticket, and the API serializes `Ticket.DueDate`
+  ///     as `…T00:00:00Z` — a UTC midnight, whose day is its day in UTC. (This is also the shape
+  ///     the backend reads back: its `UtcDateTimeConverter` treats an unspecified kind as UTC.)
+  ///   - `showDatePicker` returns a *local* midnight, and the wizard and the edit screen both store
+  ///     that value as-is — its day is its day in the device's own zone. These are the rows the old
+  ///     code displayed *correctly*; only the server's came out a day early west of UTC, which is
+  ///     the bug the whole change exists to remove.
+  ///
+  /// So neither conversion alone is right. `unixepoch` on its own drags every picker-set date back
+  /// one day on any device east of UTC — every Italian device, i.e. every device that actually
+  /// holds rows — and that is the one error this migration must not make, because it would rewrite
+  /// dates a technician chose into dates they did not, with nothing left to notice it. `localtime`
+  /// on its own is right for exactly those rows but freezes the off-by-one on the server's, which
+  /// the next delta sync would not correct for tickets nobody edits.
+  ///
+  /// Both branches read the column through `unixepoch` first: without that modifier SQLite reads a
+  /// bare number as a *Julian day*, and an epoch second count is far outside that range — it returns
+  /// `2000-01-01` for every row rather than raising, so the mistake is silent and total.
+  ///
+  /// The `CASE` tells the two apart by the only signal the column carries: whether the stored
+  /// instant *is* a UTC midnight, which is the server's shape and nothing a picker produces unless
+  /// the device itself runs at UTC (where the two days coincide anyway). A NULL stays NULL through
+  /// both branches, so a ticket with no due date keeps none.
+  static String _civilDayOfDueDate(String table) =>
+      "CASE WHEN strftime('%H:%M:%S', $table.due_date, 'unixepoch') = '00:00:00' "
+      "THEN strftime('%Y-%m-%d', $table.due_date, 'unixepoch') "
+      "ELSE strftime('%Y-%m-%d', $table.due_date, 'unixepoch', 'localtime') END";
 
   // ── sync_meta helpers ────────────────────────────────────────────────────
 

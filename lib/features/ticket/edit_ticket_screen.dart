@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart';
 import '../../core/utils/error_message.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
@@ -105,7 +106,9 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
         typeId: ticket.typeId,
         statusId: ticket.statusId,
         priority: ticket.priority ?? kDefaultTicketPriority,
-        dueDate: ticket.dueDate,
+        // `Tickets.dueDate` is a CIVIL date (`yyyy-MM-dd` TEXT) — see its doc comment. Parsed back
+        // into the `DateTime` the form and the PUT both speak, with no zone conversion.
+        dueDate: parseDateOnly(ticket.dueDate),
         technicianNotes: ticket.technicianNotes,
         agentId: ticket.agentId,
         tags: _decodeTags(ticket.tagsJson),
@@ -188,7 +191,7 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
           locationId: Value(s.locationId!),
           typeId: Value(s.typeId!),
           priority: Value(s.priority),
-          dueDate: Value(s.dueDate),
+          dueDate: Value(formatDateOnly(s.dueDate)),
           technicianNotes: Value(s.technicianNotes),
           agentId: Value(s.agentId),
           tagsJson: Value(jsonEncode(s.tags)),
