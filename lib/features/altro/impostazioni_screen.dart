@@ -286,9 +286,16 @@ class ImpostazioniScreen extends ConsumerWidget {
     if (!NotificationService.isAvailable) {
       // Firebase never initialised — an explicitly supported degraded path. Say so instead of
       // flipping a switch that cannot deliver anything.
+      //
+      // The recorded cause is appended when there is one. Without it this message is a dead end on
+      // a handset with no attached console, which is every TestFlight install: a Firebase config
+      // error, a bootstrap timeout and a failed APNs token fetch all land here reading identically.
+      final reason = NotificationService.lastError;
       showAppToast(
         context,
-        message: 'Le notifiche non sono disponibili su questo dispositivo.',
+        message: reason == null
+            ? 'Le notifiche non sono disponibili su questo dispositivo.'
+            : 'Le notifiche non sono disponibili su questo dispositivo.\n$reason',
         tone: ToastTone.warning,
       );
       return;

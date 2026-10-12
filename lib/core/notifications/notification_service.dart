@@ -41,6 +41,14 @@ class NotificationService {
   /// [instance] must check this flag first; there is no other guard.
   static bool isAvailable = false;
 
+  /// The last failure that affected push, or null if none has occurred.
+  ///
+  /// [isAvailable] alone cannot be told apart from "the app never tried": a missing APNs token, a
+  /// Firebase config error and a bootstrap timeout all collapsed into the same `false`, and the
+  /// reason went to a `debugPrint` that a TestFlight build never shows anyone. Impostazioni now
+  /// surfaces this, so the failure is diagnosable from the handset.
+  static String? lastError;
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   String? _currentToken;
   bool _initialized = false;
@@ -66,7 +74,7 @@ class NotificationService {
     _initialized = true;
 
     if (await hasPermission()) {
-      _currentToken = await _messaging.getToken();
+      _currentToken = await _tryGetToken();
       debugPrint('FCM token: $_currentToken');
     }
 
@@ -87,13 +95,32 @@ class NotificationService {
     FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
 
     // Check if app was opened from a notification (terminated state).
-    final initialMessage = await _messaging.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationTap(initialMessage);
+    //
+    // Guarded for the same reason as the token fetch above: a throw here aborts `initialize()`, and
+    // the bootstrap turns that into "push unavailable" — for a cold-start deep link that is merely
+    // absent. Nothing below depends on the result.
+    try {
+      final initialMessage = await _messaging.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationTap(initialMessage);
+      }
+    } catch (e) {
+      debugPrint('FCM getInitialMessage failed: $e');
     }
 
-    // Configure Android notification channel.
-    if (Platform.isAndroid) {
+    // Foreground presentation is an Apple-only concern: on iOS a notification that arrives while
+    // the app is open is delivered to `onMessage` but shown to nobody unless these options say
+    // otherwise.
+    //
+    // The guard here used to be `Platform.isAndroid` — the one platform that has no implementation
+    // of this method at all. Its only implementation in firebase_messaging is
+    // `ios/firebase_messaging/Sources/firebase_messaging/FLTFirebaseMessagingPlugin.m`, and the
+    // doc comment above it reads "Sets the presentation options for Apple notifications". So the
+    // call went to the platform that cannot honour it and was skipped on the platform that is the
+    // entire reason it exists. Left unguarded against throwing: if it ever does, the bootstrap now
+    // records the exception and Impostazioni shows it, which is a better outcome than silently
+    // having no foreground alerts.
+    if (Platform.isIOS) {
       await _messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
@@ -144,7 +171,7 @@ class NotificationService {
     if (!granted) return false;
 
     // The token could not be fetched at startup if permission was not held then.
-    _currentToken ??= await _messaging.getToken();
+    _currentToken ??= await _tryGetToken();
     return true;
   }
 
@@ -263,6 +290,26 @@ class NotificationService {
     final link = _pendingDeepLink;
     _pendingDeepLink = null;
     return link;
+  }
+
+  /// Fetch the FCM token, or null when the platform will not issue one yet.
+  ///
+  /// On iOS `getToken()` throws `[firebase_messaging/apns-token-not-set]` whenever APNs registration
+  /// has not completed. That is the permanent state when the App ID lacks the Push Notifications
+  /// capability, when no APNs key is uploaded to the Firebase project, or when the build carries a
+  /// `development` aps-environment under a distribution profile. Unguarded, a single such failure
+  /// propagated straight out of [initialize] and disabled the whole subsystem — no permission
+  /// prompt, no listeners, no deep links, and Impostazioni reporting notifications as unsupported
+  /// on a handset that supports them perfectly well. A missing token is a missing token; it is not
+  /// a reason to refuse to ask for permission.
+  Future<String?> _tryGetToken() async {
+    try {
+      return await _messaging.getToken();
+    } catch (e) {
+      lastError = 'Token: $e';
+      debugPrint('FCM getToken failed: $e');
+      return null;
+    }
   }
 
   Future<String> _getDeviceName() async {

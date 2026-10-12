@@ -75,14 +75,26 @@ Future<void> initializePush({
   required Future<void> Function() initNotifications,
   Duration timeout = const Duration(seconds: 5),
 }) async {
+  // The two steps are caught separately so that the recorded failure names which one broke. They
+  // used to share a single catch, so "Firebase is not configured" and "the APNs token fetch
+  // failed" produced the same sentence in the log and the same silent `false` at every call site.
   try {
     await initFirebase().timeout(timeout);
-    await initNotifications().timeout(timeout);
-    NotificationService.isAvailable = true;
   } catch (e) {
-    // Firebase is optional — app still works without push notifications.
+    NotificationService.lastError = 'Firebase: $e';
     debugPrint('Firebase init failed (push disabled): $e');
+    return;
   }
+
+  try {
+    await initNotifications().timeout(timeout);
+  } catch (e) {
+    NotificationService.lastError = 'Notifiche: $e';
+    debugPrint('Notification init failed (push disabled): $e');
+    return;
+  }
+
+  NotificationService.isAvailable = true;
 }
 
 /// Initialise Supabase and launch the Flutter widget tree.
