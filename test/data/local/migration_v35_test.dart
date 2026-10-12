@@ -70,6 +70,9 @@ void main() {
                            'prodotto_assistenza_ids_json', 'repairable_field']) {
             raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
           }
+          // The upgrade now continues 34 -> 35 -> ... -> 39, so the column that last step adds must
+          // be absent too. (38 adds none: it re-creates tickets/pending_tickets in place.)
+          raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
           raw.execute('PRAGMA user_version = 34');
         },
       ),
