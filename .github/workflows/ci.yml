@@ -89,6 +89,9 @@ jobs:
           test/features/ticket/worklog_row_date_test.dart
           test/features/ticket/ticket_timer_elapsed_test.dart
           test/features/ticket/ticket_detail_screen_test.dart
+          test/features/ticket/edit_ticket_screen_test.dart
+          test/data/tickets/ticket_due_date_test.dart
+          test/data/local/migration_v38_test.dart
           test/features/altro/notifiche_screen_test.dart
 
   build-android:

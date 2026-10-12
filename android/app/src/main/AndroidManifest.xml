@@ -110,5 +110,17 @@
             <data
                 android:mimeType="text/plain"/>
         </intent>
+        <!-- On-device dictation. Since Android 11 (API 30) package visibility is filtered by
+             default, so the speech recognizer service is invisible to this app: the plugin resolves
+             it with `packageManager.queryIntentServices(RecognitionService.SERVICE_INTERFACE)`
+             (SpeechToTextPlugin.kt, `findComponentName`) and gates recognition on
+             `SpeechRecognizer.isOnDeviceRecognitionAvailable`, both of which see nothing. The
+             plugin's own manifest is empty, so nothing merges this in.
+
+             Copied verbatim from speech_to_text 7.4.0's README ("Android SDK 30 or later") and its
+             example manifest — the exact action name is the documented requirement, not a guess. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 </manifest>

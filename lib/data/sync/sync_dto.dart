@@ -1,5 +1,6 @@
 // Dart DTOs for the MobileUserSyncResult payload.
 // These mirror the C# entities serialised as JSON from GET /api/sync/mobile.
+import '../../core/time/business_time.dart' show parseDateOnly;
 import 'checklist_sync_dto.dart';
 
 class SyncResultDto {
@@ -341,6 +342,10 @@ class TicketDto {
 
   /// Wire form is the enum name — see `Tickets.priority`'s own doc comment in `app_database.dart`.
   final String? priority;
+
+  /// A CIVIL date (`DateTime.utc(y, m, d)`), not the instant the wire spells it as — see
+  /// `Tickets.dueDate`'s own doc comment in `app_database.dart`. `parseDateOnly` keeps whatever day
+  /// the server named rather than letting a zone conversion move it.
   final DateTime? dueDate;
 
   /// Free-form labels — see `Tickets.tagsJson`'s own doc comment in `app_database.dart`.
@@ -394,7 +399,7 @@ class TicketDto {
     commessaId: j['commessaId'] as String?,
     cantiereId: j['cantiereId'] as String?,
     priority: j['priority'] as String?,
-    dueDate: _dt(j['dueDate']),
+    dueDate: parseDateOnly(j['dueDate']),
     tags: (j['tags'] as List<dynamic>?)?.cast<String>() ?? const [],
   );
 }

@@ -248,7 +248,11 @@ void main() {
     ) async {
       await (db.update(db.tickets)..where((t) => t.id.equals('ticket-1'))).write(
         TicketsCompanion(
-          dueDate: Value(DateTime.utc(2026, 10, 1)),
+          // A `yyyy-MM-dd` STRING, not a `DateTime`: `Tickets.dueDate` is a civil date stored as
+          // TEXT (see its doc comment in `app_database.dart`), and this is the column read that the
+          // whole bug lived in — the epoch-seconds carrier came back as 30/09/2026 on a device west
+          // of UTC, which is why this file is now in the tz-matrix job.
+          dueDate: const Value('2026-10-01'),
           technicianNotes: const Value('Verificare guarnizione'),
           agentId: const Value('usr-agent-1'),
           tagsJson: const Value('["urgente","garanzia"]'),

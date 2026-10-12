@@ -8,6 +8,7 @@
 // widget dependencies (LucideIcons etc.).
 // ══════════════════════════════════════════════════════════════════════════════
 
+import '../../core/time/business_time.dart' show parseDateOnly;
 import '../../data/local/app_database.dart';
 import '../../data/tickets/pending_ticket_repository.dart';
 
@@ -112,7 +113,9 @@ class NewTicketFormState {
       statusId: row.statusId,
       assignedUserId: blamed == 'assignedUserId' ? null : row.assignedUserId,
       priority: row.priorita,
-      dueDate: row.dueDate,
+      // Back out of the CIVIL-date column — see `Tickets.dueDate`'s doc comment in
+      // `app_database.dart`.
+      dueDate: parseDateOnly(row.dueDate),
       technicianNotes: row.technicianNotes,
       agentId: blamed == 'agentId' ? null : row.agentId,
       contractId: blamed == 'contractId' ? null : row.contractId,

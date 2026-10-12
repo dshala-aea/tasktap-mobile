@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/dictation/dictation_service.dart';
 import '../../../core/theme/app_rack.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../data/auth/auth_reconnect_watcher.dart';
@@ -70,9 +71,9 @@ class _HomeShellState extends ConsumerState<HomeShell>
   Timer? _reconcilePoll;
 
   // Cancel functions for every connectivityProvider.onReconnect() registration made below. A
-  // forced sign-out (AuthInterceptor → authRepo.signOut()) sends the router to /login and back,
-  // disposing and recreating this whole widget — connectivityProvider itself is never disposed
-  // across that cycle. Without unregistering here, each remount left the previous mount's
+  // forced sign-out (AuthInterceptor → the shared `SessionEnder`) sends the router to /login and
+  // back, disposing and recreating this whole widget — connectivityProvider itself is never
+  // disposed across that cycle. Without unregistering here, each remount left the previous mount's
   // closures (closing over an already-disposed `ref`) in the listener list forever, and the next
   // reconnect threw "Cannot use ref after the widget was disposed" on those stale entries.
   final List<VoidCallback> _reconnectUnsubs = [];
@@ -189,6 +190,15 @@ class _HomeShellState extends ConsumerState<HomeShell>
       // a push arriving while foregrounded — backgrounding the app and bringing it back left it
       // stale until one of those happened to occur.
       ref.read(notificheProvider.notifier).refresh();
+      // Dictation capability is cached for the process (`dictationCapabilityProvider`), and the one
+      // way it can become available mid-run is the technician leaving the app to install or enable
+      // an on-device speech pack in the system settings and coming back. Without this, the dictate
+      // buttons stay hidden until the app is restarted — the exact "it says the microphone is
+      // unavailable, so I installed the language pack, and nothing changed" complaint. It costs the
+      // handful of platform-channel calls `capability()` makes, once per resume;
+      // `AsyncValue.when`'s default `skipLoadingOnRefresh` keeps the dependents on the previous
+      // answer while it re-resolves, so nothing flickers.
+      ref.invalidate(dictationCapabilityProvider);
       _startReconcilePoll();
     } else {
       // Backgrounded (paused/inactive/hidden): stop the foreground fallback poll. This is

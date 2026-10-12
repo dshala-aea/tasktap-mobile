@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/time/business_time.dart' show formatDateOnly;
 import '../api/dio_client.dart';
 import '../local/app_database.dart';
 import '../reference/reference_cache_repository.dart';
@@ -351,7 +352,7 @@ class SyncService {
               commessaId: Value(t.commessaId),
               cantiereId: Value(t.cantiereId),
               priority: Value(t.priority),
-              dueDate: Value(t.dueDate),
+              dueDate: Value(formatDateOnly(t.dueDate)),
               tagsJson: Value(jsonEncode(t.tags)),
             ),
           );

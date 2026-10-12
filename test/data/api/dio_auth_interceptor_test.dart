@@ -179,7 +179,11 @@ void main() {
 
     test('invokes onForcedSignOut callback when set', () async {
       var signOutCalled = false;
-      interceptor.onForcedSignOut = () => signOutCalled = true;
+      // The hook is awaited (it is the whole session teardown — `SessionEnder`), so it is a
+      // `Future<void> Function()?` rather than a bare callback.
+      interceptor.onForcedSignOut = () async {
+        signOutCalled = true;
+      };
 
       final options = RequestOptions(path: '/api/data');
       final handler = MockErrorInterceptorHandler();
@@ -217,7 +221,9 @@ void main() {
 
     test('does NOT invoke onForcedSignOut', () async {
       var called = false;
-      interceptor.onForcedSignOut = () => called = true;
+      interceptor.onForcedSignOut = () async {
+        called = true;
+      };
 
       final options = RequestOptions(path: '/api/data');
       final handler = MockErrorInterceptorHandler();
@@ -264,7 +270,9 @@ void main() {
 
     test('does NOT invoke onForcedSignOut', () async {
       var called = false;
-      interceptor.onForcedSignOut = () => called = true;
+      interceptor.onForcedSignOut = () async {
+        called = true;
+      };
 
       final options = RequestOptions(path: '/api/data');
       final handler = MockErrorInterceptorHandler();

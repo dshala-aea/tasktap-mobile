@@ -189,7 +189,10 @@ void main() {
       priorita: 'Alta',
       state: 'failed',
       error: 'Non trovato sul server.',
-      dueDate: DateTime.utc(2026, 7, 1),
+      // The real column is `yyyy-MM-dd` TEXT since schema 38 — see `PendingTickets.dueDate` in
+      // app_database.dart. `fromPendingRow` reads it back with `parseDateOnly`, so the assertion
+      // below still sees `DateTime.utc(2026, 7, 1)`.
+      dueDate: '2026-07-01',
       technicianNotes: 'Portare guarnizione',
       agentId: agentId,
       contractId: contractId,

@@ -3,8 +3,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
+import '../../../core/time/business_time.dart' show formatWorkDate;
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/app_tappable.dart';
 import '../../../core/widgets/extension_fields_section.dart';
@@ -342,8 +342,11 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         // ── Scadenza ───────────────────────────────────────────────────────
         AdminDateField(
           label: 'Scadenza',
+          // `dueDate` is a civil date (`DateTime.utc(y, m, d)` — see `Tickets.dueDate` in
+          // app_database.dart). `formatWorkDate` reads the label's own y/m/d fields and never the
+          // carrier, which is the one thing a bare `DateFormat` cannot promise.
           value: widget.state.dueDate != null
-              ? DateFormat('dd/MM/yyyy').format(widget.state.dueDate!)
+              ? formatWorkDate(widget.state.dueDate!, 'dd/MM/yyyy')
               : 'Seleziona data',
           onTap: _pickDueDate,
         ),
