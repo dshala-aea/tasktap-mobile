@@ -3,6 +3,44 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 
+/// `CREATE TABLE` statements for [tables] exactly as the current schema defines them, read back out
+/// of a throwaway in-memory database.
+///
+/// A hand-written minimal fixture stops being enough the moment a migration step *rewrites* a table
+/// instead of adding a column to it. Schema 38 is the first such step: Drift's `alterTable`
+/// re-creates `tickets`/`pending_tickets` from their current definition and copies the rows across,
+/// selecting **every** current column out of the old table — so an old table missing one fails with
+/// `no such column`, whatever the step under test was actually migrating. Taking today's DDL keeps
+/// such a fixture working without a hand-copied column list that rots at the next schema change; the
+/// caller is responsible for rewinding whatever the version under test did not have yet.
+Future<Map<String, String>> _currentTableDdl(List<String> tables) async {
+  final schema = AppDatabase(NativeDatabase.memory());
+  try {
+    // Interpolated rather than bound: every caller passes literal table names.
+    final names = tables.map((t) => "'$t'").join(', ');
+    final rows = await schema
+        .customSelect(
+          "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name IN ($names)",
+        )
+        .get();
+    return {for (final row in rows) row.read<String>('name'): row.read<String>('sql')};
+  } finally {
+    await schema.close();
+  }
+}
+
+/// The `pending_tickets` columns schema 37 adds — i.e. the ones a v33 database does not have yet.
+/// A fixture built from today's DDL starts with them, so they have to be taken back off: schema 37
+/// runs on the way from 33 to 38, and its `addColumn`s cannot run against a table that already
+/// carries them.
+const _pendingTicketsColumnsAddedIn37 = [
+  'contract_id',
+  'commessa_id',
+  'cantiere_id',
+  'prodotto_assistenza_ids_json',
+  'repairable_field',
+];
+
 void main() {
   group('Tickets.cantiereId', () {
     late AppDatabase db;
@@ -125,6 +163,12 @@ void main() {
     });
   });
   group('schema 34 — DraftReports submissionAttempts/submissionErrorTransient', () {
+    late Map<String, String> realTableDdl;
+
+    setUpAll(() async {
+      realTableDdl = await _currentTableDdl(['tickets', 'pending_tickets']);
+    });
+
     test('upgrading from 33 adds both columns with defaults and keeps existing rows', () async {
       // A v33 database as far as this migration step is concerned: just a draft_reports table
       // without the two new columns, holding one pre-existing row. `setup` runs on the raw
@@ -138,9 +182,16 @@ void main() {
               "submission_state TEXT NOT NULL DEFAULT 'draft');",
             );
             raw.execute('CREATE TABLE report_controlli (id TEXT NOT NULL PRIMARY KEY);');
-            // The upgrade continues 33 -> ... -> 37, and schema 37 adds columns to
-            // pending_tickets, so it must exist on this minimal fixture for the chain to run.
-            raw.execute('CREATE TABLE pending_tickets (id TEXT NOT NULL PRIMARY KEY);');
+            // `tickets` and `pending_tickets` at their real shape: the chain continues past this
+            // step, and schema 38's `alterTable` copies every current column out of both (see
+            // [_currentTableDdl]). `pending_tickets` is then rewound to what v33 held — schema 37 is
+            // what adds those five columns, and it runs before 38 does.
+            for (final sql in realTableDdl.values) {
+              raw.execute(sql);
+            }
+            for (final column in _pendingTicketsColumnsAddedIn37) {
+              raw.execute('ALTER TABLE pending_tickets DROP COLUMN $column');
+            }
             raw.execute("INSERT INTO draft_reports (id, submission_state) VALUES ('old', 'failed');");
             raw.execute(
               "INSERT INTO draft_reports (id, submission_state) VALUES ('ok', 'readyToSubmit');",
