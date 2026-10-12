@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
@@ -287,13 +289,49 @@ void main() {
       expect(result.draft.workers, isEmpty);
     });
 
-    test('confirmConversation sends the Idempotency-Key header', () async {
+    test('confirmConversation parses the resolved draft, not a created report', () async {
       RequestOptions? captured;
       final dio = Dio();
       dio.httpClientAdapter = _Adapter((options) async {
         captured = options;
         return ResponseBody.fromString(
-          '{"reportId":"rpt-1","replayed":false}',
+          jsonEncode({
+            'title': 'Sostituzione valvola',
+            'details': 'Valvola bloccata',
+            'materialiNotRequired': false,
+            'customerSignoffText': 'accettato',
+            'ticketId': '00000000-0000-0000-0000-000000000003',
+            'cantiereId': null,
+            'locationId': null, // null is legal on a 200 and must stay null
+            'staff': [
+              {
+                'userId': '00000000-0000-0000-0000-000000000008',
+                'hoursWorked': '6.5',
+                'kmTraveled': '12',
+                'vehicle': 'Fiat Panda',
+              },
+            ],
+            'materials': [
+              {
+                'materialeId': null,
+                'freeTextName': 'Guarnizione',
+                'quantity': '2',
+                'unitOfMeasure': 'pz',
+                'notes': 'Da verificare: materiale non trovato a catalogo.',
+              },
+            ],
+            'controlli': [
+              {
+                'ticketControlId': '00000000-0000-0000-0000-000000000009',
+                'stringValue': null,
+                'boolValue': true,
+                'dateValue': null,
+                'numberValue': null,
+                'note': null,
+              },
+            ],
+            'warnings': ['Un controllo della checklist non è stato registrato.'],
+          }),
           200,
           headers: {
             Headers.contentTypeHeader: [Headers.jsonContentType],
@@ -302,11 +340,46 @@ void main() {
       });
       final client = AiApiClient(dio);
 
-      final result = await client.confirmConversation('sess-1', idempotencyKey: 'key-1');
+      final r = await client.confirmConversation('sess-1', idempotencyKey: 'key-1');
 
-      expect(result.reportId, 'rpt-1');
-      expect(result.replayed, isFalse);
+      expect(r.title, 'Sostituzione valvola');
+      expect(r.ticketId, '00000000-0000-0000-0000-000000000003');
+      expect(r.locationId, isNull, reason: 'the wire says null; nothing may invent a value for it');
+      expect(r.staff.single.hoursWorked, 6.5, reason: 'numbers may arrive as strings');
+      expect(r.materials.single.materialeId, isNull);
+      expect(r.materials.single.freeTextName, 'Guarnizione');
+      expect(r.materials.single.notes, contains('Da verificare'));
+      expect(r.controlli.single.ticketControlId, '00000000-0000-0000-0000-000000000009');
+      expect(r.controlli.single.boolValue, isTrue);
+      expect(r.warnings, hasLength(1));
       expect(captured!.headers['Idempotency-Key'], 'key-1');
+    });
+
+    test('the draft shapes do not describe the confirm response', () async {
+      final dio = Dio();
+      dio.httpClientAdapter = _Adapter(
+        (options) async => ResponseBody.fromString(
+          jsonEncode({
+            'reportId': 'rpt-1',
+            'replayed': false,
+            'materiali': [],
+            'observations': [],
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        ),
+      );
+      final client = AiApiClient(dio);
+
+      final r = await client.confirmConversation('sess-1', idempotencyKey: 'k');
+
+      // The pre-I2 body parses without throwing — every field is simply absent. That silence is
+      // why the inbound contract gate, not this test, is what pins the shape.
+      expect(r.title, isEmpty);
+      expect(r.materials, isEmpty);
+      expect(r.controlli, isEmpty);
     });
 
     test('a 409 on confirm becomes a stale-version conflict', () async {

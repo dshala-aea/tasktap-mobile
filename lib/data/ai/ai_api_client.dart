@@ -334,16 +334,191 @@ class AiConversationTurnResult {
       );
 }
 
-class AiConversationConfirmResult {
-  const AiConversationConfirmResult({required this.reportId, required this.replayed});
+/// One resolved technician line. Mirror of backend `AiResolvedStaff`.
+///
+/// Deliberately narrower than `SubmitReportStaffDto`: the server builds these from a plan that
+/// never carries `costPerKm`, `startTime`, `endTime` or `pauseMinutes`, so those are left at their
+/// column defaults rather than round-tripped as nulls.
+class AiResolvedStaff {
+  const AiResolvedStaff({
+    required this.userId,
+    this.hoursWorked,
+    this.kmTraveled = 0,
+    this.vehicle,
+  });
 
-  final String reportId;
-  final bool replayed;
+  final String userId;
+  final double? hoursWorked;
+  final double kmTraveled;
+  final String? vehicle;
 
-  factory AiConversationConfirmResult.fromJson(Map<String, dynamic> json) =>
-      AiConversationConfirmResult(
-        reportId: json['reportId'] as String? ?? '',
-        replayed: json['replayed'] as bool? ?? false,
+  static const Set<String> wireKeys = {'userId', 'hoursWorked', 'kmTraveled', 'vehicle'};
+
+  factory AiResolvedStaff.fromJson(Map<String, dynamic> json) => AiResolvedStaff(
+    userId: json['userId'] as String? ?? '',
+    hoursWorked: asDouble(json['hoursWorked']),
+    kmTraveled: asDoubleOr0(json['kmTraveled']),
+    vehicle: json['vehicle'] as String?,
+  );
+}
+
+/// One resolved material line. Mirror of backend `AiResolvedMaterial`.
+///
+/// NOT `AiDraftMaterialUsage`: that reads `materialId` and `name`, this reads `materialeId` and
+/// `freeTextName`. Exactly one of [materialeId] / [freeTextName] is meaningful — a catalogue id, or
+/// a name the operator dictated that no catalogue lookup matched. [notes] carries the
+/// "Da verificare" marker on the free-text path, which is the server telling the technician, on the
+/// row itself, that the line needs checking.
+class AiResolvedMaterial {
+  const AiResolvedMaterial({
+    this.materialeId,
+    this.freeTextName,
+    required this.quantity,
+    this.unitOfMeasure,
+    this.notes,
+  });
+
+  final String? materialeId;
+  final String? freeTextName;
+  final double quantity;
+  final String? unitOfMeasure;
+  final String? notes;
+
+  static const Set<String> wireKeys = {
+    'materialeId',
+    'freeTextName',
+    'quantity',
+    'unitOfMeasure',
+    'notes',
+  };
+
+  factory AiResolvedMaterial.fromJson(Map<String, dynamic> json) => AiResolvedMaterial(
+    materialeId: json['materialeId'] as String?,
+    freeTextName: json['freeTextName'] as String?,
+    quantity: asDoubleOr0(json['quantity']),
+    unitOfMeasure: json['unitOfMeasure'] as String?,
+    notes: json['notes'] as String?,
+  );
+}
+
+/// One resolved checklist answer. Mirror of backend `AiResolvedControl`.
+///
+/// [ticketControlId] is the **TicketControl** — this job's copy of a checklist item — not the
+/// template control it came from. The server validates ownership on submit, so a mismatched id
+/// fails the whole submission rather than quietly recording nothing.
+class AiResolvedControl {
+  const AiResolvedControl({
+    required this.ticketControlId,
+    this.stringValue,
+    this.boolValue,
+    this.dateValue,
+    this.numberValue,
+    this.note,
+  });
+
+  final String ticketControlId;
+  final String? stringValue;
+  final bool? boolValue;
+  final DateTime? dateValue;
+  final double? numberValue;
+  final String? note;
+
+  static const Set<String> wireKeys = {
+    'ticketControlId',
+    'stringValue',
+    'boolValue',
+    'dateValue',
+    'numberValue',
+    'note',
+  };
+
+  factory AiResolvedControl.fromJson(Map<String, dynamic> json) => AiResolvedControl(
+    ticketControlId: json['ticketControlId'] as String? ?? '',
+    stringValue: json['stringValue'] as String?,
+    boolValue: json['boolValue'] as bool?,
+    dateValue: json['dateValue'] != null
+        ? DateTime.tryParse(json['dateValue'] as String)
+        : null,
+    numberValue: asDouble(json['numberValue']),
+    note: json['note'] as String?,
+  );
+}
+
+/// What `POST /api/ai/conversations/{id}/confirm` returns: the draft resolved against real tenant
+/// data, and nothing written (spec §5.4). Mirror of backend `AiConversationConfirmResponse`.
+///
+/// It is NOT a created report: there is no `reportId` and no `replayed`, because confirming twice
+/// returns the same draft. The client owns the write that follows, and owns [materialiNotRequired]
+/// and the provenance flag (`isAiAssisted`), which the response deliberately does not carry.
+///
+/// [locationId] may be null: the server normalises its own `Guid.Empty` "never resolved" sentinel
+/// to null rather than hand back an id nothing downstream would reject. Never substitute a value
+/// for it — see the submit path's nullable handling in the editor screen.
+///
+/// [warnings] is operator-facing and empty when everything resolved; it replaces the per-item
+/// `AiResolutionState` the draft summary uses, because resolution is what produced this response.
+class AiConversationConfirmResponse {
+  const AiConversationConfirmResponse({
+    required this.title,
+    this.details,
+    this.materialiNotRequired = false,
+    this.customerSignoffText,
+    this.ticketId,
+    this.cantiereId,
+    this.locationId,
+    this.staff = const [],
+    this.materials = const [],
+    this.controlli = const [],
+    this.warnings = const [],
+  });
+
+  final String title;
+  final String? details;
+  final bool materialiNotRequired;
+  final String? customerSignoffText;
+  final String? ticketId;
+  final String? cantiereId;
+  final String? locationId;
+  final List<AiResolvedStaff> staff;
+  final List<AiResolvedMaterial> materials;
+  final List<AiResolvedControl> controlli;
+  final List<String> warnings;
+
+  static const Set<String> wireKeys = {
+    'title',
+    'details',
+    'materialiNotRequired',
+    'customerSignoffText',
+    'ticketId',
+    'cantiereId',
+    'locationId',
+    'staff',
+    'materials',
+    'controlli',
+    'warnings',
+  };
+
+  factory AiConversationConfirmResponse.fromJson(Map<String, dynamic> json) =>
+      AiConversationConfirmResponse(
+        title: json['title'] as String? ?? '',
+        details: json['details'] as String?,
+        materialiNotRequired: json['materialiNotRequired'] as bool? ?? false,
+        customerSignoffText: json['customerSignoffText'] as String?,
+        ticketId: json['ticketId'] as String?,
+        cantiereId: json['cantiereId'] as String?,
+        locationId: json['locationId'] as String?,
+        staff: ((json['staff'] as List<dynamic>?) ?? [])
+            .map((s) => AiResolvedStaff.fromJson(s as Map<String, dynamic>))
+            .toList(),
+        materials: ((json['materials'] as List<dynamic>?) ?? [])
+            .map((m) => AiResolvedMaterial.fromJson(m as Map<String, dynamic>))
+            .toList(),
+        controlli: ((json['controlli'] as List<dynamic>?) ?? [])
+            .map((c) => AiResolvedControl.fromJson(c as Map<String, dynamic>))
+            .toList(),
+        warnings: ((json['warnings'] as List<dynamic>?) ?? [])
+            .map((w) => w.toString())
+            .toList(),
       );
 }
 
@@ -434,11 +609,15 @@ class AiApiClient {
     }
   }
 
-  /// POST /api/ai/conversations/{id}/confirm — creates the Bozza from the resolved draft.
+  /// POST /api/ai/conversations/{id}/confirm — resolves the draft against real tenant data and
+  /// persists nothing (spec §5.4). The client owns the write that follows.
+  ///
   /// [idempotencyKey] should be a fresh id per confirm *attempt* (retried unchanged on a plain
   /// retry, regenerated by the caller after a 409 — mirrors the backend's own reuse contract,
-  /// documented on `AiConversationsController.Confirm`).
-  Future<AiConversationConfirmResult> confirmConversation(
+  /// documented on `AiConversationsController.Confirm`). The header is sent but the server takes no
+  /// header parameter today, so it is advisory; `request_body_contract_test.dart` records that the
+  /// request carries nothing else.
+  Future<AiConversationConfirmResponse> confirmConversation(
     String sessionId, {
     required String idempotencyKey,
   }) async {
@@ -449,7 +628,7 @@ class AiApiClient {
       );
       final data = response.data;
       if (data == null) throw const AiFailure('Risposta vuota dal servizio AI.');
-      return AiConversationConfirmResult.fromJson(data);
+      return AiConversationConfirmResponse.fromJson(data);
     } on DioException catch (e) {
       throw _translateConversation(e);
     }
