@@ -6,7 +6,12 @@
 //
 // Verifies: a session starts on mount, sending a turn appends both messages and updates the
 // draft summary, Confirm is disabled while an open item is Ambiguous/Conflict, and a successful
-// Confirm navigates to the created report's editor route.
+// Confirm applies the resolved draft to a LOCAL rapportino (spec §5.5) and opens the editor on it.
+// The confirm response resolves and persists nothing server-side (§5.4), so the last test in this
+// file also proves no report is ever created over the network.
+
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
@@ -18,16 +23,37 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
-import 'package:tasktap_mobile/data/reports/server_report_api_client.dart';
-import 'package:tasktap_mobile/data/reports/server_report_dto.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart'
     show SyncNotifier, SyncService, appDatabaseProvider, syncProvider;
 import 'package:tasktap_mobile/features/rapportino/ai_copilot_screen.dart';
 import 'package:tasktap_mobile/features/rapportino/steps/step_dettagli.dart';
+import 'package:tasktap_mobile/presentation/providers/auth_providers.dart';
 import 'package:tasktap_mobile/presentation/providers/report_editor_providers.dart';
 import 'package:tasktap_mobile/core/location/location_service.dart' show gpsPreferenceProvider;
 
-import '../../data/reports/server_report_dto_test.dart' show backendFixture;
+/// The label the Conferma button carries, asserted and tapped in five places below. It says
+/// "apri", not "crea": Confirm no longer creates anything server-side, and the technician lands on
+/// a local Bozza that is not yet sent.
+const _confirmLabel = 'Conferma e apri il rapportino';
+
+/// A realistic confirm response: a resolved draft, no reportId, and a null location — the exact
+/// shape `POST /api/ai/conversations/{id}/confirm` returns (spec §5.4).
+AiConversationConfirmResponse _resolvedDraft({String title = 'Pompa bloccata'}) =>
+    AiConversationConfirmResponse(
+      title: title,
+      details: 'Sostituita pompa; verificata tenuta',
+      ticketId: 'tkt-1',
+      locationId: null,
+      staff: const [AiResolvedStaff(userId: 'u-1', hoursWorked: 6.5, kmTraveled: 12)],
+      materials: const [
+        AiResolvedMaterial(
+          freeTextName: 'Guarnizione',
+          quantity: 2,
+          notes: 'Da verificare: materiale non trovato a catalogo.',
+        ),
+      ],
+      controlli: const [AiResolvedControl(ticketControlId: 'tc-1', boolValue: true)],
+    );
 
 class _FakeAiApiClient extends AiApiClient {
   _FakeAiApiClient({
@@ -37,10 +63,14 @@ class _FakeAiApiClient extends AiApiClient {
   }) : super(Dio());
 
   final AiConversationTurnResult? turnResult;
-  final AiConversationConfirmResult? confirmResult;
+  final AiConversationConfirmResponse? confirmResult;
   final Object? confirmError;
 
   final List<String> sentTurns = [];
+
+  /// Every session id `abandonConversation` was called with, so the release-after-persist order is
+  /// assertable rather than assumed.
+  final List<String> abandoned = [];
 
   @override
   Future<AiQuotaDto> getQuota() async =>
@@ -50,7 +80,11 @@ class _FakeAiApiClient extends AiApiClient {
   Future<AiConversationSessionDto> startConversation({
     String? ticketId,
     String? cantiereId,
-  }) async => AiConversationSessionDto(sessionId: 'sess-1', ticketId: ticketId);
+  }) async => AiConversationSessionDto(
+    sessionId: 'sess-1',
+    ticketId: ticketId,
+    cantiereId: cantiereId,
+  );
 
   @override
   Future<AiConversationTurnResult> sendTurn(String sessionId, String text) async {
@@ -60,30 +94,82 @@ class _FakeAiApiClient extends AiApiClient {
   }
 
   @override
-  Future<AiConversationConfirmResult> confirmConversation(
+  Future<AiConversationConfirmResponse> confirmConversation(
     String sessionId, {
     required String idempotencyKey,
   }) async {
     if (confirmError != null) throw confirmError!;
-    return confirmResult ?? const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false);
+    return confirmResult ?? _resolvedDraft();
   }
 
   @override
-  Future<void> abandonConversation(String sessionId) async {}
+  Future<void> abandonConversation(String sessionId) async {
+    abandoned.add(sessionId);
+  }
 }
 
-/// Serves the backend-shaped fixture (re-keyed to the confirmed report id) or fails on demand.
-class _FakeServerReportApi extends ServerReportApiClient {
-  _FakeServerReportApi({this.fail = false, this.stato = 0}) : super(Dio());
-  bool fail;
-  final int stato;
-  final fetched = <String>[];
+/// A real `AiApiClient` over an adapter that records every request and answers with real wire
+/// shapes. The positive control the negative test below needs: a fake that overrides the methods
+/// outright never reaches Dio, so an empty list of observed calls would prove nothing.
+class _RecordingAdapter implements HttpClientAdapter {
+  _RecordingAdapter(this.paths);
+
+  final List<RequestOptions> paths;
+  static const _sessionId = 'sess-1';
 
   @override
-  Future<ServerReportDto> fetchReport(String reportId) async {
-    fetched.add(reportId);
-    if (fail) throw DioException(requestOptions: RequestOptions(path: '/api/Reports/$reportId'));
-    return ServerReportDto.fromJson({...backendFixture(), 'id': reportId, 'stato': stato});
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    paths.add(options);
+    final body = _bodyFor(options);
+    return ResponseBody.fromString(
+      jsonEncode(body),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  Object _bodyFor(RequestOptions options) {
+    if (options.path == '/api/ai/quota') {
+      return {'monthlyLimit': 20, 'used': 4, 'remaining': 16};
+    }
+    if (options.path.contains('/turns')) {
+      return {
+        'assistantReplyText': 'Fatto.',
+        'draft': {
+          'workers': [],
+          'materials': [],
+          'controlli': [],
+          'activities': [],
+          'openItems': [],
+        },
+      };
+    }
+    if (options.path.contains('/confirm')) {
+      return {
+        'title': 'Pompa bloccata',
+        'details': 'Sostituita pompa',
+        'materialiNotRequired': false,
+        'customerSignoffText': null,
+        'ticketId': 'tkt-1',
+        'cantiereId': null,
+        'locationId': null,
+        'staff': [],
+        'materials': [],
+        'controlli': [],
+        'warnings': [],
+      };
+    }
+    // Conversation start (and anything else this path might grow) — an empty session.
+    return {'sessionId': _sessionId, 'ticketId': 'tkt-1'};
   }
 }
 
@@ -94,12 +180,7 @@ class _NoopSync extends SyncNotifier {
   Future<void> performSync() async {}
 }
 
-Widget _wrap(
-  AiApiClient client, {
-  String? ticketId,
-  AppDatabase? db,
-  ServerReportApiClient? serverApi,
-}) {
+Widget _wrap(AiApiClient client, {String? ticketId, String? cantiereId, AppDatabase? db}) {
   final database = db ?? AppDatabase(NativeDatabase.memory());
   if (db == null) addTearDown(database.close);
   final router = GoRouter(
@@ -107,12 +188,12 @@ Widget _wrap(
     routes: [
       GoRoute(
         path: '/copilot',
-        builder: (context, state) => AiCopilotScreen(ticketId: ticketId),
+        builder: (context, state) => AiCopilotScreen(ticketId: ticketId, cantiereId: cantiereId),
       ),
       GoRoute(
         path: '/altro/rapportini/editor/:reportId',
         // The real Dettagli step stands in for the editor: it reads ONLY from Drift, exactly like
-        // the real editor, so what it shows is what the import wrote.
+        // the real editor, so what it shows is what the apply path wrote.
         builder: (context, state) => Scaffold(
           body: Column(
             children: [
@@ -139,8 +220,10 @@ Widget _wrap(
       aiApiClientProvider.overrideWithValue(client),
       appDatabaseProvider.overrideWithValue(database),
       syncProvider.overrideWith((ref) => _NoopSync(database)),
-      serverReportApiClientProvider.overrideWithValue(serverApi ?? _FakeServerReportApi()),
       gpsPreferenceProvider.overrideWithValue(false),
+      // `applyConfirmedDraft` refuses without a signed-in author (same refusal createLocalDraft
+      // makes), so the confirm path needs one resolved, exactly as a real signed-in session has.
+      internalUserIdProvider.overrideWith((ref) async => 'internal-guid-2'),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -200,9 +283,6 @@ void main() {
     expect(find.text('Ho aggiornato la bozza.'), findsOneWidget);
     expect(find.textContaining('Valvola bloccata'), findsOneWidget);
     expect(find.textContaining('Marco Rossi'), findsOneWidget);
-    // Bug (2026-09-23): activities[] — what Confirm builds the created Report's Title/Description
-    // from — used to be silently dropped, so the technician had no way to verify it before
-    // confirming.
     expect(find.textContaining('Sostituzione valvola'), findsOneWidget);
   });
 
@@ -229,17 +309,23 @@ void main() {
     await tester.tap(find.byTooltip('Invia'));
     await tester.pumpAndSettle();
 
-    final confirmButton = tester.widget<AppButton>(
-      find.widgetWithText(AppButton, 'Conferma e crea rapportino'),
-    );
+    final confirmButton = tester.widget<AppButton>(find.widgetWithText(AppButton, _confirmLabel));
     expect(confirmButton.onPressed, isNull);
   });
 
-  testWidgets('a failed Confirm shows the error and stays on the screen', (tester) async {
+  testWidgets('a failed Confirm shows the error, keeps the conversation and its session', (
+    tester,
+  ) async {
     final client = _FakeAiApiClient(
       turnResult: const AiConversationTurnResult(
         assistantReplyText: 'Fatto.',
-        draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], activities: [], openItems: []),
+        draft: AiCopilotDraftDto(
+          workers: [],
+          materials: [],
+          controlli: [],
+          activities: [],
+          openItems: [],
+        ),
       ),
       confirmError: const AiConversationException(409, 'La bozza è cambiata, riprova.'),
     );
@@ -251,143 +337,153 @@ void main() {
     await tester.tap(find.byTooltip('Invia'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(AppButton, 'Conferma e crea rapportino'));
+    await tester.tap(find.widgetWithText(AppButton, _confirmLabel));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('La bozza è cambiata'), findsOneWidget);
-    expect(find.text('editor:rpt-1'), findsNothing);
+    // The technician's words are still there and the same Conferma button retries — one state, not
+    // two, now that there is no half-created server object to reconcile.
+    expect(find.text('Fatto.'), findsOneWidget);
+    expect(find.widgetWithText(AppButton, _confirmLabel), findsOneWidget);
+    // Nothing was released: the draft was never persisted, so the session must survive the failure.
+    expect(client.abandoned, isEmpty);
   });
 
   Future<void> confirmFlow(WidgetTester tester) async {
     await tester.enterText(find.byType(TextFormField), 'Ho fatto il lavoro');
     await tester.tap(find.byTooltip('Invia'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(AppButton, 'Conferma e crea rapportino'));
+    await tester.tap(find.widgetWithText(AppButton, _confirmLabel));
     await tester.pumpAndSettle();
   }
 
   const emptyDraft = AiConversationTurnResult(
     assistantReplyText: 'Fatto.',
-    draft: AiCopilotDraftDto(workers: [], materials: [], controlli: [], activities: [], openItems: []),
+    draft: AiCopilotDraftDto(
+      workers: [],
+      materials: [],
+      controlli: [],
+      activities: [],
+      openItems: [],
+    ),
   );
 
-  testWidgets('Confirm imports the server report into Drift before opening the editor', (
+  testWidgets('Confirm applies the resolved draft to a local rapportino and opens it', (
     tester,
   ) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    final serverApi = _FakeServerReportApi();
-    final client = _FakeAiApiClient(
-      turnResult: emptyDraft,
-      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
-    );
+    final client = _FakeAiApiClient(turnResult: emptyDraft, confirmResult: _resolvedDraft());
 
-    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db, serverApi: serverApi));
+    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db));
     await tester.pumpAndSettle();
     await confirmFlow(tester);
 
-    expect(serverApi.fetched, ['rpt-1']);
-    expect(find.text('editor:rpt-1'), findsOneWidget);
-    // The editor shows the confirmed values, not a blank form.
+    // The editor opened on a LOCAL id, not a server one — nothing was created server-side.
+    final row = await db.select(db.draftReports).getSingle();
+    expect(find.text('editor:${row.id}'), findsOneWidget);
+    expect(row.isLocalOnly, isTrue);
+    expect(row.stato, 'Bozza');
+    expect(row.isAiAssisted, isTrue, reason: "provenance is the client's to set");
+    expect(row.locationId, '', reason: 'the null location stayed empty and is the editor\'s to fill');
     expect(find.text('Sostituita pompa; verificata tenuta'), findsOneWidget);
     expect(find.text('Pompa bloccata'), findsOneWidget);
-    expect(find.text('Sostituita'), findsOneWidget);
     expect(await db.select(db.reportStaffTable).get(), hasLength(1));
-    expect(await db.select(db.reportMateriali).get(), hasLength(2));
-    final row = await (db.select(db.draftReports)..where((r) => r.id.equals('rpt-1'))).getSingle();
-    expect(row.tenantId, '22222222-2222-2222-2222-222222222222');
+    expect(await db.select(db.reportMateriali).get(), hasLength(1));
+    expect(await db.select(db.reportControlli).get(), hasLength(1));
+    expect(
+      client.abandoned,
+      ['sess-1'],
+      reason: 'the session is released after the draft is persisted',
+    );
     await _unmount(tester);
   });
 
-  testWidgets('a cantiere-bound copilot keeps its cantiereId on the imported report', (
+  testWidgets('a cantiere-bound copilot keeps its cantiereId on the applied draft', (
     tester,
   ) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    final router = GoRouter(
-      initialLocation: '/copilot',
-      routes: [
-        GoRoute(path: '/copilot', builder: (_, _) => const AiCopilotScreen(cantiereId: 'cant-7')),
-        GoRoute(
-          path: '/altro/rapportini/editor/:reportId',
-          builder: (_, state) => Scaffold(body: Text('editor:${state.pathParameters['reportId']}')),
-        ),
-      ],
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          aiApiClientProvider.overrideWithValue(
-            _FakeAiApiClient(
-              turnResult: emptyDraft,
-              confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
-            ),
-          ),
-          appDatabaseProvider.overrideWithValue(db),
-          syncProvider.overrideWith((ref) => _NoopSync(db)),
-          serverReportApiClientProvider.overrideWithValue(_FakeServerReportApi()),
-        ],
-        child: MaterialApp.router(routerConfig: router),
+    // The response carries no cantiereId (the server echoes the session's binding only when it has
+    // one); the screen's own cantiereId is what must survive onto the local draft.
+    final client = _FakeAiApiClient(
+      turnResult: emptyDraft,
+      confirmResult: const AiConversationConfirmResponse(
+        title: 'Manutenzione',
+        details: 'Fatto',
+        locationId: null,
       ),
     );
+
+    await tester.pumpWidget(_wrap(client, cantiereId: 'cant-7', db: db));
     await tester.pumpAndSettle();
     await confirmFlow(tester);
 
-    final row = await (db.select(db.draftReports)..where((r) => r.id.equals('rpt-1'))).getSingle();
+    final row = await db.select(db.draftReports).getSingle();
     expect(row.cantiereId, 'cant-7');
-  });
-
-  testWidgets('a failed import keeps the session, shows an error and does NOT open the editor', (
-    tester,
-  ) async {
-    final db = AppDatabase(NativeDatabase.memory());
-    addTearDown(db.close);
-    final serverApi = _FakeServerReportApi(fail: true);
-    final client = _FakeAiApiClient(
-      turnResult: emptyDraft,
-      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
-    );
-
-    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db, serverApi: serverApi));
-    await tester.pumpAndSettle();
-    await confirmFlow(tester);
-
-    expect(find.textContaining('non è stato possibile scaricarlo'), findsWidgets);
-    expect(find.text('editor:rpt-1'), findsNothing);
-    expect(find.text('Fatto.'), findsOneWidget); // conversation still on screen
-    expect(await db.select(db.draftReports).get(), isEmpty);
-
-    // Retry re-runs only the import (Confirm is not repeated) and then opens the editor.
-    serverApi.fail = false;
-    await tester.tap(find.widgetWithText(AppButton, 'Riprova'));
-    await tester.pumpAndSettle();
-
-    expect(serverApi.fetched, ['rpt-1', 'rpt-1']);
-    expect(find.text('editor:rpt-1'), findsOneWidget);
-    expect(find.text('Pompa bloccata'), findsOneWidget);
     await _unmount(tester);
   });
 
-  testWidgets('a report no longer Bozza shows the not-editable message with Chiudi, no retry loop', (
+  testWidgets('a resolved draft with no location opens the editor with a field to fix', (
     tester,
   ) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    final serverApi = _FakeServerReportApi(stato: 1);
-    final client = _FakeAiApiClient(
-      turnResult: emptyDraft,
-      confirmResult: const AiConversationConfirmResult(reportId: 'rpt-1', replayed: false),
-    );
+    final client = _FakeAiApiClient(turnResult: emptyDraft, confirmResult: _resolvedDraft());
 
-    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db, serverApi: serverApi));
+    await tester.pumpWidget(_wrap(client, ticketId: 'tkt-1', db: db));
     await tester.pumpAndSettle();
     await confirmFlow(tester);
 
-    expect(find.text('Questo rapportino non è più modificabile.'), findsWidgets);
-    expect(find.textContaining('Controlla la connessione'), findsNothing);
-    expect(find.widgetWithText(AppButton, 'Chiudi'), findsOneWidget);
-    expect(find.widgetWithText(AppButton, 'Riprova'), findsNothing);
-    expect(find.text('editor:rpt-1'), findsNothing);
+    // The draft is written; the editor opens; nothing invented a location for it. The Riepilogo
+    // step refuses to submit until one is picked (`DraftValidationIssue.missingLocation`).
+    final row = await db.select(db.draftReports).getSingle();
+    expect(row.locationId, '');
+    expect(find.text('editor:${row.id}'), findsOneWidget);
+    await _unmount(tester);
+  });
+
+  testWidgets('confirming never writes to the server — the report is the phone\'s until submit', (
+    tester,
+  ) async {
+    final paths = <RequestOptions>[];
+    final dio = Dio();
+    dio.httpClientAdapter = _RecordingAdapter(paths);
+    // The copilot must reach the network through THIS client, not through a method-overriding fake.
+    // Overriding aiApiClientProvider with a real `AiApiClient(dio)` is what makes `paths` mean
+    // anything; with the fake in place every assertion below would pass on an empty list.
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await tester.pumpWidget(_wrap(AiApiClient(dio), ticketId: 'tkt-1', db: db));
+    await tester.pumpAndSettle();
+    await confirmFlow(tester);
+
+    expect(
+      paths.map((o) => '${o.method} ${o.path}').where((p) => p.startsWith('POST /api/Reports')),
+      isEmpty,
+      reason:
+          'mobile does not create a report on confirm (spec §5.5). Routing this through '
+          'POST /api/Reports + children would also make a retried material write deplete stock '
+          'twice, which no client-side state machine can detect.',
+    );
+    expect(
+      paths.where(
+        (o) =>
+            o.path.contains('/staff') ||
+            o.path.contains('/materiali') ||
+            o.path.contains('/observations'),
+      ),
+      isEmpty,
+    );
+    // The positive half — the test must be able to fail on a wrong design, not only on a right one:
+    expect(
+      paths.map((o) => o.path),
+      contains('/api/ai/conversations/sess-1/confirm'),
+      reason:
+          'if this is empty the adapter is not wired to the copilot and every other '
+          'assertion here is vacuous',
+    );
     await _unmount(tester);
   });
 }

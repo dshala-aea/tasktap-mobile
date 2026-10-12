@@ -15,6 +15,14 @@ import '../ticket/ticket_detail_api_client.dart';
 ///
 /// Throws if the report cannot be fetched/imported (callers must not open a blank editor then);
 /// the cache warming steps never throw.
+///
+/// Its one remaining caller is the Rapportini list (`rapportini_list_screen.dart`), which opens a
+/// server-side **Bozza** that arrived as a header-only sync row and needs the full children fetched
+/// before the editor opens — otherwise the editor's submit would replace the server's data with an
+/// empty set. The AI copilot used to call it too; since I2 (spec §5.5) the copilot applies the
+/// confirm response to a local Drift draft instead, because Confirm no longer creates a server
+/// object to fetch. Do not delete this function on the copilot's account: the list's call is a
+/// different requirement with a different failure mode.
 Future<void> importServerReportForEditing(
   WidgetRef ref, {
   required String reportId,
