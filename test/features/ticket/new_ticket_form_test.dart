@@ -895,6 +895,85 @@ void main() {
       },
     );
 
+    testWidgets('a repair never re-sends a template the catalogue no longer offers', (tester) async {
+      // The row was queued when its template was still on offer; the catalogue has since retired it,
+      // so the picker no longer shows it — but the id is still sitting in the row this repair
+      // re-sends, and a repair writes the form's values back over the row. Left alone, the server
+      // answers that template with a 400 whose body carries no `field`, and the create queue can only
+      // classify a 404-with-field as repairable: the row would retry forever. So the send must drop
+      // it, and the row must not keep it either.
+      await db
+          .into(db.maintenanceTemplates)
+          .insert(
+            MaintenanceTemplatesCompanion.insert(
+              id: 'tpl-live',
+              origin: 'System',
+              name: 'Caldaia',
+              latestPublishedVersion: const Value(1),
+            ),
+          );
+      await seedRepairRow();
+      await (db.update(db.pendingTickets)..where((r) => r.id.equals('pt-repair'))).write(
+        const PendingTicketsCompanion(maintenanceTemplateId: Value('tpl-gone')),
+      );
+      final stale = await db.select(db.pendingTickets).getSingle();
+      expect(
+        stale.maintenanceTemplateId,
+        'tpl-gone',
+        reason: 'the row really does carry the retired id, so the drop below is not vacuous',
+      );
+
+      when(
+        () => mockDio.post<Map<String, dynamic>>(
+          '/api/tickets',
+          data: any(named: 'data'),
+        ),
+      ).thenAnswer(
+        (_) async => Response<Map<String, dynamic>>(
+          data: {'id': 'server-ticket-1'},
+          statusCode: 200,
+          requestOptions: RequestOptions(path: '/api/tickets'),
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            appDatabaseProvider.overrideWithValue(db),
+            dioProvider.overrideWithValue(mockDio),
+            isOnlineProvider.overrideWithValue(true),
+          ],
+          child: MaterialApp(home: NewTicketFormScreen(repairRow: stale)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await walkRepairToSave(tester);
+
+      final posted =
+          verify(
+                () => mockDio.post<Map<String, dynamic>>(
+                  '/api/tickets',
+                  data: captureAny(named: 'data'),
+                ),
+              ).captured.single
+              as Map;
+      expect(
+        posted.containsKey('maintenanceTemplateId'),
+        isFalse,
+        reason: 'a template the catalogue does not offer is left to the server to resolve, not sent',
+      );
+
+      final row = await db.select(db.pendingTickets).getSingle();
+      expect(
+        row.maintenanceTemplateId,
+        isNull,
+        reason: 'nor kept on the row, where the next sweep would send it straight from the row',
+      );
+
+      await flushSnackBarTimer(tester);
+    });
+
     testWidgets(
       'a repair made offline is queued, not sent — and promises the automatic send',
       (tester) async {

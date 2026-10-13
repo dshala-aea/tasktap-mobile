@@ -113,6 +113,42 @@ List<MaintenanceTemplate> assignableMaintenanceTemplates(
     .where((t) => t.isActive && t.latestPublishedVersion != null)
     .toList(growable: false);
 
+/// The template id a *send* may carry: [chosenId] when the catalogue still offers it, else null.
+///
+/// The picker already refuses to *display* a choice the catalogue no longer offers — it falls back
+/// to the "Nessuna" option, because `DropdownButtonFormField` asserts its value is one of its items —
+/// while the form state keeps the id, so that a repair does not silently rewrite a choice the user
+/// made. A send must not be where that gap leaks: nothing clears a queued row's stale id except the
+/// next sync ([SyncService._clearStalePendingTemplateIds], which only knows about templates the
+/// server stopped *listing*), so a template the server still lists but no longer offers for new work
+/// — retired, or with nothing published — stays on the row and would be handed to `POST /api/tickets`.
+/// The server answers that with `400 Maintenance template not found`, and a 400 carries no `field`,
+/// so `TicketCreationQueue` can never classify the row repairable: it would resend the same doomed id
+/// on every retry, forever and invisibly. Null instead is the server's documented fallback — resolve
+/// from type/contract — so the work is still created, with the pick unset, which is the state the
+/// picker was already showing.
+///
+/// The rule is the picker's own on purpose: an id the picker will not offer is an id a send must not
+/// carry, and the two cannot drift because both call [assignableMaintenanceTemplates]. Null in, null
+/// out — "no choice" is always sendable.
+///
+/// An entirely empty [catalogue] means this device has not synced one at all: there is nothing to
+/// judge the choice against, so it is passed through rather than silently discarded — dropping a pick
+/// on the strength of absent data is worse than sending one the server may refuse, and the next sync
+/// still clears the row if the template really is gone. A catalogue that has rows but offers none of
+/// them is a different case, and there the id is not offerable either.
+String? offerableMaintenanceTemplateId(
+  String? chosenId,
+  Iterable<MaintenanceTemplate> catalogue,
+) {
+  if (chosenId == null) return null;
+  final rows = catalogue.toList(growable: false);
+  if (rows.isEmpty) return chosenId;
+  return assignableMaintenanceTemplates(rows).any((t) => t.id == chosenId)
+      ? chosenId
+      : null;
+}
+
 /// All schedules for a specific ticket id.
 final schedulesForTicketProvider = StreamProvider.autoDispose
     .family<List<Schedule>, String>((ref, ticketId) {

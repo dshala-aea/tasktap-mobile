@@ -1512,6 +1512,21 @@ class AppDatabase extends _$AppDatabase {
             // ignore: experimental_member_use
             TableMigration(
               pendingTickets,
+              // The columns this 37-or-older table does NOT have, even though the class above
+              // declares them. Not bookkeeping: `TableMigration` copies the rows with a statement
+              // built from the CURRENT definition — `INSERT INTO tmp_for_copy_pending_tickets
+              // (<every column>) SELECT <every column> FROM pending_tickets` — skipping only the
+              // columns named here (or given a `columnTransformer`). A column it copies but the old
+              // table lacks is read back as a bare quoted identifier, and SQLite resolves an unknown
+              // double-quoted identifier as a string LITERAL rather than failing the way an unquoted
+              // one would, so every row would silently come out holding the column's own name:
+              // a value the server refuses with a 400, which carries no `field` and so can never be
+              // classified repairable — that row would retry forever. Naming it here leaves the new
+              // table's own default (NULL, "let the server resolve it from type/contract").
+              //
+              // Standing rule for this step: every column `tickets` or `pendingTickets` gains after
+              // schema 37 belongs in this list or in `columnTransformer`. This is the only one so far.
+              newColumns: [pendingTickets.maintenanceTemplateId],
               columnTransformer: {
                 pendingTickets.dueDate: CustomExpression<String>(
                   _civilDayOfDueDate('pending_tickets'),
@@ -1545,6 +1560,12 @@ class AppDatabase extends _$AppDatabase {
           // column name` before the app ever opens. Devices coming from 38 or 39 have the old table
           // shape and do need the add. Ask SQLite which of the two this upgrade is instead of
           // inferring it from `from`.
+          //
+          // This guard only prevents the crash, not the wrong data: skipping the add is correct only
+          // because step 38 declares the column as a new one, so the re-created table holds NULL
+          // rather than the literal column name its copy would otherwise read out of the old table.
+          // The two changes belong together — one without the other leaves a ≤37 device either
+          // crashing on open or holding a template id that can never be sent.
           if (!await _columnExists(m.database, 'pending_tickets', 'maintenance_template_id')) {
             await m.addColumn(pendingTickets, pendingTickets.maintenanceTemplateId);
           }

@@ -45,4 +45,46 @@ void main() {
     ];
     expect(assignableMaintenanceTemplates(rows), isEmpty);
   });
+
+  group('the id a send may carry', () {
+    test('an offered choice is sent as chosen', () {
+      final rows = [row('ok'), row('other')];
+      expect(offerableMaintenanceTemplateId('ok', rows), 'ok');
+    });
+
+    test('a choice the catalogue has retired is dropped', () {
+      // The picker stopped offering it, so the form no longer holds it — but the id can still be in
+      // the queued row a repair re-sends. The server answers such a template with a 400 whose body
+      // carries no `field`, and the create queue can only classify a 404-with-field as repairable:
+      // the row would retry forever. Dropping it here is what keeps it off the wire.
+      final rows = [row('ok'), row('gone', isActive: false)];
+      expect(offerableMaintenanceTemplateId('gone', rows), isNull);
+    });
+
+    test('a choice with no published version is dropped', () {
+      final rows = [row('ok'), row('draft', latestPublishedVersion: null)];
+      expect(offerableMaintenanceTemplateId('draft', rows), isNull);
+    });
+
+    test('no choice stays no choice', () {
+      expect(offerableMaintenanceTemplateId(null, [row('ok')]), isNull);
+    });
+
+    test('a catalogue that has not synced yet passes the choice through', () {
+      // An empty catalogue means "this device has nothing to judge by", not "nothing is valid" —
+      // failing closed would strip the template from every queued ticket on a device that has not
+      // synced since installing, which is the picker working exactly as the ticket was created.
+      expect(offerableMaintenanceTemplateId('tpl-1', const []), 'tpl-1');
+    });
+
+    test('a synced catalogue of only retired templates is not an unsynced one', () {
+      // The distinction the empty check above rests on: rows came back, every one of them is simply
+      // unofferable. That is a judgement, and it fails closed.
+      final rows = [
+        row('a', isActive: false),
+        row('b', latestPublishedVersion: null),
+      ];
+      expect(offerableMaintenanceTemplateId('a', rows), isNull);
+    });
+  });
 }

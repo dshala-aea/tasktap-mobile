@@ -154,14 +154,28 @@ class SyncService {
   /// offered — deleted, or simply no longer visible to this technician — must stop appearing, and an
   /// upsert would leave it in the picker forever. Skipped entirely when the payload does not carry
   /// the member, so an older backend cannot look like "every template was deleted" and wipe the
-  /// catalogue. An empty carried list is likewise treated as "nothing to say" (the `_replaceColleagues`
-  /// precedent): the picker keeps the previous catalogue rather than going blank for an empty response.
+  /// catalogue.
+  ///
+  /// The empty-list branch below is narrower than it reads. As the API stands the member is *always*
+  /// serialized — `MobileUserSyncResult.MaintenanceTemplates` is assigned unconditionally, so a
+  /// caller without `rapportini.template.read` gets `"maintenanceTemplates": []` rather than an
+  /// absent key — which makes `carriesMaintenanceTemplates` de-facto always true, and a
+  /// carried-but-empty list means "this caller was not granted the catalogue", not "the catalogue is
+  /// empty". Pruning on it, the way [_applyReferenceCache] prunes on a carried-but-empty delta, would
+  /// blank a technician's picker the moment their permissions changed, so it does not. The cost of
+  /// not pruning is bounded and accepted: a sync can never empty the catalogue, so a template the
+  /// server stops offering survives in the mirror until sign-out, and only a queued ticket's *choice*
+  /// is corrected (below). Telling the two cases apart needs the server to omit the member when
+  /// `includeMaintenanceTemplates` is false; until then this stays as it is.
   ///
   /// A queued ticket pinned to a template that just left the catalogue has its choice cleared in the
   /// same transaction — see [_clearStalePendingTemplateIds] for why that has to happen here.
   Future<void> _replaceMaintenanceTemplates(SyncResultDto payload) async {
     if (!payload.carriesMaintenanceTemplates) return;
     final list = payload.maintenanceTemplates;
+    // An empty carried list is the caller-without-permission case (see the doc comment), so it must
+    // not read as "the catalogue is now empty". Returning here is also what guarantees [keepIds]
+    // below is never empty, which [_clearStalePendingTemplateIds] depends on.
     if (list.isEmpty) return;
 
     await db.transaction(() async {

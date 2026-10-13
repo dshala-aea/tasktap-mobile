@@ -260,9 +260,12 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
 
   /// "Modello checklist" — the maintenance template this ticket should snapshot as its checklist.
   ///
-  /// Create mode only ([StepDettagliTicket.ticketId] is null): editing an existing ticket does not
-  /// re-pick its checklist here, exactly as the web form (`TicketCreatePanel.tsx`) hides the select
-  /// outside create mode.
+  /// Absent when [StepDettagliTicket.ticketId] is set, which is what the edit route passes: editing an
+  /// existing ticket does not re-pick its checklist here, exactly as the web form
+  /// (`TicketCreatePanel.tsx`) hides the select outside create mode. That is *not* the same as "create
+  /// only" — the create wizard passes no `ticketId` (`new_ticket_form_screen.dart`) and that screen is
+  /// also the repair route, so the field does render while correcting a ticket the server refused. The
+  /// choice is part of what was refused, so it belongs in the correction.
   ///
   /// Returns the field preceded by its spacer, or an empty list so nothing at all renders when there
   /// is nothing to offer — a still-empty catalogue (no sync yet) or a catalogue whose every template
@@ -282,8 +285,11 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     final offeredIds = {for (final t in offerable) t.id};
     // A queued/repair row can carry an id the catalogue no longer offers (a template retired since
     // the choice was made). `DropdownButtonFormField` asserts its value is one of its items, so fall
-    // back to the "Nessuna" option for display rather than crash; the stale choice itself is cleared
-    // by the sync that dropped the template (see SyncService), not here.
+    // back to the "Nessuna" option for display rather than crash. The state keeps the stale id on
+    // purpose — see offerableMaintenanceTemplateId, which is what keeps it off the wire: both sends
+    // clamp an unofferable choice to null, and `repair` writes the clamped values back onto the row,
+    // so the correction is also what heals it. The sync clears such a row earlier, when the template
+    // left the catalogue altogether; this covers the one it still lists but no longer offers.
     final selected = offeredIds.contains(widget.state.maintenanceTemplateId)
         ? widget.state.maintenanceTemplateId
         : null;

@@ -108,10 +108,19 @@ void main() {
   });
 
   test('a v37 database also reaches v40 — step 38 already re-creates the table', () async {
-    // The trap this pins: the `from < 38` step re-creates `pending_tickets` from the CURRENT
-    // definition, so for a device coming from 37 or older the schema-40 step finds
-    // `maintenance_template_id` already present. An unconditional `addColumn` there dies on
-    // `duplicate column name` — the app never opens again. It is asked of SQLite instead.
+    // The trap this pins has two halves, and only the first one is loud.
+    //
+    // The loud one: the `from < 38` step re-creates `pending_tickets` from the CURRENT definition, so
+    // for a device coming from 37 or older the schema-40 step finds `maintenance_template_id` already
+    // present. An unconditional `addColumn` there dies on `duplicate column name` — the app never
+    // opens again. It is asked of SQLite instead.
+    //
+    // The quiet one, which is why the row is read back at the end: that same re-creation copies the
+    // old rows with a statement built from the current definition. A column the old table lacks comes
+    // out as a bare quoted identifier, and SQLite resolves an unknown double-quoted identifier as a
+    // string literal instead of failing — so every queued ticket would silently hold the text
+    // "maintenance_template_id" as its template id. Declaring the column in that step's `newColumns`
+    // is what makes the copy leave it NULL. `hasColumn` below passes either way.
     await seedCurrent();
 
     final db = AppDatabase(
@@ -132,7 +141,16 @@ void main() {
     expect(await hasColumn(db, 'pending_tickets', 'maintenance_template_id'), isTrue);
     expect(await hasColumn(db, 'draft_reports', 'expected_version'), isTrue);
     expect(await hasTable(db, 'maintenance_templates'), isTrue);
-    expect((await db.select(db.pendingTickets).get()).length, 1);
+
+    final rows = await db.select(db.pendingTickets).get();
+    expect(rows.length, 1);
+    expect(
+      rows.single.maintenanceTemplateId,
+      isNull,
+      reason: 'a device coming from 37 has never chosen a template; reading the column it was '
+          'missing back out of the copy would put the literal column name in every queued ticket, '
+          'a value the server rejects with a 400 no retry can repair',
+    );
   });
 
   test('the migrated catalogue table accepts a template row', () async {

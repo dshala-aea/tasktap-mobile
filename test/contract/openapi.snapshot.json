@@ -24785,7 +24785,7 @@
             "items": {
               "$ref": "#/components/schemas/SyncMaintenanceTemplateDto"
             },
-            "description": "The maintenance templates this tenant may reference — the curated (shared) ones plus its\nown — so a technician can attach a checklist to a ticket offline (`Modello checklist`).\nReturned in full on every sync, inactive templates included: see\nSyncMaintenanceTemplateDto for both decisions, and for why this is not\n`IReadOnlyList&lt;MaintenanceTemplate&gt;`."
+            "description": "The maintenance templates this tenant may reference — the curated (shared) ones plus its\nown — so a technician can attach a checklist to a ticket offline (\"Modello checklist\").\nReturned in full on every sync, inactive templates included: see\nSyncMaintenanceTemplateDto for both decisions, and for why this is not\n`IReadOnlyList&lt;MaintenanceTemplate&gt;`."
           }
         },
         "description": "Shape returned by Task&lt;MobileUserSyncResult&gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true).\nContains the technician's own schedules (today..today+7d) and the linked\nreference entities they need for offline work, plus their draft reports."
@@ -30541,7 +30541,7 @@
               "integer",
               "string"
             ],
-            "description": "The version a new ticket would resolve today, or null while every version is still a draft or\nalready retired. Null is a real, visible state — it means the template cannot currently be\nattached — not an error or missing data. Computed by\nint? MaintenanceTemplateVersion.LatestSelectableVersionNumber(IEnumerable&lt;MaintenanceTemplateVersion&gt; versions), the same helper the\noffice list endpoint uses, so the two cannot disagree about what latest published means.",
+            "description": "The version a new ticket would resolve today, or null while every version is still a draft or\nalready retired. Null is a real, visible state — it means the template cannot currently be\nattached — not an error or missing data. Computed by\nint? MaintenanceTemplateVersion.LatestSelectableVersionNumber(IEnumerable&lt;MaintenanceTemplateVersion&gt; versions), the same helper the\noffice list endpoint uses, so the two cannot disagree about what \"latest published\" means.",
             "format": "int32"
           }
         },
