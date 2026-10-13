@@ -16,6 +16,7 @@ import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
@@ -25,6 +26,19 @@ import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/data/worklogs/active_tracker_api_client.dart';
 import 'package:tasktap_mobile/features/dashboard/active_trackers_provider.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
+
+/// An instant inside today's business day that is never after now: [ago] ago, or the day's own
+/// start when [ago] reaches back past it. Anchoring to `now - ago` alone put the seed in the
+/// PREVIOUS business day during the first [ago] of the day, so `getTodaySessions()` returned
+/// nothing and the repository window disagreed with the fixture. Anchoring to the day's start
+/// alone would seed a future instant during the day's first hours, so a corrected event's end
+/// would precede its start.
+DateTime _earlierToday(Duration ago) {
+  final bt = BusinessTime.fallback();
+  final start = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
+  final candidate = DateTime.now().toUtc().subtract(ago);
+  return candidate.isAfter(start) ? candidate : start;
+}
 
 AppDatabase _makeDb() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -91,7 +105,7 @@ void main() {
         final repo = container.read(workSessionRepositoryProvider);
         await repo.addEvent(
           id: 'mobile-open-shift',
-          eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
+          eventTime: _earlierToday(const Duration(hours: 2)),
           eventType: 'ingresso',
         );
         await repo.markSynced(['mobile-open-shift']);
@@ -107,7 +121,7 @@ void main() {
         final repo = container.read(workSessionRepositoryProvider);
         await repo.addEvent(
           id: 'mobile-open-shift',
-          eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
+          eventTime: _earlierToday(const Duration(hours: 2)),
           eventType: 'ingresso',
         );
         await repo.markSynced(['mobile-open-shift']);
@@ -128,7 +142,7 @@ void main() {
         final repo = container.read(workSessionRepositoryProvider);
         await repo.addEvent(
           id: 'mobile-open-shift',
-          eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
+          eventTime: _earlierToday(const Duration(hours: 2)),
           eventType: 'ingresso',
         );
         await repo.markSynced(['mobile-open-shift']);
@@ -153,7 +167,7 @@ void main() {
       final repo = container.read(workSessionRepositoryProvider);
       await repo.addEvent(
         id: 'mobile-open-shift',
-        eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 2)),
+        eventTime: _earlierToday(const Duration(hours: 2)),
         eventType: 'ingresso',
       );
       await repo.markSynced(['mobile-open-shift']);
@@ -172,7 +186,7 @@ void main() {
     });
 
     test('a clock started on another device shows up: timbra state and dashboard follow', () async {
-      final started = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+      final started = _earlierToday(const Duration(hours: 1));
       serverTrackers = [
         ActiveTracker(
           kind: ActiveTrackerKind.attendance,
@@ -195,8 +209,8 @@ void main() {
     });
 
     test('a break started elsewhere flips the timbra buttons to Riprendi (isOnPause)', () async {
-      final started = DateTime.now().toUtc().subtract(const Duration(hours: 2));
-      final breakStart = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+      final started = _earlierToday(const Duration(hours: 2));
+      final breakStart = _earlierToday(const Duration(minutes: 10));
       serverTrackers = [
         ActiveTracker(
           kind: ActiveTrackerKind.attendance,
@@ -221,7 +235,7 @@ void main() {
       final repo = container.read(workSessionRepositoryProvider);
       await repo.addEvent(
         id: 'offline-punch',
-        eventTime: DateTime.now().toUtc().subtract(const Duration(minutes: 5)),
+        eventTime: _earlierToday(const Duration(minutes: 5)),
         eventType: 'ingresso',
       ); // pending: the server has not heard of it (serverTrackers is empty)
       await _awaitTodaySessions(container);
