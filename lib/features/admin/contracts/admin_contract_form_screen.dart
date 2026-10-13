@@ -168,8 +168,11 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
     setState(() {
       _selectedCustomerId = customerId;
       // A sede belongs to exactly one customer: a switch must not leave the previous customer's
-      // location selected. Left in place it either files the contract against a sede the server
-      // rejects (cross-customer), or silently keeps a sede no longer offered by the scoped picker.
+      // location selected. Left in place it files the contract against another customer's sede and
+      // silently keeps a sede the scoped picker no longer offers. The server does NOT catch it:
+      // referential integrity is tenant-scoped only (`ReferentialIntegrityService`), and
+      // `ContractsController.Create` validates CustomerId and LocationId independently, so a
+      // same-tenant customer/location mismatch is written, not rejected.
       _selectedLocationId = null;
       // Covered assets belong to a customer too — a switch must not leave a cross-customer
       // selection behind, same reasoning as Sede.
