@@ -142,6 +142,11 @@ class _AdminScheduleListScreenState extends State<AdminScheduleListScreen> {
   void _openFilterSheet() async {
     final result = await showModalBottomSheet<AdminScheduleFilters>(
       context: context,
+      // Same exposure as the Calendario schedule sheet: this list is the `pianificazioni` route in
+      // the "altro" StatefulShellBranch (no `parentNavigatorKey: rootNavigatorKey`), so its context
+      // resolves to the branch navigator and — under HomeShell's `extendBody: true` Scaffold — the
+      // sheet would be painted under the floating AppBottomNav. Push on the root navigator instead.
+      useRootNavigator: true,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
