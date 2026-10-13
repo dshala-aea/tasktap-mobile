@@ -130,9 +130,11 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     setState(() {
       _selectedCustomerId = customerId;
       // A sede belongs to exactly one customer: a switch must not leave the previous customer's
-      // location selected. Left in place it either files the prodotto against a sede the server
-      // rejects (cross-customer), or silently keeps a sede the scoped picker below no longer
-      // offers. Same reasoning as the contract form's own `_onCustomerChanged`.
+      // location selected. Left in place it files the prodotto against another customer's sede and
+      // silently keeps a sede the scoped picker below no longer offers. The server does NOT catch
+      // it: referential integrity is tenant-scoped only (`ReferentialIntegrityService`), so a
+      // same-tenant customer/location mismatch is written, not rejected. Same reasoning as the
+      // contract form's own `_onCustomerChanged`.
       _selectedLocationId = null;
     });
   }

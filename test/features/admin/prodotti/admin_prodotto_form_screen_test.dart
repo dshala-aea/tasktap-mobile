@@ -393,8 +393,9 @@ void main() {
 
       await selectCustomer(tester, 'Beta Spa');
 
-      // The field must not still display the previous customer's sede: a stale value is either
-      // rejected server-side (cross-customer) or silently wrong. The Sede dropdown is closed here,
+      // The field must not still display the previous customer's sede: a stale value is not
+      // rejected server-side (referential integrity is tenant-scoped only, so a same-tenant
+      // mismatch is written) — it is simply wrong. The Sede dropdown is closed here,
       // so the only 'Sede Milano' that could appear is a surviving selection.
       expect(find.text('Sede Milano'), findsNothing);
       await teardown(tester);
