@@ -13,6 +13,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../clienti/clienti_providers.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
 import 'prodotto_multi_picker_sheet.dart';
@@ -166,6 +167,13 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   void _onCustomerChanged(String? customerId) {
     setState(() {
       _selectedCustomerId = customerId;
+      // A sede belongs to exactly one customer: a switch must not leave the previous customer's
+      // location selected. Left in place it files the contract against another customer's sede and
+      // silently keeps a sede the scoped picker no longer offers. The server does NOT catch it:
+      // referential integrity is tenant-scoped only (`ReferentialIntegrityService`), and
+      // `ContractsController.Create` validates CustomerId and LocationId independently, so a
+      // same-tenant customer/location mismatch is written, not rejected.
+      _selectedLocationId = null;
       // Covered assets belong to a customer too — a switch must not leave a cross-customer
       // selection behind, same reasoning as Sede.
       _selectedProdottoIds = [];
@@ -301,8 +309,35 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
     final customers = customersAsync.valueOrNull ?? [];
-    final locationsAsync = ref.watch(allLocationsProvider);
-    final locations = locationsAsync.valueOrNull ?? [];
+    // Sedi are scoped to the selected customer, never the whole tenant book.
+    //
+    // `allLocationsProvider` (every active location in the tenant) was the defect: it fed the
+    // picker locations belonging to *other* customers, and — because branch names repeat across a
+    // tenant ("Sede", "Magazzino", "Milano") — rendered the same label several times over. Those
+    // are distinct rows sharing a name, not duplicate rows: the Drift mirror is keyed by `id`
+    // (`Locations.primaryKey = {id}`) and synced via `insertOnConflictUpdate`, so it cannot hold
+    // two rows for one location. The fix is scoping, not de-duplication.
+    //
+    // Scoping reads the customer→location relation already on the device
+    // (`locationsForCustomerProvider`, the same one the customer detail screen's Sedi section
+    // uses) rather than a server query. The API does expose a customer filter
+    // (`GET /api/Locations?customerId=`), but the mirror is the form's source of truth for its
+    // reference fields and keeps it offline-capable; a live fetch here would blank the Sede field
+    // on an existing contract opened without signal. Limitation, stated rather than hidden: the
+    // mirror is refreshed on sync, so a sede another user creates on the web after this device's
+    // last sync will not appear until the next one — the same bound the Cliente field already has.
+    final locationsAsync = _selectedCustomerId == null
+        ? null
+        : ref.watch(locationsForCustomerProvider(_selectedCustomerId!));
+    final locations = locationsAsync?.valueOrNull ?? const [];
+    // A chosen sede absent from the scoped list (customer just switched, or the location is
+    // inactive/not yet synced) must not be handed to the dropdown as its value — Flutter asserts
+    // when `initialValue` is not among `items`. [_onCustomerChanged] sets the field to null on a
+    // switch; this guard covers the inactive/unsynced case.
+    final selectedLocationId =
+        _selectedLocationId != null && locations.any((l) => l.id == _selectedLocationId)
+        ? _selectedLocationId
+        : null;
 
     final startLabel = DateFormat('dd/MM/yyyy').format(_startDate);
     final endLabel = _endDate != null
@@ -365,7 +400,13 @@ class _AdminContractFormScreenState extends ConsumerState<AdminContractFormScree
             AppFieldShell(
               label: 'Sede',
               child: DropdownButtonFormField<String>(
-                initialValue: _selectedLocationId,
+                // Rekeyed by customer so a customer switch rebuilds the field. `FormField` keeps its
+                // own value across rebuilds, so merely setting [_selectedLocationId] to null in
+                // [_onCustomerChanged] would leave the previous customer's sede on screen — the
+                // widget has to be recreated for the cleared `initialValue` to take. Same reasoning
+                // as `step_cliente_sede.dart`'s own `ValueKey('sede-...')`.
+                key: ValueKey('sede-$_selectedCustomerId'),
+                initialValue: selectedLocationId,
                 items: [
                   const DropdownMenuItem(value: null, child: Text('Nessuna sede')),
                   ...locations.map((l) => DropdownMenuItem(value: l.id, child: Text(l.name))),

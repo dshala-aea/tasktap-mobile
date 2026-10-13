@@ -451,4 +451,90 @@ void main() {
       await teardown(tester);
     });
   });
+
+  group('the Sede picker is scoped to the selected customer', () {
+    // A second customer with two sedi, one deliberately sharing cust-1's sede name — the exact
+    // shape of the ClickUp 12493t4pm49 report ("si ripetono le sedi più volte, o ti restituisce le
+    // sedi che non sono del cliente"). With the old whole-tenant list this made 'Sede Milano'
+    // appear twice (cust-1's and cust-2's) and 'Magazzino Beta' appear at all.
+    Future<void> seedSecondCustomer() async {
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              companyName: 'Beta Spa',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-2',
+              name: 'Sede Milano',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-3',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-2',
+              name: 'Magazzino Beta',
+            ),
+          );
+    }
+
+    Future<void> selectCustomer(WidgetTester tester, String name) async {
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(name).last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("lists only the selected customer's sedi — no other customer's, no repeat", (
+      tester,
+    ) async {
+      await seedSecondCustomer();
+      await openForm(tester);
+      await selectCustomer(tester, 'Acme Srl');
+
+      // Open the Sede dropdown (the second `<String>` dropdown, after Cliente).
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+
+      // cust-1's own sede is offered exactly once (cust-2's same-named one is scoped out) ...
+      expect(find.text('Sede Milano'), findsOneWidget);
+      // ... and cust-2's sedi never appear.
+      expect(find.text('Magazzino Beta'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('changing the customer clears a previously selected sede', (tester) async {
+      await seedSecondCustomer();
+      await openForm(tester);
+      await selectCustomer(tester, 'Acme Srl');
+
+      // Pick cust-1's sede.
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sede Milano').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Sede Milano'), findsOneWidget);
+
+      // Switch customer — the sede must not survive the change.
+      await selectCustomer(tester, 'Beta Spa');
+
+      expect(find.text('Nessuna sede'), findsOneWidget);
+      expect(find.text('Sede Milano'), findsNothing);
+      await teardown(tester);
+    });
+  });
 }
