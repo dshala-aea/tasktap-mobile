@@ -43,6 +43,13 @@ Future<bool> askPermissionPurpose(
 }) async {
   final granted = await showModalBottomSheet<bool>(
     context: context,
+    // `useRootNavigator: true`: one of this helper's call sites — Impostazioni — is the
+    // `impostazioni` route inside the "altro" StatefulShellBranch, and HomeShell's Scaffold is
+    // `extendBody: true` with a floating AppBottomNav as `bottomNavigationBar`. A branch-hosted
+    // sheet is painted inside the shell body, so the nav covers this sheet's bottom edge — right
+    // where the "Continua"/consent CTA sits. The other call sites are full-screen or top-level
+    // routes whose context already resolves to the root navigator, where the flag is a no-op.
+    useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) => _PurposeSheet(

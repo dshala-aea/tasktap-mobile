@@ -452,6 +452,17 @@ class _CalendarioBody extends ConsumerWidget {
   static void _showScheduleSheet(BuildContext context, Schedule schedule) {
     showModalBottomSheet<void>(
       context: context,
+      // `useRootNavigator: true` is load-bearing here, unlike every other sheet in the app.
+      // Calendario is a StatefulShellBranch, and its shell (HomeShell) renders a Scaffold with
+      // `extendBody: true` plus a floating `AppBottomNav` as `bottomNavigationBar`. With the
+      // default (branch) navigator the sheet is painted inside the shell body, i.e. *under* that
+      // pill — the sheet opens but the nav covers its lower edge (the owner's repro: "for events
+      // that are not tickets the sheet opens but it is behind the bottom nav and it is covered").
+      // The root navigator sits above the whole shell, so the sheet clears the nav. Every other
+      // sheet call site lives on a full-screen route (`parentNavigatorKey: rootNavigatorKey`) or a
+      // top-level route, whose context already resolves to the root navigator; this is one of the
+      // few call sites genuinely inside a branch, hence the explicit flag.
+      useRootNavigator: true,
       // 16, not 20 — every other bottom sheet in the app uses this radius.
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
