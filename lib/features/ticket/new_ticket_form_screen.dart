@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/widgets/widgets.dart';
 import '../../data/local/app_database.dart';
 import '../../data/sync/connectivity_provider.dart';
+import '../../data/sync/sync_service.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
 import 'steps/step_assegnazione.dart';
 import 'steps/step_cliente_sede.dart';
@@ -166,6 +167,25 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
     final isOnline = ref.read(isOnlineProvider);
     final queue = ref.read(ticketCreationQueueProvider);
 
+    // Both branches below send the picker's own rule rather than the raw form state. The state can
+    // hold a template id the catalogue no longer offers — the picker hides such a choice from what it
+    // *displays* (it has to: `DropdownButtonFormField` asserts its value is one of its items), but the
+    // state keeps it so that a repair does not silently rewrite a choice the user made. Sending it is
+    // what must not happen: a template the server will not attach is a `400` with no `field`, which
+    // `TicketCreationQueue` can never classify repairable, so the row would resend it forever. See
+    // offerableMaintenanceTemplateId. Clamping here also heals the row: `repair` writes these same
+    // values back onto it.
+    //
+    // The catalogue is read from the database rather than taken from the provider: the wizard submits
+    // a snapshot of its own state, so the rule has to hold for the catalogue as it stands at that
+    // moment, and a watched value can be absent (the step showing the picker may never have been built
+    // this run, or may have been unmounted since) — which must not silently mean "cannot judge".
+    final db = ref.read(appDatabaseProvider);
+    final maintenanceTemplateId = offerableMaintenanceTemplateId(
+      _formState.maintenanceTemplateId,
+      await db.select(db.maintenanceTemplates).get(),
+    );
+
     final repairRow = widget.repairRow;
     if (repairRow != null) {
       // `repair`, never `create`: an UPDATE of that same row. A create would leave the rejected
@@ -187,6 +207,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
         contractId: _formState.contractId,
         commessaId: _formState.commessaId,
         cantiereId: _formState.cantiereId,
+        maintenanceTemplateId: maintenanceTemplateId,
         prodottoAssistenzaIds: _formState.prodottoAssistenzaIds,
         tags: _formState.tags,
         isOnline: isOnline,
@@ -238,6 +259,7 @@ class _NewTicketFormScreenState extends ConsumerState<NewTicketFormScreen> {
       contractId: _formState.contractId,
       commessaId: _formState.commessaId,
       cantiereId: _formState.cantiereId,
+      maintenanceTemplateId: maintenanceTemplateId,
       prodottoAssistenzaIds: _formState.prodottoAssistenzaIds,
       tags: _formState.tags,
       isOnline: isOnline,

@@ -75,6 +75,10 @@ void main() {
         file,
         setup: (raw) {
           raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
+          // The upgrade now continues 38 -> 39 -> 40, so the column the last step adds must be
+          // absent too, or the reopen dies on `duplicate column name`. (v40's other half, the
+          // `maintenance_templates` table, needs no undo: `createTable` is `IF NOT EXISTS`.)
+          raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
           raw.execute('PRAGMA user_version = 38');
         },
       ),

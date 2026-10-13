@@ -33,6 +33,7 @@ class NewTicketFormState {
     this.contractId,
     this.commessaId,
     this.cantiereId,
+    this.maintenanceTemplateId,
     this.prodottoAssistenzaIds = const [],
     this.tags = const [],
   });
@@ -75,6 +76,12 @@ class NewTicketFormState {
   /// Cantiere — the worksite (`Core/Entities/Cantiere.cs`). Optional; validated as
   /// `EnsureExistsAsync<Cantiere>`.
   final String? cantiereId;
+
+  /// Modello checklist — the maintenance template this ticket should snapshot, sent as
+  /// `maintenanceTemplateId`. Null means "let the server resolve it from type/contract" (the
+  /// picker's default option); a null sends no key at all rather than an explicit null — see
+  /// [TicketApiClient.createTicket].
+  final String? maintenanceTemplateId;
 
   /// Prodotti assistenza — the customer's assets this ticket covers. A list, defaults to empty
   /// and is never null: "no products" and "never opened the picker" are the same thing here, and a
@@ -122,6 +129,10 @@ class NewTicketFormState {
       commessaId: blamed == 'commessaId' ? null : row.commessaId,
       // Never dropped: no wizard step holds a cantiere, so `TicketCreationQueue` never blames it.
       cantiereId: row.cantiereId,
+      // Never dropped either: the server never blames this field (a bad template id is a 400 with no
+      // field, so it is not a repairable reference — see TicketCreationQueue). A stale id is instead
+      // cleared on the row itself by the sync that drops the template (see SyncService).
+      maintenanceTemplateId: row.maintenanceTemplateId,
       prodottoAssistenzaIds: blamed == 'prodottoAssistenzaIds'
           ? const []
           : decodePendingStringList(row.prodottoAssistenzaIdsJson),
@@ -144,6 +155,7 @@ class NewTicketFormState {
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String>? prodottoAssistenzaIds,
     List<String>? tags,
     bool clearCustomerId = false,
@@ -159,6 +171,7 @@ class NewTicketFormState {
     bool clearContractId = false,
     bool clearCommessaId = false,
     bool clearCantiereId = false,
+    bool clearMaintenanceTemplateId = false,
     bool clearProdottoAssistenzaIds = false,
   }) {
     return NewTicketFormState(
@@ -176,6 +189,9 @@ class NewTicketFormState {
       contractId: clearContractId ? null : (contractId ?? this.contractId),
       commessaId: clearCommessaId ? null : (commessaId ?? this.commessaId),
       cantiereId: clearCantiereId ? null : (cantiereId ?? this.cantiereId),
+      maintenanceTemplateId: clearMaintenanceTemplateId
+          ? null
+          : (maintenanceTemplateId ?? this.maintenanceTemplateId),
       prodottoAssistenzaIds: clearProdottoAssistenzaIds
           ? const []
           : (prodottoAssistenzaIds ?? this.prodottoAssistenzaIds),

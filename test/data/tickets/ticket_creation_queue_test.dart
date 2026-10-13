@@ -42,6 +42,7 @@ void _stubCreateTicket(MockTicketApiClient api, Future<String> Function(Invocati
       contractId: any(named: 'contractId'),
       commessaId: any(named: 'commessaId'),
       cantiereId: any(named: 'cantiereId'),
+      maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
       prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
       tags: any(named: 'tags'),
       clientId: any(named: 'clientId'),
@@ -137,6 +138,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -170,6 +172,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -220,6 +223,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -261,6 +265,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -300,6 +305,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -343,6 +349,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -395,6 +402,7 @@ void main() {
             contractId: any(named: 'contractId'),
             commessaId: any(named: 'commessaId'),
             cantiereId: any(named: 'cantiereId'),
+            maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
             prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
             tags: any(named: 'tags'),
             clientId: any(named: 'clientId'),
@@ -429,6 +437,7 @@ void main() {
             contractId: any(named: 'contractId'),
             commessaId: any(named: 'commessaId'),
             cantiereId: any(named: 'cantiereId'),
+            maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
             prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
             tags: any(named: 'tags'),
             clientId: any(named: 'clientId'),
@@ -464,6 +473,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -506,6 +516,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -538,6 +549,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -588,6 +600,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -685,6 +698,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -733,6 +747,7 @@ void main() {
           contractId: any(named: 'contractId'),
           commessaId: any(named: 'commessaId'),
           cantiereId: any(named: 'cantiereId'),
+          maintenanceTemplateId: any(named: 'maintenanceTemplateId'),
           prodottoAssistenzaIds: any(named: 'prodottoAssistenzaIds'),
           tags: any(named: 'tags'),
           clientId: any(named: 'clientId'),
@@ -1186,5 +1201,85 @@ void main() {
         expect(row.repairableField, isNull);
       },
     );
+  });
+
+  group('TicketCreationQueue — maintenance template', () {
+    test('a null choice is persisted as null and reaches the API as null', () async {
+      String? captured;
+      var seen = false;
+      _stubCreateTicket(mockApiClient, (inv) async {
+        captured = inv.namedArguments[#maintenanceTemplateId] as String?;
+        seen = true;
+        return 'server-ticket-t1';
+      });
+
+      final outcome = await queue.create(
+        title: 'Senza modello',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        isOnline: true,
+      );
+
+      expect((await repo.getById(outcome.localId))!.maintenanceTemplateId, isNull);
+      expect(seen, isTrue);
+      expect(
+        captured,
+        isNull,
+        reason: 'the wizard default means "let the server resolve it from type/contract"',
+      );
+    });
+
+    test('a chosen template is persisted and reaches the API call', () async {
+      String? captured;
+      _stubCreateTicket(mockApiClient, (inv) async {
+        captured = inv.namedArguments[#maintenanceTemplateId] as String?;
+        return 'server-ticket-t2';
+      });
+
+      final outcome = await queue.create(
+        title: 'Con modello',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        maintenanceTemplateId: 'tpl-7',
+        isOnline: true,
+      );
+
+      expect((await repo.getById(outcome.localId))!.maintenanceTemplateId, 'tpl-7');
+      expect(captured, 'tpl-7');
+    });
+
+    test('a repair carries the template choice back onto the row', () async {
+      _stubCreateTicket(mockApiClient, (inv) async => throw _notFound({'field': 'customerId'}));
+
+      final outcome = await queue.create(
+        title: 'Da riparare',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        isOnline: true,
+      );
+      expect((await repo.getById(outcome.localId))!.maintenanceTemplateId, isNull);
+
+      await queue.repair(
+        outcome.localId,
+        title: 'Da riparare',
+        customerId: 'cust-1',
+        locationId: 'loc-1',
+        statusId: 1,
+        typeId: 2,
+        maintenanceTemplateId: 'tpl-9',
+        // Offline: this test is about what `updateFields` writes, not about the send.
+        isOnline: false,
+      );
+
+      final row = (await repo.getById(outcome.localId))!;
+      expect(row.maintenanceTemplateId, 'tpl-9');
+      expect(row.repairableField, isNull);
+    });
   });
 }

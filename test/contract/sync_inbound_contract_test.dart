@@ -88,6 +88,8 @@ void main() {
   // `openapi_contract_test.dart`'s header can go back to a copy. Until then, a refresh must merge
   // (that gate fails by name on either a dropped or a stale side), and this comment is the only
   // record that the contract in the snapshot exists on one unpushed branch.
+  // `SyncMaintenanceTemplateDto` and `MaintenanceTemplateOrigin` are in the same position: they
+  // carry the maintenance-template catalogue behind `MobileUserSyncResult.maintenanceTemplates`.
   final readKeys = <String, Set<String>>{
     'SyncControlGroupDto': SyncControlGroupDto.wireKeys,
     'SyncTicketControlDto': SyncTicketControlDto.wireKeys,
@@ -99,6 +101,7 @@ void main() {
     'SyncCommessaDto': CommessaSyncDto.wireKeys,
     'SyncProdottoAssistenzaDto': ProdottoAssistenzaSyncDto.wireKeys,
     'SyncAgentDto': AgentSyncDto.wireKeys,
+    'SyncMaintenanceTemplateDto': SyncMaintenanceTemplateDto.wireKeys,
     // The I2 confirm response. The draft and resolved shapes are different DTOs, so these are
     // pinned here rather than inferred from the draft summary's classes.
     'AiConversationConfirmResponse': AiConversationConfirmResponse.wireKeys,
@@ -204,6 +207,13 @@ void main() {
 
     final ag = AgentSyncDto.fromJson(instance('SyncAgentDto'));
     expect(ag.nome, isNotEmpty);
+
+    final mt = SyncMaintenanceTemplateDto.fromJson(
+      instance('SyncMaintenanceTemplateDto'),
+    );
+    expect(mt.id, isNotEmpty);
+    expect(mt.origin, 'System', reason: 'first enum value of MaintenanceTemplateOrigin');
+    expect(mt.latestPublishedVersion, 1);
   });
 
   test(
@@ -226,6 +236,7 @@ void main() {
         'commesse': [instance('SyncCommessaDto')],
         'prodottiAssistenza': [instance('SyncProdottoAssistenzaDto')],
         'agents': [instance('SyncAgentDto')],
+        'maintenanceTemplates': [instance('SyncMaintenanceTemplateDto')],
       });
       expect(full.carriesChecklist, isTrue);
       expect(full.carriesStrumenti, isTrue);
@@ -233,6 +244,7 @@ void main() {
       expect(full.carriesCommesse, isTrue);
       expect(full.carriesProdottiAssistenza, isTrue);
       expect(full.carriesAgents, isTrue);
+      expect(full.carriesMaintenanceTemplates, isTrue);
       expect(full.ticketControls, hasLength(1));
       expect(full.checklistTruncated, isTrue);
       expect(full.checklistOmittedTicketIds, [
@@ -260,6 +272,12 @@ void main() {
       expect(older.carriesCommesse, isFalse);
       expect(older.carriesProdottiAssistenza, isFalse);
       expect(older.carriesAgents, isFalse);
+      expect(
+        older.carriesMaintenanceTemplates,
+        isFalse,
+        reason:
+            'an older backend must NOT look like "every maintenance template was deleted"',
+      );
     },
   );
 

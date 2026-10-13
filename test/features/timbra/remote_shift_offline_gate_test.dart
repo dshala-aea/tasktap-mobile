@@ -8,12 +8,26 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show AsyncData, AsyncError;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasktap_mobile/core/time/business_time.dart';
 import 'package:tasktap_mobile/data/timbratura/remote_shift.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/timbratura/timbra_sync_service.dart';
 import 'package:tasktap_mobile/data/timbratura/work_session_repository.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
 import 'package:tasktap_mobile/features/timbra/timbra_providers.dart';
+
+/// The repository window is the REAL Italian business day (BusinessTime.fallback(), fed by the
+/// live clock), so every fixture must anchor to that same clock — but never to a bare
+/// `now - N`: that lands in the PREVIOUS business day during the first N of the day, and
+/// `getTodaySessions()` then returns nothing by design while the test expects an open shift.
+/// [_earlierToday] clamps such a seed forward to the day's own start, the one instant that is
+/// inside today and never after now.
+DateTime _earlierToday(Duration ago) {
+  final bt = BusinessTime.fallback();
+  final start = bt.utcRangeForBusinessDate(bt.businessToday()).$1;
+  final candidate = DateTime.now().toUtc().subtract(ago);
+  return candidate.isAfter(start) ? candidate : start;
+}
 
 class _Api extends WorklogApiClient {
   _Api() : super(Dio());
@@ -47,7 +61,7 @@ void main() {
   Future<TimbraState> local() async => deriveShiftState(await repo.getTodaySessions());
 
   Future<void> seedRemoteShift() async {
-    final start = DateTime.now().toUtc().subtract(const Duration(hours: 1));
+    final start = _earlierToday(const Duration(hours: 1));
     await repo.addEvent(id: 'remote-i', eventTime: start, eventType: 'ingresso');
     await repo.markReconciledOrphan('remote-i');
   }
@@ -100,7 +114,7 @@ void main() {
   test('a locally started shift still works fully offline (queued for the batch)', () async {
     await repo.addEvent(
       id: 'own-i',
-      eventTime: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+      eventTime: _earlierToday(const Duration(hours: 1)),
       eventType: 'ingresso',
     );
     online = false;

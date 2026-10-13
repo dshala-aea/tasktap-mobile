@@ -49,10 +49,16 @@ void main() {
                          'prodotto_assistenza_ids_json', 'repairable_field']) {
           raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
         }
-        // The upgrade now continues 37 -> 38 -> 39, so the column that last step adds must be
-        // absent too. (38 adds none: it re-creates tickets/pending_tickets in place, and the
-        // reopen below runs it against tables that already carry every current column.)
+        // The upgrade now continues 37 -> 38 -> 39 -> 40. `expected_version` (39) must be absent or
+        // its `addColumn` dies on `duplicate column name`. `maintenance_template_id` (40) is dropped
+        // only to reproduce the shape a real v36 database has: the reopen below runs step 38, whose
+        // in-place re-creation of `pending_tickets` puts the column back from the current definition
+        // with a NULL value (it is declared in that step's `newColumns`; without that the copy would
+        // read the absent column back as the literal string), and step 40 adds it only when SQLite
+        // still reports it missing. (38 adds no column of its own, and it runs against tables that
+        // already carry every current column.)
         raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
+        raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
         raw.execute('PRAGMA user_version = 36');
       }),
     );
@@ -97,6 +103,10 @@ void main() {
     final row = (await reopened.select(reopened.pendingTickets).get()).single;
     expect(row.id, 'queued-1', reason: 'spec 11.3: a schema bump must not touch queued work');
     expect(row.contractId, isNull);
+    // The same value check on the column step 38's re-creation puts back rather than adds: a device
+    // coming from 36 has never chosen a maintenance template, and the copy must not supply the
+    // column's own name in place of a value. `columnsOf` above is blind to that.
+    expect(row.maintenanceTemplateId, isNull);
   });
 
   /// The release deliberately does not reset every device's delta cursor - the reference queries

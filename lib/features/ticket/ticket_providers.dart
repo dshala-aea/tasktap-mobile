@@ -79,6 +79,76 @@ final ticketTypeMapProvider = StreamProvider.autoDispose<Map<int, String>>((
       .map((rows) => {for (final r in rows) r.id: r.name});
 });
 
+/// The maintenance-template catalogue the create wizard's "Modello checklist" picker reads.
+///
+/// Rows, not a `Map<id, name>` like [ticketTypeMapProvider]: the picker has to answer two questions
+/// the name alone cannot — whether new work may resolve the template ([MaintenanceTemplate.isActive])
+/// and which version it would resolve to ([MaintenanceTemplate.latestPublishedVersion]) — so the
+/// whole row has to reach the widget. Mirrors [ticketStatusesProvider]'s shape for that reason.
+///
+/// The whole catalogue is returned; narrowing it to what may be *attached* is
+/// [assignableMaintenanceTemplates]' job, kept separate so it is testable without a widget.
+final maintenanceTemplatesProvider =
+    StreamProvider.autoDispose<List<MaintenanceTemplate>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.maintenanceTemplates,
+      )..orderBy([(t) => OrderingTerm.asc(t.name)])).watch();
+    });
+
+/// The templates a *new* ticket may be pinned to: active, and with a published version to snapshot.
+///
+/// An inactive template is hidden because no new work may resolve it, and one with no
+/// [MaintenanceTemplate.latestPublishedVersion] is hidden because attaching it would record nothing
+/// — both are exactly the web form's `assignableTemplates` filter
+/// (`TicketCreatePanel.tsx`: `isActive && latestPublishedVersion != null`). Kept as a pure function
+/// beside the provider so the filter is testable on its own, and so the widget cannot drift from it.
+///
+/// The catalogue is NOT filtered at the source: an inactive template a queued ticket still points at
+/// must stay nameable on the device (see the table's doc comment), which a source-side filter would
+/// make impossible.
+List<MaintenanceTemplate> assignableMaintenanceTemplates(
+  Iterable<MaintenanceTemplate> rows,
+) => rows
+    .where((t) => t.isActive && t.latestPublishedVersion != null)
+    .toList(growable: false);
+
+/// The template id a *send* may carry: [chosenId] when the catalogue still offers it, else null.
+///
+/// The picker already refuses to *display* a choice the catalogue no longer offers — it falls back
+/// to the "Nessuna" option, because `DropdownButtonFormField` asserts its value is one of its items —
+/// while the form state keeps the id, so that a repair does not silently rewrite a choice the user
+/// made. A send must not be where that gap leaks: nothing clears a queued row's stale id except the
+/// next sync ([SyncService._clearStalePendingTemplateIds], which only knows about templates the
+/// server stopped *listing*), so a template the server still lists but no longer offers for new work
+/// — retired, or with nothing published — stays on the row and would be handed to `POST /api/tickets`.
+/// The server answers that with `400 Maintenance template not found`, and a 400 carries no `field`,
+/// so `TicketCreationQueue` can never classify the row repairable: it would resend the same doomed id
+/// on every retry, forever and invisibly. Null instead is the server's documented fallback — resolve
+/// from type/contract — so the work is still created, with the pick unset, which is the state the
+/// picker was already showing.
+///
+/// The rule is the picker's own on purpose: an id the picker will not offer is an id a send must not
+/// carry, and the two cannot drift because both call [assignableMaintenanceTemplates]. Null in, null
+/// out — "no choice" is always sendable.
+///
+/// An entirely empty [catalogue] means this device has not synced one at all: there is nothing to
+/// judge the choice against, so it is passed through rather than silently discarded — dropping a pick
+/// on the strength of absent data is worse than sending one the server may refuse, and the next sync
+/// still clears the row if the template really is gone. A catalogue that has rows but offers none of
+/// them is a different case, and there the id is not offerable either.
+String? offerableMaintenanceTemplateId(
+  String? chosenId,
+  Iterable<MaintenanceTemplate> catalogue,
+) {
+  if (chosenId == null) return null;
+  final rows = catalogue.toList(growable: false);
+  if (rows.isEmpty) return chosenId;
+  return assignableMaintenanceTemplates(rows).any((t) => t.id == chosenId)
+      ? chosenId
+      : null;
+}
+
 /// All schedules for a specific ticket id.
 final schedulesForTicketProvider = StreamProvider.autoDispose
     .family<List<Schedule>, String>((ref, ticketId) {

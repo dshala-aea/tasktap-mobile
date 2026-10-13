@@ -37,8 +37,14 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 ///
 /// Only `addColumn` steps belong here. A step that rewrites or re-creates a table (schema 38's
 /// `alterTable` on `due_date`) is undone by the fixture's own column surgery, below.
+///
+/// Dropping these columns is only half of reproducing v37: step 38 re-creates both tables from the
+/// CURRENT definition, so it puts every one of them back — and its copy reads a column the old table
+/// did not have as the column's own name, unless that step names it in `newColumns`. So the shape
+/// below pins the value too (see the `maintenance_template_id` assertion), not just the presence.
 const _columnsAddedAfter37 = <String, List<String>>{
   'draft_reports': ['expected_version'],
+  'pending_tickets': ['maintenance_template_id'],
 };
 
 void main() {
@@ -196,6 +202,20 @@ void main() {
       queued.dueDate,
       '2026-10-01',
       reason: 'the outbox row is always picker-shaped — its date goes to the server verbatim',
+    );
+
+    // The same re-creation also rebuilds `maintenance_template_id`, which `_columnsAddedAfter37`
+    // dropped: a v37 table has no such column. Drift writes the copy from the current definition, so
+    // the absent column is read as a bare quoted identifier — and SQLite resolves that to the
+    // column's own NAME rather than failing. Without step 38 declaring it as a new column, every
+    // queued ticket on a v37 device would come out pinned to a template literally called
+    // "maintenance_template_id": a value the server answers with a 400 that carries no `field`, so
+    // the create queue can never classify it repairable and it retries forever. A value assertion is
+    // the only thing that sees this — `columnsOf` below passes either way.
+    expect(
+      queued.maintenanceTemplateId,
+      isNull,
+      reason: 'a v37 device has no template picker, so the rebuilt column must be NULL',
     );
 
     // The rebuild is a real table re-creation, so everything else has to survive it.
