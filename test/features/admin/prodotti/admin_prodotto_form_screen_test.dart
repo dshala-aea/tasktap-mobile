@@ -312,4 +312,93 @@ void main() {
       await teardown(tester);
     });
   });
+
+  group('the Sede picker is scoped to the selected customer', () {
+    // Regression: the Sede dropdown was fed from `allLocationsProvider` — every active location in
+    // the whole tenant, not just the selected customer's. Location names repeat across a tenant
+    // ("Sede", "Magazzino", "Milano"), so choosing a Cliente still showed other customers' sedi,
+    // several of them under the same label. A sede belongs to exactly one customer, so the picker
+    // must offer only that customer's sedi.
+
+    Future<void> seedSecondCustomer() async {
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              id: 'cust-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              companyName: 'Beta Spa',
+            ),
+          );
+      // Deliberately the same label as cust-1's sede: this IS the repeat the scoping removes. A
+      // distinct label would let the test pass on a picker that merely deduplicated by name.
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-2',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-2',
+              name: 'Sede Milano',
+            ),
+          );
+      await db
+          .into(db.locations)
+          .insert(
+            LocationsCompanion.insert(
+              id: 'loc-3',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              customerId: 'cust-2',
+              name: 'Magazzino Beta',
+            ),
+          );
+    }
+
+    Future<void> selectCustomer(WidgetTester tester, String name) async {
+      // Cliente is the first DropdownButtonFormField<String> on the form, Sede the second.
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(name).last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets("offers only the selected customer's sedi, each label once", (tester) async {
+      await seedSecondCustomer();
+      await openForm(tester);
+      await selectCustomer(tester, 'Acme Srl');
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+
+      // cust-1's one sede, exactly once — not cust-1's plus cust-2's namesake.
+      expect(find.text('Sede Milano'), findsOneWidget);
+      // A sede belonging to another customer is never offered here.
+      expect(find.text('Magazzino Beta'), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('changing the customer clears a sede chosen for the previous one', (tester) async {
+      await seedSecondCustomer();
+      await openForm(tester);
+      await selectCustomer(tester, 'Acme Srl');
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sede Milano').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Sede Milano'), findsOneWidget); // rendered as the field's value
+
+      await selectCustomer(tester, 'Beta Spa');
+
+      // The field must not still display the previous customer's sede: a stale value is not
+      // rejected server-side (referential integrity is tenant-scoped only, so a same-tenant
+      // mismatch is written) — it is simply wrong. The Sede dropdown is closed here,
+      // so the only 'Sede Milano' that could appear is a surviving selection.
+      expect(find.text('Sede Milano'), findsNothing);
+      await teardown(tester);
+    });
+  });
 }
