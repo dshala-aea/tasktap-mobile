@@ -64,11 +64,8 @@ class _StatefulAdminApiClient extends AdminApiClient {
   @override
   Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({
     bool activeOnly = true,
-  }) async => const [];
-
-  @override
-  Future<List<Map<String, dynamic>>> fetchTechnicians() async => [
-    {'id': 'u2', 'displayName': 'Luigi Bianchi'},
+  }) async => [
+    {'id': 'u2', 'firstName': 'Luigi', 'lastName': 'Bianchi'},
   ];
 
   @override
@@ -88,8 +85,43 @@ class _StatefulAdminApiClient extends AdminApiClient {
   }
 }
 
-AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
+/// Add-member picker population + label regressions.
+///
+/// `fetchAllUsersWithSquadraInfo` (the squadra LIST screen's source — every active user, no role
+/// filter) and `fetchTechnicians` (the old, role-filtered source) deliberately return DIFFERENT
+/// sets, so a test that finds the Office user proves the picker stopped reading from
+/// `fetchTechnicians`. Before the fix it did read from there, so the Office user never appeared —
+/// the operator's "si possono inserire solo paolo e daniel".
+class _PickerPopulationApiClient extends AdminApiClient {
+  _PickerPopulationApiClient() : super(Dio());
 
+  @override
+  Future<Map<String, dynamic>?> fetchSquadraDetail(String id) async => {
+    'squadra': {'id': id, 'nome': 'Squadra Nord'},
+    'membri': <Map<String, dynamic>>[],
+  };
+
+  /// Every active user, no role filter — the list screen's population. Note the payload carries
+  /// no `displayName` (the `User` schema has `fullName`/`firstName`/`lastName`), just as the real
+  /// `/api/users` response does not.
+  @override
+  Future<List<Map<String, dynamic>>> fetchAllUsersWithSquadraInfo({
+    bool activeOnly = true,
+  }) async => [
+    {'id': 'u-tech', 'firstName': 'Daniel', 'lastName': 'Rossi', 'roles': ['Technician']},
+    {'id': 'u-office', 'firstName': 'Paolo', 'lastName': 'Verdi', 'roles': ['Office']},
+    // No name fields at all, only an email — must still be offered, but never under the email.
+    {'id': 'u-noname', 'email': 'ghost@tasktap.io'},
+  ];
+
+  /// The old, role-filtered source — deliberately narrower (technicians only).
+  @override
+  Future<List<Map<String, dynamic>>> fetchTechnicians() async => [
+    {'id': 'u-tech', 'firstName': 'Daniel', 'lastName': 'Rossi'},
+  ];
+}
+
+AppDatabase _makeDb() => AppDatabase(NativeDatabase.memory());
 Widget _buildView({
   required Map<String, dynamic>? detail,
   required Map<String, dynamic> squadra,
@@ -344,6 +376,50 @@ void main() {
       // member would exist server-side but never appear on this screen.
       expect(find.text('Nessun membro'), findsNothing);
       expect(find.text('Membro non sincronizzato'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('add-member picker population & labels', () {
+    // Opens the "Aggiungi membro" sheet and expands the user dropdown.
+    Future<void> openPicker(WidgetTester tester, AdminApiClient api) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [adminApiClientProvider.overrideWithValue(api)],
+          child: MaterialApp(
+            home: AdminSquadraDetailScreen(squadra: {'id': 'sq-1', 'nome': 'Squadra Nord'}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Aggiungi membro'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers a non-Technician active user, same population as the list screen', (
+      tester,
+    ) async {
+      await openPicker(tester, _PickerPopulationApiClient());
+
+      // The Office user is only in `fetchAllUsersWithSquadraInfo` — finding it proves the picker
+      // reads the list screen's population, not the old role-filtered `fetchTechnicians()`.
+      expect(find.text('Paolo Verdi'), findsWidgets);
+      expect(find.text('Daniel Rossi'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('never labels a nameless user with their email address', (tester) async {
+      await openPicker(tester, _PickerPopulationApiClient());
+
+      // Still offered (not dropped), but under a neutral label — never the raw email.
+      expect(find.text('ghost@tasktap.io'), findsNothing);
+      expect(find.text('Utente senza nome'), findsWidgets);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

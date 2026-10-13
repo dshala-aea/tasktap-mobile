@@ -269,6 +269,30 @@ String _formatLastAccess(String? iso) {
   return DateFormat('dd/MM/yyyy HH:mm', 'it').format(DateTime.parse(iso).toLocal());
 }
 
+/// The human label for a user row in the add-member picker.
+///
+/// Never an email: an operator must not have to read `mario.rossi@cliente.it` as a person's name.
+/// The `/api/users` payload carries no `displayName` (the `User` schema's name fields are
+/// `fullName`, `firstName`, `lastName`), so the old `t['displayName'] ?? t['email'] ?? ''` fell
+/// through to the email for every real user. Derive from the name fields the payload actually
+/// carries — the server's own `fullName` first, then `firstName`/`lastName` — and, when there is
+/// genuinely no name, fall back to a neutral label rather than inventing one or dropping the row
+/// (a nameless active user is still a valid member to add).
+String _memberOptionLabel(Map<String, dynamic> u) {
+  final display = (u['displayName'] as String?)?.trim();
+  if (display != null && display.isNotEmpty) return display;
+
+  final full = (u['fullName'] as String?)?.trim();
+  if (full != null && full.isNotEmpty) return full;
+
+  final first = (u['firstName'] as String? ?? '').trim();
+  final last = (u['lastName'] as String? ?? '').trim();
+  final composed = '$first $last'.trim();
+  if (composed.isNotEmpty) return composed;
+
+  return 'Utente senza nome';
+}
+
 /// Bottom sheet to add a member to a squadra.
 class _AddMemberSheet extends StatefulWidget {
   const _AddMemberSheet({required this.squadraId, required this.api});
@@ -285,20 +309,34 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
   int _ruolo = SquadraRuolo.membro;
   bool _isLoading = true;
   bool _isSaving = false;
-  List<Map<String, dynamic>> _technicians = [];
+  List<Map<String, dynamic>> _users = [];
 
   @override
   void initState() {
     super.initState();
-    _loadTechnicians();
+    _loadUsers();
   }
 
-  Future<void> _loadTechnicians() async {
+  Future<void> _loadUsers() async {
     try {
-      final techs = await widget.api.fetchTechnicians();
+      // Same population the squadra LIST screen uses (`allUsersWithSquadraProvider` above): every
+      // active user in the tenant, no role filter. This picker previously called
+      // `fetchTechnicians()` (`GET /api/users?role=Technician`), a client-side invention — the
+      // backend does not restrict squadra membership by role (`SquadreController` validates the
+      // member, no role rule), so the filter only hid valid members. That is why the operator
+      // reported "si possono inserire solo paolo e daniel": an Office-only colleague simply never
+      // appeared.
+      //
+      // Multi-role users are NOT the cause and must not be re-litigated as one: `UsersController.
+      // GetAll` filters `u.Roles.Contains(role.Value)` over the user's whole role SET, so an
+      // Office+Technician user already came back under role=Technician. The divergence between the
+      // three surfaces answering "who can be a member" was the filter's existence, not its
+      // multi-role handling — web's squadra control (`useUserLookup()`) and this app's own list
+      // screen both fetch with no role filter. This now matches them.
+      final users = await widget.api.fetchAllUsersWithSquadraInfo();
       if (mounted) {
         setState(() {
-          _technicians = techs;
+          _users = users;
           _isLoading = false;
         });
       }
@@ -357,11 +395,11 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
               child: DropdownButtonFormField<String>(
                 // ignore: deprecated_member_use — controlled field, needs value not initialValue
                 value: _selectedUserId,
-                items: _technicians
+                items: _users
                     .map(
                       (t) => DropdownMenuItem(
                         value: t['id'] as String,
-                        child: Text(t['displayName'] as String? ?? t['email'] as String? ?? ''),
+                        child: Text(_memberOptionLabel(t)),
                       ),
                     )
                     .toList(),
