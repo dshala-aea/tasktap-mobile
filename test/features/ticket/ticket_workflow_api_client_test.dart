@@ -229,4 +229,65 @@ void main() {
       );
     });
   });
+
+  // DELETE /api/tickets/{id} deliberately breaks two of the rules above: a 404 is success, and a
+  // failure shows the server's own sentence rather than a curated one. Both are the point of the
+  // delete path — see `deleteTicket`'s doc comment.
+  group('deleteTicket', () {
+    test('a 404 is success — the ticket is already gone server-side', () async {
+      final client = _clientThatThrows(_err(status: 404, body: 'Ticket not found'));
+
+      // Must not throw: the state the caller wanted is already true.
+      await client.deleteTicket('t1');
+    });
+
+    test('a bare-string server body is surfaced verbatim', () async {
+      // The route answers failures with `NotFound(result.Message)` / `BadRequest("...")` — a bare
+      // string, not a problem+json envelope.
+      final client = _clientThatThrows(_err(status: 400, body: 'Tenant context is required'));
+
+      await expectLater(
+        () => client.deleteTicket('t1'),
+        throwsA(
+          isA<TicketWorkflowFailure>().having(
+            (f) => f.message,
+            'message',
+            'Tenant context is required',
+          ),
+        ),
+      );
+    });
+
+    test('a problem+json body is read through its own members', () async {
+      final client = _clientThatThrows(
+        _err(status: 403, body: {'detail': 'Non hai i permessi per questa operazione'}),
+      );
+
+      await expectLater(
+        () => client.deleteTicket('t1'),
+        throwsA(
+          isA<TicketWorkflowFailure>().having(
+            (f) => f.message,
+            'message',
+            'Non hai i permessi per questa operazione',
+          ),
+        ),
+      );
+    });
+
+    test('a failure with no server message falls back rather than showing nothing', () async {
+      final client = _clientThatThrows(_err(status: 500, body: ''));
+
+      await expectLater(
+        () => client.deleteTicket('t1'),
+        throwsA(
+          isA<TicketWorkflowFailure>().having(
+            (f) => f.message,
+            'message',
+            'Impossibile eliminare il ticket.',
+          ),
+        ),
+      );
+    });
+  });
 }

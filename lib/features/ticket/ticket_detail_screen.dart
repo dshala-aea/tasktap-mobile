@@ -12,6 +12,7 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_rack.dart';
 import '../../core/time/business_time.dart' show BusinessTime, formatWorkDate;
 import '../../core/time/business_time_providers.dart' show businessTimeProvider;
+import '../../core/utils/error_message.dart' show humanErrorMessage;
 import '../../core/widgets/app_compartment_tile.dart';
 import '../../core/widgets/geo_map_card.dart';
 import '../../core/widgets/widgets.dart';
@@ -21,6 +22,7 @@ import '../../data/sync/connectivity_provider.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_attachment_state.dart';
 import '../../data/tickets/ticket_attachment_upload_queue_watcher.dart';
+import '../../data/tickets/ticket_deletion.dart';
 import '../../presentation/providers/schedule_providers.dart';
 import '../admin/admin_api_client.dart';
 import '../cantiere/cantiere_providers.dart';
@@ -258,6 +260,21 @@ class _TicketDetailBody extends ConsumerWidget {
                 label: 'Assegna',
                 glass: true,
                 onTap: () => _showAssignSheet(context, ref, ticket),
+              ),
+              // Delete sits here, beside the ticket's other actions, for the one person who may
+              // perform it: a tenant admin, the same `sistema.tenant.admin` capability the server's
+              // own `[RequirePermission]` on DELETE /api/tickets/{id} enforces. Not a swipe — a
+              // swipe is triggerable by accident one-handed on a site and cannot be performed by a
+              // keyboard/TalkBack user at all; this is a labelled header action behind a
+              // confirmation dialog. See [_confirmDeleteServerTicket].
+              CapabilityGate(
+                capability: 'sistema.tenant.admin',
+                child: HeaderIconBtn(
+                  icon: LucideIcons.trash2,
+                  label: 'Elimina',
+                  glass: true,
+                  onTap: () => _confirmDeleteServerTicket(context, ref, ticket),
+                ),
               ),
             ],
           ),
@@ -538,6 +555,55 @@ class _TicketDetailBody extends ConsumerWidget {
       ),
       builder: (ctx) => _AssignSheet(api: api, ticket: ticket),
     );
+  }
+
+  /// Permanently deletes a server-side ticket, after confirmation.
+  ///
+  /// The action that reaches here is hidden behind [CapabilityGate] on `sistema.tenant.admin` — the
+  /// exact permission the backend's `[RequirePermission]` on `DELETE /api/tickets/{id}` enforces —
+  /// so the two agree on who may delete.
+  ///
+  /// Offline, [TicketDeletionService] refuses rather than queueing (there is no delete outbox), and
+  /// that refusal is shown plainly. Any other failure shows the server's own sentence
+  /// ([TicketWorkflowFailure.message]) rather than a generic line — the backend wrote it to explain
+  /// a refusal a technician can act on.
+  Future<void> _confirmDeleteServerTicket(
+    BuildContext context,
+    WidgetRef ref,
+    Ticket ticket,
+  ) async {
+    final confirmed = await confirmDeleteDialog(
+      context,
+      title: 'Eliminare il ticket?',
+      message: '"${ticket.title}" verrà eliminato definitivamente, anche sul server.',
+    );
+    if (!confirmed || !context.mounted) return;
+
+    try {
+      await ref
+          .read(ticketDeletionServiceProvider)
+          .deleteServerTicket(ticketId: ticket.id, isOnline: ref.read(isOnlineProvider));
+      if (context.mounted) {
+        showAppToast(context, message: 'Ticket eliminato', tone: ToastTone.success);
+        context.pop(true);
+      }
+    } on TicketDeleteOfflineException catch (e) {
+      if (context.mounted) {
+        showAppToast(context, message: e.toString(), tone: ToastTone.error);
+      }
+    } on TicketWorkflowFailure catch (e) {
+      if (context.mounted) {
+        showAppToast(context, message: e.message, tone: ToastTone.error);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        showAppToast(
+          context,
+          message: humanErrorMessage(e, azione: 'eliminare il ticket'),
+          tone: ToastTone.error,
+        );
+      }
+    }
   }
 
   /// Feature audit module #11, Gap D — read-only contract summary, opened from the "Contratto"

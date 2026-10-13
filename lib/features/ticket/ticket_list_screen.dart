@@ -13,6 +13,7 @@ import '../../data/local/app_database.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/tickets/pending_ticket_state.dart';
 import '../../data/tickets/ticket_creation_queue_watcher.dart';
+import '../../data/tickets/ticket_deletion.dart';
 import '../../presentation/providers/schedule_providers.dart'
     show allLocationsProvider, allCustomersProvider;
 import 'new_ticket_form_screen.dart';
@@ -440,9 +441,49 @@ class _PendingTicketRow extends ConsumerWidget {
               onPressed: () => ref.read(ticketCreationQueueProvider).retry(ticket.id),
             ),
           ],
+          // Delete a local-only ticket. Offered whenever the row is NOT mid-send: a `pendingSync`
+          // row (never sent) or a `failed` one (send refused/lost) can always go, with no network —
+          // this is the failed/duplicate ticket in the ClickUp title and its whole point is that it
+          // is removable without a connection. A `submitting` row is excluded because a create
+          // request is in flight and its outcome is unknown; removing the row here could leave a
+          // server ticket with no local row to reconcile it.
+          if (state != PendingTicketState.submitting) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(LucideIcons.trash2, size: 18, color: context.colors.inkMuted),
+              tooltip: 'Elimina',
+              onPressed: () => _confirmDeletePendingTicket(context, ref, ticket),
+            ),
+          ],
         ],
       ),
     );
+  }
+}
+
+/// Permanently removes a ticket that only ever existed on this device.
+///
+/// Pure local cleanup — no network, so it works with no signal, which is the whole point: this is
+/// the failed/duplicate ticket in the ClickUp title, and a technician must be able to get rid of it
+/// without waiting for a connection. Deliberately NOT gated on `sistema.tenant.admin` (unlike the
+/// server-side delete on the detail screen): this row exists only on this device, the server never
+/// saw it, and it is the technician's own offline draft — the server's own delete permission has
+/// nothing to say about it.
+Future<void> _confirmDeletePendingTicket(
+  BuildContext context,
+  WidgetRef ref,
+  PendingTicket ticket,
+) async {
+  final confirmed = await confirmDeleteDialog(
+    context,
+    title: 'Eliminare il ticket?',
+    message: '"${ticket.title}" verrà eliminato definitivamente da questo dispositivo.',
+  );
+  if (!confirmed || !context.mounted) return;
+
+  await ref.read(ticketDeletionServiceProvider).deleteLocalOnly(ticket.id);
+  if (context.mounted) {
+    showAppToast(context, message: 'Ticket eliminato', tone: ToastTone.success);
   }
 }
 

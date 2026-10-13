@@ -118,6 +118,32 @@ class TicketWorkflowApiClient {
     );
   }
 
+  /// DELETE /api/Tickets/{id} — permanently removes the ticket server-side.
+  ///
+  /// The backend gates this route on `sistema.tenant.admin` (`TicketsController.Delete`); the
+  /// client hides the action behind that same capability, so a 403 reaching here means the two
+  /// disagreed — see [_serverMessage] for why the server's own sentence is surfaced.
+  ///
+  /// A **404 is success, not failure**: the ticket is already gone server-side (deleted from
+  /// another device, or by the office), which is exactly the state the caller asked for. Treating
+  /// it as an error would be worse than useless — it would leave the local row behind for a ticket
+  /// that no longer exists anywhere.
+  ///
+  /// Deliberately does not go through [_run]/[_italianFor]. Those replace the backend's message
+  /// with a curated Italian one, which is right for the workflow writes (whose server sentences are
+  /// English API prose) but wrong here: the caller must show *why* the server refused a delete.
+  Future<void> deleteTicket(String ticketId) async {
+    try {
+      await _dio.delete<void>('/api/tickets/$ticketId');
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return; // already gone — success
+      throw TicketWorkflowFailure(
+        _serverMessage(e) ?? 'Impossibile eliminare il ticket.',
+        cause: e,
+      );
+    }
+  }
+
   // ── Plumbing ───────────────────────────────────────────────────────────────
 
   Future<void> _run(
@@ -129,6 +155,28 @@ class TicketWorkflowApiClient {
     } on DioException catch (e) {
       throw TicketWorkflowFailure(_italianFor(e, fallback), cause: e);
     }
+  }
+
+  /// The backend's own sentence for a failure, when it wrote one worth showing.
+  ///
+  /// The DELETE route answers with a bare string body (`NotFound(result.Message)`,
+  /// `BadRequest("Tenant context is required")`) rather than a ProblemDetails envelope, so a string
+  /// body is read directly; a map body (the permission filter's `application/problem+json`) is read
+  /// through its `detail`/`title`/`message` members. Null when the server said nothing usable, so
+  /// the caller falls back to a generic line rather than showing an empty toast.
+  static String? _serverMessage(DioException e) {
+    final body = e.response?.data;
+    if (body is String) {
+      final text = body.trim();
+      return text.isEmpty ? null : text;
+    }
+    if (body is Map) {
+      for (final key in const ['detail', 'title', 'message']) {
+        final value = body[key];
+        if (value is String && value.trim().isNotEmpty) return value.trim();
+      }
+    }
+    return null;
   }
 
   /// Turns a DioException into something a technician can act on.
