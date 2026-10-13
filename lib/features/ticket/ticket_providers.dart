@@ -79,6 +79,40 @@ final ticketTypeMapProvider = StreamProvider.autoDispose<Map<int, String>>((
       .map((rows) => {for (final r in rows) r.id: r.name});
 });
 
+/// The maintenance-template catalogue the create wizard's "Modello checklist" picker reads.
+///
+/// Rows, not a `Map<id, name>` like [ticketTypeMapProvider]: the picker has to answer two questions
+/// the name alone cannot — whether new work may resolve the template ([MaintenanceTemplate.isActive])
+/// and which version it would resolve to ([MaintenanceTemplate.latestPublishedVersion]) — so the
+/// whole row has to reach the widget. Mirrors [ticketStatusesProvider]'s shape for that reason.
+///
+/// The whole catalogue is returned; narrowing it to what may be *attached* is
+/// [assignableMaintenanceTemplates]' job, kept separate so it is testable without a widget.
+final maintenanceTemplatesProvider =
+    StreamProvider.autoDispose<List<MaintenanceTemplate>>((ref) {
+      final db = ref.watch(appDatabaseProvider);
+      return (db.select(
+        db.maintenanceTemplates,
+      )..orderBy([(t) => OrderingTerm.asc(t.name)])).watch();
+    });
+
+/// The templates a *new* ticket may be pinned to: active, and with a published version to snapshot.
+///
+/// An inactive template is hidden because no new work may resolve it, and one with no
+/// [MaintenanceTemplate.latestPublishedVersion] is hidden because attaching it would record nothing
+/// — both are exactly the web form's `assignableTemplates` filter
+/// (`TicketCreatePanel.tsx`: `isActive && latestPublishedVersion != null`). Kept as a pure function
+/// beside the provider so the filter is testable on its own, and so the widget cannot drift from it.
+///
+/// The catalogue is NOT filtered at the source: an inactive template a queued ticket still points at
+/// must stay nameable on the device (see the table's doc comment), which a source-side filter would
+/// make impossible.
+List<MaintenanceTemplate> assignableMaintenanceTemplates(
+  Iterable<MaintenanceTemplate> rows,
+) => rows
+    .where((t) => t.isActive && t.latestPublishedVersion != null)
+    .toList(growable: false);
+
 /// All schedules for a specific ticket id.
 final schedulesForTicketProvider = StreamProvider.autoDispose
     .family<List<Schedule>, String>((ref, ticketId) {

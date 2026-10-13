@@ -48,6 +48,7 @@ PendingTicketsCompanion _rowCompanion({
   String? contractId,
   String? commessaId,
   String? cantiereId,
+  String? maintenanceTemplateId,
   List<String> prodottoAssistenzaIds = const [],
   List<String> tags = const [],
 }) {
@@ -66,6 +67,8 @@ PendingTicketsCompanion _rowCompanion({
     contractId: Value(contractId),
     commessaId: Value(commessaId),
     cantiereId: Value(cantiereId),
+    // Null means "let the server resolve the template from type/contract" — the picker's default.
+    maintenanceTemplateId: Value(maintenanceTemplateId),
     // JSON text, same convention as tagsJson: a list column has to survive the round trip
     // through the outbox unchanged, and null is reserved for a row that never had one.
     prodottoAssistenzaIdsJson: Value(
@@ -97,6 +100,7 @@ class PendingTicketRepository {
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
     required PendingTicketState state,
@@ -119,6 +123,7 @@ class PendingTicketRepository {
             contractId: contractId,
             commessaId: commessaId,
             cantiereId: cantiereId,
+            maintenanceTemplateId: maintenanceTemplateId,
             prodottoAssistenzaIds: prodottoAssistenzaIds,
             tags: tags,
           ).copyWith(
@@ -152,6 +157,7 @@ class PendingTicketRepository {
     String? contractId,
     String? commessaId,
     String? cantiereId,
+    String? maintenanceTemplateId,
     List<String> prodottoAssistenzaIds = const [],
     List<String> tags = const [],
   }) async {
@@ -171,6 +177,7 @@ class PendingTicketRepository {
         contractId: contractId,
         commessaId: commessaId,
         cantiereId: cantiereId,
+        maintenanceTemplateId: maintenanceTemplateId,
         prodottoAssistenzaIds: prodottoAssistenzaIds,
         tags: tags,
       ).copyWith(repairableField: const Value(null)),

@@ -35,6 +35,12 @@ class SyncResultDto {
   final List<ProdottoAssistenzaSyncDto> prodottiAssistenza;
   final List<AgentSyncDto> agents;
 
+  /// The maintenance checklist templates the technician may attach to a NEW ticket — the create
+  /// wizard's "Modello checklist" picker. Scoped to the templates this technician's payload can see
+  /// (curated plus this tenant's own); the whole visible set travels on every sync, so it is
+  /// replaced wholesale rather than merged (see SyncService).
+  final List<SyncMaintenanceTemplateDto> maintenanceTemplates;
+
   final List<SyncControlGroupDto> controlGroups;
   final List<SyncTicketControlDto> ticketControls;
   final List<SyncTicketAssetDto> ticketAssets;
@@ -65,6 +71,11 @@ class SyncResultDto {
   final bool carriesProdottiAssistenza;
   final bool carriesAgents;
 
+  /// False when the payload came from a backend that predates the maintenance-template catalogue.
+  /// Without it an older backend would look like "every template was deleted" and the wholesale
+  /// replace would wipe the picker.
+  final bool carriesMaintenanceTemplates;
+
   static const Set<String> checklistWireKeys = {
     'controlGroups',
     'ticketControls',
@@ -83,6 +94,7 @@ class SyncResultDto {
     'commesse',
     'prodottiAssistenza',
     'agents',
+    'maintenanceTemplates',
   };
 
   const SyncResultDto({
@@ -105,6 +117,7 @@ class SyncResultDto {
     this.commesse = const [],
     this.prodottiAssistenza = const [],
     this.agents = const [],
+    this.maintenanceTemplates = const [],
     this.controlGroups = const [],
     this.ticketControls = const [],
     this.ticketAssets = const [],
@@ -119,6 +132,7 @@ class SyncResultDto {
     this.carriesCommesse = false,
     this.carriesProdottiAssistenza = false,
     this.carriesAgents = false,
+    this.carriesMaintenanceTemplates = false,
   });
 
   factory SyncResultDto.fromJson(Map<String, dynamic> j) {
@@ -151,6 +165,10 @@ class SyncResultDto {
         ProdottoAssistenzaSyncDto.fromJson,
       ),
       agents: _list(j['agents'], AgentSyncDto.fromJson),
+      maintenanceTemplates: _list(
+        j['maintenanceTemplates'],
+        SyncMaintenanceTemplateDto.fromJson,
+      ),
       controlGroups: _list(j['controlGroups'], SyncControlGroupDto.fromJson),
       ticketControls: _list(j['ticketControls'], SyncTicketControlDto.fromJson),
       ticketAssets: _list(j['ticketAssets'], SyncTicketAssetDto.fromJson),
@@ -170,6 +188,7 @@ class SyncResultDto {
       carriesCommesse: j.containsKey('commesse'),
       carriesProdottiAssistenza: j.containsKey('prodottiAssistenza'),
       carriesAgents: j.containsKey('agents'),
+      carriesMaintenanceTemplates: j.containsKey('maintenanceTemplates'),
     );
   }
 }
@@ -1133,6 +1152,65 @@ class AgentSyncDto {
     cellulare: j['cellulare'] as String?,
     isActive: j['isActive'] as bool? ?? true,
   );
+}
+
+// ── Maintenance template ───────────────────────────────────────────────────────
+
+/// One maintenance checklist template a technician may attach to a new ticket as its checklist —
+/// the "Modello checklist" the web ticket form offers. Mirrors `SyncMaintenanceTemplateDto`; the
+/// `MaintenanceTemplates` table's own doc comment records why the mirror is exactly these six fields.
+class SyncMaintenanceTemplateDto {
+  final String id;
+
+  /// MaintenanceTemplateOrigin: "System" (curated) | "Tenant" (this tenant's own). Kept as the wire
+  /// string rather than parsed to an enum — nothing on the device branches on it.
+  final String origin;
+  final String name;
+  final String? description;
+  final bool isActive;
+
+  /// The version a new ticket would resolve to today, or null while every version is a draft or
+  /// already retired. Null is a real state, not missing data.
+  final int? latestPublishedVersion;
+
+  static const Set<String> wireKeys = {
+    'id',
+    'origin',
+    'name',
+    'description',
+    'isActive',
+    'latestPublishedVersion',
+  };
+
+  const SyncMaintenanceTemplateDto({
+    required this.id,
+    required this.origin,
+    required this.name,
+    this.description,
+    this.isActive = true,
+    this.latestPublishedVersion,
+  });
+
+  factory SyncMaintenanceTemplateDto.fromJson(Map<String, dynamic> j) =>
+      SyncMaintenanceTemplateDto(
+        id: j['id'] as String,
+        origin: j['origin'] as String,
+        name: j['name'] as String,
+        description: j['description'] as String?,
+        isActive: j['isActive'] as bool? ?? true,
+        latestPublishedVersion: _intOrNull(j['latestPublishedVersion']),
+      );
+
+  /// Serializes back to the wire shape. The device only ever READS this DTO; `toJson` exists so a
+  /// test can round-trip its own fixture through the exact keys `fromJson` reads.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'origin': origin,
+    'name': name,
+    'description': description,
+    'isActive': isActive,
+    'latestPublishedVersion': latestPublishedVersion,
+  };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

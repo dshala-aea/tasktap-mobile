@@ -72,6 +72,7 @@ class SyncService {
       await _upsertCantieri(payload.cantieri);
       await _replaceColleagues(payload.colleagues);
       await _applyReferenceCache(payload);
+      await _replaceMaintenanceTemplates(payload);
       await _applyChecklist(payload);
     });
 
@@ -144,6 +145,66 @@ class SyncService {
       // No prune: see ReferenceCacheRepository.
       await cache.upsertAgents(payload.agents);
     }
+  }
+
+  /// The maintenance-template catalogue the create wizard's "Modello checklist" picker reads.
+  ///
+  /// Replaced wholesale rather than upserted, for the same reason [_replaceColleagues] is: the
+  /// server sends the whole visible set with no delta filter, so a template that is no longer
+  /// offered — deleted, or simply no longer visible to this technician — must stop appearing, and an
+  /// upsert would leave it in the picker forever. Skipped entirely when the payload does not carry
+  /// the member, so an older backend cannot look like "every template was deleted" and wipe the
+  /// catalogue. An empty carried list is likewise treated as "nothing to say" (the `_replaceColleagues`
+  /// precedent): the picker keeps the previous catalogue rather than going blank for an empty response.
+  ///
+  /// A queued ticket pinned to a template that just left the catalogue has its choice cleared in the
+  /// same transaction — see [_clearStalePendingTemplateIds] for why that has to happen here.
+  Future<void> _replaceMaintenanceTemplates(SyncResultDto payload) async {
+    if (!payload.carriesMaintenanceTemplates) return;
+    final list = payload.maintenanceTemplates;
+    if (list.isEmpty) return;
+
+    await db.transaction(() async {
+      await db.delete(db.maintenanceTemplates).go();
+      await db.batch(
+        (b) => b.insertAll(
+          db.maintenanceTemplates,
+          list.map(
+            (t) => MaintenanceTemplatesCompanion.insert(
+              id: t.id,
+              origin: t.origin,
+              name: t.name,
+              description: Value(t.description),
+              isActive: Value(t.isActive),
+              latestPublishedVersion: Value(t.latestPublishedVersion),
+            ),
+          ),
+        ),
+      );
+      await _clearStalePendingTemplateIds(list.map((t) => t.id).toSet());
+    });
+  }
+
+  /// Drops the maintenance-template choice off any queued ticket whose template is no longer in the
+  /// catalogue that just arrived.
+  ///
+  /// Without this the pending row would keep a `maintenanceTemplateId` the server now answers with
+  /// `400 Maintenance template not found`. That 400 carries no `field`, so the create queue cannot
+  /// classify it repairable (its rule is 404-plus-known-field only — see TicketCreationQueue) and the
+  /// row would resend the same doomed id on every retry, forever and invisibly. Clearing the choice
+  /// lets the ticket resolve like any other unset pick — the server falls back to type/contract — so
+  /// the work still gets created.
+  ///
+  /// Only rows that still carry a value, and only values missing from [keepIds], are touched; a null
+  /// stays null. The caller returned early on an empty catalogue, so [keepIds] is never empty here:
+  /// this can never blank a choice that is merely not yet on this device.
+  Future<void> _clearStalePendingTemplateIds(Set<String> keepIds) async {
+    await (db.update(db.pendingTickets)..where(
+          (t) =>
+              t.maintenanceTemplateId.isNotNull() &
+              t.maintenanceTemplateId.isNotIn(keepIds),
+        ))
+        .write(const PendingTicketsCompanion(maintenanceTemplateId: Value(null)));
   }
 
   // ── Upsert helpers ─────────────────────────────────────────────────────────

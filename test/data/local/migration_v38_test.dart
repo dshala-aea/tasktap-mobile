@@ -39,6 +39,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 /// `alterTable` on `due_date`) is undone by the fixture's own column surgery, below.
 const _columnsAddedAfter37 = <String, List<String>>{
   'draft_reports': ['expected_version'],
+  'pending_tickets': ['maintenance_template_id'],
 };
 
 void main() {

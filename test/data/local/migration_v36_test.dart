@@ -82,9 +82,14 @@ void main() {
                            'prodotto_assistenza_ids_json', 'repairable_field']) {
             raw.execute('ALTER TABLE pending_tickets DROP COLUMN $c');
           }
-          // The upgrade now continues 36 -> 37 -> 38 -> 39, so the column that last step adds must
-          // be absent too. (38 adds none: it re-creates tickets/pending_tickets in place.)
+          // The upgrade now continues 36 -> 37 -> 38 -> 39 -> 40. `expected_version` (39) must be
+          // absent or its `addColumn` dies on `duplicate column name`. `maintenance_template_id` (40)
+          // is dropped only to reproduce the shape a real v35 database has: step 38's in-place
+          // re-creation of `pending_tickets` puts it back from the current definition, and step 40
+          // adds it only when SQLite still reports it missing. (38 adds no column of its own: it
+          // re-creates tickets/pending_tickets in place.)
           raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
+          raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
           raw.execute('PRAGMA user_version = 35');
         },
       ),

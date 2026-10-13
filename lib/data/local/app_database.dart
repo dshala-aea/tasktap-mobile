@@ -140,6 +140,40 @@ class Agents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// ── maintenance template catalogue (schema 40) ─────────────────────────────────
+/// The maintenance checklist templates a technician may attach to a NEW ticket as its checklist —
+/// the "Modello checklist" the web form already offers — mirrored so the wizard's picker is filled
+/// offline.
+///
+/// Mirrors [SyncMaintenanceTemplateDto] on the wire rather than the full template entity: the picker
+/// needs the [name] to show and two answers about the template — whether new work may resolve it
+/// ([isActive]) and which version it would resolve to ([latestPublishedVersion], null while every
+/// version is still a draft). [origin] rides along because it is on the wire and describes the row,
+/// the same reasoning [Contracts.isActive] records: dropping a wire field would make the mirror a
+/// different set of facts than the payload.
+///
+/// No tenant/created/updated bookkeeping: the whole visible set is replaced wholesale on every sync
+/// (see SyncService), so the row only has to answer the picker.
+class MaintenanceTemplates extends Table {
+  TextColumn get id => text()();
+
+  /// MaintenanceTemplateOrigin: "System" (curated) | "Tenant" (this tenant's own), stored as the
+  /// wire enum name like [Tickets.priority] rather than an int — nothing filters on it.
+  TextColumn get origin => text()();
+
+  TextColumn get name => text()();
+  TextColumn get description => text().nullable()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  /// The version a new ticket would resolve to today, or null while every version is still a draft
+  /// or already retired. Null is a real, visible state ("cannot be attached now"), not missing data
+  /// — the picker hides it.
+  IntColumn get latestPublishedVersion => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // ── locations ─────────────────────────────────────────────────────────────────
 class Locations extends Table {
   TextColumn get id => text()();
@@ -911,6 +945,11 @@ class PendingTickets extends Table {
   TextColumn get commessaId => text().nullable()();
   TextColumn get cantiereId => text().nullable()();
 
+  /// The maintenance checklist template the wizard chose to attach, sent as `maintenanceTemplateId`.
+  /// Null means "let the server resolve it from type/contract" — the wizard's default option — which
+  /// is why the request body omits the key rather than sending null (see TicketApiClient.createTicket).
+  TextColumn get maintenanceTemplateId => text().nullable()();
+
   /// Covered products, JSON-encoded — same storage as [Tickets.tagsJson] (its doc comment has the
   /// reasoning). A JSON list rather than a join table because nothing reads it relationally: it is
   /// carried to the server verbatim and never queried by id.
@@ -1153,13 +1192,14 @@ class ChecklistOmittedTickets extends Table {
     Commesse,
     ProdottiAssistenza,
     Agents,
+    MaintenanceTemplates,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 40;
 
   @override
   MigrationStrategy get migration {
@@ -1488,6 +1528,27 @@ class AppDatabase extends _$AppDatabase {
           // (the device genuinely does not know those versions and must not invent one).
           await m.addColumn(draftReports, draftReports.expectedVersion);
         }
+        if (from < 40) {
+          // The maintenance-template catalogue the ticket wizard's "Modello checklist" picker reads
+          // offline, and the pending-ticket column the wizard's choice is queued into.
+          //
+          // A new table plus a new nullable column, and NO `syncCursorGeneration` bump: unlike a
+          // since-filtered ticket list (which is why schema 36's checklist tables needed v9), the
+          // template catalogue travels in full on every sync with no delta filter, so there is no
+          // row a delta cursor could leave unbackfilled — `_replaceMaintenanceTemplates` fills it the
+          // next time the device syncs at all.
+          await m.createTable(maintenanceTemplates);
+          // The column is added only when the table really lacks it. A device upgrading from 37 or
+          // older ALREADY has it: the `from < 38` step above re-creates `pending_tickets` from the
+          // CURRENT table definition — which now declares `maintenanceTemplateId` — so by the time
+          // this step runs the column exists and an unconditional `addColumn` dies on `duplicate
+          // column name` before the app ever opens. Devices coming from 38 or 39 have the old table
+          // shape and do need the add. Ask SQLite which of the two this upgrade is instead of
+          // inferring it from `from`.
+          if (!await _columnExists(m.database, 'pending_tickets', 'maintenance_template_id')) {
+            await m.addColumn(pendingTickets, pendingTickets.maintenanceTemplateId);
+          }
+        }
       },
     );
   }
@@ -1525,6 +1586,22 @@ class AppDatabase extends _$AppDatabase {
       "CASE WHEN strftime('%H:%M:%S', $table.due_date, 'unixepoch') = '00:00:00' "
       "THEN strftime('%Y-%m-%d', $table.due_date, 'unixepoch') "
       "ELSE strftime('%Y-%m-%d', $table.due_date, 'unixepoch', 'localtime') END";
+
+  /// Whether [table] currently carries [column], asked of SQLite rather than assumed.
+  ///
+  /// A migration step that adds a column cannot always trust `from`: an earlier `alterTable` step
+  /// re-creates its table from the CURRENT definition, so a column declared after that step exists
+  /// already on any device the re-creation ran for. `Migrator.addColumn` does not emit
+  /// `IF NOT EXISTS` — it dies on `duplicate column name` — so the only correct answer is to look.
+  /// Used by the schema-40 step for `pending_tickets.maintenance_template_id`.
+  static Future<bool> _columnExists(
+    DatabaseConnectionUser db,
+    String table,
+    String column,
+  ) async {
+    final rows = await db.customSelect('PRAGMA table_info($table)').get();
+    return rows.any((r) => r.read<String>('name') == column);
+  }
 
   // ── sync_meta helpers ────────────────────────────────────────────────────
 

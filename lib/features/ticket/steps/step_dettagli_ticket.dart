@@ -258,6 +258,64 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
     );
   }
 
+  /// "Modello checklist" — the maintenance template this ticket should snapshot as its checklist.
+  ///
+  /// Create mode only ([StepDettagliTicket.ticketId] is null): editing an existing ticket does not
+  /// re-pick its checklist here, exactly as the web form (`TicketCreatePanel.tsx`) hides the select
+  /// outside create mode.
+  ///
+  /// Returns the field preceded by its spacer, or an empty list so nothing at all renders when there
+  /// is nothing to offer — a still-empty catalogue (no sync yet) or a catalogue whose every template
+  /// is retired or unpublished. A select whose only option is "Nessuna" is worse than no select:
+  /// it reads as a broken picker rather than as a field this ticket does not have.
+  ///
+  /// No contract hint. The web form shows "Questo contratto risolverebbe a: …" from
+  /// `ContractDto.maintenanceTemplateId`, but the mobile contract mirror (`SyncContractDto`) does not
+  /// carry that field, so the name cannot be resolved offline. Showing nothing is honest; a hint
+  /// built from data the device does not have would be a guess.
+  List<Widget> _maintenanceTemplateSection() {
+    if (widget.ticketId != null) return const [];
+    final rows = ref.watch(maintenanceTemplatesProvider).valueOrNull ?? const [];
+    final offerable = assignableMaintenanceTemplates(rows);
+    if (offerable.isEmpty) return const [];
+
+    final offeredIds = {for (final t in offerable) t.id};
+    // A queued/repair row can carry an id the catalogue no longer offers (a template retired since
+    // the choice was made). `DropdownButtonFormField` asserts its value is one of its items, so fall
+    // back to the "Nessuna" option for display rather than crash; the stale choice itself is cleared
+    // by the sync that dropped the template (see SyncService), not here.
+    final selected = offeredIds.contains(widget.state.maintenanceTemplateId)
+        ? widget.state.maintenanceTemplateId
+        : null;
+
+    return [
+      const SizedBox(height: 24),
+      AppFieldShell(
+        label: 'Modello checklist',
+        child: DropdownButtonFormField<String?>(
+          // Keyed by value so a wizard back-navigation resyncs it, the same rule the Tipo field above
+          // states for `initialValue`.
+          key: ValueKey('modello-checklist-${widget.state.maintenanceTemplateId}'),
+          initialValue: selected,
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('— Nessuna (auto da tipo/contratto) —'),
+            ),
+            for (final t in offerable)
+              DropdownMenuItem<String?>(value: t.id, child: Text(t.name)),
+          ],
+          onChanged: (id) => widget.onChanged(
+            id == null
+                ? widget.state.copyWith(clearMaintenanceTemplateId: true)
+                : widget.state.copyWith(maintenanceTemplateId: id),
+          ),
+        ),
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final typesAsync = ref.watch(ticketTypeMapProvider);
@@ -319,6 +377,11 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         // Multi-select, scoped to the same customer as Contratto/Commessa. The chips are the
         // selection; the picker below them only adds to it.
         _buildProdotti(),
+
+        // ── Modello checklist ──────────────────────────────────────────────
+        // Create mode only, and only when the catalogue offers something — see
+        // [_maintenanceTemplateSection] for both rules.
+        ..._maintenanceTemplateSection(),
 
         const SizedBox(height: 24),
 
