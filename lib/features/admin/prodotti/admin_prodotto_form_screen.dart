@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../core/utils/offline_guard.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
+import '../../clienti/clienti_providers.dart';
 import '../admin_api_client.dart';
 import '../admin_widgets.dart';
 import 'admin_prodotto_list_screen.dart' show adminProdottiAssistenzaProvider;
@@ -128,6 +129,11 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
   void _onCustomerChanged(String? customerId) {
     setState(() {
       _selectedCustomerId = customerId;
+      // A sede belongs to exactly one customer: a switch must not leave the previous customer's
+      // location selected. Left in place it either files the prodotto against a sede the server
+      // rejects (cross-customer), or silently keeps a sede the scoped picker below no longer
+      // offers. Same reasoning as the contract form's own `_onCustomerChanged`.
+      _selectedLocationId = null;
     });
   }
 
@@ -257,8 +263,23 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
     final customers = customersAsync.valueOrNull ?? [];
-    final locationsAsync = ref.watch(allLocationsProvider);
-    final locations = locationsAsync.valueOrNull ?? [];
+    // Sedi are scoped to the selected customer, never the whole tenant book — `allLocationsProvider`
+    // (every active location in the tenant) listed other customers' sedi and, because branch names
+    // repeat across a tenant ("Sede", "Magazzino", "Milano"), rendered the same label several times
+    // over. Distinct rows sharing a name, not duplicates. Same fix and same relation the contract
+    // form and the customer detail screen's Sedi section use.
+    final locationsAsync = _selectedCustomerId == null
+        ? null
+        : ref.watch(locationsForCustomerProvider(_selectedCustomerId!));
+    final locations = locationsAsync?.valueOrNull ?? const [];
+    // A chosen sede absent from the scoped list (customer just switched, or the location is
+    // inactive/not yet synced) must not be handed to the dropdown as its value — Flutter asserts
+    // when the value is not among `items`. [_onCustomerChanged] nulls it on a switch; this covers
+    // the inactive/unsynced case.
+    final selectedLocationId =
+        _selectedLocationId != null && locations.any((l) => l.id == _selectedLocationId)
+        ? _selectedLocationId
+        : null;
 
     String dateLabel(DateTime? d) =>
         d != null ? DateFormat('dd/MM/yyyy').format(d) : 'Seleziona data';
@@ -308,7 +329,13 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
                 AppFieldShell(
                   label: 'Sede *',
                   child: DropdownButtonFormField<String>(
-                    initialValue: _selectedLocationId,
+                    // Rekeyed by customer so a customer switch rebuilds the field. `FormField` keeps
+                    // its own value across rebuilds, so merely nulling [_selectedLocationId] in
+                    // [_onCustomerChanged] would leave the previous customer's sede on screen — the
+                    // widget has to be recreated for the cleared value to take. Same reasoning as
+                    // the contract form's Sede field and `step_cliente_sede.dart`.
+                    key: ValueKey('sede-$_selectedCustomerId'),
+                    initialValue: selectedLocationId,
                     items: locations
                         .map((l) => DropdownMenuItem(value: l.id, child: Text(l.name)))
                         .toList(),
