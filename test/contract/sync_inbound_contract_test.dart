@@ -88,8 +88,9 @@ void main() {
   // `openapi_contract_test.dart`'s header can go back to a copy. Until then, a refresh must merge
   // (that gate fails by name on either a dropped or a stale side), and this comment is the only
   // record that the contract in the snapshot exists on one unpushed branch.
-  // `SyncMaintenanceTemplateDto` and `MaintenanceTemplateOrigin` are in the same position: they
-  // carry the maintenance-template catalogue behind `MobileUserSyncResult.maintenanceTemplates`.
+  // `SyncMaintenanceTemplateDto` and `MaintenanceTemplateOrigin` used to be in the same position,
+  // carrying the maintenance-template catalogue behind `MobileUserSyncResult.maintenanceTemplates`;
+  // they landed on `origin/master` and the 2026-10-14 re-sync took them from there.
   final readKeys = <String, Set<String>>{
     'SyncControlGroupDto': SyncControlGroupDto.wireKeys,
     'SyncTicketControlDto': SyncTicketControlDto.wireKeys,
