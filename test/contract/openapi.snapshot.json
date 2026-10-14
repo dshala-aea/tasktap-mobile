@@ -816,7 +816,7 @@
         "tags": [
           "AiConversations"
         ],
-        "summary": "Folds the conversation's current draft into a real Report (Bozza) \u2014 the\nterminal, once-only action of a copilot session. Supports the same `Idempotency-Key`\nconvention `ReportsController.Submit` already uses, via the shared\nIdempotencyStore, with one addition specific to this endpoint (Task 19\ncheckpoint 1): the draft's own optimistic-concurrency `Version` is folded into the\nclaimed key (`\"{idempotencyKey}:{state.Version}\"`) so a replay only ever matches the\nexact draft the client confirmed against. A client that generated an Idempotency-Key,\nthen took another turn (bumping `Version`) before retrying the same confirm, must not\nsilently confirm the NEW draft under the OLD key's identity \u2014 that is detected as a 409\nbelow, before any replay or create.\n\nAlso writes every resolved line item the conversation actually verified \u2014 workers with a\nverified identity AND hours (Task IReportService.BulkUpsertStaffAsync(Guid reportId, Guid? tenantId, IReadOnlyList&lt;UpsertReportStaffRequest&gt; requests, CancellationToken ct = default(CancellationToken))-shaped\nrequests), materials with a real catalog id (Task&lt;ReportMateriale&gt; IReportService.AddMaterialeAsync(Guid reportId, Guid? tenantId, Guid currentUserId, UpsertReportMaterialeRequest request, CancellationToken ct = default(CancellationToken))\nper row, same as a manual add), checklist answers against a real TicketControl id\n(Task IReportService.BulkUpsertObservationsAsync(Guid reportId, Guid? tenantId, IReadOnlyList&lt;UpsertReportControlObservationRequest&gt; requests, CancellationToken ct = default(CancellationToken))), and diagnosi/soluzione/\ncustomerSignoffText onto the header itself. Filtering is by presence\nof a real resolved id/value (Guid.Empty / null means \"never resolved, or 0 tool matches\"),\nnot by each draft entry's own aggregate ResolutionState \u2014 a field like\nmaterials[i].quantity is always OperatorInput-sourced and therefore always Unresolved under\nFactResolver's current rules (it has no tool to verify a typed quantity against), which\nwould otherwise drag the whole entry's State down and mean NO material is ever written. The\ndraft-wide check just above (Ambiguous/Conflict blocks Confirm entirely) already guarantees\nnothing written here is an unresolved multi-match guess. A resolved id with no other required\nvalue yet (e.g. a worker whose hours were never verified) is deliberately left unwritten \u2014\nthe technician adds it by hand rather than this endpoint inventing a value to fill the gap.\n\nOnce-only (I-7): on a genuine (non-replayed) success, the session is deleted\n(Task IAiConversationStore.DeleteAsync(Guid sessionId, CancellationToken ct)) so it can never be confirmed, turned, or\nabandoned again \u2014 without an `Idempotency-Key`, nothing previously stopped a repeated\n`POST .../confirm` from creating a second, unrelated Report from the same\nconversation.",
+        "summary": "Resolves the conversation's draft against real tenant data and returns it \u2014 the terminal\naction of a copilot session. It creates nothing: no `Report`, no Bozza, no attachment\nassociation, no report-lifecycle side effect, and no report id for a caller to depend on\n(spec \u00a75.4). The pre-flight (IAiDraftPreflight) still runs, so a reference that\nno longer resolves is a 422 on the draft rather than a half-written report; nothing in this\npath writes.\n\nThe session deliberately survives a successful resolve. Confirming is now safe to repeat \u2014\ntwo calls return the same draft \u2014 and a caller that loses the response can retry and recover\nit, which a delete-on-success made impossible. The session is released by\nTask&lt;IActionResult&gt; AiConversationsController.Abandon(Guid id, CancellationToken ct) instead, once the caller has actually persisted the draft.",
         "parameters": [
           {
             "name": "id",
@@ -826,18 +826,28 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConversationConfirmResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConversationConfirmResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiConversationConfirmResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1345,7 +1355,7 @@
         "tags": [
           "Billing"
         ],
-        "summary": "A one-time Stripe Checkout session for a 500-credit AI top-up. Available regardless of\nsubscription state \u2014 unlike Task&lt;IActionResult&gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct), this deliberately does not reject a\ntenant that is already subscribed (or mid-checkout), since AI is available at every tier.",
+        "summary": "A one-time Stripe Checkout session for a 500-credit AI top-up. Available regardless of\nsubscription state \u2014 unlike Task&lt;IActionResult&gt; BillingController.Checkout(CheckoutRequest request, CancellationToken ct), this deliberately does not reject a\ntenant that is already subscribed (or mid-checkout), since AI is available at every tier.\nA comped tenant is the one exception, for the reason given on\nTask&lt;string&gt; StripeCheckoutService.CreateAiCreditPackCheckoutUrlAsync(Guid tenantId, CancellationToken ct = default(CancellationToken)).",
         "responses": {
           "200": {
             "description": "OK"
@@ -9681,7 +9691,7 @@
         "tags": [
           "Reports"
         ],
-        "summary": "Deletes a report outright \u2014 office/admin only, and only while it is still Bozza. A\nreport that has ever left draft carries real history (Inviato/Controllato/Respinto/\nAnnullato/Fatturato/NonFatturabile) that must not be discardable this way; use\nTask&lt;IActionResult&gt; ReportsController.Annulla(Guid id) instead once it has been submitted. Cleans up every child row the\nreport owns (staff, materiali \u2014 reversing any stock they depleted \u2014 control\nobservations, and soft-deleting its allegati) before removing the report itself.",
+        "summary": "Deletes a report outright \u2014 office/admin only, and only while the office has not yet\ncontrolled it. (bool ok, string? error) ReportStateMachine.CanEditOrDelete(Report r) is the gate: Bozza,\nInviato and Respinto are all still discardable, since none of them has been formally\nreviewed by the office; Controllato, Fatturato, NonFatturabile and Annullato are not.\n(Respinto is allowed even though it sorts after Controllato \u2014 it is rework sent back to\nthe technician, never an office approval.) Cleans up every child row the report owns\n(staff, materiali \u2014 reversing any stock they depleted \u2014 control observations, and\nsoft-deleting its allegati) before removing the report itself.",
         "parameters": [
           {
             "name": "id",
@@ -10516,6 +10526,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "templateVariantId",
+            "in": "query",
+            "description": "Print this one copy with one of the tenant's own variants of a template, bypassing the\ntenant's assignments. When both this and templateKey are given the variant\nis used. A variant that cannot be printed \u2014 deleted, disabled, or not this tenant's \u2014 falls\nback the same way an unknown key does, rather than failing the download.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -11021,7 +11040,53 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateAssignmentDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateAssignmentDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateAssignmentDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       },
@@ -11030,6 +11095,7 @@
           "ReportTemplates"
         ],
         "summary": "Sets the template for a scope, replacing whatever was there. Idempotent by\n(document type, ticket type) \u2014 that pair is the scope, so assigning twice updates rather\nthan accumulating two answers to one question.",
+        "description": "The scope is assigned either a shipped template key or one of the tenant's own variants, never\nboth: the assignment carries one reference and one answer.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11052,7 +11118,64 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAssignmentDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAssignmentDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateAssignmentDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -11077,6 +11200,978 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Every report template this tenant has created, in creation order.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Creates a report template from a shipped base, seeded with that base's own default\nconfiguration. The base key is resolved by the service, which stores the renderer's canonical\nkey rather than the argument it was handed.",
+        "description": "The name is optional: an unnamed variant is a legitimate \"one configuration, no need to\ndistinguish it\" and falls back to the base template's own name. A name another of this\ntenant's variants already uses is a 409; a name longer than the column is a 422 from the\nmodel validator (the service keeps a backstop for the same limit).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVariantRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVariantRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVariantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/duplicate": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "An independent copy of a report template, named after the original with a\n    `(copia)` suffix. A suffix that is already taken is an ordinary 409, never auto-numbered.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}": {
+      "patch": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Renames a report template and/or takes it in or out of service. Partial by design: an absent\n`displayName` leaves the current name untouched, and an absent `enabled` leaves the\nstate untouched, so a rename never silently re-enables and a toggle never silently renames.",
+        "description": "A name is cleared (back to unnamed, falling back to the base template's name) by sending a\nblank string \u2014 `displayName` absent and `displayName: \"\"` are deliberately different\nrequests. A name another of this tenant's variants already uses is a 409; over-length is a 422.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVariantRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVariantRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVariantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantTemplateVariantDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Deletes a report template. Refused with a 409 while any assignment still names it \u2014 the tenant\nunassigns first, in two deliberate steps, rather than the assignment silently degrading to the\nnext tier down.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/config": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The variant's saved Classic config, or the base template's own default when the\n    variant has never been customized.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassicReportConfigDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassicReportConfigDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassicReportConfigDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Replaces the variant's Classic config. An unrecognized enum value in the body is\n    rejected as a 400 naming the value, never silently dropped or defaulted \u2014 the same validating\n    path the shipped-key PUT {key}/config uses.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassicReportConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/header-image": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Sets the variant's header image, replacing any previous one.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Removes the variant's header image.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/footer-image": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Sets the variant's footer image, replacing any previous one.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Removes the variant's footer image.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -11670,6 +12765,45 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/field-catalogue": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Every field this tenant can address, from all three families, in one list: the fixed report\nfields, the tenant's checklist controls (one per lineage) and its active report custom fields.\nThe template field picker is built from this; nothing in the editor lists fields on its own.\nControl and custom-field entries are derived from the tenant's own definitions, so what a\nfield is (label, type, options, unit) is read from where it is defined.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogueFieldDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogueFieldDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogueFieldDto"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -14157,6 +15291,449 @@
         "responses": {
           "200": {
             "description": "Success message."
+          }
+        }
+      }
+    },
+    "/api/Tenants/{id}/billing/comp": {
+      "post": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Puts a tenant on the product for free: grants the requested tier's modules and the given seat\ncounts locally, with no Stripe customer and no subscription. Platform admin only.",
+        "description": "    Gated on Task&lt;bool&gt; TenantsController.IsPlatformAdminAsync() alone \u2014 never\nTask&lt;IActionResult?&gt; TenantsController.EnsureOwnTenantOrPlatformAdminAsync(Guid id). That helper returns null (allow) whenever\nthe caller's own tenant is the target, so using it here would let any tenant admin comp\ntheir own tenant for free. Comping is a platform power; a tenant admin gets 403.\n    The service refuses (409) a tenant that has a Stripe subscription rather than silently\nunlinking it \u2014 the operator cancels in Stripe first. An unknown tier is a 400, not a comp\nthat entitles the tenant to nothing.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantCompRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantCompRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantCompRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Takes a tenant off a comp: back to the ordinary funnel with no subscription and no trial, and\nno features. A later Checkout creates a fresh Stripe customer. Platform admin only, same gate\nas Task&lt;IActionResult&gt; TenantsController.GrantComp(Guid id, GrantCompRequest request, CancellationToken ct).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Tenants/{id}/billing/contract": {
+      "post": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Puts a tenant on a contract billed outside Stripe: the tier's modules and hand-set seats,\nasserted locally, with no Stripe customer and no subscription.",
+        "description": "    This is how \"us\" acts \u2014 the operator's half of the owner's \"them or us\" requirement. The\ntenant's own half is the ordinary Checkout (see Task&lt;IActionResult&gt; TenantsController.GrantComp(Guid id, GrantCompRequest request, CancellationToken ct)'s refusal, which\ndeliberately does not catch a contract tenant), and that needs no endpoint of its own.\n    Platform operator only, and refused as absent rather than forbidden. A caller who is\nnot one sees a 404, never a 403 \u2014 CheckOwnershipAsync's convention elsewhere in this\ncodebase: a refusal that distinguishes \"exists but not yours\" from \"does not exist\" lets a\ncaller probe which tenants are on the platform. That is deliberately different from\nTask&lt;IActionResult&gt; TenantsController.GrantComp(Guid id, GrantCompRequest request, CancellationToken ct), whose 403 for a tenant admin is a ruling worth stating plainly; a\ncontract mode is not something a tenant can act on, so there is nothing to state.\n    The service refuses (409) a tenant that has a Stripe subscription rather than silently\nunlinking it \u2014 the operator cancels in Stripe first. An unknown tier is a 400, not a\ncontract that entitles the tenant to nothing.\n    Deliberately not symmetric with Task&lt;IActionResult&gt; TenantsController.RevokeContract(Guid id, CancellationToken ct): revoke refuses a tenant\nthat is not in Contract mode, but this grant does not refuse a tenant already in\nanother local mode such as Comped \u2014 an operator grant overrides the previous mode by\ndesign, so do not \"fix\" it into a refusal.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantContractRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantContractRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantContractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Ends a tenant's contract: back to the ordinary funnel with no subscription and no features,\nand refused writes while keeping reads. Platform operator only, refused as absent, same as\nTask&lt;IActionResult&gt; TenantsController.GrantContract(Guid id, GrantContractRequest request, CancellationToken ct).",
+        "description": "Termination is manual and deliberate \u2014 there is no contract end date in the schema and no\nsweep that enforces one, so this endpoint is the only thing that ever ends a contract. A\nconversion must not go through it: it lands the tenant on `Canceled`, which the\nentitlement middleware enforces as a write-block.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -18464,6 +20041,106 @@
         }
       }
     },
+    "/api/app/interventi": {
+      "get": {
+        "tags": [
+          "AppInterventi"
+        ],
+        "summary": "One page of the interventi list, ready to render: each row carries the ticket plus its\nresolved customer/location/status/technician display names. Replaces the canonical\n`/tickets` page fetch the office-web list screen used to make and map itself.",
+        "description": "Task-oriented endpoint \u21d2 whole-request authorization (W7 spec \u00a76): a caller lacking\n`tickets:read` gets 403 for the whole request, never a partially-populated page.\nReturns the canonical PaginatedResult&lt;T&gt; shape (doc \u00a75). An unknown\nsort column yields `invalid_sort`\n(DomainRuleException), mapped by the global\nerror-handling middleware.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statusId",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "priorita",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/TicketPriorityEnum"
+            }
+          },
+          {
+            "name": "customerId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfInterventoListaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfInterventoListaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResultOfInterventoListaDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/app/interventi/{id}": {
       "get": {
         "tags": [
@@ -19244,6 +20921,99 @@
         },
         "description": "Full-detail per-call record of an AI draft-generation call \u2014 the durable, queryable audit and\nbilling record behind the fast Redis monthly counter (`IAiQuotaStore`). Every call is\nlogged here regardless of whether it was within the included allowance or overage, so the\nnightly overage-reporting sweep (Task 7) can sum a tenant's calls for the current period."
       },
+      "AiConversationConfirmResponse": {
+        "required": [
+          "title",
+          "details",
+          "materialiNotRequired",
+          "customerSignoffText",
+          "ticketId",
+          "cantiereId",
+          "locationId",
+          "staff",
+          "materials",
+          "controlli",
+          "warnings"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Report title, derived from the ticket/cantiere or from the conversation's activities."
+          },
+          "details": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Free description; the operator may clear it."
+          },
+          "materialiNotRequired": {
+            "type": "boolean",
+            "description": "True only when the draft said so *and* no material survived resolution\n            (see `ConfirmPlanBuilder`) \u2014 the corrected value, not the draft's raw one."
+          },
+          "customerSignoffText": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "What the customer accepted, verbatim, when the conversation captured it."
+          },
+          "ticketId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The session's binding, echoed so the caller can seed the report header.",
+            "format": "uuid"
+          },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The session's binding, echoed so the caller can seed the report header.",
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Best-effort and may be null when nothing resolved \u2014 never Guid Guid.Empty,\n            this codebase's \"never resolved\" sentinel, which a client that persisted it would pin a report to with\n            nothing downstream to reject it. A cantiere-bound session's location can also come back as a tenant-default\n            location unrelated to that cantiere (`ResolveLocationIdForCantiereAsync` falls back to any visible\n            location, ordered by creation), so treat it as a starting point rather than a guarantee.",
+            "format": "uuid"
+          },
+          "staff": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiResolvedStaff"
+            },
+            "description": "One row per technician that resolved to a real user id, with the hours/km the operator\n            actually stated (0 and a warning when hours were never verified \u2014 a missing row would read as \"did not work\")."
+          },
+          "materials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiResolvedMaterial"
+            },
+            "description": "One row per material: either a catalogue id or a free-text name, plus the notes that\n            flag an unverified free-text entry."
+          },
+          "controlli": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiResolvedControl"
+            },
+            "description": "One row per checklist answer that resolved against a real control on the session's ticket."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Operator-facing; empty when everything resolved."
+          }
+        },
+        "description": "Response for `POST /api/ai/conversations/{id}/confirm` \u2014 the conversation's draft, resolved\nagainst real tenant data and ready for the caller to persist through the ordinary report APIs.\n\nConfirm creates nothing (spec \u00a75.4): no `Report`, no Bozza, no attachment association, no\nreport-lifecycle side effect, and no server-issued report id for a client to depend on. The\nvalidated references \u2014 IReadOnlyList&lt;AiResolvedStaff&gt; AiConversationConfirmResponse.Staff, IReadOnlyList&lt;AiResolvedMaterial&gt; AiConversationConfirmResponse.Materials, IReadOnlyList&lt;AiResolvedControl&gt; AiConversationConfirmResponse.Controlli \u2014 have\nalready been checked against the caller's tenant by `AiDraftPreflight`, so a reference that no\nlonger resolves is a 422 instead; Guid? AiConversationConfirmResponse.LocationId is resolved best-effort and may be null.\n\nIReadOnlyList&lt;string&gt; AiConversationConfirmResponse.Warnings are operator-facing and never block the write \u2014 they name what the copilot\ncould not resolve and the technician must complete by hand."
+      },
       "AiConversationTurnRequest": {
         "type": "object",
         "properties": {
@@ -19379,6 +21149,142 @@
           }
         }
       },
+      "AiResolvedControl": {
+        "required": [
+          "ticketControlId",
+          "stringValue",
+          "boolValue",
+          "dateValue",
+          "numberValue",
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "ticketControlId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "stringValue": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "boolValue": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "dateValue": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "numberValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One resolved checklist answer. Guid AiResolvedControl.TicketControlId is the identity the server records a\n            finding against; the four value members are the answer, exactly one of which the control's type selects."
+      },
+      "AiResolvedMaterial": {
+        "required": [
+          "materialeId",
+          "freeTextName",
+          "quantity",
+          "unitOfMeasure",
+          "notes"
+        ],
+        "type": "object",
+        "properties": {
+          "materialeId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "freeTextName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "quantity": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "unitOfMeasure": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One resolved material line. Exactly one of Guid? AiResolvedMaterial.MaterialeId / string? AiResolvedMaterial.FreeTextName is\n            meaningful: a catalogue id, or a name the operator dictated that no catalogue lookup matched. See\n            string? AiResolvedMaterial.Notes for the \"Da verificare\" marker the free-text path always carries."
+      },
+      "AiResolvedStaff": {
+        "required": [
+          "userId",
+          "hoursWorked",
+          "kmTraveled",
+          "vehicle"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hoursWorked": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "kmTraveled": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "vehicle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One resolved technician line. Deliberately narrower than the `UpsertReportStaffRequest` write\n            model it is built from: `ConfirmPlanBuilder` never sets CostPerKm/StartTime/EndTime/PauseMinutes, and a\n            response field that is always its default is a contract a client will one day depend on and never receive."
+      },
       "AiSettings": {
         "type": "object",
         "properties": {
@@ -19462,10 +21368,22 @@
             "format": "int32"
           },
           "templateKey": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A shipped template's key, or null when assigning a variant."
+          },
+          "templateVariantId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A variant of this tenant's, or null when assigning a shipped key.",
+            "format": "uuid"
           }
         },
-        "description": "Request body for assigning a template to a scope."
+        "description": "Request body for assigning a template to a scope. Provide exactly one of templateKey (a shipped\ntemplate) and templateVariantId (one of this tenant's own variants); sending both or neither is a 400."
       },
       "AttachmentDto": {
         "required": [
@@ -20310,6 +22228,55 @@
       },
       "CantiereWorkLogTypeEnum": {
         "type": "integer"
+      },
+      "CatalogueFieldDto": {
+        "required": [
+          "key",
+          "family",
+          "label",
+          "group",
+          "type",
+          "modelPath",
+          "options",
+          "unit"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "modelPath": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "One addressable field from any family, as exposed to editors."
       },
       "ChangeTierRequest": {
         "required": [
@@ -22576,6 +24543,23 @@
           }
         }
       },
+      "CreateVariantRequest": {
+        "type": "object",
+        "properties": {
+          "baseKey": {
+            "type": "string",
+            "description": "A shipped template's key (e.g. `tasktap.report.classic`)."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The tenant's name for the new variant. Omit for an unnamed one. Over-length is a\n    422 (the service keeps a 100-char backstop for the same limit)."
+          }
+        },
+        "description": "Request body for creating a report template from a shipped base."
+      },
       "Customer": {
         "type": "object",
         "properties": {
@@ -23248,6 +25232,82 @@
         },
         "description": "One cross-warehouse stock row. The <i>sottoScorta</i> flag is computed server-side."
       },
+      "GrantCompRequest": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A catalogue tier: `starter`/`pro`/`business`. Anything else is a 400."
+          },
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Billed office (full) seats to hand-set on the comped row.",
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Billed field (mobile-only) seats to hand-set on the comped row.",
+            "format": "int32"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional operator note. Logged with the grant \u2014 there is no column for it."
+          }
+        },
+        "description": "Body of `POST /api/tenants/{id}/billing/comp`."
+      },
+      "GrantContractRequest": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A catalogue tier: `starter`/`pro`/`business`. Anything else is a 400."
+          },
+          "officeSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Billed office (full) seats to hand-set on the contracted row.",
+            "format": "int32"
+          },
+          "fieldSeats": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Billed field (mobile-only) seats to hand-set on the contracted row.",
+            "format": "int32"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional operator note. Logged with the grant \u2014 there is no column for it."
+          }
+        },
+        "description": "Body of `POST /api/tenants/{id}/billing/contract`."
+      },
       "HeaderFooterOptionsDto": {
         "required": [
           "layout",
@@ -23473,7 +25533,21 @@
           "descrizione",
           "note",
           "linkedSchedules",
-          "linkedRapportini"
+          "linkedRapportini",
+          "tipo",
+          "tipoId",
+          "agente",
+          "agenteId",
+          "contratto",
+          "contrattoId",
+          "commessa",
+          "commessaId",
+          "cantiere",
+          "cantiereId",
+          "tags",
+          "noteTecnico",
+          "prodottoAssistenzaIds",
+          "chiuso"
         ],
         "type": "object",
         "properties": {
@@ -23592,9 +25666,209 @@
               "$ref": "#/components/schemas/LinkedRapportinoDto"
             },
             "description": "Every report linked to this ticket, most recent first."
+          },
+          "tipo": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved `TicketType.Name` for the ticket's type, or `null` if the type row is missing."
+          },
+          "tipoId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The raw type id, so the frontend can drive an edit-mode type picker.",
+            "format": "int32"
+          },
+          "agente": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved `Agent.Nome` for the ticket's agent, or `null` if unassigned or the agent row is missing."
+          },
+          "agenteId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The assigned agent's id.",
+            "format": "uuid"
+          },
+          "contratto": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved `Contract.Name` for the ticket's contract, or `null` if none or the contract row is missing."
+          },
+          "contrattoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The linked contract's id.",
+            "format": "uuid"
+          },
+          "commessa": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved `Commessa.Codice` (the entity's display identifier \u2014 it has no `Name`) for the ticket's commessa, or `null` if none or the row is missing."
+          },
+          "commessaId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The linked commessa's id.",
+            "format": "uuid"
+          },
+          "cantiere": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved `Cantiere.Name` for the ticket's construction site, or `null` if none or the row is missing."
+          },
+          "cantiereId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The linked cantiere's id.",
+            "format": "uuid"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Free-form ticket tags (`Ticket.Tags`), empty when none."
+          },
+          "noteTecnico": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Notes visible to the technician (`Ticket.TechnicianNotes`)."
+          },
+          "prodottoAssistenzaIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Ids of the assets this ticket covers (`TicketProdottoAssistenza`), for edit-mode prefill. Empty when the ticket covers none."
+          },
+          "chiuso": {
+            "type": "boolean",
+            "description": "Whether the ticket is closed (`Ticket.ClosedAt.HasValue`)."
           }
         },
         "description": "Ready-to-render payload for the Intervento detail screen (`GET /api/app/interventi/{id}`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy already produces\n`titolo`/`stato`/`clienteId` from these PascalCase names), owned by the web\napp, no external compatibility promise. Replaces three canonical calls (ticket + linked\nschedules + linked rapportini) with one composed read."
+      },
+      "InterventoListaDto": {
+        "required": [
+          "id",
+          "numero",
+          "titolo",
+          "cliente",
+          "clienteId",
+          "sede",
+          "sedeId",
+          "stato",
+          "statoId",
+          "priorita",
+          "tecnico",
+          "tecnicoId",
+          "data"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Ticket id.",
+            "format": "uuid"
+          },
+          "numero": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Per-tenant display number (W7 Task 2). `null` for tickets created before numbering existed \u2014 the frontend renders `numero ?? '\u2014'`."
+          },
+          "titolo": {
+            "type": "string",
+            "description": "Ticket title."
+          },
+          "cliente": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved customer company name, or `null` if the customer row is missing."
+          },
+          "clienteId": {
+            "type": "string",
+            "description": "Customer id, for the frontend to link back to the customer record.",
+            "format": "uuid"
+          },
+          "sede": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved display string for the ticket's location (address, falling back to the location name), or `null` if missing."
+          },
+          "sedeId": {
+            "type": "string",
+            "description": "Location id.",
+            "format": "uuid"
+          },
+          "stato": {
+            "type": "string",
+            "description": "Resolved `TicketStatus.Name` \u2014 always a string, never the raw `statusId`."
+          },
+          "statoId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The raw status id, so the frontend can drive a status filter/link.",
+            "format": "int32"
+          },
+          "priorita": {
+            "type": "string",
+            "description": "Ticket priority as a string (`TicketPriorityEnum.ToString()`) \u2014 enums are strings on the wire (doc \u00a72)."
+          },
+          "tecnico": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved full name of the assigned technician, or `null` if unassigned."
+          },
+          "tecnicoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Assigned technician's user id.",
+            "format": "uuid"
+          },
+          "data": {
+            "type": "string",
+            "description": "The ticket's creation date (matches the detail DTO's `Data` \u2014 see its doc for why `CreatedAt` stands in for the \"intervention date\").",
+            "format": "date-time"
+          }
+        },
+        "description": "Ready-to-render row for the Intervento list screen (`GET /api/app/interventi`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy produces `titolo`/\n`clienteId` from these PascalCase names), owned by the web app. Mirrors what the web's\n`mapTicketToListItem` resolves today from a canonical `/tickets` page, so the list\nscreen can drop that canonical fetch."
       },
       "InvitePortalUserRequest": {
         "required": [
@@ -24698,6 +26972,13 @@
             },
             "description": "The tenant's ticket type lookup list (TipologiaIntervento).\nReturned in full on every sync (no UpdatedAt column \u2014 no delta filter).\nUsed by the mobile app to map a ticket's `TypeId` int to a human name."
           },
+          "maintenanceTemplates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncMaintenanceTemplateDto"
+            },
+            "description": "The maintenance templates this tenant may reference \u2014 the curated (shared) ones plus its\nown \u2014 so a technician can attach a checklist to a ticket offline (\"Modello checklist\").\nReturned in full on every sync, inactive templates included: see\nSyncMaintenanceTemplateDto for both decisions, and for why this is not\n`IReadOnlyList&lt;MaintenanceTemplate&gt;`."
+          },
           "controlGroups": {
             "type": "array",
             "items": {
@@ -24752,12 +27033,12 @@
             },
             "description": "Tickets whose checklist, assets and groups were NOT sent this time (whole tickets only). The phone keeps whatever it\nalready holds for them; nothing here implies a deletion."
           },
-          "contracts": {
+          "agents": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SyncContractDto"
+              "$ref": "#/components/schemas/SyncAgentDto"
             },
-            "description": "Contracts of the customers this payload carries."
+            "description": "Agents referenced by this payload's tickets."
           },
           "commesse": {
             "type": "array",
@@ -24766,29 +27047,22 @@
             },
             "description": "Commesse of the customers this payload carries."
           },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncContractDto"
+            },
+            "description": "Contracts of the customers this payload carries."
+          },
           "prodottiAssistenza": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SyncProdottoAssistenzaDto"
             },
             "description": "Products of the customers this payload carries."
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SyncAgentDto"
-            },
-            "description": "Agents referenced by this payload's tickets."
-          },
-          "maintenanceTemplates": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SyncMaintenanceTemplateDto"
-            },
-            "description": "The maintenance templates this tenant may reference — the curated (shared) ones plus its\nown — so a technician can attach a checklist to a ticket offline (\"Modello checklist\").\nReturned in full on every sync, inactive templates included: see\nSyncMaintenanceTemplateDto for both decisions, and for why this is not\n`IReadOnlyList&lt;MaintenanceTemplate&gt;`."
           }
         },
-        "description": "Shape returned by Task&lt;MobileUserSyncResult&gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true).\nContains the technician's own schedules (today..today+7d) and the linked\nreference entities they need for offline work, plus their draft reports."
+        "description": "Shape returned by Task&lt;MobileUserSyncResult&gt; MobileUserSyncService.GetDeltaAsync(Guid tenantId, Guid userId, DateTime? since, bool fullScope = false, bool includeStrumenti = true, bool includeMaintenanceTemplates = true).\nContains the technician's own schedules (today..today+7d) and the linked\nreference entities they need for offline work, plus their draft reports."
       },
       "ModelRole": {
         "type": "integer",
@@ -25483,6 +27757,55 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Contract"
+            },
+            "description": "Items for current page."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Current page number.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Number of items per page.",
+            "format": "int32"
+          },
+          "totalItems": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of items across all pages.",
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Total number of pages.",
+            "format": "int32"
+          }
+        },
+        "description": "Paginated result wrapper."
+      },
+      "PaginatedResultOfInterventoListaDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InterventoListaDto"
             },
             "description": "Items for current page."
           },
@@ -29672,6 +31995,13 @@
             "description": "Client-generated report id (GUID). Enables idempotent re-submit.",
             "format": "uuid"
           },
+          "expectedVersion": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The report row's version the client last saw \u2014 the `version` field of\n`GET /api/reports/{id}`, i.e. ReportVersion of the row's `xmin`.\nWhen it does not match the report's current version, the submit is rejected with a\n`409 concurrency_conflict` instead of overwriting an edit made after that read (an\noffice edit landing while the phone was offline).\n\nNull means \"do not check\" \u2014 the pre-existing unconditional-overwrite\nbehaviour \u2014 so every client build that predates this field (v1.0.2/v1.0.3) is unaffected,\nand a submit for a report that does not exist yet (a brand-new offline draft) is never\nversion-checked: there is nothing to have raced."
+          },
           "scheduleId": {
             "type": [
               "null",
@@ -30009,6 +32339,10 @@
           "replayed": {
             "type": "boolean",
             "description": "True when this response replayed a previously-completed idempotent submit."
+          },
+          "version": {
+            "type": "string",
+            "description": "The report row's version <b>after</b> this submit \u2014 the `version` a subsequent\n`GET /api/reports/{id}` would return, and the value the client must send as\nstring? SubmitReportRequest.ExpectedVersion on its next attempt for this report.\n\nWithout this the client's cached version is stale the moment its own submit lands:\nits next attempt \u2014 the Idempotency-Key replay path, or a retry after a lost\nresponse \u2014 would carry the pre-submit version and 409 against its own write. An\nidempotent replay returns the same value as the original successful submit."
           }
         },
         "description": "Canonical response returned by `POST /api/reports/submit`.\nStrongly typed so the generated TS/Dart client surfaces the full shape\n(header + persisted children) rather than an opaque object."
@@ -30516,7 +32850,7 @@
             "format": "uuid"
           },
           "origin": {
-            "description": "Who authored it — curated (MaintenanceTemplateOrigin.System) or this tenant's own.",
+            "description": "Who authored it \u2014 curated (MaintenanceTemplateOrigin.System) or this tenant's own.",
             "$ref": "#/components/schemas/MaintenanceTemplateOrigin"
           },
           "name": {
@@ -30541,11 +32875,11 @@
               "integer",
               "string"
             ],
-            "description": "The version a new ticket would resolve today, or null while every version is still a draft or\nalready retired. Null is a real, visible state — it means the template cannot currently be\nattached — not an error or missing data. Computed by\nint? MaintenanceTemplateVersion.LatestSelectableVersionNumber(IEnumerable&lt;MaintenanceTemplateVersion&gt; versions), the same helper the\noffice list endpoint uses, so the two cannot disagree about what \"latest published\" means.",
+            "description": "The version a new ticket would resolve today, or null while every version is still a draft or\nalready retired. Null is a real, visible state \u2014 it means the template cannot currently be\nattached \u2014 not an error or missing data. Computed by\nint? MaintenanceTemplateVersion.LatestSelectableVersionNumber(IEnumerable&lt;MaintenanceTemplateVersion&gt; versions), the same helper the\noffice list endpoint uses, so the two cannot disagree about what \"latest published\" means.",
             "format": "int32"
           }
         },
-        "description": "One maintenance template the technician can attach to a ticket as its checklist — the `Modello\nchecklist` the web app's ticket form offers."
+        "description": "One maintenance template the technician can attach to a ticket as its checklist \u2014 the \"Modello\nchecklist\" the web app's ticket form offers."
       },
       "SyncProdottoAssistenzaDto": {
         "required": [
@@ -31048,6 +33382,51 @@
         },
         "description": "Which materiali columns print, and in what order, as exposed over the wire."
       },
+      "TemplateAssignmentDto": {
+        "required": [
+          "id",
+          "documentType",
+          "ticketTypeId",
+          "templateKey",
+          "templateVariantId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "documentType": {
+            "$ref": "#/components/schemas/DocumentType"
+          },
+          "ticketTypeId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Null means the tenant-wide default for the document type.",
+            "format": "int32"
+          },
+          "templateKey": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The shipped template's key, or null when the scope is assigned one of the tenant's own variants\ninstead. Exactly one of this and TemplateVariantId is set."
+          },
+          "templateVariantId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The tenant's own variant assigned to the scope, or null when a shipped key is assigned instead.",
+            "format": "uuid"
+          }
+        },
+        "description": "Where a template applies for this tenant."
+      },
       "TemplateImageResponse": {
         "required": [
           "allegatoId",
@@ -31173,6 +33552,36 @@
           }
         },
         "description": "Payload sent by an already-authenticated user to claim a tenant.\nEmail + firstName + lastName are derived server-side from the JWT, not this body."
+      },
+      "TenantTemplateVariantDto": {
+        "required": [
+          "id",
+          "baseKey",
+          "displayName",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseKey": {
+            "type": "string",
+            "description": "The shipped template it configures \u2014 a catalogue entry the picker groups under, so the origin of\neach variant is obvious."
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The tenant's name for it, or null when unnamed \u2014 the client falls back to the base template's own\nname in that case, the same way the server does."
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "description": "One of this tenant's own report templates, as exposed over the wire."
       },
       "TextLineDto": {
         "required": [
@@ -34043,6 +36452,26 @@
         },
         "description": "Request model for updating a user."
       },
+      "UpdateVariantRequest": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The new name. Absent (null) leaves the current name unchanged; a blank string clears it back\nto unnamed (the base template's name is shown instead). Over-length is a 422."
+          },
+          "enabled": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "The new enabled state, or null to leave it unchanged."
+          }
+        },
+        "description": "Request body for renaming and/or enabling/disabling a report template. Absent fields are left\nuntouched, so a rename never re-enables and a toggle never renames."
+      },
       "UpsertCantiereContactRequest": {
         "type": "object",
         "properties": {
@@ -34225,7 +36654,7 @@
             ]
           },
           "quantity": {
-            "maximum": 100000000,
+            "maximum": 9999999.999,
             "minimum": 0.0001,
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": [
@@ -34243,7 +36672,7 @@
             ]
           },
           "unitPrice": {
-            "maximum": 100000000,
+            "maximum": 99999999.99,
             "minimum": 0,
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": [
@@ -35309,235 +37738,6 @@
           }
         },
         "description": "Body of `PUT /api/presenze/worklogs/{kind}/{id}`. Same time rules as WorklogCreateRequest\n(local times without offset in the row's zone; `ambiguityChoice` applies to both endpoints and the\nreversed-order both-in-repeated-hour case is not expressible; `endLocal` must not be \"now\").\n`version` is the value the client last read; a stale one is a 409 `concurrent_modification`.\n`type` and `description` are optional: omitted (null) = unchanged, an empty description clears it.\nOnly closed rows can be edited (`open_row_not_correctable`); a cantiere row already copied into a rapportino\ncannot (`cantiere_worklog_in_report`)."
-      },
-      "AiConversationConfirmResponse": {
-        "required": [
-          "title",
-          "details",
-          "materialiNotRequired",
-          "customerSignoffText",
-          "ticketId",
-          "cantiereId",
-          "locationId",
-          "staff",
-          "materials",
-          "controlli",
-          "warnings"
-        ],
-        "type": "object",
-        "properties": {
-          "title": {
-            "type": "string",
-            "description": "Report title, derived from the ticket/cantiere or from the conversation's activities."
-          },
-          "details": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Free description; the operator may clear it."
-          },
-          "materialiNotRequired": {
-            "type": "boolean",
-            "description": "True only when the draft said so *and* no material survived resolution\n            (see `ConfirmPlanBuilder`) \u2014 the corrected value, not the draft's raw one."
-          },
-          "customerSignoffText": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "What the customer accepted, verbatim, when the conversation captured it."
-          },
-          "ticketId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "The session's binding, echoed so the caller can seed the report header.",
-            "format": "uuid"
-          },
-          "cantiereId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "The session's binding, echoed so the caller can seed the report header.",
-            "format": "uuid"
-          },
-          "locationId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Best-effort and may be null when nothing resolved \u2014 never Guid Guid.Empty,\n            this codebase's \"never resolved\" sentinel, which a client that persisted it would pin a report to with\n            nothing downstream to reject it. A cantiere-bound session's location can also come back as a tenant-default\n            location unrelated to that cantiere (`ResolveLocationIdForCantiereAsync` falls back to any visible\n            location, ordered by creation), so treat it as a starting point rather than a guarantee.",
-            "format": "uuid"
-          },
-          "staff": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiResolvedStaff"
-            },
-            "description": "One row per technician that resolved to a real user id, with the hours/km the operator\n            actually stated (0 and a warning when hours were never verified \u2014 a missing row would read as \"did not work\")."
-          },
-          "materials": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiResolvedMaterial"
-            },
-            "description": "One row per material: either a catalogue id or a free-text name, plus the notes that\n            flag an unverified free-text entry."
-          },
-          "controlli": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AiResolvedControl"
-            },
-            "description": "One row per checklist answer that resolved against a real control on the session's ticket."
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Operator-facing; empty when everything resolved."
-          }
-        },
-        "description": "Response for `POST /api/ai/conversations/{id}/confirm` \u2014 the conversation's draft, resolved\nagainst real tenant data and ready for the caller to persist through the ordinary report APIs.\n\nConfirm creates nothing (spec \u00a75.4): no `Report`, no Bozza, no attachment association, no\nreport-lifecycle side effect, and no server-issued report id for a client to depend on. The\nvalidated references \u2014 IReadOnlyList&lt;AiResolvedStaff&gt; AiConversationConfirmResponse.Staff, IReadOnlyList&lt;AiResolvedMaterial&gt; AiConversationConfirmResponse.Materials, IReadOnlyList&lt;AiResolvedControl&gt; AiConversationConfirmResponse.Controlli \u2014 have\nalready been checked against the caller's tenant by `AiDraftPreflight`, so a reference that no\nlonger resolves is a 422 instead; Guid? AiConversationConfirmResponse.LocationId is resolved best-effort and may be null.\n\nIReadOnlyList&lt;string&gt; AiConversationConfirmResponse.Warnings are operator-facing and never block the write \u2014 they name what the copilot\ncould not resolve and the technician must complete by hand."
-      },
-      "AiResolvedControl": {
-        "required": [
-          "ticketControlId",
-          "stringValue",
-          "boolValue",
-          "dateValue",
-          "numberValue",
-          "note"
-        ],
-        "type": "object",
-        "properties": {
-          "ticketControlId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "stringValue": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "boolValue": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
-          "dateValue": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "numberValue": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "null",
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "note": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "description": "One resolved checklist answer. Guid AiResolvedControl.TicketControlId is the identity the server records a\n            finding against; the four value members are the answer, exactly one of which the control's type selects."
-      },
-      "AiResolvedMaterial": {
-        "required": [
-          "materialeId",
-          "freeTextName",
-          "quantity",
-          "unitOfMeasure",
-          "notes"
-        ],
-        "type": "object",
-        "properties": {
-          "materialeId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "freeTextName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "quantity": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "unitOfMeasure": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "notes": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "description": "One resolved material line. Exactly one of Guid? AiResolvedMaterial.MaterialeId / string? AiResolvedMaterial.FreeTextName is\n            meaningful: a catalogue id, or a name the operator dictated that no catalogue lookup matched. See\n            string? AiResolvedMaterial.Notes for the \"Da verificare\" marker the free-text path always carries."
-      },
-      "AiResolvedStaff": {
-        "required": [
-          "userId",
-          "hoursWorked",
-          "kmTraveled",
-          "vehicle"
-        ],
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "hoursWorked": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "kmTraveled": {
-            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-            "type": [
-              "number",
-              "string"
-            ],
-            "format": "double"
-          },
-          "vehicle": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "description": "One resolved technician line. Deliberately narrower than the `UpsertReportStaffRequest` write\n            model it is built from: `ConfirmPlanBuilder` never sets CostPerKm/StartTime/EndTime/PauseMinutes, and a\n            response field that is always its default is a contract a client will one day depend on and never receive."
       }
     }
   },
