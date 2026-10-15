@@ -2004,6 +2004,7 @@
         "tags": [
           "Cantieri"
         ],
+        "summary": "List with optional filters.",
         "parameters": [
           {
             "name": "Page",
@@ -2071,6 +2072,17 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Optional batch lookup: only the rows with these ids (GUIDs), e.g. to resolve names for a page of\nresults. Send it once per id (`ids=a` repeated) or comma-separated (`ids=a,b`).\nAt most 100 ids per request (more is a 400, code `too_many_ids`); an id that is not a valid\nGUID is a 400 (code `invalid_ids`). Unknown ids simply return nothing. Combines with the other filters.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -2874,6 +2886,7 @@
         "tags": [
           "Commesse"
         ],
+        "summary": "List with optional filters.",
         "parameters": [
           {
             "name": "Page",
@@ -2941,6 +2954,17 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Optional batch lookup: only the rows with these ids (GUIDs), e.g. to resolve names for a page of\nresults. Send it once per id (`ids=a` repeated) or comma-separated (`ids=a,b`).\nAt most 100 ids per request (more is a 400, code `too_many_ids`); an id that is not a valid\nGUID is a 400 (code `invalid_ids`). Unknown ids simply return nothing. Combines with the other filters.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -3167,6 +3191,7 @@
         "tags": [
           "Contracts"
         ],
+        "summary": "List contracts with optional filtering (server-side, so totals and paging are exact).",
         "parameters": [
           {
             "name": "Page",
@@ -3239,6 +3264,7 @@
           {
             "name": "isActive",
             "in": "query",
+            "description": "Filter on the persisted active flag (not the derived state \u2014 see stato).",
             "schema": {
               "type": "boolean"
             }
@@ -3246,6 +3272,7 @@
           {
             "name": "customerId",
             "in": "query",
+            "description": "Filter by customer.",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -3254,6 +3281,7 @@
           {
             "name": "locationId",
             "in": "query",
+            "description": "Filter by location.",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -3262,6 +3290,7 @@
           {
             "name": "externalId",
             "in": "query",
+            "description": "Exact-match legacy id.",
             "schema": {
               "type": "string"
             }
@@ -3269,8 +3298,43 @@
           {
             "name": "codice",
             "in": "query",
+            "description": "Exact-match business code.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "stato",
+            "in": "query",
+            "description": "Derived lifecycle state, evaluated in SQL with the same rule as `Contract.Stato`\n(`ContractStatoResolver`), with \"today\" = the Europe/Rome calendar date:\n`Scaduto` = EndDate is before today (wins over IsActive); `Attivo` = not Scaduto\nand IsActive; `Cessato` = not Scaduto and not IsActive. Accepted values (case-insensitive):\n`Attivo`, `Cessato`, `Scaduto` (e.g. `?stato=Scaduto`). Any other value is a\n400 (code `invalid_stato`) listing the allowed values.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inScadenza",
+            "in": "query",
+            "description": "`true` = \"expiring soon\": now &lt; EndDate &lt;= now + 30 days (the same rule as the web's\n`isInScadenza`); contracts already expired or with no EndDate are excluded.\n`false` = every other contract. Omitted = no filter.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "scadenzaDa",
+            "in": "query",
+            "description": "Inclusive lower bound on EndDate (contracts with no EndDate never match a bound).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "scadenzaA",
+            "in": "query",
+            "description": "Inclusive upper bound on EndDate. Combine with scadenzaDa to express\n\"expiring within N days\": scadenzaDa = now, scadenzaA = now + N days. Either bound alone is\nvalid (open-ended); a start later than the end is a 400 (code `invalid_date_range`).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
             }
           }
         ],
@@ -4054,6 +4118,17 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Optional batch lookup: only the rows with these ids (GUIDs), e.g. to resolve names for a page of\nresults. Send it once per id (`ids=a` repeated) or comma-separated (`ids=a,b`).\nAt most 100 ids per request (more is a 400, code `too_many_ids`); an id that is not a valid\nGUID is a 400 (code `invalid_ids`). Unknown ids simply return nothing. Combines with the other filters.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -5655,6 +5730,17 @@
                 "string"
               ],
               "format": "int32"
+            }
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Optional batch lookup: only the rows with these ids (GUIDs), e.g. to resolve names for a page of\nresults. Send it once per id (`ids=a` repeated) or comma-separated (`ids=a,b`).\nAt most 100 ids per request (more is a 400, code `too_many_ids`); an id that is not a valid\nGUID is a 400 (code `invalid_ids`). Unknown ids simply return nothing. Combines with the other filters.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -9546,16 +9632,25 @@
           {
             "name": "dateTo",
             "in": "query",
-            "description": "Filter by end date.",
+            "description": "Filter by end date. A start later than the end is a 400 (code `invalid_date_range`); either bound may be used alone.",
             "schema": {
               "type": "string",
               "format": "date-time"
+            }
+          },
+          {
+            "name": "createdByUserId",
+            "in": "query",
+            "description": "Only reports created by this user (the technician who inserted the report; stored as\n`InsertedUserId`). Example: `?createdByUserId=3fa85f64-5717-4562-b3fc-2c963f66afa6`.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "Paginated list of reports."
+            "description": "Paginated list of reports. `q` is case-insensitive and matches the title or the report number."
           }
         }
       },
@@ -15896,6 +15991,7 @@
         "tags": [
           "Tickets"
         ],
+        "summary": "List tickets (interventi) with optional filters.",
         "parameters": [
           {
             "name": "Page",
@@ -16042,6 +16138,15 @@
           {
             "name": "contractId",
             "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "createdByUserId",
+            "in": "query",
+            "description": "Only tickets created by this user (the id of whoever opened the ticket, not the assignee \u2014\nuse `userId` for the assignee). Example: `?createdByUserId=3fa85f64-5717-4562-b3fc-2c963f66afa6`.",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -17318,6 +17423,17 @@
             }
           },
           {
+            "name": "ids",
+            "in": "query",
+            "description": "Optional batch lookup: only the rows with these ids (GUIDs), e.g. to resolve names for a page of\nresults. Send it once per id (`ids=a` repeated) or comma-separated (`ids=a,b`).\nAt most 100 ids per request (more is a 400, code `too_many_ids`); an id that is not a valid\nGUID is a 400 (code `invalid_ids`). Unknown ids simply return nothing. Combines with the other filters.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "isActive",
             "in": "query",
             "description": "Optional filter by active status.",
@@ -17636,7 +17752,7 @@
           "Users"
         ],
         "summary": "Returns the QR code token used for reverse-scan kiosk clock-in\n(string? User.QrCodeToken).",
-        "description": "This is a credential, not ordinary profile data \u2014 it is deliberately excluded from\nUser's normal JSON shape (`[JsonIgnore]` on the entity property), so\nTask&lt;IActionResult&gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task&lt;IActionResult&gt; UsersController.GetById(Guid id, CancellationToken ct)/Task&lt;IActionResult&gt; UsersController.GetCurrentUser() never carry it.\nThis is the ONLY endpoint that returns it, and only to the owning user or a tenant Admin \u2014\nanyone else gets ForbidResult (403). Existence of the target user is not\nhidden behind a 404 here (unlike the tenant-isolation FK guards elsewhere in this\ncodebase): the caller already reached this route with a real, in-tenant user id (e.g. from\na team member list they can already see), so this is an authorization decision, not a\ncross-tenant existence leak.",
+        "description": "This is a credential, not ordinary profile data \u2014 it is deliberately excluded from\nUser's normal JSON shape (`[JsonIgnore]` on the entity property), so\nTask&lt;IActionResult&gt; UsersController.GetAll(ListQuery? query = null, string[]? ids = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task&lt;IActionResult&gt; UsersController.GetById(Guid id, CancellationToken ct)/Task&lt;IActionResult&gt; UsersController.GetCurrentUser() never carry it.\nThis is the ONLY endpoint that returns it, and only to the owning user or a tenant Admin \u2014\nanyone else gets ForbidResult (403). Existence of the target user is not\nhidden behind a 404 here (unlike the tenant-isolation FK guards elsewhere in this\ncodebase): the caller already reached this route with a real, in-tenant user id (e.g. from\na team member list they can already see), so this is an authorization decision, not a\ncross-tenant existence leak.",
         "parameters": [
           {
             "name": "id",
@@ -17660,7 +17776,7 @@
         "tags": [
           "Users"
         ],
-        "summary": "Returns this user's hourly cost (internal) and sell rate (billed to customers) \u2014\ndecimal? User.HourlyCost/decimal? User.HourlySellRate. Both are\n`[JsonIgnore]`d on the entity precisely so Task&lt;IActionResult&gt; UsersController.GetAll(ListQuery? query = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task&lt;IActionResult&gt; UsersController.GetById(Guid id, CancellationToken ct)/\nTask&lt;IActionResult&gt; UsersController.GetCurrentUser() never carry them (see those fields' remarks) \u2014 this is the\nonly read path, gated on the narrower string PermissionCatalogue.TeamUserRateRead\nrather than string PermissionCatalogue.TeamUserRead, which Technician also holds.",
+        "summary": "Returns this user's hourly cost (internal) and sell rate (billed to customers) \u2014\ndecimal? User.HourlyCost/decimal? User.HourlySellRate. Both are\n`[JsonIgnore]`d on the entity precisely so Task&lt;IActionResult&gt; UsersController.GetAll(ListQuery? query = null, string[]? ids = null, bool? isActive = null, UserRoleEnum? role = null, CancellationToken ct = default(CancellationToken))/Task&lt;IActionResult&gt; UsersController.GetById(Guid id, CancellationToken ct)/\nTask&lt;IActionResult&gt; UsersController.GetCurrentUser() never carry them (see those fields' remarks) \u2014 this is the\nonly read path, gated on the narrower string PermissionCatalogue.TeamUserRateRead\nrather than string PermissionCatalogue.TeamUserRead, which Technician also holds.",
         "parameters": [
           {
             "name": "id",
@@ -20116,6 +20232,50 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "createdByUserId",
+            "in": "query",
+            "description": "Only interventi opened by this user (the creator, not the assignee). Same name and meaning as\non `GET /tickets`. Example: `?createdByUserId=3fa85f64-5717-4562-b3fc-2c963f66afa6`.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "query",
+            "description": "Only interventi assigned to this user (the technician). Same as `userId` on `GET /tickets`.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "isClosed",
+            "in": "query",
+            "description": "`true` = only closed interventi, `false` = only open ones; omit for both.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "description": "Only interventi created on or after this date/time (inclusive). May be used alone.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "description": "Only interventi created on or before this date/time (inclusive). May be used alone. A start later than the end is a 400 (code `invalid_date_range`).",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
           }
         ],
         "responses": {
@@ -21792,6 +21952,14 @@
       "Cantiere": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "name": {
             "type": "string"
           },
@@ -21955,6 +22123,14 @@
       "CantiereContact": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "cantiereId": {
             "type": "string",
             "format": "uuid"
@@ -22481,7 +22657,8 @@
           "contratti",
           "interventiTotali",
           "interventiAperti",
-          "updatedAt"
+          "updatedAt",
+          "updatedByUserId"
         ],
         "type": "object",
         "properties": {
@@ -22618,6 +22795,13 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         },
         "description": "Ready-to-render payload for the customer overview screen (`GET /api/app/clienti/{id}/overview`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy already produces `ragioneSociale`,\n`codiceFiscale`, etc. from these PascalCase names), owned by the web app, no external\ncompatibility promise. Replaces the previous Italian-shaped hand-mocked customer detail with\na composed header plus computed counts; the three detail tabs stay canonical endpoints."
@@ -22633,6 +22817,14 @@
       "Commessa": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "codice": {
             "type": "string"
           },
@@ -22731,6 +22923,14 @@
       "Contract": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "name": {
             "type": "string"
           },
@@ -24579,6 +24779,14 @@
       "Customer": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "companyName": {
             "type": "string",
             "description": "Company legal name (Ragione Sociale)."
@@ -25566,7 +25774,8 @@
           "chiuso",
           "createdAt",
           "updatedAt",
-          "createdByUserId"
+          "createdByUserId",
+          "updatedByUserId"
         ],
         "type": "object",
         "properties": {
@@ -25808,6 +26017,14 @@
             ],
             "description": "Id of the user who created the ticket (`Ticket.CreatedByUserId`), or `null` for tickets created before it was persisted. The client resolves the id to a name.",
             "format": "uuid"
+          },
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited the ticket (`Ticket.UpdatedByUserId`); null for system changes and for rows that predate this column. The client resolves the id to a name.",
+            "format": "uuid"
           }
         },
         "description": "Ready-to-render payload for the Intervento detail screen (`GET /api/app/interventi/{id}`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy already produces\n`titolo`/`stato`/`clienteId` from these PascalCase names), owned by the web\napp, no external compatibility promise. Replaces three canonical calls (ticket + linked\nschedules + linked rapportini) with one composed read."
@@ -25829,7 +26046,8 @@
           "data",
           "createdAt",
           "updatedAt",
-          "createdByUserId"
+          "createdByUserId",
+          "updatedByUserId"
         ],
         "type": "object",
         "properties": {
@@ -25929,6 +26147,14 @@
               "string"
             ],
             "description": "Id of the user who created the ticket (`Ticket.CreatedByUserId`), or `null` for older tickets. The client resolves the id to a name.",
+            "format": "uuid"
+          },
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited the ticket (`Ticket.UpdatedByUserId`); null for system changes and for rows that predate this column. The client resolves the id to a name.",
             "format": "uuid"
           }
         },
@@ -26242,6 +26468,14 @@
       "Location": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "customerId": {
             "type": "string",
             "description": "Reference to the parent customer (flattened, no navigation).",
@@ -26466,6 +26700,14 @@
       "Materiale": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "code": {
             "type": "string",
             "description": "Internal SKU / part number. Unique per tenant."
@@ -26799,6 +27041,14 @@
       "Matricola": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "prodottoAssistenzaId": {
             "type": "string",
             "format": "uuid"
@@ -29237,6 +29487,14 @@
       "Report": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "title": {
             "type": "string",
             "description": "Short title of the intervention (e.g. \"Manutenzione quadro elettrico\")."
@@ -31488,6 +31746,14 @@
       "Squadra": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "nome": {
             "type": "string"
           },
@@ -33749,6 +34015,14 @@
       "Ticket": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "title": {
             "type": "string",
             "description": "Ticket title/summary."
@@ -36955,6 +37229,14 @@
       "User": {
         "type": "object",
         "properties": {
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "externalUserId": {
             "type": "string",
             "description": "identity provider user identifier (UUID from auth.users.id)."
