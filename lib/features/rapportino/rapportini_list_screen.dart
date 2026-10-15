@@ -331,8 +331,10 @@ class _RapportinoRow extends ConsumerWidget {
     // Item 13: edit/delete now follow the backend's own "before office review" boundary
     // (ReportStateMachine.CanEditOrDelete — Bozza/Inviato/Respinto), not draft-only.
     final canEditOrDelete = rapportinoCanEditOrDelete(draft);
-    final hasBothSigs =
-        draft.customerSignatureAllegatoId != null && draft.technicianSignatureAllegatoId != null;
+    // The signed-badge marks a report carrying the signature the SEND actually requires — the
+    // technician's. The customer's is collected on site when possible but is never a precondition,
+    // so keying the badge on both would hide every correctly-sent unsigned report.
+    final hasTechnicianSignature = draft.technicianSignatureAllegatoId != null;
 
     final dateLabel = DateFormat(
       'dd/MM/yy',
@@ -422,7 +424,7 @@ class _RapportinoRow extends ConsumerWidget {
               Stack(
                 children: [
                   const RowIconTile(icon: LucideIcons.fileText),
-                  if (hasBothSigs)
+                  if (hasTechnicianSignature)
                     Positioned(
                       right: 0,
                       bottom: 0,

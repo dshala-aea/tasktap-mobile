@@ -12,14 +12,18 @@ import '../../data/local/app_database.dart';
 //      OR customerFreeText for free-text)
 //   3. ≥ 1 staff row
 //   4. ≥ 1 materiale row OR materialiNotRequired == true
-//   5. customerSignatureAllegatoId is non-null/non-empty — only when the draft has a ticketId
-//   6. technicianSignatureAllegatoId is non-null/non-empty — only when the draft has a ticketId
+//   5. technicianSignatureAllegatoId is non-null/non-empty — only when the draft has a ticketId
 //
-// Rules 5/6 are gated on `ticketId != null` to mirror the backend's identical
-// `TicketId.HasValue` gate (the cantiere-only rapportino flow has no customer-facing sign-off
-// step at all — a cantiere worklog-derived report is an internal timesheet, not a job a customer
-// signs off on — so requiring signatures nobody is ever asked to capture would strand every such
-// draft in "not ready to submit" forever).
+// Rule 5 is gated on `ticketId != null` to mirror the backend's identical `TicketId.HasValue` gate
+// (the cantiere-only rapportino flow has no customer-facing sign-off step at all — a cantiere
+// worklog-derived report is an internal timesheet, not a job a customer signs off on — so requiring
+// a signature nobody is ever asked to capture would strand every such draft in "not ready to
+// submit" forever).
+//
+// The CUSTOMER's signature is not required, for ticket-linked drafts included: it is collected in
+// the field when the customer is there to sign, and when they are not the report still has to go
+// in. This mirrors `ReportStateMachine.CanInvia` — the server would accept the submit, so flagging
+// it here would block a send the backend is perfectly willing to take.
 // ══════════════════════════════════════════════════════════════════════════════
 
 enum DraftValidationIssue {
@@ -28,7 +32,6 @@ enum DraftValidationIssue {
   missingCustomer,
   noStaff,
   noMateriali, // only when materialiNotRequired == false
-  missingCustomerSignature,
   missingTechnicianSignature,
 }
 
@@ -55,8 +58,6 @@ class DraftValidationResult {
           return 'Nessun tecnico aggiunto';
         case DraftValidationIssue.noMateriali:
           return 'Nessun materiale aggiunto (o flag "nessun materiale" non attivo)';
-        case DraftValidationIssue.missingCustomerSignature:
-          return 'Firma cliente mancante';
         case DraftValidationIssue.missingTechnicianSignature:
           return 'Firma tecnico mancante';
       }
@@ -107,12 +108,9 @@ DraftValidationResult validateDraft({
     issues.add(DraftValidationIssue.noMateriali);
   }
 
-  // No ticket → no customer-facing sign-off step (cantiere-only rapportini) → nothing to flag.
+  // No ticket → no sign-off step at all (cantiere-only rapportini). With a ticket, only the
+  // technician's signature is required; the customer's is collected when they are there to sign.
   if (draft.ticketId != null) {
-    if (draft.customerSignatureAllegatoId == null || draft.customerSignatureAllegatoId!.isEmpty) {
-      issues.add(DraftValidationIssue.missingCustomerSignature);
-    }
-
     if (draft.technicianSignatureAllegatoId == null ||
         draft.technicianSignatureAllegatoId!.isEmpty) {
       issues.add(DraftValidationIssue.missingTechnicianSignature);

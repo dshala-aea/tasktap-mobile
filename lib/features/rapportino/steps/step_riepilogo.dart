@@ -350,8 +350,10 @@ class _StepRiepilogoState extends ConsumerState<StepRiepilogo> {
             const SizedBox(height: 20),
           ],
 
-          // ── Firma cliente ──────────────────────────────────────────────────
-          StepLabel(title: 'Firma cliente *'),
+          // ── Firma cliente (facoltativa) ────────────────────────────────────
+          // No asterisk: the customer's signature is collected when the customer is there to sign,
+          // but it is not required to send — only the technician's is.
+          StepLabel(title: 'Firma cliente'),
           const SizedBox(height: 8),
           _SignatureBlock(
             label: 'cliente',

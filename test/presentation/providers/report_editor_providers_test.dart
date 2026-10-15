@@ -1048,6 +1048,29 @@ void main() {
       expect(notifier.state.validation.issues, isEmpty);
     });
 
+    test('isReadyToSubmit=true when the customer signature is the only thing missing', () async {
+      await _seedDraft(db, 'draft-1');
+      final (notifier, _) = await _makeEditor(db);
+
+      await notifier.setTitle('Test');
+      await notifier.setCustomerFromCache('cust-1');
+
+      await notifier.addStaff(const StaffRow(id: 's-1', userId: 'u-1', hoursWorked: 4.0));
+      await notifier.addMateriale(
+        const MaterialeRow(id: 'm-1', reportId: 'draft-1', freeTextName: 'Cavo', quantity: 1.0),
+      );
+      // No saveCustomerSignature on purpose: the server accepts this send, so the phone must not
+      // hold it back (ReportStateMachine.CanInvia requires only the technician's signature).
+      await notifier.saveTechnicianSignature(
+        allegatoId: 'sig-t',
+        bytes: Uint8List.fromList([2]),
+        localPath: '/tmp/st.png',
+      );
+
+      expect(notifier.state.validation.issues, isEmpty);
+      expect(notifier.state.isReadyToSubmit, isTrue);
+    });
+
     test('noMateriali not flagged when materialiNotRequired=true', () async {
       await _seedDraft(db, 'draft-1');
       final (notifier, _) = await _makeEditor(db);
