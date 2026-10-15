@@ -119,6 +119,8 @@ void main() {
         SubmitReportStrumentoDto(
           strumentoId: '00000000-0000-0000-0000-000000000009',
           expiredAcknowledged: true,
+          usageDescription: 'Misura di isolamento sul quadro B',
+          outcome: 'Valori conformi',
         ),
       ],
     );
@@ -177,13 +179,38 @@ void main() {
       },
     );
 
+    test('the instrument notes are properties the server declares, as optional text', () {
+      final props = propertiesOf('SubmitReportStrumentoDto');
+      expect(props, containsAll(['usageDescription', 'outcome']));
+      final json =
+          (fullRequest.toJson()['strumenti'] as List).first
+              as Map<String, dynamic>;
+      expect(json['usageDescription'], 'Misura di isolamento sul quadro B');
+      expect(json['outcome'], 'Valori conformi');
+    });
+
+    test('blank instrument notes are omitted from the wire, not sent as empty strings', () {
+      final json = const SubmitReportStrumentoDto(
+        strumentoId: '00000000-0000-0000-0000-000000000009',
+        usageDescription: '   ',
+        outcome: '',
+      ).toJson();
+      expect(json.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
+      expectNoUnknownKeys('SubmitReportStrumentoDto', json);
+    });
+
     /// The server recomputes expiry from the report's work date and rejects anything else; a
     /// client-supplied `expiredAtUse` would be ignored at best and is never part of the contract.
     test('the instrument selection never carries expiredAtUse', () {
       final json =
           (fullRequest.toJson()['strumenti'] as List).first
               as Map<String, dynamic>;
-      expect(json.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
+      expect(json.keys.toSet(), {
+        'strumentoId',
+        'expiredAcknowledged',
+        'usageDescription',
+        'outcome',
+      });
       expect(
         propertiesOf('SubmitReportStrumentoDto'),
         isNot(contains('expiredAtUse')),

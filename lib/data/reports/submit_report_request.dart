@@ -260,16 +260,28 @@ class SubmitReportControlloDto {
 
 /// One instrument used on the rapportino. Mirror of `SubmitReportStrumentoDto`: `strumentoId` +
 /// `expiredAcknowledged` only. An expired instrument REQUIRES `expiredAcknowledged = true`; a valid
-/// one forbids it (422 `strumenti_invalid` otherwise).
+/// one forbids it (422 `strumenti_invalid` otherwise). Plus two optional free-text notes,
+/// [usageDescription] (how it was used) and [outcome] (esito), each max 2000 chars server-side.
+/// They are sent only when non-blank (the server trims and stores blank as null).
 class SubmitReportStrumentoDto {
-  const SubmitReportStrumentoDto({required this.strumentoId, this.expiredAcknowledged = false});
+  const SubmitReportStrumentoDto({
+    required this.strumentoId,
+    this.expiredAcknowledged = false,
+    this.usageDescription,
+    this.outcome,
+  });
 
   final String strumentoId;
   final bool expiredAcknowledged;
+  final String? usageDescription;
+  final String? outcome;
 
   Map<String, dynamic> toJson() => {
     'strumentoId': strumentoId,
     'expiredAcknowledged': expiredAcknowledged,
+    if (usageDescription != null && usageDescription!.trim().isNotEmpty)
+      'usageDescription': usageDescription!.trim(),
+    if (outcome != null && outcome!.trim().isNotEmpty) 'outcome': outcome!.trim(),
   };
 }
 

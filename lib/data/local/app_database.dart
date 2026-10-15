@@ -1133,6 +1133,12 @@ class ReportStrumenti extends Table {
   BoolColumn get expiredAcknowledged => boolean().withDefault(const Constant(false))();
   BoolColumn get isLocal => boolean().withDefault(const Constant(false))();
 
+  /// Free text, how the instrument was used on this rapportino. Optional, max 2000 chars server-side.
+  TextColumn get usageDescription => text().nullable()();
+
+  /// Free text, the outcome (esito) of using the instrument. Optional, max 2000 chars server-side.
+  TextColumn get outcome => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1199,7 +1205,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   @override
   MigrationStrategy get migration {
@@ -1568,6 +1574,21 @@ class AppDatabase extends _$AppDatabase {
           // crashing on open or holding a template id that can never be sent.
           if (!await _columnExists(m.database, 'pending_tickets', 'maintenance_template_id')) {
             await m.addColumn(pendingTickets, pendingTickets.maintenanceTemplateId);
+          }
+        }
+        if (from < 41) {
+          // Per-instrument free text on a rapportino ("how it was used", "esito"). Two nullable
+          // columns, no backfill: every existing row simply has no note.
+          //
+          // Guarded by `PRAGMA table_info`, not by `from`: a device coming from 35 or older gets
+          // `report_strumenti` created by the `from < 36` step from the CURRENT definition, which
+          // already declares both columns, and an unconditional `addColumn` would die on
+          // `duplicate column name` before the app opens.
+          if (!await _columnExists(m.database, 'report_strumenti', 'usage_description')) {
+            await m.addColumn(reportStrumenti, reportStrumenti.usageDescription);
+          }
+          if (!await _columnExists(m.database, 'report_strumenti', 'outcome')) {
+            await m.addColumn(reportStrumenti, reportStrumenti.outcome);
           }
         }
       },

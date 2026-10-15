@@ -354,6 +354,8 @@ class SubmissionQueue {
                 ? catalogue[r.strumentoId]!.calibrationExpiry
                 : r.calibrationExpiry,
             expiredAcknowledged: r.expiredAcknowledged,
+            usageDescription: r.usageDescription,
+            outcome: r.outcome,
           ),
     ], workDateLabel(draft.startedAt, draft.createdAt));
 

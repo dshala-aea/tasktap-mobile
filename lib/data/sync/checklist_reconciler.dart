@@ -335,6 +335,8 @@ Future<void> replaceServerReportStrumenti(
               certificateReference: Value(s.certificateReference),
               expiredAtUse: Value(s.expiredAtUse),
               expiredAcknowledged: Value(s.expiredAcknowledged),
+              usageDescription: Value(s.usageDescription),
+              outcome: Value(s.outcome),
             ),
         ],
         mode: InsertMode.insertOrReplace,

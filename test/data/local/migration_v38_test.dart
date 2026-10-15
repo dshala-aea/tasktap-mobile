@@ -45,6 +45,7 @@ import 'package:tasktap_mobile/data/local/app_database.dart';
 const _columnsAddedAfter37 = <String, List<String>>{
   'draft_reports': ['expected_version'],
   'pending_tickets': ['maintenance_template_id'],
+  'report_strumenti': ['usage_description', 'outcome'],
 };
 
 void main() {

@@ -36,6 +36,8 @@ class StrumentoSelectionItem {
     required this.expiredAcknowledged,
     required this.expired,
     required this.inCatalogue,
+    this.usageDescription = '',
+    this.outcome = '',
   });
 
   final String strumentoId;
@@ -51,6 +53,10 @@ class StrumentoSelectionItem {
 
   /// False when the instrument was retired from the catalogue after it was saved on the draft.
   final bool inCatalogue;
+
+  /// Free-text notes, '' when none. Optional: never blocks a submit.
+  final String usageDescription;
+  final String outcome;
 }
 
 class StrumentiSelectionState {
@@ -115,6 +121,8 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
                   calibrationExpiry: Value(s.calibrationExpiry),
                   certificateReference: Value(s.certificateReference),
                   expiredAcknowledged: Value(s.expiredAcknowledged),
+                  usageDescription: Value(s.usageDescription),
+                  outcome: Value(s.outcome),
                   isLocal: const Value(true),
                 ),
             ],
@@ -176,6 +184,8 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
           expiredAcknowledged: expired && r.expiredAcknowledged,
           expired: expired,
           inCatalogue: cat != null,
+          usageDescription: r.usageDescription ?? '',
+          outcome: r.outcome ?? '',
         ),
       );
     }
@@ -223,6 +233,23 @@ class StrumentiSelectionNotifier extends StateNotifier<StrumentiSelectionState> 
       ),
     );
     await _reload();
+  }
+
+  /// Persists the "how it was used" note at once (the sheet can be closed or the app killed any
+  /// moment). Writes ONLY that column, so acknowledgement/snapshot are untouched. The state is not
+  /// reloaded: the text field owns what is on screen while typing.
+  Future<void> setUsageDescription(String strumentoId, String value) =>
+      _writeNote(strumentoId, ReportStrumentiCompanion(usageDescription: Value(_nullIfBlank(value))));
+
+  /// Same as [setUsageDescription], for the esito.
+  Future<void> setOutcome(String strumentoId, String value) =>
+      _writeNote(strumentoId, ReportStrumentiCompanion(outcome: Value(_nullIfBlank(value))));
+
+  static String? _nullIfBlank(String v) => v.trim().isEmpty ? null : v;
+
+  Future<void> _writeNote(String strumentoId, ReportStrumentiCompanion change) async {
+    if (!state.items.any((i) => i.strumentoId == strumentoId)) return;
+    await _repo.updateLocalStrumentoNotes(reportId, strumentoId, change);
   }
 }
 
