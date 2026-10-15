@@ -103,6 +103,23 @@ void main() {
         expect(s.toJson().keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
       }
     });
+
+    test('body carries the notes through, and the DTO omits blank ones', () {
+      final body = buildStrumentiBody(const [
+        StrumentoSelectionInput(
+          strumentoId: 'a',
+          calibrationExpiry: null,
+          expiredAcknowledged: false,
+          usageDescription: 'Misura',
+          outcome: '  ',
+        ),
+      ], '2026-06-22');
+      expect(body.single.toJson(), {
+        'strumentoId': 'a',
+        'expiredAcknowledged': false,
+        'usageDescription': 'Misura',
+      });
+    });
   });
 
   group('StrumentiSelectionNotifier', () {
@@ -158,6 +175,65 @@ void main() {
       final c = _container(db);
       await c.read(strumentiSelectionProvider(_rid).notifier).ready;
       expect(c.read(strumentiSelectionProvider(_rid)).items.map((i) => i.strumentoId), ['other']);
+    });
+
+    test('adopting the server selection keeps its notes', () async {
+      await _seedDraft(db);
+      await _seedCatalogue(db);
+      await db
+          .into(db.reportStrumenti)
+          .insert(
+            ReportStrumentiCompanion.insert(
+              id: 'srv-1',
+              reportId: _rid,
+              strumentoId: const Value('other'),
+              name: 'Anemometro',
+              matricola: 'A-3',
+              usageDescription: const Value('Portata canale'),
+              outcome: const Value('12 m/s'),
+            ),
+          );
+      final c = _container(db);
+      await c.read(strumentiSelectionProvider(_rid).notifier).ready;
+      final item = c.read(strumentiSelectionProvider(_rid)).items.single;
+      expect(item.usageDescription, 'Portata canale');
+      expect(item.outcome, '12 m/s');
+    });
+
+    test('setUsageDescription/setOutcome persist at once, survive an acknowledgement, blank -> null',
+        () async {
+      await _seedDraft(db);
+      await _seedCatalogue(db);
+      final c = _container(db);
+      final n = c.read(strumentiSelectionProvider(_rid).notifier);
+      await n.ready;
+
+      await n.setUsageDescription('mine-expired', 'Ispezione quadro');
+      await n.setOutcome('mine-expired', 'Punto caldo');
+      await n.setAcknowledged('mine-expired', true); // rewrites the row: must not wipe the notes
+
+      Future<ReportStrumentoRow> row() => (db.select(
+        db.reportStrumenti,
+      )..where((s) => s.strumentoId.equals('mine-expired'))).getSingle();
+      var r = await row();
+      expect(r.usageDescription, 'Ispezione quadro');
+      expect(r.outcome, 'Punto caldo');
+      expect(r.expiredAcknowledged, isTrue);
+
+      await n.setOutcome('mine-expired', '   ');
+      r = await row();
+      expect(r.outcome, isNull);
+      expect(r.usageDescription, 'Ispezione quadro');
+
+      // A fresh open reads them back.
+      final c2 = _container(db);
+      await c2.read(strumentiSelectionProvider(_rid).notifier).ready;
+      final item = c2
+          .read(strumentiSelectionProvider(_rid))
+          .items
+          .firstWhere((i) => i.strumentoId == 'mine-expired');
+      expect(item.usageDescription, 'Ispezione quadro');
+      expect(item.outcome, '');
     });
 
     test('add pulls from the catalogue and remove drops it; the picker excludes selected', () async {
@@ -219,6 +295,7 @@ void main() {
       expect(find.text('Scaduto'), findsOneWidget);
       expect(find.textContaining('Confermo di aver usato'), findsOneWidget);
 
+      await tester.ensureVisible(find.textContaining('Confermo di aver usato'));
       await tester.tap(find.textContaining('Confermo di aver usato'));
       await tester.pumpAndSettle();
 
@@ -227,6 +304,51 @@ void main() {
       )..where((s) => s.strumentoId.equals('mine-expired'))).getSingle();
       expect(row.expiredAcknowledged, isTrue);
       expect(row.isLocal, isTrue);
+    });
+
+    testWidgets('typing in the two note fields persists to the Drift row, counter hidden until 1800',
+        (tester) async {
+      await _seedDraft(db);
+      await _seedCatalogue(db);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [appDatabaseProvider.overrideWithValue(db)],
+          child: const MaterialApp(
+            home: Scaffold(body: SingleChildScrollView(child: StepStrumenti(reportId: _rid))),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final usage = find.byKey(const ValueKey('strumento-usage-mine-valid'));
+      final esito = find.byKey(const ValueKey('strumento-outcome-mine-valid'));
+      expect(find.text('DESCRIZIONE DELL\'UTILIZZO'), findsNWidgets(2));
+      expect(find.text('ESITO'), findsNWidgets(2));
+      await tester.ensureVisible(usage);
+      await tester.enterText(
+        find.descendant(of: usage, matching: find.byType(TextFormField)),
+        'Misura isolamento',
+      );
+      await tester.ensureVisible(esito);
+      await tester.enterText(
+        find.descendant(of: esito, matching: find.byType(TextFormField)),
+        'Conforme',
+      );
+      await tester.pumpAndSettle();
+
+      final row = await (db.select(
+        db.reportStrumenti,
+      )..where((s) => s.strumentoId.equals('mine-valid'))).getSingle();
+      expect(row.usageDescription, 'Misura isolamento');
+      expect(row.outcome, 'Conforme');
+      expect(find.text('17/2000'), findsNothing, reason: 'counter hidden below 1800');
+
+      await tester.enterText(
+        find.descendant(of: usage, matching: find.byType(TextFormField)),
+        'x' * 1850,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('1850/2000'), findsOneWidget, reason: 'counter shows from 1800');
     });
   });
 }

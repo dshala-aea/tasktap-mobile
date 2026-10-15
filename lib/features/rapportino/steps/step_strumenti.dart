@@ -86,9 +86,12 @@ class StepStrumenti extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: _StrumentoCard(
+                  key: ValueKey('strumento-card-${item.strumentoId}'),
                   item: item,
                   onRemove: () => notifier.remove(item.strumentoId),
                   onAcknowledge: (v) => notifier.setAcknowledged(item.strumentoId, v),
+                  onUsageChanged: (v) => notifier.setUsageDescription(item.strumentoId, v),
+                  onOutcomeChanged: (v) => notifier.setOutcome(item.strumentoId, v),
                 ),
               ),
           const SizedBox(height: 8),
@@ -152,19 +155,56 @@ class StepStrumenti extends ConsumerWidget {
   }
 }
 
-class _StrumentoCard extends StatelessWidget {
+/// Server limit of both notes (`strumento_usage_description_too_long` / `..._outcome_too_long`).
+const int kStrumentoNoteMaxLength = 2000;
+
+/// The character counter stays hidden until the note is close to the limit.
+const int kStrumentoNoteCounterFrom = 1800;
+
+class _StrumentoCard extends StatefulWidget {
   const _StrumentoCard({
+    super.key,
     required this.item,
     required this.onRemove,
     required this.onAcknowledge,
+    required this.onUsageChanged,
+    required this.onOutcomeChanged,
   });
 
   final StrumentoSelectionItem item;
   final VoidCallback onRemove;
   final ValueChanged<bool> onAcknowledge;
+  final ValueChanged<String> onUsageChanged;
+  final ValueChanged<String> onOutcomeChanged;
+
+  @override
+  State<_StrumentoCard> createState() => _StrumentoCardState();
+}
+
+class _StrumentoCardState extends State<_StrumentoCard> {
+  // Created once from the stored note and then owned by the field: the selection state is reloaded
+  // on every toggle/add/remove, and re-seeding from it would fight the cursor while typing. Each
+  // keystroke is persisted at once (same as the other editor text fields).
+  late final TextEditingController _usage = TextEditingController(
+    text: widget.item.usageDescription,
+  );
+  late final TextEditingController _outcome = TextEditingController(text: widget.item.outcome);
+
+  @override
+  void dispose() {
+    _usage.dispose();
+    _outcome.dispose();
+    super.dispose();
+  }
+
+  String? _counter(TextEditingController c) =>
+      c.text.length >= kStrumentoNoteCounterFrom ? null : '';
 
   @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final onRemove = widget.onRemove;
+    final onAcknowledge = widget.onAcknowledge;
     final c = context.colors;
     return AppCard(
       child: Column(
@@ -227,6 +267,34 @@ class _StrumentoCard extends StatelessWidget {
                 ),
               ),
             ),
+          const SizedBox(height: AppSpacing.sm),
+          AppTextField.multiline(
+            key: ValueKey('strumento-usage-${item.strumentoId}'),
+            label: 'Descrizione dell\'utilizzo',
+            hint: 'Come hai usato lo strumento (facoltativo)',
+            controller: _usage,
+            maxLines: 4,
+            maxLength: kStrumentoNoteMaxLength,
+            counterText: _counter(_usage),
+            onChanged: (v) {
+              setState(() {});
+              widget.onUsageChanged(v);
+            },
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppTextField.multiline(
+            key: ValueKey('strumento-outcome-${item.strumentoId}'),
+            label: 'Esito',
+            hint: 'Risultato della misura o dell\'intervento (facoltativo)',
+            controller: _outcome,
+            maxLines: 4,
+            maxLength: kStrumentoNoteMaxLength,
+            counterText: _counter(_outcome),
+            onChanged: (v) {
+              setState(() {});
+              widget.onOutcomeChanged(v);
+            },
+          ),
         ],
       ),
     );

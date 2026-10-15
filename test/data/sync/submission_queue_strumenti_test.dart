@@ -72,7 +72,13 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<void> localRow(String id, String? expiry, {bool ack = false}) => db
+  Future<void> localRow(
+    String id,
+    String? expiry, {
+    bool ack = false,
+    String? usage,
+    String? outcome,
+  }) => db
       .into(db.reportStrumenti)
       .insert(
         ReportStrumentiCompanion.insert(
@@ -84,6 +90,8 @@ void main() {
           calibrationExpiry: Value(expiry),
           expiredAcknowledged: Value(ack),
           expiredAtUse: const Value(true), // server-side display value: must never be sent
+          usageDescription: Value(usage),
+          outcome: Value(outcome),
           isLocal: const Value(true),
         ),
       );
@@ -144,5 +152,25 @@ void main() {
     await queue.processAll();
 
     expect(sent!.strumenti, isEmpty);
+  });
+
+  test('the notes are sent only when non-blank, trimmed; blank ones are omitted', () async {
+    await localRow('both', null, usage: '  Misura sul quadro B ', outcome: 'Conforme');
+    await localRow('usage-only', null, usage: 'Solo utilizzo');
+    await localRow('blank', null, usage: '   ', outcome: '');
+    await localRow('none', null);
+
+    await queue.processAll();
+
+    final byId = {
+      for (final j in sent!.toJson()['strumenti'] as List)
+        (j as Map)['strumentoId'] as String: j.cast<String, dynamic>(),
+    };
+    expect(byId['both']!['usageDescription'], 'Misura sul quadro B');
+    expect(byId['both']!['outcome'], 'Conforme');
+    expect(byId['usage-only']!.containsKey('outcome'), isFalse);
+    expect(byId['usage-only']!['usageDescription'], 'Solo utilizzo');
+    expect(byId['blank']!.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
+    expect(byId['none']!.keys.toSet(), {'strumentoId', 'expiredAcknowledged'});
   });
 }

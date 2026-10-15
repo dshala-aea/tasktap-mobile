@@ -79,6 +79,9 @@ void main() {
           // absent too, or the reopen dies on `duplicate column name`. (v40's other half, the
           // `maintenance_templates` table, needs no undo: `createTable` is `IF NOT EXISTS`.)
           raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
+          // Schema 41 adds the per-instrument notes: absent in a real v38 database.
+          raw.execute('ALTER TABLE report_strumenti DROP COLUMN usage_description');
+          raw.execute('ALTER TABLE report_strumenti DROP COLUMN outcome');
           raw.execute('PRAGMA user_version = 38');
         },
       ),

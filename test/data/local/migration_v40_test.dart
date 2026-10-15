@@ -61,6 +61,9 @@ void main() {
         setup: (raw) {
           raw.execute('DROP TABLE IF EXISTS maintenance_templates');
           raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
+          // Schema 41 adds the per-instrument notes: absent in a real v39 database.
+          raw.execute('ALTER TABLE report_strumenti DROP COLUMN usage_description');
+          raw.execute('ALTER TABLE report_strumenti DROP COLUMN outcome');
           raw.execute('PRAGMA user_version = 39');
         },
       ),
@@ -131,6 +134,8 @@ void main() {
           raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
           raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
           raw.execute('DROP TABLE IF EXISTS maintenance_templates');
+          raw.execute('ALTER TABLE report_strumenti DROP COLUMN usage_description');
+          raw.execute('ALTER TABLE report_strumenti DROP COLUMN outcome');
           raw.execute('PRAGMA user_version = 37');
         },
       ),

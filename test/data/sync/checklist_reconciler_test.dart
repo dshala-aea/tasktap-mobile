@@ -352,4 +352,33 @@ void main() {
     expect(byReport['synced'], ['srv-1'], reason: 'replaced wholesale');
     expect(byReport['mine'], ['local-1'], reason: 'a local-only draft is authoritative');
   });
+
+  test('server report instruments carry their usage notes into the mirror', () async {
+    await db.into(db.draftReports).insert(
+          DraftReportsCompanion.insert(
+            id: 'synced', tenantId: 'x', createdAt: DateTime.utc(2026, 10, 7), title: 'T',
+            insertedUserId: 'u', locationId: 'l',
+          ),
+        );
+
+    await replaceServerReportStrumenti(
+      db,
+      reportIdsInPayload: ['synced'],
+      rows: [
+        SyncReportStrumentoDto.fromJson({
+          'id': 'srv-1', 'reportId': 'synced', 'strumentoId': 's1', 'name': 'N', 'matricola': '1',
+          'usageDescription': 'Misura sul quadro', 'outcome': 'Conforme',
+        }),
+        SyncReportStrumentoDto.fromJson({
+          'id': 'srv-2', 'reportId': 'synced', 'strumentoId': 's2', 'name': 'N', 'matricola': '2',
+        }),
+      ],
+    );
+
+    final rows = {for (final r in await db.select(db.reportStrumenti).get()) r.id: r};
+    expect(rows['srv-1']!.usageDescription, 'Misura sul quadro');
+    expect(rows['srv-1']!.outcome, 'Conforme');
+    expect(rows['srv-2']!.usageDescription, isNull);
+    expect(rows['srv-2']!.outcome, isNull);
+  });
 }

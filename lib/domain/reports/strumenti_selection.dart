@@ -41,11 +41,15 @@ class StrumentoSelectionInput {
     required this.strumentoId,
     required this.calibrationExpiry,
     required this.expiredAcknowledged,
+    this.usageDescription,
+    this.outcome,
   });
 
   final String strumentoId;
   final String? calibrationExpiry;
   final bool expiredAcknowledged;
+  final String? usageDescription;
+  final String? outcome;
 }
 
 /// The `strumenti` of the submit body. Never carries `expiredAtUse`; the acknowledgement is only
@@ -64,6 +68,8 @@ List<SubmitReportStrumentoDto> buildStrumentiBody(
       SubmitReportStrumentoDto(
         strumentoId: r.strumentoId,
         expiredAcknowledged: expired ? r.expiredAcknowledged : false,
+        usageDescription: r.usageDescription,
+        outcome: r.outcome,
       ),
     );
   }

@@ -9910,7 +9910,7 @@
         "tags": [
           "Reports"
         ],
-        "summary": "Invia il rapportino (Bozza \u2192 Inviato). Richiede firma cliente + firma tecnico +\nalmeno un tecnico registrato + almeno un materiale (o \"nessun materiale\" confermato) \u2014\nenforced via void ReportStateMachine.Apply(Report r, ReportStatoEnum target, IClock clock, int? staffCount = null, int? materialiCount = null)'s authoritative send gate.",
+        "summary": "Invia il rapportino (Bozza \u2192 Inviato). Richiede firma tecnico + almeno un tecnico\nregistrato + almeno un materiale (o \"nessun materiale\" confermato) \u2014 enforced via\nvoid ReportStateMachine.Apply(Report r, ReportStatoEnum target, IClock clock, int? staffCount = null, int? materialiCount = null)'s authoritative send gate. La firma del cliente\nNON \u00e8 obbligatoria: viene raccolta sul posto quando il cliente \u00e8 presente, ma un\nrapportino non firmato dal cliente deve poter essere inviato lo stesso.",
         "parameters": [
           {
             "name": "id",
@@ -15174,7 +15174,8 @@
         "tags": [
           "Tenants"
         ],
-        "summary": "Create a new tenant (with schema creation).",
+        "summary": "Create a new tenant (platform admin only).",
+        "description": "    Platform admin only, like GetAll: this action takes no target {id}, so neither\nEnsureOwnTenantOrPlatformAdminAsync nor anything else in the class-level policy stands\nin for the check, and creating a tenant is a platform-wide act rather than something a tenant\nadmin does inside their own tenant.\n    The tenant is created through ITenantProvisioningService, not by inserting a\nTenant row here. Two reasons, both of which made the previous implementation fail even\nwith the privilege that used to be granted: the ordinary connection has no INSERT on\nTenants at all, and a tenant row on its own is not a usable tenant \u2014 it needs its\nTenantSettings/TenantBilling rows (and the default lookups) or every module reads\nas locked. That provisioning runs on the admin context, which is the connection that can\nwrite the table.\n    The service is taken as a [FromServices] parameter rather than a constructor\ndependency: this is the only action on the controller that needs it, and the parameter does\nnot reach the generated contract.",
         "requestBody": {
           "description": "Tenant creation request.",
           "content": {
@@ -15198,7 +15199,7 @@
         },
         "responses": {
           "200": {
-            "description": "Created tenant."
+            "description": "The created tenant's id."
           }
         }
       }
@@ -22479,7 +22480,8 @@
           "sediAttive",
           "contratti",
           "interventiTotali",
-          "interventiAperti"
+          "interventiAperti",
+          "updatedAt"
         ],
         "type": "object",
         "properties": {
@@ -22609,6 +22611,13 @@
               "string"
             ],
             "format": "int32"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
           }
         },
         "description": "Ready-to-render payload for the customer overview screen (`GET /api/app/clienti/{id}/overview`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy already produces `ragioneSociale`,\n`codiceFiscale`, etc. from these PascalCase names), owned by the web app, no external\ncompatibility promise. Replaces the previous Italian-shaped hand-mocked customer detail with\na composed header plus computed counts; the three detail tabs stay canonical endpoints."
@@ -24263,6 +24272,13 @@
           },
           "domain": {
             "type": "string"
+          },
+          "billingEmail": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Billing contact for the new tenant. Optional: when omitted the creating platform admin's own\nemail is used, because the tenant's invoices and welcome email need <i>some</i> address."
           }
         }
       },
@@ -25547,7 +25563,10 @@
           "tags",
           "noteTecnico",
           "prodottoAssistenzaIds",
-          "chiuso"
+          "chiuso",
+          "createdAt",
+          "updatedAt",
+          "createdByUserId"
         ],
         "type": "object",
         "properties": {
@@ -25768,6 +25787,27 @@
           "chiuso": {
             "type": "boolean",
             "description": "Whether the ticket is closed (`Ticket.ClosedAt.HasValue`)."
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Row creation timestamp (`Ticket.CreatedAt`) \u2014 audit metadata for the detail page.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Last-edit timestamp (`Ticket.UpdatedAt`), or `null` if never edited.",
+            "format": "date-time"
+          },
+          "createdByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Id of the user who created the ticket (`Ticket.CreatedByUserId`), or `null` for tickets created before it was persisted. The client resolves the id to a name.",
+            "format": "uuid"
           }
         },
         "description": "Ready-to-render payload for the Intervento detail screen (`GET /api/app/interventi/{id}`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy already produces\n`titolo`/`stato`/`clienteId` from these PascalCase names), owned by the web\napp, no external compatibility promise. Replaces three canonical calls (ticket + linked\nschedules + linked rapportini) with one composed read."
@@ -25786,7 +25826,10 @@
           "priorita",
           "tecnico",
           "tecnicoId",
-          "data"
+          "data",
+          "createdAt",
+          "updatedAt",
+          "createdByUserId"
         ],
         "type": "object",
         "properties": {
@@ -25866,6 +25909,27 @@
             "type": "string",
             "description": "The ticket's creation date (matches the detail DTO's `Data` \u2014 see its doc for why `CreatedAt` stands in for the \"intervention date\").",
             "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Row creation timestamp (`Ticket.CreatedAt`) \u2014 audit metadata, same value as `Data` today but a distinct contract field.",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Last-edit timestamp (`Ticket.UpdatedAt`), or `null` if never edited.",
+            "format": "date-time"
+          },
+          "createdByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Id of the user who created the ticket (`Ticket.CreatedByUserId`), or `null` for older tickets. The client resolves the id to a name.",
+            "format": "uuid"
           }
         },
         "description": "Ready-to-render row for the Intervento list screen (`GET /api/app/interventi`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy produces `titolo`/\n`clienteId` from these PascalCase names), owned by the web app. Mirrors what the web's\n`mapTicketToListItem` resolves today from a canonical `/tickets` page, so the list\nscreen can drop that canonical fetch."
@@ -30448,6 +30512,18 @@
           },
           "expiredAcknowledged": {
             "type": "boolean"
+          },
+          "usageDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "One instrument used on a report (live selection while Bozza, frozen snapshot once finalised)."
@@ -31880,6 +31956,18 @@
           },
           "expiredAcknowledged": {
             "type": "boolean"
+          },
+          "usageDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "What the client states per instrument. It never states `expiredAtUse`: the server recomputes it."
@@ -32426,6 +32514,20 @@
           },
           "expiredAcknowledged": {
             "type": "boolean"
+          },
+          "usageDescription": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional free text: how the instrument was used (max 2000 characters)."
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional free text: the result (esito) obtained (max 2000 characters)."
           }
         },
         "description": "One instrument used on the intervention. Deliberately carries NO `expiredAtUse`: the server recomputes it from the\ninstrument's calibration expiry and the report's work date; the client only states the operator's acknowledgement."
@@ -33017,6 +33119,18 @@
           },
           "expiredAcknowledged": {
             "type": "boolean"
+          },
+          "usageDescription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "One instrument selected on a draft report of the caller (the snapshot columns; no tenant id)."
@@ -33662,6 +33776,14 @@
               "string"
             ],
             "description": "User the ticket is assigned to.",
+            "format": "uuid"
+          },
+          "createdByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who created the ticket. Null for tickets with no human creator (customer-portal requests,\nsystem-generated tickets) and for rows that predate this column (no backfill). For API-key requests it\nis the key's creating user (attribution only). Plain column with no foreign key.",
             "format": "uuid"
           },
           "statusId": {

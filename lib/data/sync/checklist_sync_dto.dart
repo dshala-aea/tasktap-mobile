@@ -246,6 +246,8 @@ class SyncReportStrumentoDto {
     this.certificateReference,
     this.expiredAtUse = false,
     this.expiredAcknowledged = false,
+    this.usageDescription,
+    this.outcome,
   });
 
   final String id;
@@ -260,6 +262,10 @@ class SyncReportStrumentoDto {
   final bool expiredAtUse;
   final bool expiredAcknowledged;
 
+  /// Free-text notes the technician wrote for this instrument (max 2000 chars, null when blank).
+  final String? usageDescription;
+  final String? outcome;
+
   static const Set<String> wireKeys = {
     'id',
     'reportId',
@@ -270,6 +276,8 @@ class SyncReportStrumentoDto {
     'certificateReference',
     'expiredAtUse',
     'expiredAcknowledged',
+    'usageDescription',
+    'outcome',
   };
 
   factory SyncReportStrumentoDto.fromJson(Map<String, dynamic> j) => SyncReportStrumentoDto(
@@ -282,6 +290,8 @@ class SyncReportStrumentoDto {
     certificateReference: j['certificateReference'] as String?,
     expiredAtUse: j['expiredAtUse'] as bool? ?? false,
     expiredAcknowledged: j['expiredAcknowledged'] as bool? ?? false,
+    usageDescription: j['usageDescription'] as String?,
+    outcome: j['outcome'] as String?,
   );
 }
 

@@ -59,6 +59,10 @@ void main() {
         // already carry every current column.)
         raw.execute('ALTER TABLE draft_reports DROP COLUMN expected_version');
         raw.execute('ALTER TABLE pending_tickets DROP COLUMN maintenance_template_id');
+        // The upgrade also continues through 41: the per-instrument notes columns must be absent
+        // (`report_strumenti` exists at v36), exactly as a real v36 database has it.
+        raw.execute('ALTER TABLE report_strumenti DROP COLUMN usage_description');
+        raw.execute('ALTER TABLE report_strumenti DROP COLUMN outcome');
         raw.execute('PRAGMA user_version = 36');
       }),
     );

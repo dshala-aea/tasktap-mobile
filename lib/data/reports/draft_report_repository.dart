@@ -121,6 +121,21 @@ class DraftReportRepository {
     await _db.into(_db.reportStrumenti).insertOnConflictUpdate(row);
   }
 
+  /// Writes only the columns [change] carries (the notes) on the local row of one instrument.
+  Future<void> updateLocalStrumentoNotes(
+    String reportId,
+    String strumentoId,
+    ReportStrumentiCompanion change,
+  ) async {
+    await (_db.update(_db.reportStrumenti)..where(
+          (s) =>
+              s.reportId.equals(reportId) &
+              s.strumentoId.equals(strumentoId) &
+              s.isLocal.equals(true),
+        ))
+        .write(change);
+  }
+
   Future<void> deleteLocalStrumento(String reportId, String strumentoId) async {
     await (_db.delete(_db.reportStrumenti)..where(
           (s) =>

@@ -192,6 +192,9 @@ void main() {
       instance('SyncReportStrumentoDto'),
     );
     expect(rs.calibrationExpiry, DateTime.utc(2026, 10, 7));
+    // The two per-instrument notes are read off the snapshot sample, not just listed in wireKeys.
+    expect(rs.usageDescription, isA<String>());
+    expect(rs.outcome, isA<String>());
 
     SyncTicketAssetDto.fromJson(instance('SyncTicketAssetDto'));
 
