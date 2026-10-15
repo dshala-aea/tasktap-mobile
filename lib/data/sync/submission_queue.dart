@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/utils/error_message.dart';
+import '../../domain/reports/strumenti_selection.dart';
 import '../local/app_database.dart';
 import '../reports/draft_report_repository.dart';
 import '../reports/report_submit_api_client.dart';
@@ -338,6 +339,24 @@ class SubmissionQueue {
     final controlli = await _repo.getControlli(draft.id);
     final allegati = await _repo.getAllegati(draft.id);
 
+    // Instruments: only the selection authored on this device. A draft whose Strumenti step was
+    // never opened has none, and an empty list tells the server to keep the rows it holds. The
+    // calibration expiry is the catalogue's (fresher than the snapshot saved on the row); it is
+    // used ONLY to decide expiredAcknowledged, `expiredAtUse` is never sent.
+    final localStrumenti = await _repo.getLocalStrumenti(draft.id);
+    final catalogue = {for (final s in await _repo.getStrumentiCatalogue()) s.id: s};
+    final strumenti = buildStrumentiBody([
+      for (final r in localStrumenti)
+        if (r.strumentoId != null)
+          StrumentoSelectionInput(
+            strumentoId: r.strumentoId!,
+            calibrationExpiry: catalogue.containsKey(r.strumentoId)
+                ? catalogue[r.strumentoId]!.calibrationExpiry
+                : r.calibrationExpiry,
+            expiredAcknowledged: r.expiredAcknowledged,
+          ),
+    ], workDateLabel(draft.startedAt, draft.createdAt));
+
     // Photo allegati (non-signature, non-pending)
     final signatureIds = {
       draft.customerSignatureAllegatoId,
@@ -373,6 +392,7 @@ class SubmissionQueue {
       aiAssisted: draft.isAiAssisted,
       richiedeSecondoIntervento: draft.richiedeSecondoIntervento,
       photoAllegatoIds: photoIds,
+      strumenti: strumenti,
       staff: staff
           .map(
             (s) => SubmitReportStaffDto(
