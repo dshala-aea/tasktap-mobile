@@ -27012,6 +27012,14 @@
             ],
             "format": "date-time"
           },
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
+          },
           "barcodes": {
             "type": "array",
             "items": {
@@ -28830,6 +28838,14 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "updatedByUserId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The user who last edited this record; null for system changes and for rows that predate this column.",
+            "format": "uuid"
           },
           "name": {
             "type": "string"
