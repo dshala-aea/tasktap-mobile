@@ -6,7 +6,7 @@
 //   - No staff → flagged
 //   - No materiali AND materialiNotRequired=false → flagged
 //   - No materiali but materialiNotRequired=true → OK
-//   - Missing customer firma → flagged
+//   - Missing customer firma → NOT flagged (the server accepts the send without it)
 //   - Missing technician firma → flagged
 //   - All rules pass → isValid=true, isReadyToSubmit=true
 //   - Italian messages for each issue
@@ -176,12 +176,23 @@ void main() {
       expect(result.issues, isNot(contains(DraftValidationIssue.noMateriali)));
     });
 
-    test('flags missingCustomerSignature when customerSignatureAllegatoId null', () async {
-      final draft = await _insertDraft(db, customerSignatureAllegatoId: null);
+    test('does NOT flag a missing customer signature', () async {
+      final draft = await _insertDraft(
+        db,
+        customerSignatureAllegatoId: null,
+        technicianSignatureAllegatoId: 'sig-tech-1',
+      );
 
       final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
-      expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
+      expect(result.issues, isNot(contains(DraftValidationIssue.missingTechnicianSignature)));
+      expect(
+        result.isReadyToSubmit,
+        isTrue,
+        reason:
+            'the server accepts a send with no customer signature (ReportStateMachine.CanInvia), '
+            'so the phone must not block it',
+      );
     });
 
     test('flags missingTechnicianSignature when technicianSignatureAllegatoId null', () async {
@@ -193,14 +204,14 @@ void main() {
     });
   });
 
-  // ── ticketId gates the signature requirement (cantiere-only rapportini) ──────
+  // ── ticketId gates the technician-signature requirement (cantiere-only rapportini) ──
   //
   // Mirrors the backend's identical TicketId.HasValue gate: a cantiere worklog-derived report has
-  // no customer-facing sign-off step, so signatures nobody is ever asked to capture must not
+  // no customer-facing sign-off step, so a signature nobody is ever asked to capture must not
   // strand it in "not ready to submit" forever.
 
   group('validateDraft — ticketId gates the signature requirement', () {
-    test('does not flag missing signatures when the draft has no ticketId', () async {
+    test('does not flag a missing technician signature when the draft has no ticketId', () async {
       final draft = await _insertDraft(
         db,
         ticketId: null,
@@ -210,11 +221,10 @@ void main() {
 
       final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
-      expect(result.issues, isNot(contains(DraftValidationIssue.missingCustomerSignature)));
       expect(result.issues, isNot(contains(DraftValidationIssue.missingTechnicianSignature)));
     });
 
-    test('still flags missing signatures when the draft has a ticketId', () async {
+    test('flags a missing technician signature when the draft has a ticketId', () async {
       final draft = await _insertDraft(
         db,
         ticketId: 'ticket-1',
@@ -224,7 +234,6 @@ void main() {
 
       final result = validateDraft(draft: draft, staffCount: 1, materialiCount: 1);
 
-      expect(result.issues, contains(DraftValidationIssue.missingCustomerSignature));
       expect(result.issues, contains(DraftValidationIssue.missingTechnicianSignature));
     });
   });
@@ -236,6 +245,9 @@ void main() {
       final draft = await _insertDraft(
         db,
         title: '',
+        // Overrides the fixture's real default location: "bare minimum" has to be genuinely bare
+        // for the missingLocation expectation below to hold.
+        locationId: '',
         customerId: null,
         customerSignatureAllegatoId: null,
         technicianSignatureAllegatoId: null,
@@ -254,12 +266,14 @@ void main() {
         result.issues,
         containsAll([
           DraftValidationIssue.missingTitle,
+          DraftValidationIssue.missingLocation,
           DraftValidationIssue.missingCustomer,
           DraftValidationIssue.noStaff,
           DraftValidationIssue.noMateriali,
-          DraftValidationIssue.missingCustomerSignature,
           DraftValidationIssue.missingTechnicianSignature,
         ]),
+        reason:
+            'the missing customer signature is deliberately absent: it no longer blocks a send',
       );
       expect(result.isValid, isFalse);
     });
