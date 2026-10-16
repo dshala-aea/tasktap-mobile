@@ -290,6 +290,9 @@ class _EditTicketScreenState extends ConsumerState<EditTicketScreen> {
                         // not either (the server is set-only). Both are drawn, neither is offered.
                         contractEditable: false,
                         commessaClearable: false,
+                        // The ticket's own Riferimento is authoritative: changing the customer
+                        // here must not rewrite it.
+                        prefillAgentFromCustomer: false,
                       ),
                       _EditStep.dettagli => StepDettagliTicket(
                         key: const ValueKey(_EditStep.dettagli),

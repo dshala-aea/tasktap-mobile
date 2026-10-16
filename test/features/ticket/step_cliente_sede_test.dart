@@ -32,11 +32,13 @@ class _ClienteSedeHarness extends StatefulWidget {
     required this.initialState,
     this.contractEditable = true,
     this.commessaClearable = true,
+    this.prefillAgentFromCustomer = true,
   });
 
   final NewTicketFormState initialState;
   final bool contractEditable;
   final bool commessaClearable;
+  final bool prefillAgentFromCustomer;
 
   @override
   State<_ClienteSedeHarness> createState() => _ClienteSedeHarnessState();
@@ -60,6 +62,7 @@ class _ClienteSedeHarnessState extends State<_ClienteSedeHarness> {
           state: _state,
           contractEditable: widget.contractEditable,
           commessaClearable: widget.commessaClearable,
+          prefillAgentFromCustomer: widget.prefillAgentFromCustomer,
           onChanged: (s) {
             changes.add(s);
             setState(() => _state = s);
@@ -169,6 +172,7 @@ void main() {
     NewTicketFormState state = seeded,
     bool contractEditable = true,
     bool commessaClearable = true,
+    bool prefillAgentFromCustomer = true,
   }) async {
     final key = GlobalKey<_ClienteSedeHarnessState>();
     await tester.pumpWidget(
@@ -182,6 +186,7 @@ void main() {
           initialState: state,
           contractEditable: contractEditable,
           commessaClearable: commessaClearable,
+          prefillAgentFromCustomer: prefillAgentFromCustomer,
         ),
       ),
     );
@@ -553,6 +558,139 @@ void main() {
     expect(fieldText(tester, _contrattoField), 'Contratto Nuovo');
     expect(key.currentState!.state.contractId, isNull);
 
+    await unmount(tester);
+  });
+
+  // ── Riferimento: pre-filled from the customer's agent ───────────────────────
+
+  /// Beta Spa with whatever agent the test wants, and the mirrored agents a sync would have written.
+  Future<void> insertBeta({String? agentId, List<String> mirroredAgents = const []}) async {
+    await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            id: 'cust-2',
+            tenantId: 'tenant-1',
+            createdAt: DateTime.utc(2026, 1, 1),
+            companyName: 'Beta Spa',
+            agentId: Value(agentId),
+          ),
+        );
+    for (final id in mirroredAgents) {
+      await db
+          .into(db.agents)
+          .insert(
+            AgentsCompanion.insert(
+              id: id,
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              nome: 'Agente $id',
+            ),
+          );
+    }
+  }
+
+  testWidgets('picking a customer with a mirrored agent pre-fills Riferimento', (tester) async {
+    await insertBeta(agentId: 'ag-1', mirroredAgents: ['ag-1']);
+    final key = await pumpStep(tester);
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.customerId, 'cust-2');
+    expect(key.currentState!.state.agentId, 'ag-1');
+    expect(key.currentState!.state.autoFilledAgentId, 'ag-1');
+    await unmount(tester);
+  });
+
+  testWidgets('a customer whose agent is not mirrored leaves Riferimento empty', (tester) async {
+    // The agent id is on the customer, but this device holds no row to label it with: nothing is
+    // pre-filled rather than a blank selection over an id the technician cannot see.
+    await insertBeta(agentId: 'ag-missing');
+    final key = await pumpStep(tester);
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.customerId, 'cust-2');
+    expect(key.currentState!.state.agentId, isNull);
+    await unmount(tester);
+  });
+
+  testWidgets('a customer without an agent leaves Riferimento empty', (tester) async {
+    await insertBeta(mirroredAgents: ['ag-1']);
+    final key = await pumpStep(tester);
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.agentId, isNull);
+    await unmount(tester);
+  });
+
+  testWidgets('an agent the technician chose is not overwritten by the new customer', (
+    tester,
+  ) async {
+    await insertBeta(agentId: 'ag-1', mirroredAgents: ['ag-1', 'ag-2']);
+    final key = await pumpStep(tester, state: seeded.copyWith(agentId: 'ag-2'));
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.customerId, 'cust-2');
+    expect(key.currentState!.state.agentId, 'ag-2');
+    await unmount(tester);
+  });
+
+  testWidgets('a previous customer\'s pre-filled agent is replaced, or cleared when there is none', (
+    tester,
+  ) async {
+    await insertBeta(agentId: 'ag-2', mirroredAgents: ['ag-1', 'ag-2']);
+    final key = await pumpStep(
+      tester,
+      state: seeded.copyWith(agentId: 'ag-1', autoFilledAgentId: 'ag-1'),
+    );
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.agentId, 'ag-2');
+    await unmount(tester);
+  });
+
+  testWidgets('a previous pre-fill is cleared when the new customer has no agent', (tester) async {
+    await insertBeta(mirroredAgents: ['ag-1']);
+    final key = await pumpStep(
+      tester,
+      state: seeded.copyWith(agentId: 'ag-1', autoFilledAgentId: 'ag-1'),
+    );
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.agentId, isNull);
+    expect(key.currentState!.state.autoFilledAgentId, isNull);
+    await unmount(tester);
+  });
+
+  testWidgets('edit mode (prefillAgentFromCustomer: false) never rewrites the reference', (
+    tester,
+  ) async {
+    await insertBeta(agentId: 'ag-1', mirroredAgents: ['ag-1', 'ag-2']);
+    final key = await pumpStep(
+      tester,
+      state: seeded.copyWith(agentId: 'ag-2'),
+      prefillAgentFromCustomer: false,
+    );
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.customerId, 'cust-2');
+    expect(key.currentState!.state.agentId, 'ag-2');
+    await unmount(tester);
+  });
+
+  testWidgets('edit mode leaves an empty reference empty', (tester) async {
+    await insertBeta(agentId: 'ag-1', mirroredAgents: ['ag-1']);
+    final key = await pumpStep(tester, prefillAgentFromCustomer: false);
+
+    await selectBetaSpa(tester);
+
+    expect(key.currentState!.state.agentId, isNull);
     await unmount(tester);
   });
 }

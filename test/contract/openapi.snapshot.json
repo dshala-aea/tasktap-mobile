@@ -23854,6 +23854,14 @@
               "string"
             ],
             "description": "Business/legacy customer code (W6b Task 8). Nullable, tenant-scoped partial-unique \u2014\nsee string? Customer.Codice. Default camelCase, no override needed."
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional agent (referente) this customer belongs to; tenant-guarded in\nCustomerService.",
+            "format": "uuid"
           }
         },
         "description": "Request model for creating a customer."
@@ -25115,6 +25123,14 @@
             ],
             "description": "Date and time when the entity was last updated.",
             "format": "date-time"
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The one agent (referente) this customer belongs to \u2014 an agent has many customers, a customer\nhas at most one agent. A new ticket for this customer pre-fills its Riferimento\n(Guid? Ticket.AgentId) from this value; the ticket's own value stays authoritative\nafterwards, so re-pointing the customer never rewrites existing tickets.",
+            "format": "uuid"
           }
         },
         "description": "Represents a customer/client (Cliente) in the system."
@@ -35779,6 +35795,14 @@
               "string"
             ],
             "description": "Business/legacy customer code (W6b Task 8). Null = not provided, leaves the existing\nvalue untouched."
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Sets the customer's agent when supplied (tenant-guarded). Clearing is explicit \u2014\nbool UpdateCustomerRequest.ClearAgent \u2014 because a plain null means \"not provided\" under this DTO's\npartial-update convention.",
+            "format": "uuid"
           }
         },
         "description": "Request model for updating a customer. Only non-null properties are applied."
