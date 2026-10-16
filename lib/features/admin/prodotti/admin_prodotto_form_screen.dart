@@ -247,7 +247,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
       if (mounted) {
         showAppToast(
           context,
-          message: _isEditing ? 'Prodotto aggiornato' : 'Prodotto creato',
+          message: _isEditing ? 'Asset aggiornato' : 'Asset creato',
           tone: ToastTone.success,
         );
         context.pop(true);
@@ -289,7 +289,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
     return Scaffold(
       backgroundColor: context.colors.bg2,
       appBar: ScreenHeaderBar(
-        title: _isEditing ? 'Modifica prodotto' : 'Nuovo prodotto',
+        title: _isEditing ? 'Modifica asset' : 'Nuovo asset',
         showBack: true,
       ),
       body: Form(
@@ -501,7 +501,7 @@ class _AdminProdottoFormScreenState extends ConsumerState<AdminProdottoFormScree
                 const SizedBox(height: 16),
 
                 AppButton(
-                  label: _isEditing ? 'Salva modifiche' : 'Crea prodotto',
+                  label: _isEditing ? 'Salva modifiche' : 'Crea asset',
                   onPressed: _isSaving ? null : _save,
                   isLoading: _isSaving,
                 ),

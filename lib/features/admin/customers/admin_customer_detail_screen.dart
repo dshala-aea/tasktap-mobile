@@ -547,10 +547,10 @@ class _ProdottiSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionTitle(
-          title: 'Prodotti assistenza',
+          title: 'Asset',
           action: IconButton(
             icon: const Icon(LucideIcons.plus),
-            tooltip: 'Nuovo prodotto',
+            tooltip: 'Nuovo asset',
             onPressed: () => context.push('/altro/prodotti/nuovo'),
           ),
         ),
@@ -566,8 +566,8 @@ class _ProdottiSection extends ConsumerWidget {
             if (prodotti.isEmpty) {
               return const EmptyState(
                 icon: LucideIcons.wrench,
-                title: 'Nessun prodotto',
-                body: 'Non risultano prodotti in assistenza per questo cliente.',
+                title: 'Nessun asset',
+                body: 'Non risultano asset per questo cliente.',
               );
             }
             return Padding(

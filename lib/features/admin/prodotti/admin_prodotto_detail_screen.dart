@@ -93,7 +93,7 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                           capability: 'contratti.contract.write',
                           child: HeaderIconBtn(
                             icon: LucideIcons.trash2,
-                            label: 'Elimina prodotto',
+                            label: 'Elimina asset',
                             glass: true,
                             onTap: () => _deleteProdotto(context, ref, id, name),
                           ),
@@ -211,9 +211,9 @@ Future<void> _deleteProdotto(
 ) async {
   final confirmed = await confirmDeleteDialog(
     context,
-    title: 'Eliminare il prodotto?',
+    title: 'Eliminare l\'asset?',
     message:
-        'Il prodotto "$name" verrà eliminato definitivamente. L\'operazione non può '
+        'L\'asset "$name" verrà eliminato definitivamente. L\'operazione non può '
         'essere annullata.',
   );
   if (!confirmed || !context.mounted) return;
@@ -222,14 +222,14 @@ Future<void> _deleteProdotto(
     await ref.read(adminApiClientProvider).deleteProdottoAssistenza(prodottoId);
     unawaited(ref.read(syncProvider.notifier).performSync());
     if (context.mounted) {
-      showAppToast(context, message: 'Prodotto eliminato', tone: ToastTone.success);
+      showAppToast(context, message: 'Asset eliminato', tone: ToastTone.success);
       context.pop(true);
     }
   } catch (e) {
     if (context.mounted) {
       showAppToast(
         context,
-        message: humanErrorMessage(e, azione: 'eliminare il prodotto'),
+        message: humanErrorMessage(e, azione: 'eliminare l\'asset'),
         tone: ToastTone.error,
       );
     }
@@ -329,7 +329,7 @@ class _MatricoleSection extends ConsumerWidget {
     final confirmed = await confirmDeleteDialog(
       context,
       title: 'Rimuovere la matricola?',
-      message: 'Vuoi rimuovere la matricola "$numero" da questo prodotto?',
+      message: 'Vuoi rimuovere la matricola "$numero" da questo asset?',
       confirmLabel: 'Rimuovi',
     );
     if (!confirmed || !context.mounted) return;

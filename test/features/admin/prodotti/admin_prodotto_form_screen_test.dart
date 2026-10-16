@@ -179,7 +179,7 @@ void main() {
       // Codice — the second TextFormField on the form (after Nome).
       await tester.enterText(find.byType(TextFormField).at(1), 'PROD-001');
 
-      await tester.tap(find.text('Crea prodotto'));
+      await tester.tap(find.text('Crea asset'));
       await tester.pumpAndSettle();
 
       final captured = verify(
@@ -236,7 +236,7 @@ void main() {
       await tester.tap(find.text('Sede Milano').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea prodotto'));
+      await tester.tap(find.text('Crea asset'));
       await tester.pumpAndSettle();
 
       expect(fetchCalls, greaterThan(fetchesBeforeSave));
@@ -256,7 +256,7 @@ void main() {
       await tester.tap(find.text('Sede Milano').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Crea prodotto'));
+      await tester.tap(find.text('Crea asset'));
       await tester.pumpAndSettle();
 
       final captured = verify(

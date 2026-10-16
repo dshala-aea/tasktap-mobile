@@ -233,7 +233,7 @@ void main() {
     expect(
       find.text(
         'Il riferimento non è più valido: scegline un altro. '
-        'La copertura è stata azzerata: i prodotti vanno scelti di nuovo.',
+        'La copertura è stata azzerata: gli asset vanno scelti di nuovo.',
       ),
       findsOneWidget,
     );
@@ -273,7 +273,7 @@ void main() {
     // The riepilogo drops an id it cannot label rather than print it; this chip cannot be dropped —
     // it is the only way to remove the selection — so it gets a state, not a GUID a technician would
     // read as a product's name.
-    expect(find.text('Prodotto non disponibile'), findsOneWidget);
+    expect(find.text('Asset non disponibile'), findsOneWidget);
     expect(find.text('ghost-1'), findsNothing);
 
     await unmount(tester);
