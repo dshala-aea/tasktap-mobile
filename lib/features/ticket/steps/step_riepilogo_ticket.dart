@@ -101,7 +101,7 @@ class StepRiepilogoTicket extends ConsumerWidget {
                 valueColor: state.typeId == null ? context.colors.red : null,
               ),
               if (refs.prodotti.isNotEmpty)
-                KeyVal(label: 'Prodotti assistenza', value: refs.prodotti.join(', ')),
+                KeyVal(label: 'Asset', value: refs.prodotti.join(', ')),
               if (statusName != null) KeyVal(label: 'Stato', value: statusName),
               KeyVal(label: 'Priorità', value: state.priority),
               if (state.description != null && state.description!.isNotEmpty)

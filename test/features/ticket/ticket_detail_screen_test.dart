@@ -850,7 +850,7 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Prodotti'));
+      await tester.tap(find.text('Asset'));
       await tester.pumpAndSettle();
 
       expect(find.text('Caldaia Murale'), findsOneWidget);
@@ -867,10 +867,10 @@ void main() {
       await pump(tester, dio: dio, isOnline: true);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Prodotti'));
+      await tester.tap(find.text('Asset'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nessun prodotto'), findsOneWidget);
+      expect(find.text('Nessun asset'), findsOneWidget);
       await resetAndDispose(tester);
     });
 
@@ -880,11 +880,11 @@ void main() {
       await pump(tester, isOnline: false);
       await tester.binding.setSurfaceSize(const Size(800, 1200));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Prodotti'));
+      await tester.tap(find.text('Asset'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Prodotti non disponibili offline'), findsOneWidget);
-      expect(find.text('Nessun prodotto'), findsNothing);
+      expect(find.text('Asset non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun asset'), findsNothing);
       await resetAndDispose(tester);
     });
   });

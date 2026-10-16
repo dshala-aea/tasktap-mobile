@@ -38,7 +38,7 @@ const String _kNoneSentinel = '';
 /// this chip is also the only way to remove a selection, so it cannot be dropped. It gets a name
 /// that reads as a state, in the "… non disponibile" shape the rest of the app uses for one, and
 /// never as a product.
-const String _kUnresolvedProdottoLabel = 'Prodotto non disponibile';
+const String _kUnresolvedProdottoLabel = 'Asset non disponibile';
 
 class StepDettagliTicket extends ConsumerStatefulWidget {
   const StepDettagliTicket({
@@ -197,7 +197,7 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
         BlamedFieldNotice(
           field: 'prodottoAssistenzaIds',
           blamedField: widget.blamedField,
-          detail: 'La copertura è stata azzerata: i prodotti vanno scelti di nuovo.',
+          detail: 'La copertura è stata azzerata: gli asset vanno scelti di nuovo.',
         ),
         if (ids.isNotEmpty) ...[
           Wrap(
@@ -229,17 +229,17 @@ class _StepDettagliTicketState extends ConsumerState<StepDettagliTicket> {
             // Re-keyed after every pick (see _prodottoPickerEpoch) so the field empties itself and
             // the next product can be typed for immediately.
             key: ValueKey('prodotto-adder-$_prodottoPickerEpoch'),
-            label: 'Prodotti assistenza',
+            label: 'Asset',
             localItems: prodotti,
             search: (q) async => customerId == null
                 ? const <ReferenceOption>[]
                 : ref
                       .read(referenceSearchClientProvider)
                       .searchProdottiAssistenza(customerId: customerId, query: q),
-            hint: 'Cerca prodotto…',
+            hint: 'Cerca asset…',
             emptyCacheHint: customerId == null
                 ? 'Seleziona prima un cliente.'
-                : 'Nessun prodotto in cache. Cerca per nome.',
+                : 'Nessun asset in cache. Cerca per nome.',
             enabled: customerId != null,
             onSelected: (option) {
               // A pick released by editing the text (null) is not a product to add.

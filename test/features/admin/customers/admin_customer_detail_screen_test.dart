@@ -236,7 +236,7 @@ void main() {
 
       await pumpScreen(tester);
 
-      expect(find.text('Prodotti assistenza'), findsOneWidget);
+      expect(find.text('Asset'), findsOneWidget);
       expect(find.text('Caldaia condominio'), findsOneWidget);
       expect(find.text('SN-42'), findsOneWidget);
 
@@ -256,7 +256,7 @@ void main() {
 
       await pumpScreen(tester);
 
-      expect(find.text('Nessun prodotto'), findsOneWidget);
+      expect(find.text('Nessun asset'), findsOneWidget);
 
       await teardown(tester);
     });

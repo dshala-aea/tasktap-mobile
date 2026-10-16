@@ -74,7 +74,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     'Dettagli',
     'Report',
     'Controllo',
-    'Prodotti',
+    'Asset',
     'Allegati',
     'Ore',
     'Pianificazioni',
@@ -739,7 +739,7 @@ class _Prose extends StatelessWidget {
 Widget _sectionContent(String label, String ticketId) => switch (label) {
   'Report' => _ReportTab(ticketId: ticketId),
   'Controllo' => _ControlloTab(ticketId: ticketId),
-  'Prodotti' => _ProdottiTab(ticketId: ticketId),
+  'Asset' => _ProdottiTab(ticketId: ticketId),
   'Allegati' => _AllegatiTab(ticketId: ticketId),
   'Ore' => _OreTab(ticketId: ticketId),
   'Pianificazioni' => _PianificazioniTab(ticketId: ticketId),
@@ -755,7 +755,7 @@ IconData _sectionIcon(String label) => switch (label) {
   'Dettagli' => LucideIcons.clipboardList,
   'Report' => LucideIcons.fileText,
   'Controllo' => LucideIcons.clipboardCheck,
-  'Prodotti' => LucideIcons.wrench,
+  'Asset' => LucideIcons.wrench,
   'Allegati' => LucideIcons.paperclip,
   'Ore' => LucideIcons.clock,
   'Pianificazioni' => LucideIcons.calendarDays,
@@ -905,18 +905,18 @@ class _ProdottiTab extends ConsumerWidget {
       error: (e, _) => UnavailableState.forFetchError(
         icon: LucideIcons.wrench,
         offline: e is TicketDetailOfflineException,
-        offlineTitle: 'Prodotti non disponibili offline',
+        offlineTitle: 'Asset non disponibili offline',
         offlineBody:
-            'I prodotti di questo ticket richiedono una connessione: riprova quando torni online.',
-        errorTitle: 'Impossibile caricare i prodotti',
+            'Gli asset di questo ticket richiedono una connessione: riprova quando torni online.',
+        errorTitle: 'Impossibile caricare gli asset',
         errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
       ).paddedForTab(),
       data: (prodotti) {
         if (prodotti.isEmpty) {
           return const _EmptyTab(
             icon: LucideIcons.wrench,
-            label: 'Nessun prodotto',
-            body: 'Nessun prodotto in assistenza è collegato a questo ticket.',
+            label: 'Nessun asset',
+            body: 'Nessun asset è collegato a questo ticket.',
           );
         }
         return Padding(
@@ -951,7 +951,7 @@ class _ProdottoRow extends StatelessWidget {
       return (v == null || v.trim().isEmpty) ? null : v.trim();
     }
 
-    final name = text('name') ?? 'Prodotto';
+    final name = text('name') ?? 'Asset';
     final codice = text('codice');
     final serial = text('serialNumber');
     final brandModel = [text('marchio'), text('modello')].whereType<String>().join(' ');

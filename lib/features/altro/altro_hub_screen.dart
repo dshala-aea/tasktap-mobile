@@ -136,7 +136,7 @@ class AltroHubScreen extends ConsumerWidget {
       ),
       (
         icon: LucideIcons.package,
-        label: 'Prodotti',
+        label: 'Asset',
         module: 'prodotti',
         onTap: () => context.push('/altro/prodotti'),
       ),

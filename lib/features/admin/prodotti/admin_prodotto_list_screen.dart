@@ -51,7 +51,7 @@ class AdminProdottoListScreen extends ConsumerWidget {
         // this same change.
         padding: EdgeInsets.only(bottom: context.navClearance),
         child: AppFab(
-          tooltip: 'Nuovo prodotto',
+          tooltip: 'Nuovo asset',
           onPressed: () => context.push('/altro/prodotti/nuovo'),
         ),
       ),
@@ -97,7 +97,7 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
         slivers: [
           SliverToBoxAdapter(
             child: ScreenHeader(
-              title: 'Prodotti Assistenza',
+              title: 'Asset',
               subtitle: '${filtered.length} totali',
               showBack: true,
             ),
@@ -113,10 +113,10 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
             SliverToBoxAdapter(
               child: EmptyState(
                 icon: LucideIcons.wrench,
-                title: 'Nessun prodotto',
+                title: 'Nessun asset',
                 body: searching
-                    ? 'Nessun prodotto corrisponde alla ricerca.'
-                    : 'Crea un nuovo prodotto con il pulsante +.',
+                    ? 'Nessun asset corrisponde alla ricerca.'
+                    : 'Crea un nuovo asset con il pulsante +.',
               ),
             )
           else

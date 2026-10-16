@@ -191,7 +191,7 @@ void main() {
       // HeaderIconBtn announces itself via Semantics(label:), not a Tooltip widget — mirrors
       // admin_cantiere_detail_screen_test.dart's own convention for the same widget.
       await tester.tap(
-        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina prodotto'),
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina asset'),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Elimina').last);
@@ -207,7 +207,7 @@ void main() {
       await openDetail(tester);
 
       expect(
-        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina prodotto'),
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina asset'),
         findsNothing,
       );
       expect(find.byTooltip('Modifica'), findsNothing);
