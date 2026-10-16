@@ -141,6 +141,30 @@ class ImpostazioniScreen extends ConsumerWidget {
               ),
             ),
 
+            // ── Notifiche — per tipo ──────────────────────────────────────
+            //
+            // The switches above are families; this opens one switch per event. Hidden unless the
+            // user holds `sistema.notification.read` (the route is guarded by the same capability).
+            SliverToBoxAdapter(
+              child: CapabilityGate(
+                capability: 'sistema.notification.read',
+                child: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md),
+                  child: _SettingsGroup(
+                    children: [
+                      _LinkRow(
+                        icon: LucideIcons.bell,
+                        title: 'Preferenze notifiche',
+                        subtitle: 'Scegli quali avvisi ricevere, uno per uno',
+                        onTap: () => context.push(AppRoutes.altroPreferenzeNotifiche),
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
             // ── App ───────────────────────────────────────────────────────
             const SliverToBoxAdapter(child: _SettingsSectionTitle(title: 'App')),
             SliverToBoxAdapter(

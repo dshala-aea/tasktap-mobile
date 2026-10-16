@@ -7,6 +7,7 @@ import '../../features/altro/altro_hub_screen.dart';
 import '../../features/altro/i_miei_dati_screen.dart';
 import '../../features/altro/impostazioni_screen.dart';
 import '../../features/altro/notifiche_screen.dart';
+import '../../features/altro/notification_preferences_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
 import '../../presentation/providers/auth_providers.dart';
 import '../../presentation/screens/home/home_shell.dart';
@@ -145,6 +146,9 @@ abstract final class AppRoutes {
   static const String altroImpostazioni = '/altro/impostazioni';
   static const String altroNotifiche = '/altro/notifiche';
 
+  /// Per-type notification switches (`/api/notifications/preferences`), reached from Impostazioni.
+  static const String altroPreferenzeNotifiche = '/altro/preferenze-notifiche';
+
   /// The subject-access surface: what the company has on record about this person.
   static const String altroIMieiDati = '/altro/i-miei-dati';
 
@@ -280,6 +284,7 @@ final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 /// alone would let a held-read/denied-write user past the button-level `CapabilityGate` that hides
 /// `nuovo`/`modifica` triggers in the UI, by deep-linking straight to the path.
 final _routeRequirements = <(String pathPrefix, RouteRequirement requirement, RouteRequirement? writeRequirement)>[
+  ('/altro/preferenze-notifiche', const RouteRequirement.capability('sistema.notification.read'), null),
   ('/altro/pianificazioni', const RouteRequirement.capability('pianificazione.schedule.write'), null),
   ('/altro/rapportini-admin', const RouteRequirement.capability('rapportini.report.read'), null),
   ('/altro/rapportini', const RouteRequirement.module('rapportini'), null),
@@ -634,6 +639,10 @@ GoRouter buildRouter(WidgetRef ref) {
                   GoRoute(
                     path: 'notifiche',
                     builder: (context, state) => const NotificheScreen(),
+                  ),
+                  GoRoute(
+                    path: 'preferenze-notifiche',
+                    builder: (context, state) => const NotificationPreferencesScreen(),
                   ),
                   GoRoute(
                     path: 'i-miei-dati',
