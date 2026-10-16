@@ -6,11 +6,16 @@
 // TicketMaterialiEditor.tsx already allowed this via the ticket detail page's Materials tab).
 
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
+import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
+import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_detail_api_client.dart';
 import 'package:tasktap_mobile/features/ticket/ticket_materiali_editor.dart';
 
@@ -223,5 +228,147 @@ void main() {
     expect(savedRows!.single.materialeId, isNull);
     expect(savedRows!.single.freeTextName, 'Guarnizione custom');
     expect(savedRows!.single.quantity, 3);
+  });
+
+  group('barcode scan', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = AppDatabase(NativeDatabase.memory());
+      await db
+          .into(db.materiali)
+          .insert(
+            MaterialiCompanion.insert(
+              id: 'mat-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              code: 'ART001',
+              name: 'Valvola idraulica',
+              unitOfMeasure: const Value('pz'),
+            ),
+          );
+      await db
+          .into(db.materialeBarcodes)
+          .insert(
+            MaterialeBarcodesCompanion.insert(
+              id: 'bc-1',
+              tenantId: 'tenant-1',
+              createdAt: DateTime.utc(2026, 1, 1),
+              materialeId: 'mat-1',
+              barcode: '8001234567890',
+            ),
+          );
+    });
+
+    tearDown(() => db.close());
+
+    // Offline on purpose: an unknown code must resolve from the local mirror alone, with no
+    // live-lookup call (the MockDio has no stub for it).
+    Widget wrapScan(
+      TicketMaterialiEditor editor,
+    ) {
+      return ProviderScope(
+        overrides: [
+          dioProvider.overrideWithValue(mockDio),
+          appDatabaseProvider.overrideWithValue(db),
+          isOnlineProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(home: Scaffold(body: SingleChildScrollView(child: editor))),
+      );
+    }
+
+    TicketMaterialiEditor editorScanning(
+      String? code,
+      void Function(List<TicketMaterialeWriteRow>) onSaved,
+    ) {
+      return TicketMaterialiEditor(
+        initialRows: const [],
+        scanner: (_) async => code,
+        onSave: (rows) async => onSaved(rows),
+        onCancel: () {},
+      );
+    }
+
+    testWidgets('shows the scan button', (tester) async {
+      await tester.pumpWidget(wrapScan(editorScanning(null, (_) {})));
+
+      expect(find.text('Scansiona codice'), findsOneWidget);
+
+      // Disposes the toast overlay so its auto-dismiss Timer doesn't outlive the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a known code adds the article as a row', (tester) async {
+      List<TicketMaterialeWriteRow>? saved;
+      await tester.pumpWidget(wrapScan(editorScanning('8001234567890', (r) => saved = r)));
+
+      await tester.tap(find.text('Scansiona codice'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Valvola idraulica'), findsOneWidget);
+
+      await tester.tap(find.text('Salva'));
+      await tester.pumpAndSettle();
+
+      expect(saved!.single.materialeId, 'mat-1');
+      expect(saved!.single.freeTextName, isNull);
+      expect(saved!.single.quantity, 1);
+      expect(saved!.single.unitOfMeasure, 'pz');
+
+      // Disposes the toast overlay so its auto-dismiss Timer doesn't outlive the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('scanning the same code again increments the quantity, no second row', (
+      tester,
+    ) async {
+      List<TicketMaterialeWriteRow>? saved;
+      await tester.pumpWidget(wrapScan(editorScanning('8001234567890', (r) => saved = r)));
+
+      await tester.tap(find.text('Scansiona codice'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Scansiona codice'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Salva'));
+      await tester.pumpAndSettle();
+
+      expect(saved!.length, 1);
+      expect(saved!.single.quantity, 2);
+
+      // Disposes the toast overlay so its auto-dismiss Timer doesn't outlive the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('an unknown code becomes a free-text row and says so', (tester) async {
+      List<TicketMaterialeWriteRow>? saved;
+      await tester.pumpWidget(wrapScan(editorScanning('999000', (r) => saved = r)));
+
+      await tester.tap(find.text('Scansiona codice'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('non in catalogo'), findsOneWidget);
+
+      await tester.tap(find.text('Salva'));
+      await tester.pumpAndSettle();
+
+      expect(saved!.single.materialeId, isNull);
+      expect(saved!.single.freeTextName, '999000');
+
+      // Disposes the toast overlay so its auto-dismiss Timer doesn't outlive the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('backing out of the scanner adds nothing', (tester) async {
+      await tester.pumpWidget(wrapScan(editorScanning(null, (_) {})));
+
+      await tester.tap(find.text('Scansiona codice'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextFormField), findsNothing);
+
+      // Disposes the toast overlay so its auto-dismiss Timer doesn't outlive the test.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }
