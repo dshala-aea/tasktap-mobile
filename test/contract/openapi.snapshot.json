@@ -7879,6 +7879,137 @@
         }
       }
     },
+    "/api/Notifications/preferences": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "The caller's effective preference for every notification type a user may switch off.",
+        "description": "Types that are always delivered (seat-limit and licence alerts) are not listed. A type the user\nnever touched comes back `enabled: true`, `default: true`.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Sets one or many of the caller's notification preferences, and returns the full effective list.",
+        "description": "Only ever the caller's own. An unknown type, or one that is always delivered, is a 400 and\nnothing in the request is applied. A disabled type suppresses both the in-app row and the push.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetNotificationPreferencesRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetNotificationPreferencesRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetNotificationPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPreferencesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/Notifications/announcements": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Broadcasts a SystemAnnouncement to the tenant's active users (admin only).",
+        "description": "`audience` is `all` or `role`; with `role`, `role` names the target\n(User, Technician, Office, Admin). Users who switched SystemAnnouncement off are skipped.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendAnnouncementRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendAnnouncementRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendAnnouncementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Notifications/{id}": {
       "get": {
         "tags": [
@@ -21496,6 +21627,32 @@
           }
         }
       },
+      "AnnouncementResponse": {
+        "required": [
+          "recipients",
+          "delivered"
+        ],
+        "type": "object",
+        "properties": {
+          "recipients": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "delivered": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "How many users the announcement addressed and how many actually received it."
+      },
       "AssignStrumentoHolderRequest": {
         "required": [
           "holderUserId"
@@ -27921,6 +28078,75 @@
         },
         "description": "The notification list page, plus the unread total the badge reads."
       },
+      "NotificationPreferenceChangeDto": {
+        "required": [
+          "type",
+          "enabled"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "description": "One requested change: `type` is the notification type's int ordinal."
+      },
+      "NotificationPreferenceItem": {
+        "required": [
+          "type",
+          "key",
+          "enabled",
+          "default"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Enum ordinal, the same value `Notification.type` carries.",
+            "format": "int32"
+          },
+          "key": {
+            "type": "string",
+            "description": "Enum name (e.g. \"TicketAssigned\") \u2014 the stable key for client labels."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "The caller's effective setting (absent row = true)."
+          },
+          "default": {
+            "type": "boolean",
+            "description": "What the type is when the user has expressed no preference. Always true today."
+          }
+        },
+        "description": "One user-controllable notification type and the caller's effective choice for it."
+      },
+      "NotificationPreferencesResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationPreferenceItem"
+            }
+          }
+        },
+        "description": "The caller's effective preferences, one item per user-controllable type."
+      },
       "NotificationTypeEnum": {
         "type": "integer",
         "description": "Defines the types of notifications in the system."
@@ -31624,6 +31850,33 @@
         },
         "description": "Payload for the unauthenticated self-registration endpoint\n(`POST /api/signup/register`). The backend creates the identity-provider\nuser and provisions the new tenant + initial administrator in one operation."
       },
+      "SendAnnouncementRequest": {
+        "required": [
+          "title",
+          "message",
+          "audience",
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Body of POST /api/notifications/announcements."
+      },
       "SendReportEmailRequest": {
         "type": "object",
         "properties": {
@@ -31695,6 +31948,21 @@
           }
         },
         "description": "The full matrix to store, replacing whatever the tenant holds today."
+      },
+      "SetNotificationPreferencesRequest": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationPreferenceChangeDto"
+            }
+          }
+        },
+        "description": "Body of PUT /api/notifications/preferences."
       },
       "SetStockMinimoRequest": {
         "required": [
