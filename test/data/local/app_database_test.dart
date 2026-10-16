@@ -166,7 +166,7 @@ void main() {
     late Map<String, String> realTableDdl;
 
     setUpAll(() async {
-      realTableDdl = await _currentTableDdl(['tickets', 'pending_tickets']);
+      realTableDdl = await _currentTableDdl(['tickets', 'pending_tickets', 'customers']);
     });
 
     test('upgrading from 33 adds both columns with defaults and keeps existing rows', () async {
@@ -186,6 +186,12 @@ void main() {
             // step, and schema 38's `alterTable` copies every current column out of both (see
             // [_currentTableDdl]). `pending_tickets` is then rewound to what v33 held — schema 37 is
             // what adds those five columns, and it runs before 38 does.
+            //
+            // `customers` too: schema 42 adds `customers.agent_id` and a real device has had that
+            // table since its first release, so a fixture without it fails the step with `no such
+            // table: customers` — a fixture gap, not a device failure. The current DDL already
+            // declares `agent_id`, so the step's `PRAGMA table_info` guard skips the add here; the
+            // add path itself is covered by migration_v42_test.dart.
             for (final sql in realTableDdl.values) {
               raw.execute(sql);
             }
