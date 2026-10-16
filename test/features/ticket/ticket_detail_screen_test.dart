@@ -108,6 +108,11 @@ GoRouter _makeChipRouter({required String ticketId}) => GoRouter(
       builder: (_, state) => TicketDetailScreen(ticketId: state.pathParameters['id']!),
     ),
     GoRoute(
+      path: '/altro/rapportini/view/:id',
+      builder: (_, state) =>
+          Scaffold(body: Center(child: Text('REPORT-VIEW-MARKER:${state.pathParameters['id']}'))),
+    ),
+    GoRoute(
       path: AppRoutes.cantieriDetail,
       builder: (_, state) => Scaffold(
         body: Center(
@@ -125,12 +130,13 @@ Widget _buildDetailWithRouter({
   required MockAuthRepository repo,
   required GoRouter router,
   bool isOnline = false,
+  Dio? dio,
 }) {
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       appDatabaseProvider.overrideWithValue(db),
-      dioProvider.overrideWithValue(MockDio()),
+      dioProvider.overrideWithValue(dio ?? MockDio()),
       isOnlineProvider.overrideWithValue(isOnline),
       geocodingServiceProvider.overrideWithValue(_NullGeocodingService()),
     ],
@@ -853,6 +859,48 @@ void main() {
       // Uppercased by StatusStamp now (Il Documento's stamp device) — see
       // status_pill_test.dart's own note on this rendering change.
       expect(find.text('INVIATO'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('tapping a listed rapportino opens its read-only view', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      when(
+        () => dio.get<Map<String, dynamic>>(
+          '/api/Reports',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer(
+        (_) async => _okResponse({
+          'items': [
+            {
+              'id': 'rep-1',
+              'title': 'Sostituzione valvola',
+              'stato': 1,
+              'createdAt': '2026-07-01T10:00:00Z',
+            },
+          ],
+          'page': 1,
+          'pageSize': 100,
+          'totalItems': 1,
+          'totalPages': 1,
+        }, '/api/Reports'),
+      );
+      final router = _makeChipRouter(ticketId: 'ticket-1');
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpWidget(
+        _buildDetailWithRouter(db: db, repo: repo, router: router, isOnline: true, dio: dio),
+      );
+      await tester.pump();
+      authStream.add(fakeUser);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      await tester.tap(find.text('Report'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sostituzione valvola'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('REPORT-VIEW-MARKER:rep-1'), findsOneWidget);
       await resetAndDispose(tester);
     });
 

@@ -1,4 +1,6 @@
 // dart format width=100
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_rack.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,16 +8,21 @@ import 'package:go_router/go_router.dart';
 import 'package:tasktap_mobile/core/icons/app_lucide_icons.dart';
 
 import '../../../core/widgets/widgets.dart';
-import '../../../presentation/providers/schedule_providers.dart';
 import '../admin_api_client.dart';
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
 
-/// Fetches prodotti assistenza from backend API.
+/// The list's search text. Its own provider (not a family argument on the list provider) so the
+/// form screen can keep invalidating [adminProdottiAssistenzaProvider] without knowing the query.
+final adminProdottiQueryProvider = StateProvider.autoDispose<String>((ref) => '');
+
+/// Fetches prodotti assistenza from backend API; the search text is sent as `q`, so the server
+/// searches every row rather than the client filtering the first page.
 final adminProdottiAssistenzaProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((
   ref,
 ) async {
   final api = ref.watch(adminApiClientProvider);
-  return api.fetchProdottiAssistenza();
+  final q = ref.watch(adminProdottiQueryProvider);
+  return api.fetchProdottiAssistenza(q: q);
 });
 
 /// Admin prodotto assistenza list — online-only.
@@ -30,6 +37,9 @@ class AdminProdottoListScreen extends ConsumerWidget {
       backgroundColor: context.colors.bg2,
       body: SafeArea(
         child: prodottiAsync.when(
+          // A new search term reloads the provider; keep the previous list (and the search field's
+          // focus and text, which live in the body) on screen instead of swapping in a spinner.
+          skipLoadingOnReload: true,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) =>
               ErrorState(onRetry: () => ref.invalidate(adminProdottiAssistenzaProvider)),
@@ -59,28 +69,27 @@ class _ProdottoListBody extends ConsumerStatefulWidget {
 }
 
 class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
-  String _query = '';
   final _searchCtrl = TextEditingController();
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
 
+  void _onQueryChanged(String q) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) ref.read(adminProdottiQueryProvider.notifier).state = q.trim();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.prodotti.where((p) {
-      if (_query.isEmpty) return true;
-      final q = _query.toLowerCase();
-      final name = (p['name'] as String? ?? '').toLowerCase();
-      final codice = (p['codice'] as String? ?? '').toLowerCase();
-      return name.contains(q) || codice.contains(q);
-    }).toList();
-
-    final customersAsync = ref.watch(allCustomersProvider);
-    final customers = customersAsync.valueOrNull ?? [];
-    final customerMap = {for (final c in customers) c.id: c.companyName};
+    final filtered = widget.prodotti;
+    final searching = ref.watch(adminProdottiQueryProvider).isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: () => ref.refresh(adminProdottiAssistenzaProvider.future),
@@ -97,7 +106,7 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
             child: AppSearchBar(
               controller: _searchCtrl,
               hint: 'Cerca per nome o codice…',
-              onChanged: (q) => setState(() => _query = q),
+              onChanged: _onQueryChanged,
             ),
           ),
           if (filtered.isEmpty)
@@ -105,7 +114,9 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
               child: EmptyState(
                 icon: LucideIcons.wrench,
                 title: 'Nessun prodotto',
-                body: 'Crea un nuovo prodotto con il pulsante +.',
+                body: searching
+                    ? 'Nessun prodotto corrisponde alla ricerca.'
+                    : 'Crea un nuovo prodotto con il pulsante +.',
               ),
             )
           else
@@ -113,8 +124,10 @@ class _ProdottoListBodyState extends ConsumerState<_ProdottoListBody> {
               delegate: SliverChildBuilderDelegate((context, i) {
                 final prodotto = filtered[i];
                 final name = prodotto['name'] as String? ?? '';
-                final customerId = prodotto['customerId'] as String? ?? '';
-                final customerName = customerMap[customerId] ?? '—';
+                // The server resolves the name on the row; the customer list is not fetched here
+                // (a technician does not hold customer.read, and walking it only to map ids is the
+                // anti-pattern the list endpoints exist to avoid).
+                final customerName = prodotto['customerName'] as String? ?? '—';
                 final isActive = prodotto['isActive'] as bool? ?? true;
                 final codice = prodotto['codice'] as String?;
                 final categoria = prodotto['categoria'] as String?;

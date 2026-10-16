@@ -871,6 +871,10 @@ class _ReportTab extends ConsumerWidget {
                 subtitle: dateLabel,
                 meta: StatusPill(stato: r.statoLabel, small: true),
                 showDivider: r != reports.last,
+                // The row used to be inert: a technician could list a ticket's rapportini but never
+                // read one. The read-only view loads the local mirror by id and says so plainly when
+                // the report has not reached this phone yet (same destination the push deep-link uses).
+                onTap: () => context.push(AppRoutes.rapportiniView(r.id)),
               );
             }).toList(),
           ),

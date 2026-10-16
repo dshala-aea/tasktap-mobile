@@ -910,12 +910,21 @@ class AdminApiClient {
   /// own `customerId` query param (Gap 8 of the feature audit — a customer's Prodotti section
   /// needs this scoped, not a client-side filter over an unpaginated fetch that could miss rows
   /// past the default 20-item page).
+  ///
+  /// [q] is the backend's free-text search (`ListQuery.Q`: name, code, serial number, marca, modello,
+  /// category, description) — searching is the server's job, never a filter over the first page.
   Future<List<Map<String, dynamic>>> fetchProdottiAssistenza({
     String? customerId,
+    String? q,
   }) async {
+    final term = q?.trim();
     final res = await _dio.get<Map<String, dynamic>>(
       '/api/prodottoassistenza',
-      queryParameters: {'customerId': ?customerId, 'pageSize': 100},
+      queryParameters: {
+        'customerId': ?customerId,
+        if (term != null && term.isNotEmpty) 'q': term,
+        'pageSize': 100,
+      },
     );
     return pagedItems(res.data);
   }
