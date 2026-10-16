@@ -21,6 +21,7 @@ import 'features/altro/notifiche_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/account_deactivated_screen.dart';
+import 'core/widgets/app_toast.dart' show showAppToast;
 import 'core/widgets/startup_watchdog.dart';
 import 'core/widgets/suspended_banner.dart';
 import 'data/entitlements/entitlement_providers.dart';
@@ -256,6 +257,11 @@ class _TaskTapAppState extends ConsumerState<TaskTapApp> {
     if (NotificationService.isAvailable) {
       NotificationService.instance.onForegroundMessage = () =>
           ref.read(notificheProvider.notifier).refresh();
+      NotificationService.instance.onForegroundBanner = (title, body) {
+        final context = rootNavigatorKey.currentContext;
+        final text = [title, body].whereType<String>().where((s) => s.trim().isNotEmpty).join(' — ');
+        if (context != null && text.isNotEmpty) showAppToast(context, message: text);
+      };
     }
 
     // Impostazioni → "Tema scuro". The switch existed, was persisted to SharedPreferences, and
