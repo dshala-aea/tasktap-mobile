@@ -228,6 +228,10 @@ class CustomerDto {
   final String? notes;
   final bool isActive;
 
+  /// `Customer.AgentId` — the customer's one agent, which pre-fills a new ticket's Riferimento.
+  /// Absent from an older backend's payload, which reads as null: no pre-fill, never an error.
+  final String? agentId;
+
   const CustomerDto({
     required this.id,
     required this.tenantId,
@@ -244,6 +248,7 @@ class CustomerDto {
     this.contactPerson,
     this.notes,
     this.isActive = true,
+    this.agentId,
   });
 
   factory CustomerDto.fromJson(Map<String, dynamic> j) => CustomerDto(
@@ -262,6 +267,7 @@ class CustomerDto {
     contactPerson: j['contactPerson'] as String?,
     notes: j['notes'] as String?,
     isActive: j['isActive'] as bool? ?? true,
+    agentId: j['agentId'] as String?,
   );
 }
 

@@ -299,4 +299,55 @@ void main() {
       expect(seed.agentId, isNull);
     });
   });
+
+  group('NewTicketFormState.withCustomerAgentPrefill', () {
+    test('fills an empty Riferimento and records that it was a pre-fill', () {
+      final s = const NewTicketFormState().withCustomerAgentPrefill('ag-1');
+      expect(s.agentId, 'ag-1');
+      expect(s.autoFilledAgentId, 'ag-1');
+    });
+
+    test('a customer with no agent leaves an empty Riferimento empty', () {
+      final s = const NewTicketFormState().withCustomerAgentPrefill(null);
+      expect(s.agentId, isNull);
+      expect(s.autoFilledAgentId, isNull);
+    });
+
+    test('replaces a value that is still the previous pre-fill', () {
+      final s = const NewTicketFormState(
+        agentId: 'ag-1',
+        autoFilledAgentId: 'ag-1',
+      ).withCustomerAgentPrefill('ag-2');
+      expect(s.agentId, 'ag-2');
+      expect(s.autoFilledAgentId, 'ag-2');
+    });
+
+    test('clears a stale pre-fill when the new customer has no agent', () {
+      final s = const NewTicketFormState(
+        agentId: 'ag-1',
+        autoFilledAgentId: 'ag-1',
+      ).withCustomerAgentPrefill(null);
+      expect(s.agentId, isNull);
+      expect(s.autoFilledAgentId, isNull);
+    });
+
+    test('never overwrites an agent the technician chose', () {
+      final chosen = const NewTicketFormState(agentId: 'ag-9');
+      expect(chosen.withCustomerAgentPrefill('ag-2').agentId, 'ag-9');
+      expect(chosen.withCustomerAgentPrefill(null).agentId, 'ag-9');
+
+      // Chose a different agent after a pre-fill: still theirs.
+      final overridden = const NewTicketFormState(
+        agentId: 'ag-9',
+        autoFilledAgentId: 'ag-1',
+      );
+      expect(overridden.withCustomerAgentPrefill('ag-2').agentId, 'ag-9');
+    });
+
+    test('a state restored from the outbox (no pre-fill record) is treated as the technician\'s', () {
+      // Repair path: the row's agent was sent by the technician's own form, never re-derived.
+      final s = const NewTicketFormState(agentId: 'ag-1').withCustomerAgentPrefill('ag-2');
+      expect(s.agentId, 'ag-1');
+    });
+  });
 }

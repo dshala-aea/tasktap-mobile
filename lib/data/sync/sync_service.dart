@@ -369,6 +369,9 @@ class SyncService {
               contactPerson: Value(c.contactPerson),
               notes: Value(c.notes),
               isActive: Value(c.isActive),
+              // Written even when null: the server's value is authoritative, so a customer whose
+              // agent was removed must lose it here too.
+              agentId: Value(c.agentId),
             ),
           );
     }

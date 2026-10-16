@@ -114,4 +114,26 @@ void main() {
       expect(dto.isAvailable, isFalse);
     });
   });
+
+  group('CustomerDto.agentId', () {
+    Map<String, dynamic> json({Object? agentId = #absent}) => {
+      'id': 'c1',
+      'tenantId': 'tenant1',
+      'createdAt': '2026-10-16T00:00:00Z',
+      'companyName': 'ACME Srl',
+      if (agentId != #absent) 'agentId': agentId,
+    };
+
+    test('parses the agent when present', () {
+      expect(CustomerDto.fromJson(json(agentId: 'ag-1')).agentId, 'ag-1');
+    });
+
+    test('is null when the key is absent (older backend)', () {
+      expect(CustomerDto.fromJson(json()).agentId, isNull);
+    });
+
+    test('is null when the server sends an explicit null', () {
+      expect(CustomerDto.fromJson(json(agentId: null)).agentId, isNull);
+    });
+  });
 }

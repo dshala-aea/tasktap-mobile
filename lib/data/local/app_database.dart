@@ -43,6 +43,12 @@ class Customers extends Table {
   TextColumn get notes => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
+  /// The customer's one agent (Riferimento) — `Customer.AgentId` on the server. A new ticket for this
+  /// customer pre-fills its own Riferimento from it; the ticket's value stays authoritative after
+  /// that. Nullable: most customers have none. No foreign key — the agent may not be mirrored (it
+  /// travels in the sync's `agents`, and the picker reads `agents` by id, tolerating a miss).
+  TextColumn get agentId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1205,7 +1211,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 42;
 
   @override
   MigrationStrategy get migration {
@@ -1591,6 +1597,19 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(reportStrumenti, reportStrumenti.outcome);
           }
         }
+        if (from < 42) {
+          // The customer's agent, which pre-fills a new ticket's Riferimento. Nullable, no backfill
+          // here: the value is already on the wire (`customers[].agentId`), so the cursor bump below
+          // (v10) is what makes every existing device re-download its customers and fill the column.
+          //
+          // Guarded by `PRAGMA table_info`, not by `from`, like the steps above: `customers` is never
+          // re-created from the current definition by an earlier step today, but the guard costs
+          // nothing and an `alterTable` added later would turn an unconditional add into a crash on
+          // `duplicate column name` before the app opens.
+          if (!await _columnExists(m.database, 'customers', 'agent_id')) {
+            await m.addColumn(customers, customers.agentId);
+          }
+        }
       },
     );
   }
@@ -1679,7 +1698,10 @@ class AppDatabase extends _$AppDatabase {
   ///      resent on every sync, but a fullScope caller's ticket list is since-filtered, so a device
   ///      whose cursor is already past a ticket would never receive its asset rows. Same reasoning
   ///      as v3-v8.
-  static const String syncCursorGeneration = 'v9';
+  /// v10 — 2026-10-16, schema 42 added `customers.agentId`. Already on the wire, and a delta sync only
+  ///      re-sends customers that changed, so an unedited customer would keep a null agent — and the
+  ///      new-ticket pre-fill silently never fire for it — until somebody happened to edit it.
+  static const String syncCursorGeneration = 'v10';
 
   static const String _cursorId = 'default:$syncCursorGeneration';
 

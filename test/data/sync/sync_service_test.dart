@@ -64,7 +64,14 @@ Map<String, dynamic> _syncPayload({
   };
 }
 
-Map<String, dynamic> _customerJson({String id = 'cust-1', String companyName = 'ACME Srl'}) => {
+Map<String, dynamic> _customerJson({
+  String id = 'cust-1',
+  String companyName = 'ACME Srl',
+  // Omitted from the payload when null AND `withAgentKey` is false — an older backend sends no
+  // `agentId` key at all, which must read the same as an explicit null.
+  String? agentId,
+  bool withAgentKey = false,
+}) => {
   'id': id,
   'tenantId': 'tenant-1',
   'createdAt': '2026-01-01T00:00:00Z',
@@ -80,6 +87,7 @@ Map<String, dynamic> _customerJson({String id = 'cust-1', String companyName = '
   'contactPerson': null,
   'notes': null,
   'isActive': true,
+  if (agentId != null || withAgentKey) 'agentId': agentId,
 };
 
 Map<String, dynamic> _locationJson({
@@ -470,6 +478,24 @@ void main() {
       final rows = await db.select(db.customers).get();
       expect(rows.length, 1, reason: 'upsert must not create a duplicate');
       expect(rows.first.companyName, 'Nuovo Nome Spa');
+    });
+
+    test('stores the customer\'s agentId, and a re-sync that drops it clears it', () async {
+      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson(agentId: 'ag-1')]));
+      await svc.sync();
+      expect((await db.select(db.customers).getSingle()).agentId, 'ag-1');
+
+      // The server removed the agent: its value is authoritative, so the local one must go too.
+      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson(withAgentKey: true)]));
+      await svc.sync();
+      expect((await db.select(db.customers).getSingle()).agentId, isNull);
+    });
+
+    test('a customer from an older backend (no agentId key) syncs with a null agent', () async {
+      _stubDioGet(mockDio, _syncPayload(customers: [_customerJson()]));
+      await svc.sync();
+
+      expect((await db.select(db.customers).getSingle()).agentId, isNull);
     });
 
     test('updates existing schedule on re-sync', () async {

@@ -113,10 +113,10 @@ void main() {
     expect(row.maintenanceTemplateId, isNull);
   });
 
-  /// The release deliberately does not reset every device's delta cursor - the reference queries
-  /// carry no delta, so there is nothing a reset would fetch. This test is the guard on that
-  /// decision, not a formality.
-  test('the sync cursor generation is deliberately not bumped', () {
-    expect(AppDatabase.syncCursorGeneration, 'v9');
+  /// The schema-37 release deliberately did not reset every device's delta cursor - the reference
+  /// queries carry no delta, so there was nothing a reset would fetch. Schema 42 (customers.agentId,
+  /// already on the wire for unedited customers) is the first reason to move it since: v10.
+  test('the sync cursor generation is the one schema 42 set', () {
+    expect(AppDatabase.syncCursorGeneration, 'v10');
   });
 }

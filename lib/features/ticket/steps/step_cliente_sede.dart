@@ -12,6 +12,7 @@ import '../../../core/widgets/app_toast.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/lookup_field.dart';
 import '../../../data/local/app_database.dart';
+import '../../../data/reference/reference_option.dart';
 import '../../../data/sync/sync_service.dart';
 import '../../../presentation/providers/schedule_providers.dart';
 import '../../admin/admin_api_client.dart';
@@ -37,6 +38,7 @@ class StepClienteSede extends ConsumerStatefulWidget {
     this.blamedField,
     this.contractEditable = true,
     this.commessaClearable = true,
+    this.prefillAgentFromCustomer = true,
   });
 
   final NewTicketFormState state;
@@ -60,6 +62,11 @@ class StepClienteSede extends ConsumerStatefulWidget {
   /// persist, so the field stays enabled either way — only the release is refused, with a toast
   /// rather than silence. Defaults to `true` for the create wizard.
   final bool commessaClearable;
+
+  /// Whether picking a customer pre-fills Riferimento from the customer's own agent
+  /// (`Customer.agentId`). `true` for the create wizard; `false` in edit mode, where the ticket's
+  /// own Riferimento is authoritative and re-pointing the customer must never rewrite it.
+  final bool prefillAgentFromCustomer;
 
   @override
   ConsumerState<StepClienteSede> createState() => _StepClienteSedeState();
@@ -278,10 +285,60 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
     );
   }
 
+  /// The agent id to pre-fill Riferimento with for [customerId], or null.
+  ///
+  /// Reads only the local mirror: the customer row's `agentId`, and only when that agent is a row
+  /// this device holds and can therefore LABEL (`localAgentsProvider`, the same list the Riferimento
+  /// field renders its selection from). An agent that is not mirrored — or not loaded yet — yields
+  /// null, so the field stays empty: it never shows a blank selection over an id the technician
+  /// cannot see, and never invents a label.
+  String? _agentToPrefill(String? customerId) {
+    if (!widget.prefillAgentFromCustomer || customerId == null) return null;
+    final customers = ref.read(allCustomersProvider).valueOrNull ?? const <Customer>[];
+    final agentId = customers.where((c) => c.id == customerId).firstOrNull?.agentId;
+    if (agentId == null) return null;
+    final agents = ref.read(localAgentsProvider('')).valueOrNull ?? const <ReferenceOption>[];
+    return agents.any((a) => a.id == agentId) ? agentId : null;
+  }
+
+  /// [NewTicketFormState] after the customer changed to [customerId] (null = emptied): the
+  /// customer-scoped references cleared, and Riferimento pre-filled — see
+  /// [NewTicketFormState.withCustomerAgentPrefill].
+  NewTicketFormState _withCustomerChange(String? customerId) {
+    final base = customerId == null
+        ? widget.state.copyWith(
+            clearCustomerId: true,
+            clearLocationId: true,
+            clearContractId: true,
+            clearCommessaId: true,
+            clearCantiereId: true,
+          )
+        : widget.state.copyWith(
+            customerId: customerId,
+            // The sede takes the explicit flag rather than a plain `locationId: null`: `copyWith`
+            // reads a null argument as "not supplied" (`locationId: locationId ?? this.locationId`)
+            // and hands the old sede straight back, so the reset this line intends never happened
+            // and a ticket could be filed against the previous customer's sede.
+            clearLocationId: true,
+            // A contract, a commessa and a cantiere belong to the customer that owned them —
+            // keeping one across a customer change would point the new ticket at a row the
+            // server will refuse with a 404, and through the queue that is a ticket that never
+            // arrives. Clearing here is the fix, not a detail. The sede above is the same class
+            // of reference and clears for the same reason.
+            clearContractId: true,
+            clearCommessaId: true,
+            clearCantiereId: true,
+          );
+    if (!widget.prefillAgentFromCustomer) return base;
+    return base.withCustomerAgentPrefill(_agentToPrefill(customerId));
+  }
+
   @override
   Widget build(BuildContext context) {
     final customersAsync = ref.watch(allCustomersProvider);
     final customers = customersAsync.valueOrNull ?? [];
+    // Held loaded so `_agentToPrefill` can read it synchronously at the moment of the pick.
+    if (widget.prefillAgentFromCustomer) ref.watch(localAgentsProvider(''));
 
     // Filter locations by selected customer.
     final allLocationsAsync = ref.watch(allLocationsProvider);
@@ -326,24 +383,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
               _contractPickerEpoch++;
               _commessaPickerEpoch++;
             });
-            widget.onChanged(
-              widget.state.copyWith(
-                customerId: id,
-                // The sede takes the explicit flag rather than a plain `locationId: null`: `copyWith`
-                // reads a null argument as "not supplied" (`locationId: locationId ?? this.locationId`)
-                // and hands the old sede straight back, so the reset this line intends never happened
-                // and a ticket could be filed against the previous customer's sede.
-                clearLocationId: true,
-                // A contract, a commessa and a cantiere belong to the customer that owned them —
-                // keeping one across a customer change would point the new ticket at a row the
-                // server will refuse with a 404, and through the queue that is a ticket that never
-                // arrives. Clearing here is the fix, not a detail. The sede above is the same class
-                // of reference and clears for the same reason.
-                clearContractId: true,
-                clearCommessaId: true,
-                clearCantiereId: true,
-              ),
-            );
+            widget.onChanged(_withCustomerChange(id));
           },
           // The customer here must resolve to a real cached record — unlike the rapportino's
           // Cliente field, NewTicketFormState has no free-text fallback (customerId is a plain
@@ -360,15 +400,7 @@ class _StepClienteSedeState extends ConsumerState<StepClienteSede> {
                 _contractPickerEpoch++;
                 _commessaPickerEpoch++;
               });
-              widget.onChanged(
-                widget.state.copyWith(
-                  clearCustomerId: true,
-                  clearLocationId: true,
-                  clearContractId: true,
-                  clearCommessaId: true,
-                  clearCantiereId: true,
-                ),
-              );
+              widget.onChanged(_withCustomerChange(null));
             }
           },
         ),
