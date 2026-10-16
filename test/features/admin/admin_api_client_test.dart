@@ -832,6 +832,27 @@ void main() {
       ).captured.single as Map;
       expect(captured['customerId'], 'cust-1');
     });
+
+    test('fetchProdottiAssistenza sends the search text as q, trimmed, and omits it when blank', () async {
+      when(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: any(named: 'queryParameters'),
+        ),
+      ).thenAnswer((_) async => _okResponse({'items': <dynamic>[]}, '/api/prodottoassistenza'));
+
+      await client.fetchProdottiAssistenza(q: '  caldaia ');
+      await client.fetchProdottiAssistenza(q: '   ');
+
+      final captured = verify(
+        () => mockDio.get<Map<String, dynamic>>(
+          '/api/prodottoassistenza',
+          queryParameters: captureAny(named: 'queryParameters'),
+        ),
+      ).captured.cast<Map>();
+      expect(captured[0]['q'], 'caldaia');
+      expect(captured[1].containsKey('q'), isFalse);
+    });
   });
 
   // Feature audit module #10 (Prodotti/Servizi), Gaps 1/2/7: mobile only ever sent the original
