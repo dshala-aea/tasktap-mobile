@@ -9,6 +9,7 @@ import 'package:tasktap_mobile/data/ai/ai_api_client.dart';
 import 'package:tasktap_mobile/data/clienti/customer_contact_api_client.dart';
 import 'package:tasktap_mobile/data/ferie/absence_request_api_client.dart';
 import 'package:tasktap_mobile/data/notifications/notification_api_client.dart';
+import 'package:tasktap_mobile/data/settings/notification_preferences_api_client.dart';
 import 'package:tasktap_mobile/data/settings/notification_settings_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/cantiere_worklog_api_client.dart';
 import 'package:tasktap_mobile/data/timbratura/worklog_api_client.dart';
@@ -474,6 +475,14 @@ void main() {
           documentNotifications: false,
         ),
       );
+    });
+
+    // Fails until the snapshot is re-synced from a backend that carries
+    // `PUT /api/notifications/preferences` (tasktap-api#102, not merged at the time of writing).
+    // That is the gate doing its job — see the PR description — not a reason to exempt the route.
+    contractTest('the per-type notification preferences update matches the server', () {
+      final client = NotificationPreferencesApiClient(dio);
+      return capture(() => client.update({25: false}));
     });
 
     contractTest('marking one notification read matches the server', () {

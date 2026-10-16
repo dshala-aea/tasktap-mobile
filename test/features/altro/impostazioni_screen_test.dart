@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/domain/auth/auth_user.dart';
 import 'package:tasktap_mobile/domain/auth/i_auth_repository.dart';
 import 'package:tasktap_mobile/features/altro/impostazioni_screen.dart';
@@ -40,7 +41,11 @@ AuthUser _fakeUser({String? displayName}) => AuthUser(
 
 Widget _buildScreen(MockAuthRepository repo) {
   return ProviderScope(
-    overrides: [authRepositoryProvider.overrideWithValue(repo)],
+    overrides: [
+      authRepositoryProvider.overrideWithValue(repo),
+      // The "Preferenze notifiche" entry is behind a CapabilityGate; nothing cached = hidden.
+      cachedEntitlementProvider.overrideWith((ref) async => null),
+    ],
     child: const MaterialApp(home: ImpostazioniScreen()),
   );
 }
