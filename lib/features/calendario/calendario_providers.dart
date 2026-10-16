@@ -122,3 +122,71 @@ String formatMinutes(int minutes) {
   final m = minutes % 60;
   return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
 }
+
+// ── Where a schedule is, and for whom ──────────────────────────────────────────
+
+/// The customer and site address of a schedule, resolved from the local mirror — no backend field
+/// is needed: the customer is the ticket's (`Schedule.ticketId → Ticket.customerId`), falling back
+/// to the location's own customer for a schedule with no ticket, and the address is the location's.
+class ScheduleWhere {
+  const ScheduleWhere({this.customerName, this.address});
+
+  final String? customerName;
+  final String? address;
+}
+
+/// "Via Roma 12, 20100 Milano", or the location's bare name when it carries no address.
+String? formatLocationAddress(Location l) {
+  String? clean(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
+  final street = clean(l.address);
+  final town = [clean(l.postalCode), clean(l.city)].whereType<String>().join(' ');
+  final parts = [?street, if (town.isNotEmpty) town];
+  return parts.isNotEmpty ? parts.join(', ') : clean(l.name);
+}
+
+/// Keyed on the two ids a schedule resolves through, so rows sharing a ticket/location share work.
+final scheduleWhereProvider = FutureProvider.autoDispose
+    .family<ScheduleWhere, ({String? ticketId, String locationId})>((ref, key) async {
+      final db = ref.watch(appDatabaseProvider);
+
+      final location = await (db.select(db.locations)..where((l) => l.id.equals(key.locationId)))
+          .getSingleOrNull();
+
+      String? customerId;
+      if (key.ticketId != null) {
+        final ticket = await (db.select(db.tickets)..where((t) => t.id.equals(key.ticketId!)))
+            .getSingleOrNull();
+        customerId = ticket?.customerId;
+      }
+      customerId ??= location?.customerId;
+
+      String? customerName;
+      if (customerId != null) {
+        final customer = await (db.select(db.customers)..where((c) => c.id.equals(customerId!)))
+            .getSingleOrNull();
+        customerName = customer?.companyName;
+      }
+
+      return ScheduleWhere(
+        customerName: customerName,
+        address: location == null ? null : formatLocationAddress(location),
+      );
+    });
+
+/// Names of the colleagues on a schedule (`ScheduleAssignees` → `Colleagues`), for the detail
+/// sheet. Only people the device holds a name for appear; a squadra name is not mirrored locally.
+final scheduleAssigneeNamesProvider = FutureProvider.autoDispose.family<List<String>, String>((
+  ref,
+  scheduleId,
+) async {
+  final db = ref.watch(appDatabaseProvider);
+  final assignees = await (db.select(db.scheduleAssignees)
+        ..where((a) => a.scheduleId.equals(scheduleId)))
+      .get();
+  if (assignees.isEmpty) return const [];
+  final ids = assignees.map((a) => a.userId).toSet();
+  final people = await (db.select(db.colleagues)..where((c) => c.id.isIn(ids))).get();
+  final names = people.map((p) => p.displayName).where((n) => n.trim().isNotEmpty).toList()
+    ..sort();
+  return names;
+});

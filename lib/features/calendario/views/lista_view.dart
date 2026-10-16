@@ -95,7 +95,7 @@ class _DateHeader extends StatelessWidget {
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 }
 
-class _ScheduleListRow extends StatelessWidget {
+class _ScheduleListRow extends ConsumerWidget {
   const _ScheduleListRow({
     required this.schedule,
     this.onTapTicket,
@@ -111,7 +111,12 @@ class _ScheduleListRow extends StatelessWidget {
   final bool isTeam;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final where = ref
+        .watch(
+          scheduleWhereProvider((ticketId: schedule.ticketId, locationId: schedule.locationId)),
+        )
+        .valueOrNull;
     // An all-day schedule has no meaningful time-of-day to show as a subtitle — see the same
     // gate in `_ScheduleInfoSheet` (calendario_screen.dart) and `_EventBlock` (giorno_view.dart).
     final timeRange = schedule.allDay
@@ -131,7 +136,10 @@ class _ScheduleListRow extends StatelessWidget {
         child: Icon(LucideIcons.clock, size: 18, color: statusPair.foreground),
       ),
       title: schedule.title,
-      subtitle: timeRange,
+      // Time and customer on one line, the site address under it: what a technician needs to know
+      // before opening the job.
+      subtitle: [?timeRange, ?where?.customerName].join(' · ').nullIfEmpty,
+      detail: where?.address,
       meta: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -154,4 +162,8 @@ class _ScheduleListRow extends StatelessWidget {
           : null,
     );
   }
+}
+
+extension on String {
+  String? get nullIfEmpty => isEmpty ? null : this;
 }

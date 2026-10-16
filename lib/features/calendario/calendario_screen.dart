@@ -612,13 +612,17 @@ class _ListaBody extends ConsumerWidget {
 
 // ── Schedule info sheet ───────────────────────────────────────────────────────
 
-class _ScheduleInfoSheet extends StatelessWidget {
+class _ScheduleInfoSheet extends ConsumerWidget {
   const _ScheduleInfoSheet({required this.schedule});
 
   final Schedule schedule;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final where = ref
+        .watch(scheduleWhereProvider((ticketId: schedule.ticketId, locationId: schedule.locationId)))
+        .valueOrNull;
+    final tecnici = ref.watch(scheduleAssigneeNamesProvider(schedule.id)).valueOrNull ?? const [];
     // An all-day schedule has no meaningful time-of-day to show — timeStartMinutes/
     // timeEndMinutes on an all-day row are placeholder bounds, not a real range. Gate on
     // `allDay`, not on the minute values, so neither the visible text nor its layout implies
@@ -669,6 +673,9 @@ class _ScheduleInfoSheet extends StatelessWidget {
               ],
             ],
           ),
+          if (where?.customerName != null) _InfoLine(label: 'Cliente', value: where!.customerName!),
+          if (where?.address != null) _InfoLine(label: 'Sede', value: where!.address!),
+          if (tecnici.isNotEmpty) _InfoLine(label: 'Tecnici', value: tecnici.join(', ')),
           if (schedule.description.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
@@ -682,6 +689,41 @@ class _ScheduleInfoSheet extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+/// One labelled fact in the schedule detail sheet.
+class _InfoLine extends StatelessWidget {
+  const _InfoLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontFamily: 'Archivo',
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.6,
+              color: context.colors.inkMuted,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(fontFamily: 'Archivo', fontSize: 14, color: context.colors.ink),
+          ),
         ],
       ),
     );

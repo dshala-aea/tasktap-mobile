@@ -31,6 +31,7 @@ class ListRow extends StatelessWidget {
     this.leading,
     required this.title,
     this.subtitle,
+    this.detail,
     this.meta,
     this.onTap,
     this.showDivider = true,
@@ -41,6 +42,10 @@ class ListRow extends StatelessWidget {
   final Widget? leading;
   final String title;
   final String? subtitle;
+
+  /// An optional third line under [subtitle] (one line, ellipsised) for a row that needs one more
+  /// fact to be useful on its own — the agenda uses it for the site address.
+  final String? detail;
   final Widget? meta;
   final VoidCallback? onTap;
 
@@ -107,6 +112,15 @@ class ListRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkMuted),
+                      ),
+                    ],
+                    if (detail != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        detail!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: 'Archivo', fontSize: 12, color: c.inkFaint),
                       ),
                     ],
                   ],
