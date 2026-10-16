@@ -527,6 +527,39 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('shows the customer beside the time and the site address under it', (tester) async {
+      await seedSchedules(db);
+      final now = DateTime.now().toUtc();
+      await db.into(db.customers).insert(
+        CustomersCompanion.insert(
+          id: 'cust-1',
+          tenantId: 'tenant-1',
+          createdAt: now,
+          companyName: 'Condominio Aurora',
+        ),
+      );
+      // The schedule's ticket is not mirrored here, so the customer resolves through the location.
+      await db.into(db.locations).insert(
+        LocationsCompanion.insert(
+          id: 'loc-1',
+          tenantId: 'tenant-1',
+          createdAt: now,
+          customerId: 'cust-1',
+          name: 'Sede centrale',
+          address: const Value('Via Roma 12'),
+          postalCode: const Value('20100'),
+          city: const Value('Milano'),
+        ),
+      );
+
+      await pump(tester, view: CalendarioView.lista);
+
+      expect(find.text('08:00 – 10:00 · Condominio Aurora'), findsOneWidget);
+      expect(find.text('Via Roma 12, 20100 Milano'), findsWidgets);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('all-day schedule row shows no time-range subtitle', (tester) async {
       await seedAllDaySchedule(db);
       await pump(tester, view: CalendarioView.lista);
@@ -541,6 +574,26 @@ void main() {
   // ── Providers helpers ──────────────────────────────────────────────────────
 
   group('calendario_providers helpers', () {
+    test('formatLocationAddress prefers the street line, falls back to the name', () {
+      Location loc({String? address, String? cap, String? city}) => Location(
+        id: 'l',
+        tenantId: 't',
+        createdAt: DateTime.utc(2026),
+        customerId: 'c',
+        name: 'Sede nord',
+        address: address,
+        postalCode: cap,
+        city: city,
+        isActive: true,
+      );
+
+      expect(formatLocationAddress(loc(address: 'Via Roma 12', cap: '20100', city: 'Milano')),
+          'Via Roma 12, 20100 Milano');
+      expect(formatLocationAddress(loc(address: 'Via Roma 12')), 'Via Roma 12');
+      expect(formatLocationAddress(loc(cap: '20100', city: 'Milano')), '20100 Milano');
+      expect(formatLocationAddress(loc()), 'Sede nord');
+    });
+
     test('scheduleStatusName maps known IDs', () {
       expect(scheduleStatusName(2), 'In corso');
       expect(scheduleStatusName(5), 'Completato');
