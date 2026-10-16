@@ -239,7 +239,17 @@ class NotificationService {
     // zero badge no matter what had been delivered. A push arriving is exactly the moment we know
     // there is something new to fetch.
     onForegroundMessage?.call();
+
+    // Android shows nothing for a push that arrives while the app is open (the OS only draws a
+    // notification for a backgrounded app), so the technician was never told at the moment it
+    // happened. iOS presents it itself via setForegroundNotificationPresentationOptions above —
+    // a banner here as well would show it twice.
+    if (Platform.isAndroid) onForegroundBanner?.call(notification.title, notification.body);
   }
+
+  /// Asks the UI to tell the user about a push that arrived while the app is open (Android only).
+  /// Same wiring reason as [onForegroundMessage]: `main.dart` owns the navigator, not this service.
+  void Function(String? title, String? body)? onForegroundBanner;
 
   /// Called when a push arrives while the app is in the foreground.
   ///
