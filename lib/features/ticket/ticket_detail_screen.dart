@@ -956,7 +956,7 @@ class _ProdottoRow extends StatelessWidget {
     final serial = text('serialNumber');
     final brandModel = [text('marchio'), text('modello')].whereType<String>().join(' ');
     final subtitle = [
-      if (codice != null) codice,
+      ?codice,
       if (serial != null) 'S/N: $serial',
       if (brandModel.isNotEmpty) brandModel,
     ].join(' · ');

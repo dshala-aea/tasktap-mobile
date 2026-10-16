@@ -80,8 +80,7 @@ class NotificationPreferenceDto {
     final items = body is Map ? body['items'] : null;
     if (items is! List) return const [];
     return [
-      for (final raw in items)
-        if (tryParse(raw) case final dto?) dto,
+      for (final raw in items) ?tryParse(raw),
     ];
   }
 }

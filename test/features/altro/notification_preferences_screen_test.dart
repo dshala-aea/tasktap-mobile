@@ -11,7 +11,7 @@ NotificationPreferenceDto _pref(int type, String key, {bool enabled = true}) =>
     NotificationPreferenceDto(type: type, key: key, enabled: enabled, defaultEnabled: true);
 
 class _FakeApi implements NotificationPreferencesApiClient {
-  _FakeApi(this.items, {this.failWith});
+  _FakeApi(this.items);
 
   List<NotificationPreferenceDto> items;
   NotificationPreferencesFailure? failWith;
