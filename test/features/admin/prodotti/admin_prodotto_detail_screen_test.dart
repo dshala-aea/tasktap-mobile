@@ -21,7 +21,8 @@ import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
 import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
-import 'package:tasktap_mobile/data/local/app_database.dart';
+// Hides the Drift row class of the same name: `Entitlement` below is the entitlement repository's.
+import 'package:tasktap_mobile/data/local/app_database.dart' hide Entitlement;
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
 import 'package:tasktap_mobile/features/admin/prodotti/admin_prodotto_detail_screen.dart';
