@@ -823,6 +823,72 @@ void main() {
   // must distinguish three outcomes: real data, a genuine empty list, and
   // "we couldn't check" (offline). See ticket_providers.dart.
   // ══════════════════════════════════════════════════════════════════════════
+  group('TicketDetailScreen — Prodotti compartment', () {
+    void stubTicketAndProdotti(MockDio dio, Map<String, dynamic> ticket, Map<String, Map<String, dynamic>> prodotti) {
+      when(() => dio.get<Map<String, dynamic>>('/api/tickets/ticket-1')).thenAnswer(
+        (_) async => _okResponse(ticket, '/api/tickets/ticket-1'),
+      );
+      prodotti.forEach((id, body) {
+        when(() => dio.get<Map<String, dynamic>>('/api/prodottoassistenza/$id')).thenAnswer(
+          (_) async => _okResponse(body, '/api/prodottoassistenza/$id'),
+        );
+      });
+    }
+
+    testWidgets('lists the prodotti the ticket covers, by name with code and serial', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      stubTicketAndProdotti(
+        dio,
+        {'id': 'ticket-1', 'prodottoAssistenzaIds': ['p2', 'p1'], 'prodottoAssistenzaId': 'p1'},
+        {
+          'p1': {'id': 'p1', 'name': 'Caldaia Murale', 'codice': 'CAL-1', 'serialNumber': 'SN-9', 'marchio': 'Vaillant', 'modello': 'X1'},
+          'p2': {'id': 'p2', 'name': 'Bruciatore', 'codice': null},
+        },
+      );
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Prodotti'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Caldaia Murale'), findsOneWidget);
+      expect(find.text('CAL-1 · S/N: SN-9 · Vaillant X1'), findsOneWidget);
+      expect(find.text('Bruciatore'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says plainly when the ticket covers no prodotto', (tester) async {
+      await seedBase(db);
+      final dio = MockDio();
+      stubTicketAndProdotti(dio, {'id': 'ticket-1', 'prodottoAssistenzaIds': <String>[]}, {});
+
+      await pump(tester, dio: dio, isOnline: true);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Prodotti'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nessun prodotto'), findsOneWidget);
+      await resetAndDispose(tester);
+    });
+
+    testWidgets('says it is offline instead of showing an empty list', (tester) async {
+      await seedBase(db);
+
+      await pump(tester, isOnline: false);
+      await tester.binding.setSurfaceSize(const Size(800, 1200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Prodotti'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Prodotti non disponibili offline'), findsOneWidget);
+      expect(find.text('Nessun prodotto'), findsNothing);
+      await resetAndDispose(tester);
+    });
+  });
+
   group('TicketDetailScreen — Report tab (index 0)', () {
     testWidgets('shows rapportini returned by the backend', (tester) async {
       await seedBase(db);

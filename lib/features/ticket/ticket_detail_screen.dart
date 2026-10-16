@@ -74,6 +74,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen> {
     'Dettagli',
     'Report',
     'Controllo',
+    'Prodotti',
     'Allegati',
     'Ore',
     'Pianificazioni',
@@ -738,6 +739,7 @@ class _Prose extends StatelessWidget {
 Widget _sectionContent(String label, String ticketId) => switch (label) {
   'Report' => _ReportTab(ticketId: ticketId),
   'Controllo' => _ControlloTab(ticketId: ticketId),
+  'Prodotti' => _ProdottiTab(ticketId: ticketId),
   'Allegati' => _AllegatiTab(ticketId: ticketId),
   'Ore' => _OreTab(ticketId: ticketId),
   'Pianificazioni' => _PianificazioniTab(ticketId: ticketId),
@@ -753,6 +755,7 @@ IconData _sectionIcon(String label) => switch (label) {
   'Dettagli' => LucideIcons.clipboardList,
   'Report' => LucideIcons.fileText,
   'Controllo' => LucideIcons.clipboardCheck,
+  'Prodotti' => LucideIcons.wrench,
   'Allegati' => LucideIcons.paperclip,
   'Ore' => LucideIcons.clock,
   'Pianificazioni' => LucideIcons.calendarDays,
@@ -880,6 +883,93 @@ class _ReportTab extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ── Prodotti tab ─────────────────────────────────────────────────────────────
+
+/// The prodotti in assistenza this ticket covers, each opening its card. Before this a technician
+/// on a ticket had no way to see which machines the job was for, short of the Controllo checklist.
+class _ProdottiTab extends ConsumerWidget {
+  const _ProdottiTab({required this.ticketId});
+
+  final String ticketId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prodottiAsync = ref.watch(ticketProdottiProvider(ticketId));
+
+    return prodottiAsync.when(
+      loading: () => const _TabLoading(),
+      error: (e, _) => UnavailableState.forFetchError(
+        icon: LucideIcons.wrench,
+        offline: e is TicketDetailOfflineException,
+        offlineTitle: 'Prodotti non disponibili offline',
+        offlineBody:
+            'I prodotti di questo ticket richiedono una connessione: riprova quando torni online.',
+        errorTitle: 'Impossibile caricare i prodotti',
+        errorBody: 'Si è verificato un errore durante il caricamento. Riprova più tardi.',
+      ).paddedForTab(),
+      data: (prodotti) {
+        if (prodotti.isEmpty) {
+          return const _EmptyTab(
+            icon: LucideIcons.wrench,
+            label: 'Nessun prodotto',
+            body: 'Nessun prodotto in assistenza è collegato a questo ticket.',
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.pagePadding,
+            AppSpacing.md,
+            AppSpacing.pagePadding,
+            0,
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < prodotti.length; i++)
+                _ProdottoRow(prodotto: prodotti[i], isLast: i == prodotti.length - 1),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProdottoRow extends StatelessWidget {
+  const _ProdottoRow({required this.prodotto, required this.isLast});
+
+  final Map<String, dynamic> prodotto;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    String? text(String key) {
+      final v = prodotto[key] as String?;
+      return (v == null || v.trim().isEmpty) ? null : v.trim();
+    }
+
+    final name = text('name') ?? 'Prodotto';
+    final codice = text('codice');
+    final serial = text('serialNumber');
+    final brandModel = [text('marchio'), text('modello')].whereType<String>().join(' ');
+    final subtitle = [
+      if (codice != null) codice,
+      if (serial != null) 'S/N: $serial',
+      if (brandModel.isNotEmpty) brandModel,
+    ].join(' · ');
+    final id = prodotto['id'] as String?;
+
+    return ListRow(
+      leading: const RowIconTile(icon: LucideIcons.wrench),
+      title: name,
+      subtitle: subtitle.isEmpty ? null : subtitle,
+      showDivider: !isLast,
+      // The card is the same screen the Altro > Prodotti list opens; passing the row as `extra`
+      // saves it a second fetch.
+      onTap: id == null ? null : () => context.push('/altro/prodotti/$id', extra: prodotto),
     );
   }
 }

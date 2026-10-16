@@ -178,6 +178,26 @@ final ticketReportsProvider = FutureProvider.autoDispose
       return api.fetchReportsForTicket(ticketId);
     });
 
+/// Prodotti in assistenza the ticket covers (Prodotti compartment): the ticket's coverage ids from
+/// the server, then each prodotto's card. Fetch-on-demand like its siblings — the local
+/// `ticket_assets` rows are not an authoritative coverage list (see
+/// [TicketDetailApiClient.fetchCoveredProdottoIds]).
+final ticketProdottiProvider = FutureProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, ticketId) async {
+      if (!ref.watch(isOnlineProvider)) {
+        throw const TicketDetailOfflineException();
+      }
+      final ids = await ref.watch(ticketDetailApiClientProvider).fetchCoveredProdottoIds(ticketId);
+      final admin = ref.watch(adminApiClientProvider);
+      final rows = await Future.wait(ids.map(admin.fetchProdottoAssistenzaById));
+      return rows.whereType<Map<String, dynamic>>().toList()
+        ..sort(
+          (a, b) => ((a['name'] as String?) ?? '').toLowerCase().compareTo(
+            ((b['name'] as String?) ?? '').toLowerCase(),
+          ),
+        );
+    });
+
 /// Files uploaded directly to a ticket (Allegati tab).
 final ticketAttachmentsProvider = FutureProvider.autoDispose
     .family<List<TicketAttachmentDto>, String>((ref, ticketId) async {

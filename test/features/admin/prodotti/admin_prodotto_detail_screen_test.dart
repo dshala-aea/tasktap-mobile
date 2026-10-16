@@ -19,6 +19,8 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:tasktap_mobile/core/widgets/widgets.dart';
 import 'package:tasktap_mobile/data/api/dio_client.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_providers.dart';
+import 'package:tasktap_mobile/data/entitlements/entitlement_repository.dart';
 import 'package:tasktap_mobile/data/local/app_database.dart';
 import 'package:tasktap_mobile/data/sync/connectivity_provider.dart';
 import 'package:tasktap_mobile/data/sync/sync_service.dart';
@@ -28,6 +30,13 @@ class MockDio extends Mock implements Dio {}
 
 Response<T> _ok<T>(T data, String path) =>
     Response<T>(data: data, statusCode: 200, requestOptions: RequestOptions(path: path));
+
+Entitlement _entitlementWith(Set<String> capabilities) => Entitlement(
+  features: const {},
+  capabilities: capabilities,
+  seatType: 'office',
+  fetchedAt: DateTime.utc(2026, 9, 23),
+);
 
 void main() {
   setUpAll(() {
@@ -80,6 +89,10 @@ void main() {
 
   tearDown(() async => db.close());
 
+  // Edit and delete are contract-write operations; the tests below act as someone who holds it.
+  var entitlement = _entitlementWith({'contratti.contract.write'});
+  setUp(() => entitlement = _entitlementWith({'contratti.contract.write'}));
+
   Widget buildHarness() {
     final router = GoRouter(
       initialLocation: '/',
@@ -107,6 +120,7 @@ void main() {
         appDatabaseProvider.overrideWithValue(db),
         dioProvider.overrideWithValue(mockDio),
         isOnlineProvider.overrideWithValue(true),
+        cachedEntitlementProvider.overrideWith((ref) => Future.value(entitlement)),
       ],
       child: MaterialApp.router(routerConfig: router),
     );
@@ -184,6 +198,18 @@ void main() {
 
       verify(() => mockDio.delete<dynamic>('/api/prodottoassistenza/prod-1')).called(1);
       expect(find.text('Apri dettaglio'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('a user without contract-write is not offered edit or delete', (tester) async {
+      entitlement = _entitlementWith({'contratti.contract.read'});
+      await openDetail(tester);
+
+      expect(
+        find.byWidgetPredicate((w) => w is HeaderIconBtn && w.label == 'Elimina prodotto'),
+        findsNothing,
+      );
+      expect(find.byTooltip('Modifica'), findsNothing);
       await teardown(tester);
     });
   });

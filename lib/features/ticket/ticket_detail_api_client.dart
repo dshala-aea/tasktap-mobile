@@ -42,6 +42,20 @@ class TicketDetailApiClient {
     return items.cast<Map<String, dynamic>>().map(TicketReportSummary.fromJson).toList();
   }
 
+  /// Ids of every prodotto assistenza this ticket covers: `GET /api/tickets/{id}` is the one place
+  /// that lists the coverage authoritatively (`prodottoAssistenzaIds`), plus the legacy singular
+  /// `prodottoAssistenzaId` that older tickets carry. The local `ticket_assets` mirror is a
+  /// checklist-sync artifact and is NOT a coverage list, so it is deliberately not used here.
+  Future<List<String>> fetchCoveredProdottoIds(String ticketId) async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/tickets/$ticketId');
+    final data = response.data ?? const <String, dynamic>{};
+    final ids = <String>{
+      ...((data['prodottoAssistenzaIds'] as List<dynamic>?) ?? const []).whereType<String>(),
+      if (data['prodottoAssistenzaId'] is String) data['prodottoAssistenzaId'] as String,
+    };
+    return ids.toList();
+  }
+
   /// Files uploaded directly to the ticket (not via a rapportino).
   Future<List<TicketAttachmentDto>> fetchAttachments(String ticketId) async {
     final response = await _dio.get<List<dynamic>>('/api/Tickets/$ticketId/attachments');

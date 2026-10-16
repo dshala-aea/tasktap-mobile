@@ -57,14 +57,22 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: context.colors.bg2,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: context.fabSafeBottom),
-        child: AppFab(
-          icon: LucideIcons.pencil,
-          tooltip: 'Modifica',
-          onPressed: () async {
-            await context.push<bool>('/altro/prodotti/${prodotto['id']}/modifica', extra: prodotto);
-          },
+      // Reachable by technicians now (from the ticket's Prodotti compartment): edit and delete are
+      // contract-write operations server-side, so do not offer them to someone who would be refused.
+      floatingActionButton: CapabilityGate(
+        capability: 'contratti.contract.write',
+        child: Padding(
+          padding: EdgeInsets.only(bottom: context.fabSafeBottom),
+          child: AppFab(
+            icon: LucideIcons.pencil,
+            tooltip: 'Modifica',
+            onPressed: () async {
+              await context.push<bool>(
+                '/altro/prodotti/${prodotto['id']}/modifica',
+                extra: prodotto,
+              );
+            },
+          ),
         ),
       ),
       body: SafeArea(
@@ -81,11 +89,14 @@ class AdminProdottoDetailScreen extends ConsumerWidget {
                 actions: id.isEmpty
                     ? const []
                     : [
-                        HeaderIconBtn(
-                          icon: LucideIcons.trash2,
-                          label: 'Elimina prodotto',
-                          glass: true,
-                          onTap: () => _deleteProdotto(context, ref, id, name),
+                        CapabilityGate(
+                          capability: 'contratti.contract.write',
+                          child: HeaderIconBtn(
+                            icon: LucideIcons.trash2,
+                            label: 'Elimina prodotto',
+                            glass: true,
+                            onTap: () => _deleteProdotto(context, ref, id, name),
+                          ),
                         ),
                       ],
               ),
