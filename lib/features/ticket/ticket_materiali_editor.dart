@@ -1,13 +1,17 @@
 // dart format width=100
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/icons/app_lucide_icons.dart';
+import '../../core/scanner/barcode_scan_sheet.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/widgets.dart';
+import '../../data/materiali/materiale_barcode_lookup.dart'
+    show MaterialeMatch, lookupMaterialeByBarcode;
 import 'ticket_detail_api_client.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -17,6 +21,12 @@ import 'ticket_detail_api_client.dart';
 // search) OR a free-text name — never both, mirroring web's TicketMaterialiEditor.tsx: choosing
 // an article clears the free text and vice versa, so a row can never claim to be both and leave
 // the server to decide which it meant. Quantity is required; unit and notes are optional.
+//
+// A "Scansiona codice" button adds a row from a barcode: the code is resolved against the local
+// materiali mirror first (offline-safe, then the live lookup when online) via the same
+// lookupMaterialeByBarcode the rapportino Materiali step and the magazzino screen use. A code
+// already on the list bumps that row's quantity instead of adding a duplicate; a code the catalogue
+// does not know becomes a free-text row named after the raw code, as in the rapportino step.
 //
 // Save PUTs the full replacement list (TicketDetailApiClient.setMateriali — the endpoint has no
 // per-row server id to reconcile against, so there is nothing to diff).
@@ -70,23 +80,34 @@ class MaterialeEditRow {
   );
 }
 
-class TicketMaterialiEditor extends StatefulWidget {
+/// Opens the camera scan sheet and returns the raw scanned code, or null if the technician backed
+/// out. Swappable in tests, where there is no camera.
+typedef BarcodeScanner = Future<String?> Function(BuildContext context);
+
+Future<String?> _openCameraScanner(BuildContext context) =>
+    openBarcodeScanSheet(context, title: 'Scansiona materiale');
+
+class TicketMaterialiEditor extends ConsumerStatefulWidget {
   const TicketMaterialiEditor({
     super.key,
     required this.initialRows,
     required this.onSave,
     required this.onCancel,
+    this.scanner,
   });
+
+  /// Defaults to the shared camera sheet. Only tests pass one.
+  final BarcodeScanner? scanner;
 
   final List<TicketMaterialeDto> initialRows;
   final Future<void> Function(List<TicketMaterialeWriteRow> rows) onSave;
   final VoidCallback onCancel;
 
   @override
-  State<TicketMaterialiEditor> createState() => TicketMaterialiEditorState();
+  ConsumerState<TicketMaterialiEditor> createState() => TicketMaterialiEditorState();
 }
 
-class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
+class TicketMaterialiEditorState extends ConsumerState<TicketMaterialiEditor> {
   late List<MaterialeEditRow> _rows;
   bool _isSaving = false;
 
@@ -97,6 +118,53 @@ class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
   }
 
   void _addRow() => setState(() => _rows.add(MaterialeEditRow()));
+
+  Future<MaterialeMatch?> _resolveCode(String code) async {
+    try {
+      return await lookupMaterialeByBarcode(ref, code);
+    } on DioException {
+      // The live lookup failed (not a 404) — the scan is still kept, as free text.
+      return null;
+    }
+  }
+
+  Future<void> _onScanPressed() async {
+    final code = await (widget.scanner ?? _openCameraScanner)(context);
+    if (code == null || !mounted) return;
+
+    final match = await _resolveCode(code);
+    if (!mounted) return;
+
+    final existing = _rows.where(
+      (r) => match != null
+          ? r.materialeId == match.id
+          : r.materialeId == null && r.freeTextName == code,
+    );
+    final incremented = existing.isNotEmpty;
+    setState(() {
+      if (incremented) {
+        existing.first.quantity += 1;
+      } else if (match != null) {
+        _rows.add(
+          MaterialeEditRow(
+            materialeId: match.id,
+            unitOfMeasure: match.unitOfMeasure,
+            initialArticleName: match.name,
+            initialArticleCode: match.code,
+          ),
+        );
+      } else {
+        _rows.add(MaterialeEditRow(freeTextName: code));
+      }
+    });
+    showAppToast(
+      context,
+      message: match != null
+          ? (incremented ? '${match.name}: quantità aumentata' : '${match.name} aggiunto')
+          : 'Codice $code non in catalogo: aggiunto come testo libero',
+      tone: match != null ? ToastTone.success : ToastTone.warning,
+    );
+  }
 
   void _removeRow(int index) => setState(() => _rows.removeAt(index));
 
@@ -132,6 +200,12 @@ class TicketMaterialiEditorState extends State<TicketMaterialiEditor> {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
+        AppButton.secondary(
+          label: 'Scansiona codice',
+          icon: const Icon(LucideIcons.scanLine, size: 18),
+          onPressed: _isSaving ? null : _onScanPressed,
+        ),
+        const SizedBox(height: AppSpacing.sm),
         AppButton.secondary(
           label: 'Aggiungi materiale',
           icon: const Icon(LucideIcons.plus, size: 18),
@@ -203,6 +277,17 @@ class _MaterialeRowEditorState extends ConsumerState<_MaterialeRowEditor> {
             ),
           ]
         : const [];
+  }
+
+  @override
+  void didUpdateWidget(_MaterialeRowEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A scan of an article already on the list bumps row.quantity from outside this field; typing
+    // always writes the parsed value back to the row first, so equal means nothing to refresh.
+    final typed = double.tryParse(_quantityCtrl.text.replaceAll(',', '.')) ?? 0;
+    if (typed != widget.row.quantity) {
+      _quantityCtrl.text = _formatQuantity(widget.row.quantity);
+    }
   }
 
   @override
