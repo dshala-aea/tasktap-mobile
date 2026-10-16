@@ -2114,6 +2114,24 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Optional period filter (inclusive lower bound): only cantieri whose [StartDate, EndDate] period\noverlaps [from, to]. A null EndDate is open-ended (still running); a null StartDate is open at the\nstart. A cantiere with neither date has no period and is never returned when from or to is sent.\nEither bound may be sent alone. An unspecified kind is read as UTC. Combines with the other filters.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Optional period filter (inclusive upper bound); see from.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
           }
         ],
         "responses": {
@@ -4973,6 +4991,29 @@
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/extension-fields/{entityType}/definitions": {
+      "get": {
+        "tags": [
+          "ExtensionFields"
+        ],
+        "summary": "Ordinary-operation read of the ACTIVE definitions applicable to one entity type \u2014 what a\nlist page needs to build optional columns and a create/edit form needs to render inputs.\nGated on the entity type's own module read permission (NOT Sistema.Setting.Read), and\nreturns a reduced shape without tenant/audit/IsActive admin data. Administration (inactive\ndefinitions, full records) stays on `GET definitions`.",
+        "parameters": [
+          {
+            "name": "entityType",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -9981,7 +10022,7 @@
         "tags": [
           "Reports"
         ],
-        "summary": "Creates a cantiere-only report directly from the caller's already-logged\n`CantiereWorkLog` entries for the given cantiere \u2014 no manual hour entry. Always\ncreates and returns a report, even when there is nothing new to consume (see\nTask&lt;Guid&gt; IReportService.CreateFromCantiereWorkLogsAsync(Guid? tenantId, Guid creatingUserId, Guid cantiereId, CancellationToken ct = default(CancellationToken))).",
+        "summary": "Creates a cantiere-only report directly from the caller's already-logged\n`CantiereWorkLog` entries for the given cantiere \u2014 no manual hour entry. Always\ncreates and returns a report, even when there is nothing new to consume (see\nTask&lt;Guid&gt; IReportService.CreateFromCantiereWorkLogsAsync(Guid? tenantId, Guid creatingUserId, Guid cantiereId, CancellationToken ct = default(CancellationToken), bool skipAssignmentCheck = false)).",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13053,6 +13094,568 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/acroform-config": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The variant's saved AcroForm config, or the base template's own default when the\n    variant has never been customized.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcroFormConfigDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcroFormConfigDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcroFormConfigDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Replaces the variant's AcroForm config, validating every binding against the real\n    fields of the variant's own asset \u2014 the same rules as the shipped-key PUT.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcroFormConfigDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcroFormConfigDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcroFormConfigDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/acroform-asset": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Uploads the variant's AcroForm PDF, replacing the one it owns, and clears every field\n    mapping.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "$ref": "#/components/schemas/IFormFile"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcroFormAssetUploadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcroFormAssetUploadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcroFormAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Removes the variant's AcroForm asset and clears every field mapping. A PDF the variant\n    only references (not owns) is left active for its owner.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/acroform-asset/discover": {
+      "post": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "Discovers the fields in the variant's currently-uploaded AcroForm asset.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormFieldDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormFieldDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormFieldDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/acroform-controls": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The tenant's own configured controls, for the binding dropdown \u2014 identical to the\n    shipped-key list (it is tenant data, not template data); the variant is checked so a foreign id\n    is still a 404 and a Classic variant a 400.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormControlDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormControlDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AcroFormControlDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/report-templates/variants/{id}/acroform-fields-catalogue": {
+      "get": {
+        "tags": [
+          "ReportTemplates"
+        ],
+        "summary": "The fixed catalogue keys the binding dropdown's \"Fields\" section offers, for a variant.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -20838,6 +21441,19 @@
         "type": "integer",
         "description": "The category of an AbsenceRequest. Client requirement (2026-09):\nthe create form must offer exactly 9 types \u2014 Ferie, ROL, Ex festivit\u00e0, Permesso retribuito,\nPermesso non retribuito, Legge 104, Malattia, Congedo parentale, Altri congedi/permessi.\nNew members are appended after the original 3 (never renumbered \u2014 this is a plain-int wire\nenum with no `JsonStringEnumConverter`, and existing rows/API callers depend on the\nnumeric values staying stable)."
       },
+      "AcroFormAssetUploadResponse": {
+        "required": [
+          "allegatoId"
+        ],
+        "type": "object",
+        "properties": {
+          "allegatoId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "description": "Result of uploading the AcroForm PDF asset."
+      },
       "AcroFormConfigDto": {
         "required": [
           "assetAllegatoId",
@@ -20860,6 +21476,46 @@
           }
         },
         "description": "The AcroForm template's config, as exposed over the wire (GET response / PUT body)."
+      },
+      "AcroFormControlDto": {
+        "required": [
+          "controlLineageId",
+          "label",
+          "options"
+        ],
+        "type": "object",
+        "properties": {
+          "controlLineageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "One of the tenant's actual configured controls, for the binding dropdown's second\n    section. Options is the control's real discrete choice list (Options-type controls only \u2014\n    see AcroFormFieldCatalogue.ParseOptions), empty for every other control type; the admin UI\n    uses it to offer a real ExpectedValue picker for ValueEqualsToChecked instead of free text."
+      },
+      "AcroFormFieldDto": {
+        "required": [
+          "name",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "description": "One discovered PDF field, as returned by the discovery endpoint."
       },
       "ActiveTracker": {
         "required": [
@@ -22959,6 +23615,19 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "agentName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "Ready-to-render payload for the customer overview screen (`GET /api/app/clienti/{id}/overview`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy already produces `ragioneSociale`,\n`codiceFiscale`, etc. from these PascalCase names), owned by the web app, no external\ncompatibility promise. Replaces the previous Italian-shaped hand-mocked customer detail with\na composed header plus computed counts; the three detail tabs stay canonical endpoints."
@@ -23841,6 +24510,14 @@
             "description": "Optional bill-to customer id (bill-to/ship-to split). Tenant-guarded and\nself-reference-rejected in CustomerService.",
             "format": "uuid"
           },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional agent (referente) this customer belongs to; tenant-guarded in\nCustomerService.",
+            "format": "uuid"
+          },
           "externalId": {
             "type": [
               "null",
@@ -23854,14 +24531,6 @@
               "string"
             ],
             "description": "Business/legacy customer code (W6b Task 8). Nullable, tenant-scoped partial-unique \u2014\nsee string? Customer.Codice. Default camelCase, no override needed."
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Optional agent (referente) this customer belongs to; tenant-guarded in\nCustomerService.",
-            "format": "uuid"
           }
         },
         "description": "Request model for creating a customer."
@@ -25081,6 +25750,14 @@
             "description": "Optional bill-to customer: when set, this customer's invoices should be addressed to\nthe referenced Customer instead (bill-to/ship-to split; legacy\n`idClienteFatturazione`). Self-reference within the same tenant.",
             "format": "uuid"
           },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The one agent (referente) this customer belongs to \u2014 an agent has many customers, a customer\nhas at most one agent. A new ticket for this customer pre-fills its Riferimento\n(Guid? Ticket.AgentId) from this value; the ticket's own value stays authoritative\nafterwards, so re-pointing the customer never rewrites existing tickets.",
+            "format": "uuid"
+          },
           "externalId": {
             "type": [
               "null",
@@ -25123,14 +25800,6 @@
             ],
             "description": "Date and time when the entity was last updated.",
             "format": "date-time"
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "The one agent (referente) this customer belongs to \u2014 an agent has many customers, a customer\nhas at most one agent. A new ticket for this customer pre-fills its Riferimento\n(Guid? Ticket.AgentId) from this value; the ticket's own value stays authoritative\nafterwards, so re-pointing the customer never rewrites existing tickets.",
-            "format": "uuid"
           }
         },
         "description": "Represents a customer/client (Cliente) in the system."
@@ -25385,6 +26054,30 @@
           }
         },
         "description": "One binding, as exposed over the wire. ExpectedValue is only meaningful (and\n    required) when Transform is \"ValueEqualsToChecked\" \u2014 see FieldBinding.ExpectedValue."
+      },
+      "FieldRefDto": {
+        "required": [
+          "key"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "labelOverride": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hideWhenEmpty": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        },
+        "description": "One field a section prints, as exposed over the wire: a catalogue key, an optional wording and\n    the field-level empty behavior. `HideWhenEmpty` absent means true."
       },
       "FileContentResult": {
         "type": "object",
@@ -26220,7 +26913,8 @@
           "createdAt",
           "updatedAt",
           "createdByUserId",
-          "updatedByUserId"
+          "updatedByUserId",
+          "extensionValues"
         ],
         "type": "object",
         "properties": {
@@ -26329,6 +27023,20 @@
             ],
             "description": "The user who last edited the ticket (`Ticket.UpdatedByUserId`); null for system changes and for rows that predate this column. The client resolves the id to a name.",
             "format": "uuid"
+          },
+          "extensionValues": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The ticket's raw extension-field (\"campi aggiuntivi\") values as a JSON object string (`Ticket.ExtensionValues`), or `null` when none were ever set. The list screen reads it to fill the optional, read-only extension columns whose definition has `ShowInList`; the same raw-JSON-string shape every canonical list item already carries."
+          },
+          "riferimento": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Resolved name of the ticket's agent (`Ticket.AgentId`, shown as \"Riferimento\" in the forms), or `null` when the ticket has none or the agent no longer resolves. Resolved server-side in one batched query per page."
           }
         },
         "description": "Ready-to-render row for the Intervento list screen (`GET /api/app/interventi`).\nApplication-tier contract (`docs/patterns/application-api.md`): Italian property names,\nno `[JsonPropertyName]` (the existing camelCase policy produces `titolo`/\n`clienteId` from these PascalCase names), owned by the web app. Mirrors what the web's\n`mapTicketToListItem` resolves today from a canonical `/tickets` page, so the list\nscreen can drop that canonical fetch."
@@ -27411,6 +28119,13 @@
             },
             "description": "Customers referenced by the schedules or draft reports."
           },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncAgentDto"
+            },
+            "description": "The agents (Riferimento) referenced by the customers and tickets in this payload \u2014 one bounded\nquery, never the tenant's whole agent book. Lets the phone label a ticket's Riferimento, and the\none a new ticket pre-fills from `Customer.AgentId`, while offline. Not delta-filtered: it\nfollows whichever customers/tickets travel this time; the phone upserts and never prunes."
+          },
           "locations": {
             "type": "array",
             "items": {
@@ -27527,13 +28242,6 @@
               "format": "uuid"
             },
             "description": "Tickets whose checklist, assets and groups were NOT sent this time (whole tickets only). The phone keeps whatever it\nalready holds for them; nothing here implies a deletion."
-          },
-          "agents": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SyncAgentDto"
-            },
-            "description": "Agents referenced by this payload's tickets."
           },
           "commesse": {
             "type": "array",
@@ -31275,6 +31983,12 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "riferimento": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "description": "One schedule item on the planning calendar."
@@ -31664,6 +32378,18 @@
             ],
             "additionalProperties": {
               "$ref": "#/components/schemas/SectionStyleOverrideDto"
+            }
+          },
+          "fields": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/FieldRefDto"
+              }
             }
           }
         },
@@ -33239,7 +33965,8 @@
           "isActive": {
             "type": "boolean"
           }
-        }
+        },
+        "description": "An Agent (Riferimento) the synced customers or tickets point at, mirrored so the\nphone can LABEL a pre-filled Riferimento offline. A DTO rather than the entity for the usual\nreason (see SyncColleagueDto): the photo URL, external id and audit columns do not\nbelong on a phone that gets lost on building sites."
       },
       "SyncAssetDto": {
         "required": [
@@ -33298,169 +34025,6 @@
           }
         },
         "description": "A colleague the technician can name on a rapportino \u2014 just enough to pick them from a list\nand send back the right id."
-      },
-      "SyncCommessaDto": {
-        "required": [
-          "id",
-          "tenantId",
-          "createdAt",
-          "updatedAt",
-          "codice",
-          "descrizione",
-          "customerId",
-          "isActive",
-          "stato",
-          "externalId"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "tenantId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "codice": {
-            "type": "string"
-          },
-          "descrizione": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "customerId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "stato": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "externalId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "SyncContractDto": {
-        "required": [
-          "id",
-          "tenantId",
-          "createdAt",
-          "updatedAt",
-          "name",
-          "customerId",
-          "locationId",
-          "startDate",
-          "endDate",
-          "isActive",
-          "numero",
-          "codice",
-          "tipo",
-          "externalId"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "tenantId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "name": {
-            "type": "string"
-          },
-          "customerId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "locationId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "startDate": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endDate": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "numero": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "codice": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "tipo": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "null",
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "externalId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "description": "The reference entities a ticket is made of, shipped to the phone so the create wizard can be\nfilled from the local mirror while offline (spec \u00a76.2, \u00a77.4).\n\nScoped, never tenant-wide: contracts, commesse and products are limited to the customers the\ncaller's own payload already carries, and agents to the agents that payload's tickets already\nreference. Widening any of these is a confidentiality decision, not a sync change (spec \u00a710).\n\n`isActive` travels as data and the picker filters on it. A predicate that hides inactive\nrows makes a deactivation invisible to a device that has already cached the row \u2014 the failure\nspec \u00a76.4 exists to fix. Hard deletes, which no flag can describe, are handled on the client by\npruning the customers a payload does carry."
       },
       "SyncControlGroupDto": {
         "required": [
@@ -33548,89 +34112,6 @@
           }
         },
         "description": "One maintenance template the technician can attach to a ticket as its checklist \u2014 the \"Modello\nchecklist\" the web app's ticket form offers."
-      },
-      "SyncProdottoAssistenzaDto": {
-        "required": [
-          "id",
-          "tenantId",
-          "createdAt",
-          "updatedAt",
-          "name",
-          "customerId",
-          "locationId",
-          "isActive",
-          "codice",
-          "serialNumber",
-          "categoria",
-          "marchio",
-          "externalId"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "tenantId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "name": {
-            "type": "string"
-          },
-          "customerId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "locationId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "codice": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "serialNumber": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "categoria": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "marchio": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "externalId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
       },
       "SyncReportStrumentoDto": {
         "required": [
@@ -34125,6 +34606,13 @@
         },
         "description": "A template image, as returned by its upload endpoint."
       },
+      "TemplateKind": {
+        "enum": [
+          "Classic",
+          "AcroForm",
+          null
+        ]
+      },
       "TenantDeletionRequest": {
         "type": "object",
         "properties": {
@@ -34259,6 +34747,17 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Which editor the template needs \u2014 Classic (the section/branding editor) or AcroForm (the PDF\nfield-mapping editor) \u2014 derived from the base renderer. Null only when the build no longer ships\nthe base key, in which case neither editor can open it.",
+                "$ref": "#/components/schemas/TemplateKind"
+              }
+            ]
           }
         },
         "description": "One of this tenant's own report templates, as exposed over the wire."
@@ -35782,6 +36281,18 @@
             "description": "Optional bill-to customer id (bill-to/ship-to split). Tenant-guarded and\nself-reference-rejected in CustomerService. Following the same\npartial-update convention as bool? UpdateCustomerRequest.IsActive: only applied when supplied\n(cannot be used to clear an existing value back to null).",
             "format": "uuid"
           },
+          "agentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Sets the customer's agent when supplied (tenant-guarded). Clearing is explicit \u2014\nbool UpdateCustomerRequest.ClearAgent \u2014 because a plain null means \"not provided\" under this DTO's\npartial-update convention.",
+            "format": "uuid"
+          },
+          "clearAgent": {
+            "type": "boolean",
+            "description": "True removes the customer's agent. Wins over Guid? UpdateCustomerRequest.AgentId when both are sent."
+          },
           "externalId": {
             "type": [
               "null",
@@ -35795,14 +36306,6 @@
               "string"
             ],
             "description": "Business/legacy customer code (W6b Task 8). Null = not provided, leaves the existing\nvalue untouched."
-          },
-          "agentId": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Sets the customer's agent when supplied (tenant-guarded). Clearing is explicit \u2014\nbool UpdateCustomerRequest.ClearAgent \u2014 because a plain null means \"not provided\" under this DTO's\npartial-update convention.",
-            "format": "uuid"
           }
         },
         "description": "Request model for updating a customer. Only non-null properties are applied."
@@ -38450,6 +38953,252 @@
           }
         },
         "description": "Body of `PUT /api/presenze/worklogs/{kind}/{id}`. Same time rules as WorklogCreateRequest\n(local times without offset in the row's zone; `ambiguityChoice` applies to both endpoints and the\nreversed-order both-in-repeated-hour case is not expressible; `endLocal` must not be \"now\").\n`version` is the value the client last read; a stale one is a 409 `concurrent_modification`.\n`type` and `description` are optional: omitted (null) = unchanged, an empty description clears it.\nOnly closed rows can be edited (`open_row_not_correctable`); a cantiere row already copied into a rapportino\ncannot (`cantiere_worklog_in_report`)."
+      },
+      "SyncCommessaDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "codice",
+          "descrizione",
+          "customerId",
+          "isActive",
+          "stato",
+          "externalId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "codice": {
+            "type": "string"
+          },
+          "descrizione": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "customerId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "stato": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SyncContractDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "name",
+          "customerId",
+          "locationId",
+          "startDate",
+          "endDate",
+          "isActive",
+          "numero",
+          "codice",
+          "tipo",
+          "externalId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "numero": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "The reference entities a ticket is made of, shipped to the phone so the create wizard can be\nfilled from the local mirror while offline (spec \u00a76.2, \u00a77.4).\n\nScoped, never tenant-wide: contracts, commesse and products are limited to the customers the\ncaller's own payload already carries, and agents to the agents that payload's tickets already\nreference. Widening any of these is a confidentiality decision, not a sync change (spec \u00a710).\n\n`isActive` travels as data and the picker filters on it. A predicate that hides inactive\nrows makes a deactivation invisible to a device that has already cached the row \u2014 the failure\nspec \u00a76.4 exists to fix. Hard deletes, which no flag can describe, are handled on the client by\npruning the customers a payload does carry."
+      },
+      "SyncProdottoAssistenzaDto": {
+        "required": [
+          "id",
+          "tenantId",
+          "createdAt",
+          "updatedAt",
+          "name",
+          "customerId",
+          "locationId",
+          "isActive",
+          "codice",
+          "serialNumber",
+          "categoria",
+          "marchio",
+          "externalId"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "codice": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "serialNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "categoria": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "marchio": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       }
     }
   },
