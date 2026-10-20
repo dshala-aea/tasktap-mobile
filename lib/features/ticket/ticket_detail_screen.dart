@@ -30,6 +30,7 @@ import '../checklist/checklist_providers.dart';
 import '../checklist/ticket_asset_checklists_card.dart';
 import '../dashboard/active_trackers_provider.dart' show nowProvider, formatElapsed;
 import '../rapportino/create_draft.dart';
+import 'control_group_accordion.dart';
 import 'edit_ticket_screen.dart';
 import 'ticket_detail_api_client.dart';
 import 'ticket_label.dart';
@@ -1030,15 +1031,11 @@ class _ControlloTab extends ConsumerWidget {
               AppSpacing.pagePadding,
               0,
             ),
-            child: Column(
-              children: flat
-                  .map(
-                    (f) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: _TicketControlStatusCard(flat: f),
-                    ),
-                  )
-                  .toList(),
+            child: ControlGroupAccordion(
+              groups: groups,
+              controlBuilder: (f) => _TicketControlStatusCard(flat: f),
+              summaryFor: (controls) =>
+                  '${controls.where((c) => c.status != 'Pending').length}/${controls.length}',
             ),
           ),
         );

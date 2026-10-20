@@ -24,6 +24,7 @@ import '../../../presentation/providers/schedule_providers.dart';
 import '../../checklist/asset_checklist_entry_card.dart';
 import '../../checklist/checklist_providers.dart';
 import '../../magazzino/magazzino_providers.dart';
+import '../../ticket/control_group_accordion.dart';
 import '../../ticket/ticket_detail_api_client.dart';
 import '../../ticket/ticket_providers.dart' show ticketMaterialiProvider;
 import 'package:tasktap_mobile/core/theme/app_palette.dart';
@@ -1066,19 +1067,12 @@ class _ControlliChecklist extends ConsumerWidget {
             ),
           );
         }
-        return Column(
-          children: flat
-              .map(
-                (f) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _ControlloInputCard(
-                    key: ValueKey(f.control.id),
-                    reportId: reportId,
-                    flat: f,
-                  ),
-                ),
-              )
-              .toList(),
+        // Open on arrival (collapseAbove: null): a fill-in form must not hide a required control.
+        return ControlGroupAccordion(
+          groups: groups,
+          collapseAbove: null,
+          controlBuilder: (f) =>
+              _ControlloInputCard(key: ValueKey(f.control.id), reportId: reportId, flat: f),
         );
       },
     );
