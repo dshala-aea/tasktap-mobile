@@ -201,7 +201,7 @@ void main() {
 
     // Nothing mirrored, nothing typed: without this line the sheet is a lone "Nessuno" row, which
     // reads as the picker being broken rather than as the device holding no agents yet.
-    expect(find.text('Nessun agente in cache. Cerca per nome.'), findsOneWidget);
+    expect(find.text('Nessun riferimento in cache. Cerca per nome.'), findsOneWidget);
 
     await unmount(tester);
   });
@@ -216,8 +216,8 @@ void main() {
 
     // The two empty states are different news: one is "type a name", the other is "this name is not
     // there". Telling a technician who just searched to go and search again is the bug.
-    expect(find.text('Nessun agente trovato.'), findsOneWidget);
-    expect(find.text('Nessun agente in cache. Cerca per nome.'), findsNothing);
+    expect(find.text('Nessun riferimento trovato.'), findsOneWidget);
+    expect(find.text('Nessun riferimento in cache. Cerca per nome.'), findsNothing);
 
     await unmount(tester);
   });

@@ -586,8 +586,8 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
   String? get _emptyHint {
     if (_merged.isNotEmpty) return null;
     return _queryCtrl.text.trim().isEmpty
-        ? 'Nessun agente in cache. Cerca per nome.'
-        : 'Nessun agente trovato.';
+        ? 'Nessun riferimento in cache. Cerca per nome.'
+        : 'Nessun riferimento trovato.';
   }
 
   @override
@@ -609,7 +609,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
               child: AppTextField(
                 key: const ValueKey('agent-search-field'),
                 controller: _queryCtrl,
-                label: 'Cerca agente',
+                label: 'Cerca riferimento',
                 hint: 'Nome, telefono o email…',
                 onChanged: _onQueryChanged,
               ),
