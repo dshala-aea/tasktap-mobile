@@ -10578,6 +10578,70 @@
         }
       }
     },
+    "/api/Reports/{id}/issued-pdf/retry": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Re-runs the issuance of a report whose PDF is still \"in preparazione\" (its first attempt ran out of retries).\nSame permission as Task&lt;IActionResult&gt; ReportsController.Controlla(Guid id). Answers 202 when the issuance was re-staged; 409 when there is\nnothing to retry (not issued, or the PDF is already stored).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Reports/{id}/fattura": {
       "post": {
         "tags": [
@@ -23443,6 +23507,25 @@
                 "$ref": "#/components/schemas/StaffOptionsDto"
               }
             ]
+          },
+          "schemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "layout": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GridLayoutDto"
+              }
+            ]
           }
         },
         "description": "The Classic template's config, as exposed over the wire (GET response / PUT body)."
@@ -26397,6 +26480,57 @@
           }
         },
         "description": "Body of `POST /api/tenants/{id}/billing/contract`."
+      },
+      "GridCellDto": {
+        "required": [
+          "block",
+          "weight"
+        ],
+        "type": "object",
+        "properties": {
+          "block": {
+            "type": "string"
+          },
+          "weight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "One cell: the `ReportSection` name it shows and its relative width."
+      },
+      "GridLayoutDto": {
+        "required": [
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GridRowDto"
+            }
+          }
+        },
+        "description": "The version-2 row/column layout, as exposed over the wire."
+      },
+      "GridRowDto": {
+        "required": [
+          "cells"
+        ],
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GridCellDto"
+            }
+          }
+        },
+        "description": "One layout row: 1\u20133 cells side by side."
       },
       "HeaderFooterOptionsDto": {
         "required": [
@@ -30593,6 +30727,22 @@
             ],
             "format": "date-time"
           },
+          "issuedPdfRequestedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Set, in the transaction that moves the report to ReportStatoEnum.Controllato, to the instant\nits PDF was requested (Epic 14, slice 4). Null on every report that is not issued yet AND on every report\nthat was already past Controllato before the feature existed \u2014 those keep rendering live, by design (no\nbackfill: a PDF reproduced today would pass as the original). When set, the stored artifact\n(Guid? Report.IssuedPdfAllegatoId) is the only PDF this report has: while it is null the report answers\n\"being prepared\", never a live render.",
+            "format": "date-time"
+          },
+          "issuedPdfAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The immutable rendered PDF of this report as issued: an Allegato of this report with\n`Kind = SystemArtifact`. Written once, by the issuance handler. No foreign key, like the report's other\nallegato references.",
+            "format": "uuid"
+          },
           "nonFatturabileAt": {
             "type": [
               "null",
@@ -32929,9 +33079,15 @@
         "properties": {
           "showHoursBreakdown": {
             "type": "boolean"
+          },
+          "showSellRate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \"Ore lavorate\" total, as exposed over the wire."
+        "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \"Ore lavorate\" total, and whether it prints each technician's hourly sell\n    rate, as exposed over the wire. `ShowSellRate` is nullable on the wire: a client written before\n    the DTO carried it omits it, and FromDto reads that as the option's own default (`true`)."
       },
       "StartAiConversationRequest": {
         "type": "object",
