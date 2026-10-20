@@ -23443,6 +23443,25 @@
                 "$ref": "#/components/schemas/StaffOptionsDto"
               }
             ]
+          },
+          "schemaVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "layout": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GridLayoutDto"
+              }
+            ]
           }
         },
         "description": "The Classic template's config, as exposed over the wire (GET response / PUT body)."
@@ -26397,6 +26416,57 @@
           }
         },
         "description": "Body of `POST /api/tenants/{id}/billing/contract`."
+      },
+      "GridCellDto": {
+        "required": [
+          "block",
+          "weight"
+        ],
+        "type": "object",
+        "properties": {
+          "block": {
+            "type": "string"
+          },
+          "weight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "One cell: the `ReportSection` name it shows and its relative width."
+      },
+      "GridLayoutDto": {
+        "required": [
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GridRowDto"
+            }
+          }
+        },
+        "description": "The version-2 row/column layout, as exposed over the wire."
+      },
+      "GridRowDto": {
+        "required": [
+          "cells"
+        ],
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GridCellDto"
+            }
+          }
+        },
+        "description": "One layout row: 1\u20133 cells side by side."
       },
       "HeaderFooterOptionsDto": {
         "required": [
@@ -32929,9 +32999,15 @@
         "properties": {
           "showHoursBreakdown": {
             "type": "boolean"
+          },
+          "showSellRate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         },
-        "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \"Ore lavorate\" total, as exposed over the wire."
+        "description": "Whether the staff-hours table shows the 4-way ordinarie/straordinarie/festive/notturne\n    breakdown or a single \"Ore lavorate\" total, and whether it prints each technician's hourly sell\n    rate, as exposed over the wire. `ShowSellRate` is nullable on the wire: a client written before\n    the DTO carried it omits it, and FromDto reads that as the option's own default (`true`)."
       },
       "StartAiConversationRequest": {
         "type": "object",
