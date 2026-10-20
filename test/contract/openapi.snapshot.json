@@ -10578,6 +10578,70 @@
         }
       }
     },
+    "/api/Reports/{id}/issued-pdf/retry": {
+      "post": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Re-runs the issuance of a report whose PDF is still \"in preparazione\" (its first attempt ran out of retries).\nSame permission as Task&lt;IActionResult&gt; ReportsController.Controlla(Guid id). Answers 202 when the issuance was re-staged; 409 when there is\nnothing to retry (not issued, or the PDF is already stored).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/Reports/{id}/fattura": {
       "post": {
         "tags": [
@@ -30662,6 +30726,22 @@
               "string"
             ],
             "format": "date-time"
+          },
+          "issuedPdfRequestedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Set, in the transaction that moves the report to ReportStatoEnum.Controllato, to the instant\nits PDF was requested (Epic 14, slice 4). Null on every report that is not issued yet AND on every report\nthat was already past Controllato before the feature existed \u2014 those keep rendering live, by design (no\nbackfill: a PDF reproduced today would pass as the original). When set, the stored artifact\n(Guid? Report.IssuedPdfAllegatoId) is the only PDF this report has: while it is null the report answers\n\"being prepared\", never a live render.",
+            "format": "date-time"
+          },
+          "issuedPdfAllegatoId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The immutable rendered PDF of this report as issued: an Allegato of this report with\n`Kind = SystemArtifact`. Written once, by the issuance handler. No foreign key, like the report's other\nallegato references.",
+            "format": "uuid"
           },
           "nonFatturabileAt": {
             "type": [
