@@ -21561,6 +21561,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "group": {
+            "type": "string",
+            "description": "The section the control sits in, nested sections joined with \u0022 / \u0022 (empty when the section is unknown).\n    Two controls can share a label across sections; this is what tells them apart in the binding picker.",
+            "default": ""
           }
         },
         "description": "One of the tenant's actual configured controls, for the binding dropdown's second\n    section. Options is the control's real discrete choice list (Options-type controls only \u2014\n    see AcroFormFieldCatalogue.ParseOptions), empty for every other control type; the admin UI\n    uses it to offer a real ExpectedValue picker for ValueEqualsToChecked instead of free text."
